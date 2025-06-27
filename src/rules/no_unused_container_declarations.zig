@@ -175,7 +175,7 @@ fn isFieldAccessOfRootContainer(doc: zlinter.LintDocument, node: std.zig.Ast.Nod
 fn isContainerRoot(container: anytype) bool {
     return switch (zlinter.version.zig) {
         .@"0.14" => container.toNode() == 0,
-        .@"0.15" => container.scope_handle.toNode().index == 0,
+        .@"0.15" => container.scope_handle.toNode() == .root,
     };
 }
 
