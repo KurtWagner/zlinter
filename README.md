@@ -89,7 +89,7 @@ This may change, especially when `zig` is "stable" at `1.x`.
     zig build lint
 
     // or be specific with paths
-    zig build -- src/
+    zig build lint -- src/ file.zig
     ```
 
 ## Configure
