@@ -1,4 +1,10 @@
 const std = @import("std");
+const version = @import("./src/lib/version.zig");
+
+const zls_version: []const u8 = switch (version.zig) {
+    .@"0.15" => "0.15.0-dev",
+    .@"0.14" => "0.14.0",
+};
 
 pub const BuildStepOptions = struct {
     /// List of rules created with `buildRule`
@@ -107,6 +113,7 @@ pub fn build(b: *std.Build) !void {
             .module = b.dependency("zls", .{
                 .target = target,
                 .optimize = optimize,
+                .@"version-string" = zls_version,
             }).module("zls"),
         }},
     });
