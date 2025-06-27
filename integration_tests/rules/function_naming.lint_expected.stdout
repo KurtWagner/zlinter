@@ -1,0 +1,31 @@
+error Callable should be camelCase [./rules/function_naming.input.zig:1:4] function_naming
+
+ 1 | fn this_is_not_ok() void {}
+   |    ^^^^^^^^^^^^^^
+
+error Callable should be camelCase [./rules/function_naming.input.zig:3:4] function_naming
+
+ 3 | fn ThisIsAlsoNotOk() void {}
+   |    ^^^^^^^^^^^^^^^
+
+error Callable returning `type` should be TitleCase [./rules/function_naming.input.zig:9:4] function_naming
+
+ 9 | fn thisIsNotOk() type {}
+   |    ^^^^^^^^^^^
+
+error Callable should be camelCase [./rules/function_naming.input.zig:12:8] function_naming
+
+ 12 |     fn this_is_not_ok() void {}
+    |        ^^^^^^^^^^^^^^
+
+error Callable should be camelCase [./rules/function_naming.input.zig:14:8] function_naming
+
+ 14 |     fn ThisIsAlsoNotOk() void {}
+    |        ^^^^^^^^^^^^^^^
+
+error Callable returning `type` should be TitleCase [./rules/function_naming.input.zig:20:8] function_naming
+
+ 20 |     fn thisIsNotOk() type {}
+    |        ^^^^^^^^^^^
+
+x 6 errors

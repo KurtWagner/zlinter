@@ -1,0 +1,6 @@
+warning I'm allergic to cats [./rules/no_cats.input.zig:1:11] no_cats
+
+ 1 | pub const allow_cats = false;
+   |           ^^^^^^^^^^
+
+x 1 warnings

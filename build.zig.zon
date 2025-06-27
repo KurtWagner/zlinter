@@ -1,0 +1,18 @@
+.{
+    .name = .zlinter,
+    .version = "0.0.1",
+    .dependencies = .{
+        .zls = .{
+            .url = "git+https://github.com/zigtools/zls?ref=0.14.0#7485feeeda45d1ad09422ae83af73307ab9e6c9e",
+            .hash = "zls-0.14.0-rmm5fjKFIADiTeGEPxU79BXPmOqepsgJPJrghXzTStc5",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build_rules.zig",
+        "build_rules_config.zig",
+        "build.zig.zon",
+        "src",
+        "LICENSE",
+    },
+}

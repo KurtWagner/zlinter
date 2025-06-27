@@ -1,0 +1,33 @@
+warning Unused declaration [./rules/no_unused_container_declarations.input.zig:1:1] no_unused_container_declarations
+
+ 1 | var apple = @import("std");
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Unused declaration [./rules/no_unused_container_declarations.input.zig:4:1] no_unused_container_declarations
+
+ 4 | const chocolate = @import("std");
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Unused declaration [./rules/no_unused_container_declarations.input.zig:8:1] no_unused_container_declarations
+
+ 8 | const Coffee = struct {};
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Unused declaration [./rules/no_unused_container_declarations.input.zig:29:1] no_unused_container_declarations
+
+ 29 | const not_disabled = 0;
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Unused declaration [./rules/no_unused_container_declarations.input.zig:32:1] no_unused_container_declarations
+
+ 32 | const ShouldGoInFix = struct {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 33 |     multi: u32,
+    | ^^^^^^^^^^^^^^^
+ 34 |     line: usize,
+    | ^^^^^^^^^^^^^^^^
+ 35 | };
+    | ^^
+
+x 5 warnings
+x 3 skipped
