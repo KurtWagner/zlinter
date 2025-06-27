@@ -50,7 +50,7 @@ pub fn buildStep(
         b,
         options.rules,
         .{
-            .target = options.target,
+            .target = options.target orelse b.graph.host,
             .optimize = options.optimize,
             .zlinter = .{ .dependency = b.dependencyFromBuildZig(@This(), .{}) },
         },

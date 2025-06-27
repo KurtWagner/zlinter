@@ -58,8 +58,10 @@ This may change, especially when `zig` is "stable" at `1.x`.
 1. Configure `lint` step in your `build.zig`:
 
     ```zig
+    const zlinter = @import("zlinter");
+    // ...
     const lint_cmd = b.step("lint", "Lint source code.");
-    lint_cmd.dependOn(zlinter.buildStep(b, .{
+    lint_cmd.dependOn(try zlinter.buildStep(b, .{
         .rules = &.{
             zlinter.buildRule(b, .{ .builtin = .no_unused_container_declarations }, .{}),
             zlinter.buildRule(b, .{ .builtin = .declaration_naming }, .{}),
