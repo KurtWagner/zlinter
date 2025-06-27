@@ -30,30 +30,29 @@ fn run(
 
     const handle = doc.handle;
     const tree = doc.handle.tree;
-
-    const node_tags = handle.tree.nodes.items(.tag);
-    const node_data = handle.tree.nodes.items(.data);
-    const node_main_token = handle.tree.nodes.items(.main_token);
     const token_starts = handle.tree.tokens.items(.start);
 
     var arena_mem: [8 * 1024]u8 = undefined;
     var arena_buffer = std.heap.FixedBufferAllocator.init(&arena_mem);
     const arena = arena_buffer.allocator();
 
-    for (0..handle.tree.nodes.len) |i| {
-        const node_index: std.zig.Ast.Node.Index = @intCast(i);
+    var node: zlinter.analyzer.NodeIndexShim = .init(0);
+    while (node.index < handle.tree.nodes.len) : (node.index += 1) {
         defer arena_buffer.reset();
 
-        const identifier_token: std.zig.Ast.TokenIndex = switch (node_tags[node_index]) {
+        const identifier_token: std.zig.Ast.TokenIndex = switch (zlinter.analyzer.nodeTag(tree, node.toNodeIndex())) {
             .builtin_call,
             .builtin_call_comma,
             .builtin_call_two,
             .builtin_call_two_comma,
             .identifier,
             .enum_literal,
-            => node_main_token[node_index],
+            => zlinter.analyzer.nodeMainToken(tree, node.toNodeIndex()),
             .field_access,
-            => node_data[node_index].rhs,
+            => switch (zlinter.version.zig) {
+                .@"0.14" => zlinter.analyzer.nodeData(tree, node.toNodeIndex()).rhs,
+                .@"0.15" => zlinter.analyzer.nodeData(tree, node.toNodeIndex()).node_and_token.@"1",
+            },
             else => continue,
         };
 
@@ -65,10 +64,10 @@ fn run(
         );
 
         switch (pos_ctx) {
-            .var_access => try handleVarAccess(rule, gpa, arena, doc, node_index, identifier_token, &lint_problems),
-            .field_access => try handleFieldAccess(rule, gpa, arena, doc, node_index, identifier_token, &lint_problems),
-            .builtin => try handleBuiltin(rule, gpa, arena, doc, node_index, identifier_token, &lint_problems),
-            .enum_literal => try handleEnumLiteral(rule, gpa, arena, doc, node_index, identifier_token, &lint_problems),
+            .var_access => try handleVarAccess(rule, gpa, arena, doc, node.toNodeIndex(), identifier_token, &lint_problems),
+            .field_access => try handleFieldAccess(rule, gpa, arena, doc, node.toNodeIndex(), identifier_token, &lint_problems),
+            .builtin => try handleBuiltin(rule, gpa, arena, doc, node.toNodeIndex(), identifier_token, &lint_problems),
+            .enum_literal => try handleEnumLiteral(rule, gpa, arena, doc, node.toNodeIndex(), identifier_token, &lint_problems),
             else => continue,
         }
     }
@@ -175,12 +174,20 @@ fn handleEnumLiteral(
     const handle = doc.handle;
     const analyser = doc.analyser;
 
-    const decl = (try analyser.getSymbolEnumLiteral(
-        arena,
-        handle,
-        handle.tree.tokens.items(.start)[identifier_token],
-        doc.handle.tree.tokenSlice(identifier_token),
-    )) orelse return;
+    const decl =
+        switch (zlinter.version.zig) {
+            .@"0.14" => (try analyser.getSymbolEnumLiteral(
+                arena,
+                handle,
+                handle.tree.tokens.items(.start)[identifier_token],
+                doc.handle.tree.tokenSlice(identifier_token),
+            )) orelse return,
+            .@"0.15" => (try analyser.getSymbolEnumLiteral(
+                handle,
+                handle.tree.tokens.items(.start)[identifier_token],
+                doc.handle.tree.tokenSlice(identifier_token),
+            )) orelse return,
+        };
 
     if (try decl.docComments(arena)) |doc_comment| {
         if (getDeprecationFromDoc(doc_comment)) |message| {

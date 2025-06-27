@@ -30,22 +30,24 @@ fn run(
 
     const tree = doc.handle.tree;
     const token_tags = tree.tokens.items(.tag);
-    const node_tags = tree.nodes.items(.tag);
-    const node_data = tree.nodes.items(.data);
-
-    const main_tokens = tree.nodes.items(.main_token);
 
     // Store an index of referenced identifiers and field accesses on the
     // container, this is then used to check whether a root declaration is
     // being used.
     var container_references = map: {
         var map = std.StringHashMapUnmanaged(void).empty;
-        var node_index: std.zig.Ast.Node.Index = 0;
-        while (node_index < tree.nodes.len) : (node_index += 1) {
-            switch (node_tags[node_index]) {
-                .identifier => try map.put(allocator, tree.tokenSlice(main_tokens[node_index]), {}),
-                .field_access => if (try isFieldAccessOfRootContainer(doc, node_index))
-                    try map.put(allocator, tree.tokenSlice(node_data[node_index].rhs), {}),
+
+        var node: zlinter.analyzer.NodeIndexShim = .init(0);
+        while (node.index < tree.nodes.len) : (node.index += 1) {
+            switch (zlinter.analyzer.nodeTag(tree, node.toNodeIndex())) {
+                .identifier => try map.put(allocator, tree.tokenSlice(zlinter.analyzer.nodeMainToken(tree, node.toNodeIndex())), {}),
+                .field_access => if (try isFieldAccessOfRootContainer(doc, node.toNodeIndex())) {
+                    const node_data = zlinter.analyzer.nodeData(tree, node.toNodeIndex());
+                    try map.put(allocator, tree.tokenSlice(switch (zlinter.version.zig) {
+                        .@"0.14" => node_data.rhs,
+                        .@"0.15" => node_data.node_and_token.@"1",
+                    }), {});
+                },
                 else => {},
             }
         }
@@ -129,9 +131,16 @@ fn run(
 }
 
 /// Returns fn proto if node is fn declaration and has a name token.
-fn namedFnDeclProto(tree: std.zig.Ast, buffer: *[1]std.zig.Ast.Node.Index, node: std.zig.Ast.Node.Index) ?std.zig.Ast.full.FnProto {
-    if (switch (tree.nodes.items(.tag)[node]) {
-        .fn_decl => tree.fullFnProto(buffer, tree.nodes.items(.data)[node].lhs),
+fn namedFnDeclProto(
+    tree: std.zig.Ast,
+    buffer: *[1]std.zig.Ast.Node.Index,
+    node: std.zig.Ast.Node.Index,
+) ?std.zig.Ast.full.FnProto {
+    if (switch (zlinter.analyzer.nodeTag(tree, node)) {
+        .fn_decl => tree.fullFnProto(buffer, switch (zlinter.version.zig) {
+            .@"0.14" => zlinter.analyzer.nodeData(tree, node).lhs,
+            .@"0.15" => zlinter.analyzer.nodeData(tree, node).node_and_node.@"0",
+        }),
         else => null,
     }) |fn_proto| {
         if (fn_proto.name_token != null) return fn_proto;
@@ -140,24 +149,34 @@ fn namedFnDeclProto(tree: std.zig.Ast, buffer: *[1]std.zig.Ast.Node.Index, node:
 }
 
 fn isFieldAccessOfRootContainer(doc: zlinter.LintDocument, node: std.zig.Ast.Node.Index) error{OutOfMemory}!bool {
-    std.debug.assert(doc.handle.tree.nodes.items(.tag)[node] == .field_access);
+    std.debug.assert(zlinter.analyzer.nodeTag(doc.handle.tree, node) == .field_access);
 
     const tree = doc.handle.tree;
 
-    if (try doc.analyser.resolveTypeOfNode(.{
-        .handle = doc.handle,
-        .node = tree.nodes.items(.data)[node].lhs,
-    })) |t| {
+    const node_data = zlinter.analyzer.nodeData(tree, node);
+    const lhs = switch (zlinter.version.zig) {
+        .@"0.14" => node_data.lhs,
+        .@"0.15" => node_data.node_and_token.@"0",
+    };
+
+    if (try doc.resolveTypeOfNode(lhs)) |t| {
         switch (t.data) {
             .pointer => |handle| switch (handle.elem_ty.data) {
-                .container => |scope_handle| return scope_handle.toNode() == 0,
+                .container => |scope_handle| return isContainerRoot(scope_handle),
                 else => {},
             },
-            .container => |scope_handle| return scope_handle.toNode() == 0,
+            .container => |scope_handle| return isContainerRoot(scope_handle),
             else => {},
         }
     }
     return false;
+}
+
+fn isContainerRoot(container: anytype) bool {
+    return switch (zlinter.version.zig) {
+        .@"0.14" => container.toNode() == 0,
+        .@"0.15" => container.scope_handle.toNode().index == 0,
+    };
 }
 
 test "no_unused_container_declarations" {

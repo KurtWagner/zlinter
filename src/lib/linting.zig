@@ -11,6 +11,13 @@ pub const LintDocument = struct {
         gpa.destroy(self.analyser);
         gpa.free(self.path);
     }
+
+    pub inline fn resolveTypeOfNode(self: @This(), node: std.zig.Ast.Node.Index) !?zls.Analyser.Type {
+        return switch (version.zig) {
+            .@"0.15" => self.analyser.resolveTypeOfNode(.of(node, self.handle)),
+            .@"0.14" => self.analyser.resolveTypeOfNode(.{ .handle = self.handle, .node = node }),
+        };
+    }
 };
 
 /// The context of all document and rule executions.
@@ -39,7 +46,41 @@ pub const LintContext = struct {
         self.document_store = zls.DocumentStore{
             .allocator = gpa,
             .diagnostics_collection = &self.diagnostics_collection,
-            .config = .fromMainConfig(config),
+            .config = switch (version.zig) {
+                .@"0.15" => .{
+                    .zig_exe_path = config.zig_exe_path,
+                    .zig_lib_dir = dir: {
+                        if (config.zig_lib_path) |zig_lib_path| {
+                            if (std.fs.openDirAbsolute(zig_lib_path, .{})) |zig_lib_dir| {
+                                break :dir .{
+                                    .handle = zig_lib_dir,
+                                    .path = zig_lib_path,
+                                };
+                            } else |err| {
+                                std.log.err("failed to open zig library directory '{s}': {s}", .{ zig_lib_path, @errorName(err) });
+                            }
+                        }
+                        break :dir null;
+                    },
+                    .build_runner_path = config.build_runner_path,
+                    .builtin_path = config.builtin_path,
+                    .global_cache_dir = dir: {
+                        if (config.global_cache_path) |global_cache_path| {
+                            if (std.fs.openDirAbsolute(global_cache_path, .{})) |global_cache_dir| {
+                                break :dir .{
+                                    .handle = global_cache_dir,
+                                    .path = global_cache_path,
+                                };
+                            } else |err| {
+                                std.log.err("failed to open zig library directory '{s}': {s}", .{ global_cache_path, @errorName(err) });
+                            }
+                        }
+                        break :dir null;
+                    },
+                },
+                .@"0.14" => .fromMainConfig(config),
+            },
+
             .thread_pool = &self.thread_pool,
         };
     }
@@ -54,7 +95,7 @@ pub const LintContext = struct {
     /// Loads and parses zig file into the document store.
     ///
     /// Caller is responsible for calling deinit once done.
-    pub fn loadDocument(self: *LintContext, path: []const u8, gpa: std.mem.Allocator) !?LintDocument {
+    pub fn loadDocument(self: *LintContext, path: []const u8, gpa: std.mem.Allocator, arena: std.mem.Allocator) !?LintDocument {
         var mem: [4096]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&mem);
         const uri = try zls.URI.fromPath(
@@ -74,12 +115,22 @@ pub const LintContext = struct {
             .handle = handle,
             .analyser = try gpa.create(zls.Analyser),
         };
-        doc.analyser.* = zls.Analyser.init(
-            gpa,
-            &self.document_store,
-            &self.intern_pool,
-            handle,
-        );
+
+        doc.analyser.* = switch (version.zig) {
+            .@"0.14" => zls.Analyser.init(
+                gpa,
+                &self.document_store,
+                &self.intern_pool,
+                handle,
+            ),
+            .@"0.15" => zls.Analyser.init(
+                gpa,
+                arena,
+                &self.document_store,
+                &self.intern_pool,
+                handle,
+            ),
+        };
         return doc;
     }
 };
@@ -620,7 +671,10 @@ pub const testing = struct {
 
         try file.writeAll(contents);
 
-        var doc = (try ctx.loadDocument(real_path, ctx.gpa)).?;
+        var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+        defer arena.deinit();
+
+        var doc = (try ctx.loadDocument(real_path, ctx.gpa, arena.allocator())).?;
         defer doc.deinit(ctx.gpa);
 
         const ast = doc.handle.tree;
@@ -674,4 +728,5 @@ const std = @import("std");
 const builtin = @import("builtin");
 const zls = @import("zls");
 const strings = @import("strings.zig");
+const version = @import("version.zig");
 const ansi = @import("ansi.zig");

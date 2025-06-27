@@ -48,10 +48,10 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    var node_index: std.zig.Ast.Node.Index = 1; // Skip root node at 0
-    while (node_index < tree.nodes.len) : (node_index += 1) {
-        if (tree.fullVarDecl(node_index)) |var_decl| {
-            if (try doc.analyser.resolveTypeOfNode(.{ .handle = doc.handle, .node = node_index })) |t| {
+    var node: zlinter.analyzer.NodeIndexShim = .init(1); // Skip root node at 0
+    while (node.index < tree.nodes.len) : (node.index += 1) {
+        if (tree.fullVarDecl(node.toNodeIndex())) |var_decl| {
+            if (try doc.resolveTypeOfNode(node.toNodeIndex())) |t| {
                 const name_token = var_decl.ast.mut_token + 1;
                 const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
 

@@ -56,14 +56,14 @@ fn run(
     const tree = doc.handle.tree;
     var buffer: [2]std.zig.Ast.Node.Index = undefined;
 
-    var node_index: std.zig.Ast.Node.Index = 0;
-    while (node_index < tree.nodes.len) : (node_index += 1) {
-        if (tree.fullContainerDecl(&buffer, node_index)) |container_decl| {
-            const container_tag = if (node_index == 0) .keyword_struct else tree.tokens.items(.tag)[container_decl.ast.main_token];
+    var node: zlinter.analyzer.NodeIndexShim = .init(0);
+    while (node.index < tree.nodes.len) : (node.index += 1) {
+        if (tree.fullContainerDecl(&buffer, node.toNodeIndex())) |container_decl| {
+            const container_tag = if (node.index == 0) .keyword_struct else tree.tokens.items(.tag)[container_decl.ast.main_token];
 
             for (container_decl.ast.members) |member| {
                 if (tree.fullContainerField(member)) |container_field| {
-                    const maybe_node_type = try doc.analyser.resolveTypeOfNode(.{ .handle = doc.handle, .node = member });
+                    const maybe_node_type = try doc.resolveTypeOfNode(member);
 
                     const style: zlinter.LintTextStyle, const container_name: []const u8 = tuple: {
                         break :tuple switch (container_tag) {
@@ -100,11 +100,16 @@ fn run(
                     }
                 }
             }
-        } else if (tree.nodes.items(.tag)[node_index] == .error_set_decl) {
-            const rbrace = tree.nodes.items(.data)[node_index].rhs;
+        } else if (zlinter.analyzer.nodeTag(tree, node.toNodeIndex()) == .error_set_decl) {
+            const node_data = zlinter.analyzer.nodeData(tree, node.toNodeIndex());
+
+            const rbrace = switch (zlinter.version.zig) {
+                .@"0.14" => node_data.rhs,
+                .@"0.15" => node_data.token_and_token.@"1",
+            };
 
             var token = rbrace - 1;
-            while (token >= tree.firstToken(node_index)) : (token -= 1) {
+            while (token >= tree.firstToken(node.toNodeIndex())) : (token -= 1) {
                 switch (tree.tokens.items(.tag)[token]) {
                     .identifier => if (!config.error_field.check(zlinter.strings.normalizeIdentifierName(tree.tokenSlice(token)))) {
                         try lint_problems.append(allocator, .{

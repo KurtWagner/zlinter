@@ -80,8 +80,13 @@ pub fn main() !u8 {
     // ------------------------------------------------------------------------
     // Process files and populate results:
     // ------------------------------------------------------------------------
+
     for (lint_files) |lint_file| {
-        var doc = try ctx.loadDocument(lint_file.pathname, ctx.gpa) orelse {
+        var arena = std.heap.ArenaAllocator.init(gpa);
+        defer arena.deinit();
+        const arena_allocator = arena.allocator();
+
+        var doc = try ctx.loadDocument(lint_file.pathname, ctx.gpa, arena_allocator) orelse {
             std.log.err("Unable to open file: {s}", .{lint_file.pathname});
             continue;
         };

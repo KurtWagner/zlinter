@@ -85,15 +85,18 @@ fn parseZon(zon_file: std.fs.File, comptime T: type, arena: std.mem.Allocator) !
     const content = try zon_file.readToEndAlloc(arena, max_config_bytes);
     const null_content = try arena.dupeZ(u8, content);
 
-    var status: std.zon.parse.Status = .{};
-    if (std.zon.parse.fromSlice(T, arena, null_content, &status, .{
+    var diagnostics: if (builtin.zig_version.major == 0 and builtin.zig_version.minor == 14)
+        std.zon.parse.Status
+    else
+        std.zon.parse.Diagnostics = .{};
+    if (std.zon.parse.fromSlice(T, arena, null_content, &diagnostics, .{
         .free_on_error = true,
         .ignore_unknown_fields = false,
     })) |result| {
         return result;
     } else |e| {
         var writer = std.io.getStdErr().writer();
-        try status.format("Failed to parse zlinter zon file", .{}, &writer);
+        try diagnostics.format("Failed to parse zlinter zon file", .{}, &writer);
         return e;
     }
 }
@@ -117,3 +120,4 @@ fn fatal(comptime format: []const u8, args: anytype) noreturn {
 
 const std = @import("std");
 const RulesConfig = @import("rules").RulesConfig;
+const builtin = @import("builtin");
