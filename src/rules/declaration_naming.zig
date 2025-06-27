@@ -52,15 +52,16 @@ fn run(
     while (node.index < tree.nodes.len) : (node.index += 1) {
         if (tree.fullVarDecl(node.toNodeIndex())) |var_decl| {
             if (try doc.resolveTypeOfNode(node.toNodeIndex())) |t| {
+                const decl_type = t.resolveDeclLiteralResultType();
                 const name_token = var_decl.ast.mut_token + 1;
                 const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
 
                 const style: zlinter.LintTextStyle, const var_desc: []const u8 =
-                    if (zlinter.analyzer.isTypeFunction(t))
+                    if (decl_type.isTypeFunc())
                         .{ config.decl_that_is_type_fn, "Type function" }
-                    else if (zlinter.analyzer.isFunction(t))
+                    else if (decl_type.isFunc())
                         .{ config.decl_that_is_fn, "Function" }
-                    else if (t.isNamespace())
+                    else if (decl_type.isNamespace())
                         .{ config.decl_that_is_namespace, "Namespace" }
                     else if (t.is_type_val)
                         .{ config.decl_that_is_type, "Type" }
