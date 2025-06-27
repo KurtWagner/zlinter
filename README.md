@@ -102,15 +102,15 @@ For example,
 
 ```zig
 .{
-  .no_deprecation = .{
-    .severity = .warning,
-  },
-  .field_naming = .{
-    .enum_field = .snake_case,
-    .union_field = .off,
-    .struct_field_that_is_type = .title_case,
-    struct_field_that_is_fn = .camel_case,
-  }.
+    .no_deprecation = .{
+        .severity = .warning,
+    },
+    .field_naming = .{
+        .enum_field = .snake_case,
+        .union_field = .off,
+        .struct_field_that_is_type = .title_case,
+        .struct_field_that_is_fn = .camel_case,
+    },
 }
 ```
 
