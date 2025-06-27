@@ -52,7 +52,11 @@ This may change, especially when `zig` is "stable" at `1.x`.
 1. Save dependency to your zig project:
 
     ```shell
+    # For 0.14.x
     zig fetch --save git+https://github.com/kurtwagner/zlinter#0.14.x
+
+    # For master (0.15.x-dev)
+    zig fetch --save git+https://github.com/kurtwagner/zlinter#master
     ```
 
 1. Configure `lint` step in your `build.zig`:
