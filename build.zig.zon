@@ -1,5 +1,6 @@
 .{
     .name = .zlinter,
+    .fingerprint = 0x10e04548f134343a,
     .version = "0.0.1",
     .dependencies = .{
         .zls = .{
