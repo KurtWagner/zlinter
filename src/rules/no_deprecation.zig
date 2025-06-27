@@ -121,8 +121,6 @@ fn handleVarAccess(
 
     const source_index = handle.tree.tokens.items(.start)[identifier_token];
 
-    // const name_loc = zls.Analyser.identifierLocFromIndex(handle.tree, source_index) orelse return;
-    // const name = zls.offsets.locToSlice(handle.tree.source, name_loc);
     const decl = (try analyser.lookupSymbolGlobal(
         handle,
         tree.tokenSlice(identifier_token),

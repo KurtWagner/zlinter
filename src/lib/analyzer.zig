@@ -26,20 +26,6 @@ pub fn isFunction(t: zls.Analyser.Type) bool {
     };
 }
 
-pub fn tokenTag(tree: std.zig.Ast, token_index: std.zig.Ast.TokenIndex) std.zig.Ast.Token.Tag {
-    if (std.meta.hasMethod(@TypeOf(tree), "tokenTag")) {
-        return tree.tokenTag(token_index);
-    }
-    return tree.tokens.items(.tag)[token_index]; // 0.14.x
-}
-
-pub fn tokenStart(tree: std.zig.Ast, token_index: std.zig.Ast.TokenIndex) std.zig.Ast.ByteOffset {
-    if (std.meta.hasMethod(@TypeOf(tree), "tokenStart")) {
-        return tree.tokenStart(token_index);
-    }
-    return tree.tokens.items(.start)[token_index]; // 0.14.x
-}
-
 pub fn nodeTag(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) std.zig.Ast.Node.Tag {
     if (std.meta.hasMethod(@TypeOf(tree), "nodeTag")) {
         return tree.nodeTag(node);

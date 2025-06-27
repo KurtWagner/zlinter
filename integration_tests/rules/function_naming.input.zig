@@ -19,3 +19,13 @@ pub const Parent = struct {
 
     fn thisIsNotOk() type {}
 };
+
+fn here(Arg: u32, t: type, fn_call: *const fn (A: u32) void) t {
+    fn_call(Arg);
+    return @intCast(Arg);
+}
+
+fn alsoHere(arg: u32, T: type, fnCall: *const fn (a: u32) void) T {
+    fnCall(arg);
+    return @intCast(arg);
+}

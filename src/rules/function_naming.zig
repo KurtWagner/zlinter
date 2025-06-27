@@ -9,6 +9,18 @@ pub const Config = struct {
 
     /// Type functions
     function_that_returns_type: zlinter.LintTextStyle = .title_case,
+
+    /// Standard function arg
+    function_arg: zlinter.LintTextStyle = .snake_case,
+
+    /// Type function arg
+    function_arg_that_is_type: zlinter.LintTextStyle = .title_case,
+
+    /// Non-type function function arg
+    function_arg_that_is_fn: zlinter.LintTextStyle = .camel_case,
+
+    /// Type function function arg
+    function_arg_that_is_type_fn: zlinter.LintTextStyle = .title_case,
 };
 
 /// Builds and returns the function_naming rule.
@@ -75,6 +87,46 @@ fn run(
                 );
             }
         }
+
+        if (fnProto(tree, &buffer, node.toNodeIndex())) |fn_proto| {
+            for (fn_proto.ast.params) |param| {
+                const colon_token = tree.firstToken(param) - 1;
+                if (tree.tokens.items(.tag)[colon_token] != .colon) continue;
+
+                const identifer_token = colon_token - 1;
+                if (tree.tokens.items(.tag)[identifer_token] != .identifier) continue;
+                const identifier = tree.tokenSlice(identifer_token);
+
+                if (try doc.resolveTypeOfNode(param)) |t| {
+                    const param_type = if (t.isMetaType()) t else switch (zlinter.version.zig) {
+                        .@"0.14" => t.instanceTypeVal(doc.analyser) orelse continue,
+                        .@"0.15" => try t.instanceTypeVal(doc.analyser) orelse continue,
+                    };
+
+                    const underlying_type = param_type.resolveDeclLiteralResultType();
+
+                    const style: zlinter.LintTextStyle, const desc: []const u8 =
+                        if (underlying_type.isTypeFunc())
+                            .{ config.function_arg_that_is_type_fn, "Function argument of type function" }
+                        else if (underlying_type.isFunc())
+                            .{ config.function_arg_that_is_fn, "Function argument of function" }
+                        else if (underlying_type.isMetaType())
+                            .{ config.function_arg_that_is_type, "Function argument of type" }
+                        else
+                            .{ config.function_arg, "Function argument" };
+
+                    if (!style.check(identifier)) {
+                        try lint_problems.append(allocator, .{
+                            .rule_id = rule.rule_id,
+                            .severity = config.severity,
+                            .start = .startOfToken(tree, identifer_token),
+                            .end = .endOfToken(tree, identifer_token),
+                            .message = try std.fmt.allocPrint(allocator, "{s} should be {s}", .{ desc, style.name() }),
+                        });
+                    }
+                }
+            }
+        }
     }
 
     return if (lint_problems.items.len > 0)
@@ -89,6 +141,14 @@ fn run(
 
 /// Returns fn proto if node is fn proto and has a name token.
 pub fn namedFnProto(tree: std.zig.Ast, buffer: *[1]std.zig.Ast.Node.Index, node: std.zig.Ast.Node.Index) ?std.zig.Ast.full.FnProto {
+    if (fnProto(tree, buffer, node)) |fn_proto| {
+        if (fn_proto.name_token != null) return fn_proto;
+    }
+    return null;
+}
+
+/// Returns fn proto if node is fn proto and has a name token.
+pub fn fnProto(tree: std.zig.Ast, buffer: *[1]std.zig.Ast.Node.Index, node: std.zig.Ast.Node.Index) ?std.zig.Ast.full.FnProto {
     if (switch (zlinter.analyzer.nodeTag(tree, node)) {
         .fn_proto => tree.fnProto(node),
         .fn_proto_multi => tree.fnProtoMulti(node),
@@ -96,7 +156,7 @@ pub fn namedFnProto(tree: std.zig.Ast, buffer: *[1]std.zig.Ast.Node.Index, node:
         .fn_proto_simple => tree.fnProtoSimple(buffer, node),
         else => null,
     }) |fn_proto| {
-        if (fn_proto.name_token != null) return fn_proto;
+        return fn_proto;
     }
     return null;
 }
@@ -115,6 +175,16 @@ test "run" {
         \\
         \\extern fn extern_not_good() void;
         \\extern fn externGood() void;
+        \\
+        \\fn here(Arg: u32, t: type, fn_call: *const fn (A: u32) void) t {
+        \\fn_call(Arg);
+        \\return @intCast(Arg);
+        \\}
+        \\
+        \\fn alsoHere(arg: u32, T: type, fnCall: *const fn (a: u32) void) T {
+        \\    fnCall(arg);
+        \\    return @intCast(arg);
+        \\}
     ;
     var result = (try zlinter.testing.runRule(rule, "path/to/file.zig", source)).?;
     defer result.deinit(std.testing.allocator);
@@ -169,6 +239,66 @@ test "run" {
                 .column = 24,
             },
             .message = "Callable should be camelCase",
+        },
+        .{
+            .rule_id = "function_naming",
+            .severity = .@"error",
+            .start = .{
+                .offset = 189,
+                .line = 10,
+                .column = 8,
+            },
+            .end = .{
+                .offset = 253,
+                .line = 10,
+                .column = 10,
+            },
+            .message = "Function argument should be snake_case",
+        },
+        .{
+            .rule_id = "function_naming",
+            .severity = .@"error",
+            .start = .{
+                .offset = 189,
+                .line = 10,
+                .column = 18,
+            },
+            .end = .{
+                .offset = 253,
+                .line = 10,
+                .column = 18,
+            },
+            .message = "Function argument of type should be TitleCase",
+        },
+        .{
+            .rule_id = "function_naming",
+            .severity = .@"error",
+            .start = .{
+                .offset = 189,
+                .line = 10,
+                .column = 27,
+            },
+            .end = .{
+                .offset = 253,
+                .line = 10,
+                .column = 33,
+            },
+            .message = "Function argument of function should be camelCase",
+        },
+        .{
+            .rule_id = "function_naming",
+            .severity = .@"error",
+            .start = .{
+                .offset = 189,
+                .line = 10,
+                .column = 47,
+            },
+            .end = .{
+                .offset = 253,
+                .line = 10,
+                .column = 47,
+            },
+            .message = "Function argument should be snake_case",
         },
     }, result.problems);
 

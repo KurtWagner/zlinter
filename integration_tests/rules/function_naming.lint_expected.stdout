@@ -28,4 +28,24 @@ error Callable returning `type` should be TitleCase [./rules/function_naming.inp
  20 |     fn thisIsNotOk() type {}
     |        ^^^^^^^^^^^
 
-x 6 errors
+error Function argument should be snake_case [./rules/function_naming.input.zig:23:9] function_naming
+
+ 23 | fn here(Arg: u32, t: type, fn_call: *const fn (A: u32) void) t {
+    |         ^^^
+
+error Function argument of type should be TitleCase [./rules/function_naming.input.zig:23:19] function_naming
+
+ 23 | fn here(Arg: u32, t: type, fn_call: *const fn (A: u32) void) t {
+    |                   ^
+
+error Function argument of function should be camelCase [./rules/function_naming.input.zig:23:28] function_naming
+
+ 23 | fn here(Arg: u32, t: type, fn_call: *const fn (A: u32) void) t {
+    |                            ^^^^^^^
+
+error Function argument should be snake_case [./rules/function_naming.input.zig:23:48] function_naming
+
+ 23 | fn here(Arg: u32, t: type, fn_call: *const fn (A: u32) void) t {
+    |                                                ^
+
+x 10 errors
