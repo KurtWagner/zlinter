@@ -17,6 +17,12 @@ Zlinter is **not** a binary you download and execute. See [getting started](#get
   * [Disable with comments](#disable-with-comments)
 * [Rules](#rules)
   * [Builtin rules](#builtin-rules)
+    * [no_deprecated](#no_deprecated)
+    * [function_naming](#function_naming)
+    * [declaration_naming](#declaration_naming)
+    * [field_naming](#field_naming)
+    * [file_naming](#file_naming)
+    * [no_unused_container_declarations](#no_unused_container_declarations)
   * [Custom rules](#custom-rules)
 * [For contributors](#for-contributors)
   * [Contributions](#contributions)
@@ -219,8 +225,9 @@ const MyStruct = struct {
 };
 ```
 
-#### `no_unused_container_declarations` :wrench:
+#### `no_unused_container_declarations`
 
+* :wrench:
 * [Source code](./src/rules/no_unused_container_declarations.zig)
 
 Enforces that container declarations are used.
