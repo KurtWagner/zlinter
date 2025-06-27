@@ -160,11 +160,7 @@ fn isFieldAccessOfRootContainer(doc: zlinter.LintDocument, node: std.zig.Ast.Nod
     };
 
     if (try doc.resolveTypeOfNode(lhs)) |t| {
-        switch (t.data) {
-            .pointer => |handle| switch (handle.elem_ty.data) {
-                .container => |scope_handle| return isContainerRoot(scope_handle),
-                else => {},
-            },
+        switch (t.resolveDeclLiteralResultType().data) {
             .container => |scope_handle| return isContainerRoot(scope_handle),
             else => {},
         }

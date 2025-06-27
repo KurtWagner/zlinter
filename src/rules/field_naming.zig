@@ -68,11 +68,11 @@ fn run(
                     const style: zlinter.LintTextStyle, const container_name: []const u8 = tuple: {
                         break :tuple switch (container_tag) {
                             .keyword_struct => if (maybe_node_type) |t|
-                                if (zlinter.analyzer.isTypeFunction(t))
+                                if (t.resolveDeclLiteralResultType().isTypeFunc())
                                     .{ config.struct_field_that_is_type_fn, "Type function" }
-                                else if (zlinter.analyzer.isFunction(t))
+                                else if (t.resolveDeclLiteralResultType().isFunc())
                                     .{ config.struct_field_that_is_fn, "Function" }
-                                else if (t.isNamespace())
+                                else if (t.resolveDeclLiteralResultType().isNamespace())
                                     .{ config.struct_field_that_is_namespace, "Namespace" }
                                 else if (t.is_type_val)
                                     .{ config.struct_field_that_is_type, "Type" }
