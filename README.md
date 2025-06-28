@@ -1,3 +1,5 @@
+<img align="left" width="64" height="64" src="icon_128.png" alt="Zlinter icon">
+
 # Zlinter - Linter for Zig
 
 An extendable and customizable **Zig linter** that is integrated and built from within your own `build.zig`.
