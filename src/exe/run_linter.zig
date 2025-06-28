@@ -154,9 +154,9 @@ pub fn main() !u8 {
                 gpa,
                 .{
                     .config = config: {
-                        inline for (std.meta.fields(RulesConfig)) |field| {
-                            if (std.mem.eql(u8, rule.rule_id, field.name)) {
-                                break :config @as(*anyopaque, @constCast(&@field(rules_config, field.name)));
+                        inline for (@typeInfo(configs).@"struct".decls) |decl| {
+                            if (std.mem.eql(u8, rule.rule_id, decl.name)) {
+                                break :config @as(*anyopaque, @constCast(&@field(configs, decl.name)));
                             }
                         }
                         std.log.err("Failed to lookup rule config for {s}", .{rule.rule_id});
@@ -366,6 +366,5 @@ test {
 const std = @import("std");
 const builtin = @import("builtin");
 const zlinter = @import("zlinter");
-const RulesConfig = @import("rules").RulesConfig; // Generated in build.zig
 const rules = @import("rules").rules; // Generated in build.zig
-const rules_config: RulesConfig = @import("rules_config");
+const configs = @import("rules").configs; // Generated in build.zig

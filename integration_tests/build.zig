@@ -15,20 +15,17 @@ pub fn build(b: *std.Build) !void {
 
     // zig build lint -
     const lint_cmd = b.step("lint", "Lint source code.");
-    const options = zlinter.BuildRuleOptions{ .target = target, .optimize = optimize };
-    lint_cmd.dependOn(try zlinter.buildStep(b, .{
-        .target = target,
-        .optimize = optimize,
-        .rules = &.{
-            zlinter.buildRule(b, .{ .builtin = .no_unused }, options),
-            zlinter.buildRule(b, .{ .builtin = .field_naming }, options),
-            zlinter.buildRule(b, .{ .builtin = .declaration_naming }, options),
-            zlinter.buildRule(b, .{ .builtin = .function_naming }, options),
-            zlinter.buildRule(b, .{ .builtin = .file_naming }, options),
-            zlinter.buildRule(b, .{ .builtin = .no_deprecation }, options),
-            zlinter.buildRule(b, .{ .custom = .{ .name = "no_cats", .path = "src/no_cats.zig" } }, options),
-        },
-    }));
+    lint_cmd.dependOn(step: {
+        var builder = zlinter.builder(b, .{ .target = target, .optimize = optimize });
+        try builder.addRule(.{ .builtin = .no_unused }, .{});
+        try builder.addRule(.{ .builtin = .field_naming }, .{});
+        try builder.addRule(.{ .builtin = .declaration_naming }, .{});
+        try builder.addRule(.{ .builtin = .function_naming }, .{});
+        try builder.addRule(.{ .builtin = .file_naming }, .{});
+        try builder.addRule(.{ .builtin = .no_deprecation }, .{});
+        try builder.addRule(.{ .custom = .{ .name = "no_cats", .path = "src/no_cats.zig" } }, .{});
+        break :step try builder.build();
+    });
 }
 
 const zlinter = @import("zlinter");
