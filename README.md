@@ -101,7 +101,7 @@ This may change, especially when `zig` is "stable" at `1.x`.
 `addRule` accepts an anonymous struct representing the `Config` of rule being added. For example,
 
 ```zig
-try builder.addRule(.{ .builtin = .file_naming }, .{
+try builder.addRule(.{ .builtin = .field_naming }, .{
   .enum_field = .snake_case,
   .union_field = .off,
   .struct_field_that_is_type = .title_case,
