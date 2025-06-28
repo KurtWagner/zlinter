@@ -75,12 +75,12 @@ This may change, especially when `zig` is "stable" at `1.x`.
     const lint_cmd = b.step("lint", "Lint source code.");
     lint_cmd.dependOn(try zlinter.buildStep(b, .{
         .rules = &.{
-            zlinter.buildRule(b, .{ .builtin = .no_unused }, .{}),
-            zlinter.buildRule(b, .{ .builtin = .declaration_naming }, .{}),
-            zlinter.buildRule(b, .{ .builtin = .function_naming }, .{}),
-            zlinter.buildRule(b, .{ .builtin = .file_naming }, .{}),
-            zlinter.buildRule(b, .{ .builtin = .field_naming }, .{}),
-            zlinter.buildRule(b, .{ .builtin = .no_deprecation }, .{}),
+            zlinter.buildRule(b, .{ .builtin = .no_unused }, .{}, .{}),
+            zlinter.buildRule(b, .{ .builtin = .declaration_naming }, .{}, .{}),
+            zlinter.buildRule(b, .{ .builtin = .function_naming }, .{}, .{}),
+            zlinter.buildRule(b, .{ .builtin = .file_naming }, .{}, .{}),
+            zlinter.buildRule(b, .{ .builtin = .field_naming }, .{}, .{}),
+            zlinter.buildRule(b, .{ .builtin = .no_deprecation }, .{}, .{}),
         },
     }));
     ```
@@ -98,25 +98,23 @@ This may change, especially when `zig` is "stable" at `1.x`.
 
 ### Project config
 
-Create a file `zlinter.zon` alongside your `build.zig` that contains an object with rule name keys and values matching the `Config` of the rule.
-
-For example,
+The forth argument of `buildRule` accepts `Config` of the rule being built. For example,
 
 ```zig
-.{
-    .no_deprecation = .{
-        .severity = .warning,
-    },
-    .field_naming = .{
-        .enum_field = .snake_case,
-        .union_field = .off,
-        .struct_field_that_is_type = .title_case,
-        .struct_field_that_is_fn = .camel_case,
-    },
-}
+lint_cmd.dependOn(try zlinter.buildStep(b, .{
+  .rules = &.{
+    zlinter.buildRule(b, .{ .builtin = .field_naming }, .{}, .{
+      .enum_field = .snake_case,
+      .union_field = .off,
+      .struct_field_that_is_type = .title_case,
+      .struct_field_that_is_fn = .camel_case,
+    }),
+    zlinter.buildRule(b, .{ .builtin = .no_deprecation }, .{}, .{ .severity = .warning }),
+  }
+}));
 ```
 
-Where `Config` struct are found in the rule source files [`no_deprecation.Config`](./src/rules/no_deprecation.zig) and [`field_naming.Config`](./src/rules/field_naming.zig).
+where `Config` struct are found in the rule source files [`no_deprecation.Config`](./src/rules/no_deprecation.zig) and [`field_naming.Config`](./src/rules/field_naming.zig).
 
 ### Disable with comments
 
@@ -257,7 +255,7 @@ Bespoke rules can be added to your project. For example, maybe you really don't 
 const lint_cmd = b.step("lint", "Lint source code.");
 lint_cmd.dependOn(try zlinter.buildStep(b, .{
     .rules = &.{
-        zlinter.buildRule(b, .{ .custom = .{ .name = "no_cats", .path = "src/no_cats.zig" } }, .{}),
+        zlinter.buildRule(b, .{ .custom = .{ .name = "no_cats", .path = "src/no_cats.zig" } }, .{}, .{}),
         // .. other rules ...
     },
 }));
