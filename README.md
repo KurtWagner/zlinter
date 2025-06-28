@@ -277,10 +277,6 @@ zig build unit-test
 
 Integration tests:
 
-> [!WARNING]  
-> Integration test has a caching issue with the way its written so sometimes you
-> need to nuke its cache.
-
 ```shell
 zig build integration-test
 ```
