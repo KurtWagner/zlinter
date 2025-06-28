@@ -165,14 +165,8 @@ pub fn build(b: *std.Build) !void {
     // ------------------------------------------------------------------------
     // zig build test
     // ------------------------------------------------------------------------
-    const run_integration_tests = b.addRunArtifact(b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/exe/run_integration_tests.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{zlinter_import},
-        }),
-    }));
+    const run_integration_tests = b.addSystemCommand(&.{ "zig", "build", "test" });
+    run_integration_tests.setCwd(b.path("./integration_tests"));
 
     const unit_test_step = b.step("unit-test", "Run unit tests");
     unit_test_step.dependOn(&run_unit_tests.step);
