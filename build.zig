@@ -8,7 +8,7 @@ const zls_version: []const u8 = switch (version.zig) {
 
 pub const BuildStepOptions = struct {
     /// List of rules created with `buildRule`
-    rules: []const std.Build.Module.Import,
+    rules: []const BuiltRule,
 
     /// You should never need to set this. Defaults to native host.
     target: ?std.Build.ResolvedTarget = null,
@@ -42,6 +42,10 @@ pub const BuildRuleSource = union(enum) {
     },
 };
 
+pub const BuiltRule = struct {
+    import: std.Build.Module.Import,
+};
+
 pub const BuildStepError = error{
     OutOfMemory,
     InvalidConfig,
@@ -68,7 +72,7 @@ pub fn buildRule(
     b: *std.Build,
     comptime source: BuildRuleSource,
     options: BuildRuleOptions,
-) std.Build.Module.Import {
+) BuiltRule {
     const zlinter_import = std.Build.Module.Import{
         .name = "zlinter",
         .module = b.dependencyFromBuildZig(@This(), .{}).module("zlinter"),
@@ -85,13 +89,15 @@ pub fn buildRule(
             },
         ),
         .custom => |custom| .{
-            .name = checkNoNameCollision(custom.name),
-            .module = b.createModule(.{
-                .root_source_file = b.path(custom.path),
-                .target = options.target,
-                .optimize = options.optimize,
-                .imports = &.{zlinter_import},
-            }),
+            .import = .{
+                .name = checkNoNameCollision(custom.name),
+                .module = b.createModule(.{
+                    .root_source_file = b.path(custom.path),
+                    .target = options.target,
+                    .optimize = options.optimize,
+                    .imports = &.{zlinter_import},
+                }),
+            },
         },
     };
 }
@@ -220,7 +226,7 @@ pub fn build(b: *std.Build) !void {
 
 fn buildStepWithDependency(
     b: *std.Build,
-    rule_imports: []const std.Build.Module.Import,
+    rules: []const BuiltRule,
     options: struct {
         target: ?std.Build.ResolvedTarget = null,
         optimize: ?std.builtin.OptimizeMode = null,
@@ -253,11 +259,15 @@ fn buildStepWithDependency(
     // Generate dynamic rules and rules config
     // --------------------------------------------------------------------
 
-    const build_rules_step, const build_rules_output = addBuildRulesStep(b, build_rules_exe_file, rule_imports);
+    var rule_imports = std.ArrayListUnmanaged(std.Build.Module.Import).empty;
+    for (rules) |r| try rule_imports.append(b.allocator, r.import);
+    defer rule_imports.deinit(b.allocator);
+
+    const build_rules_step, const build_rules_output = addBuildRulesStep(b, build_rules_exe_file, rule_imports.items);
     const rules_module = try createRulesModule(
         b,
         zlinter_import,
-        rule_imports,
+        rule_imports.items,
         build_rules_output,
     );
     exe_module.addImport("rules", rules_module);
@@ -321,16 +331,18 @@ fn buildRuleWithDependency(
         zlinter_dependency: ?*std.Build.Dependency = null,
         zlinter_import: std.Build.Module.Import,
     },
-) std.Build.Module.Import {
+) BuiltRule {
     return switch (rule) {
         inline else => |inline_rule| .{
-            .name = @tagName(inline_rule),
-            .module = b.createModule(.{
-                .root_source_file = if (options.zlinter_dependency) |d| d.path("src/rules/" ++ @tagName(inline_rule) ++ ".zig") else b.path("src/rules/" ++ @tagName(inline_rule) ++ ".zig"),
-                .target = options.target,
-                .optimize = options.optimize,
-                .imports = &.{options.zlinter_import},
-            }),
+            .import = .{
+                .name = @tagName(inline_rule),
+                .module = b.createModule(.{
+                    .root_source_file = if (options.zlinter_dependency) |d| d.path("src/rules/" ++ @tagName(inline_rule) ++ ".zig") else b.path("src/rules/" ++ @tagName(inline_rule) ++ ".zig"),
+                    .target = options.target,
+                    .optimize = options.optimize,
+                    .imports = &.{options.zlinter_import},
+                }),
+            },
         },
     };
 }
