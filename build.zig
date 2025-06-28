@@ -1,20 +1,8 @@
-const std = @import("std");
-const version = @import("./src/lib/version.zig");
+const @"build.zig" = @This();
 
 const zls_version: []const u8 = switch (version.zig) {
     .@"0.15" => "0.15.0-dev",
     .@"0.14" => "0.14.0",
-};
-
-pub const BuildStepOptions = struct {
-    /// List of rules created with `buildRule`
-    rules: []const BuiltRule,
-
-    /// You should never need to set this. Defaults to native host.
-    target: ?std.Build.ResolvedTarget = null,
-
-    /// You should never need to set this. Leave it to be managed by zlinter
-    optimize: std.builtin.OptimizeMode = .Debug,
 };
 
 pub const BuiltinLintRule = enum {
@@ -26,15 +14,7 @@ pub const BuiltinLintRule = enum {
     no_deprecation,
 };
 
-pub const BuildRuleOptions = struct {
-    /// You should never need to set this. Defaults to native host.
-    target: ?std.Build.ResolvedTarget = null,
-
-    /// You should never need to set this. Leave it to be managed by zlinter
-    optimize: std.builtin.OptimizeMode = .Debug,
-};
-
-pub const BuildRuleSource = union(enum) {
+const BuildRuleSource = union(enum) {
     builtin: BuiltinLintRule,
     custom: struct {
         name: []const u8,
@@ -42,12 +22,80 @@ pub const BuildRuleSource = union(enum) {
     },
 };
 
-pub const BuiltRule = struct {
+const BuiltRule = struct {
     import: std.Build.Module.Import,
     zon_config_str: []const u8,
 
-    pub fn deinit(self: *BuiltRule, allocator: std.mem.Allocator) void {
+    fn deinit(self: *BuiltRule, allocator: std.mem.Allocator) void {
         allocator.free(self.zon_config_str);
+    }
+};
+
+pub const BuilderOptions = struct {
+    /// You should never need to set this. Defaults to native host.
+    target: ?std.Build.ResolvedTarget = null,
+
+    /// You should never need to set this. Leave it to be managed by zlinter
+    optimize: std.builtin.OptimizeMode = .Debug,
+};
+
+/// Creater a step builder for zlinter
+pub fn builder(b: *std.Build, options: BuilderOptions) StepBuilder {
+    return .{
+        .rules = .empty,
+        .b = b,
+        .optimize = options.optimize,
+        .target = options.target orelse b.graph.host,
+    };
+}
+
+const StepBuilder = struct {
+    rules: std.ArrayListUnmanaged(BuiltRule),
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+
+    pub fn addRule(
+        self: *StepBuilder,
+        comptime source: BuildRuleSource,
+        config: anytype,
+    ) error{OutOfMemory}!void {
+        try self.rules.append(
+            self.b.allocator,
+            buildRule(
+                self.b,
+                source,
+                .{
+                    .optimize = self.optimize,
+                    .target = self.target,
+                },
+                config,
+            ),
+        );
+    }
+
+    /// Returns a build step and cleans itself up.
+    pub fn build(self: *StepBuilder) BuildStepError!*std.Build.Step {
+        defer self.deinit();
+
+        return try buildStep(
+            self.b,
+            self.rules.items,
+            .{
+                .target = self.target,
+                .optimize = self.optimize,
+                .zlinter = .{
+                    .dependency = self.b.dependencyFromBuildZig(
+                        @"build.zig",
+                        .{},
+                    ),
+                },
+            },
+        );
+    }
+
+    fn deinit(self: *StepBuilder) void {
+        for (self.rules.items) |*r| r.deinit(self.b.allocator);
     }
 };
 
@@ -55,66 +103,6 @@ pub const BuildStepError = error{
     OutOfMemory,
     InvalidConfig,
 };
-
-/// Used to integrate the linter into other packages build.zig.
-pub fn buildStep(
-    b: *std.Build,
-    options: BuildStepOptions,
-) BuildStepError!*std.Build.Step {
-    defer {
-        // for (options.rules) |*rule| {
-        //     rule.deinit(b.allocator);
-        // }
-    }
-    return try buildStepWithDependency(
-        b,
-        options.rules,
-        .{
-            .target = options.target orelse b.graph.host,
-            .optimize = options.optimize,
-            .zlinter = .{ .dependency = b.dependencyFromBuildZig(@This(), .{}) },
-        },
-    );
-}
-
-/// Used in conjunction with `buildStep` to add rules to other packages build.zig
-pub fn buildRule(
-    b: *std.Build,
-    comptime source: BuildRuleSource,
-    options: BuildRuleOptions,
-    config: anytype,
-) BuiltRule {
-    const zlinter_import = std.Build.Module.Import{
-        .name = "zlinter",
-        .module = b.dependencyFromBuildZig(@This(), .{}).module("zlinter"),
-    };
-
-    return switch (source) {
-        .builtin => |builtin| buildRuleWithDependency(
-            b,
-            builtin,
-            .{
-                .target = options.target,
-                .optimize = options.optimize,
-                .zlinter_dependency = b.dependencyFromBuildZig(@This(), .{}),
-                .zlinter_import = zlinter_import,
-            },
-            config,
-        ),
-        .custom => |custom| .{
-            .import = .{
-                .name = checkNoNameCollision(custom.name),
-                .module = b.createModule(.{
-                    .root_source_file = b.path(custom.path),
-                    .target = options.target,
-                    .optimize = options.optimize,
-                    .imports = &.{zlinter_import},
-                }),
-            },
-            .zon_config_str = toZonString(config, b.allocator) catch @panic("Invalid Rule config"),
-        },
-    };
-}
 
 /// zlinters own build file for running its tests and itself on itself
 pub fn build(b: *std.Build) !void {
@@ -200,15 +188,15 @@ pub fn build(b: *std.Build) !void {
     // zig build lint
     // ------------------------------------------------------------------------
     const lint_cmd = b.step("lint", "Lint the linters own source code.");
-    lint_cmd.dependOn(try buildStepWithDependency(
+    lint_cmd.dependOn(try buildStep(
         b,
         &.{
-            buildRuleWithDependency(b, .no_unused, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-            buildRuleWithDependency(b, .field_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-            buildRuleWithDependency(b, .declaration_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-            buildRuleWithDependency(b, .function_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-            buildRuleWithDependency(b, .file_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-            buildRuleWithDependency(b, .no_deprecation, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_unused, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .field_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .declaration_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .function_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .file_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_deprecation, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
         },
         .{
             .target = target,
@@ -227,13 +215,12 @@ fn toZonString(val: anytype, allocator: std.mem.Allocator) ![]const u8 {
     return zon.toOwnedSlice(allocator);
 }
 
-fn buildStepWithDependency(
+fn buildStep(
     b: *std.Build,
     rules: []const BuiltRule,
     options: struct {
-        target: ?std.Build.ResolvedTarget = null,
-        optimize: ?std.builtin.OptimizeMode = null,
-
+        target: std.Build.ResolvedTarget,
+        optimize: std.builtin.OptimizeMode,
         zlinter: union(enum) {
             dependency: *std.Build.Dependency,
             module: *std.Build.Module,
@@ -250,7 +237,6 @@ fn buildStepWithDependency(
     // --------------------------------------------------------------------
     // Generate linter exe
     // --------------------------------------------------------------------
-
     const exe_module = b.createModule(.{
         .root_source_file = exe_file,
         .target = options.target,
@@ -261,7 +247,6 @@ fn buildStepWithDependency(
     // --------------------------------------------------------------------
     // Generate dynamic rules and rules config
     // --------------------------------------------------------------------
-
     var rule_imports = std.ArrayListUnmanaged(std.Build.Module.Import).empty;
     for (rules) |r| try rule_imports.append(b.allocator, r.import);
     defer rule_imports.deinit(b.allocator);
@@ -277,10 +262,10 @@ fn buildStepWithDependency(
         ),
     );
     exe_module.addImport("rules", rules_module);
+
     // --------------------------------------------------------------------
     // Generate linter exe
     // --------------------------------------------------------------------
-
     const exe = b.addExecutable(.{
         .name = "zlinter",
         .root_module = exe_module,
@@ -312,12 +297,53 @@ fn checkNoNameCollision(comptime name: []const u8) []const u8 {
     return name;
 }
 
-fn buildRuleWithDependency(
+fn buildRule(
+    b: *std.Build,
+    comptime source: BuildRuleSource,
+    options: struct {
+        target: std.Build.ResolvedTarget,
+        optimize: std.builtin.OptimizeMode,
+    },
+    config: anytype,
+) BuiltRule {
+    const zlinter_import = std.Build.Module.Import{
+        .name = "zlinter",
+        .module = b.dependencyFromBuildZig(@This(), .{}).module("zlinter"),
+    };
+
+    return switch (source) {
+        .builtin => |builtin| buildBuiltinRule(
+            b,
+            builtin,
+            .{
+                .target = options.target,
+                .optimize = options.optimize,
+                .zlinter_dependency = b.dependencyFromBuildZig(@This(), .{}),
+                .zlinter_import = zlinter_import,
+            },
+            config,
+        ),
+        .custom => |custom| .{
+            .import = .{
+                .name = checkNoNameCollision(custom.name),
+                .module = b.createModule(.{
+                    .root_source_file = b.path(custom.path),
+                    .target = options.target,
+                    .optimize = options.optimize,
+                    .imports = &.{zlinter_import},
+                }),
+            },
+            .zon_config_str = toZonString(config, b.allocator) catch @panic("Invalid Rule config"),
+        },
+    };
+}
+
+fn buildBuiltinRule(
     b: *std.Build,
     rule: BuiltinLintRule,
     options: struct {
-        target: ?std.Build.ResolvedTarget = null,
-        optimize: ?std.builtin.OptimizeMode = null,
+        target: std.Build.ResolvedTarget,
+        optimize: std.builtin.OptimizeMode,
         zlinter_dependency: ?*std.Build.Dependency = null,
         zlinter_import: std.Build.Module.Import,
     },
@@ -384,3 +410,6 @@ fn createRulesModule(
         .imports = rules_imports,
     });
 }
+
+const std = @import("std");
+const version = @import("./src/lib/version.zig");
