@@ -20,7 +20,7 @@ An extendable and customizable **Zig linter** that is integrated and built from 
     * [declaration_naming](#declaration_naming)
     * [field_naming](#field_naming)
     * [file_naming](#file_naming)
-    * [no_unused_container_declarations](#no_unused_container_declarations)
+    * [no_unused](#no_unused)
   * [Custom rules](#custom-rules)
 * [For contributors](#for-contributors)
   * [Contributions](#contributions)
@@ -73,7 +73,7 @@ This may change, especially when `zig` is "stable" at `1.x`.
     const lint_cmd = b.step("lint", "Lint source code.");
     lint_cmd.dependOn(try zlinter.buildStep(b, .{
         .rules = &.{
-            zlinter.buildRule(b, .{ .builtin = .no_unused_container_declarations }, .{}),
+            zlinter.buildRule(b, .{ .builtin = .no_unused }, .{}),
             zlinter.buildRule(b, .{ .builtin = .declaration_naming }, .{}),
             zlinter.buildRule(b, .{ .builtin = .function_naming }, .{}),
             zlinter.buildRule(b, .{ .builtin = .file_naming }, .{}),
@@ -225,10 +225,10 @@ const MyStruct = struct {
 };
 ```
 
-#### `no_unused_container_declarations`
+#### `no_unused`
 
 * :wrench:
-* [Source code](./src/rules/no_unused_container_declarations.zig)
+* [Source code](./src/rules/no_unused.zig)
 
 Enforces that container declarations are used.
 
