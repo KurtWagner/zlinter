@@ -73,16 +73,16 @@ This may change, especially when `zig` is "stable" at `1.x`.
     const zlinter = @import("zlinter");
     // ...
     const lint_cmd = b.step("lint", "Lint source code.");
-    lint_cmd.dependOn(try zlinter.buildStep(b, .{
-        .rules = &.{
-            zlinter.buildRule(b, .{ .builtin = .no_unused }, .{}),
-            zlinter.buildRule(b, .{ .builtin = .declaration_naming }, .{}),
-            zlinter.buildRule(b, .{ .builtin = .function_naming }, .{}),
-            zlinter.buildRule(b, .{ .builtin = .file_naming }, .{}),
-            zlinter.buildRule(b, .{ .builtin = .field_naming }, .{}),
-            zlinter.buildRule(b, .{ .builtin = .no_deprecation }, .{}),
-        },
-    }));
+    lint_cmd.dependOn(step: {
+        var builder = zlinter.builder(b, .{});
+        try builder.addRule(.{ .builtin = .no_unused }, .{});
+        try builder.addRule(.{ .builtin = .field_naming }, .{});
+        try builder.addRule(.{ .builtin = .declaration_naming }, .{});
+        try builder.addRule(.{ .builtin = .function_naming }, .{});
+        try builder.addRule(.{ .builtin = .file_naming }, .{});
+        try builder.addRule(.{ .builtin = .no_deprecation }, .{});
+        break :step try builder.build();
+    });
     ```
 
 1. Run linter:
@@ -98,25 +98,21 @@ This may change, especially when `zig` is "stable" at `1.x`.
 
 ### Project config
 
-Create a file `zlinter.zon` alongside your `build.zig` that contains an object with rule name keys and values matching the `Config` of the rule.
-
-For example,
+`addRule` accepts an anonymous struct representing the `Config` of rule being added. For example,
 
 ```zig
-.{
-    .no_deprecation = .{
-        .severity = .warning,
-    },
-    .field_naming = .{
-        .enum_field = .snake_case,
-        .union_field = .off,
-        .struct_field_that_is_type = .title_case,
-        .struct_field_that_is_fn = .camel_case,
-    },
-}
+try builder.addRule(.{ .builtin = .file_naming }, .{
+  .enum_field = .snake_case,
+  .union_field = .off,
+  .struct_field_that_is_type = .title_case,
+  .struct_field_that_is_fn = .camel_case,
+});
+try builder.addRule(.{ .builtin = .no_deprecation }, .{
+  .severity = .warning,
+});
 ```
 
-Where `Config` struct are found in the rule source files [`no_deprecation.Config`](./src/rules/no_deprecation.zig) and [`field_naming.Config`](./src/rules/field_naming.zig).
+where `Config` struct are found in the rule source files [`no_deprecation.Config`](./src/rules/no_deprecation.zig) and [`field_naming.Config`](./src/rules/field_naming.zig).
 
 ### Disable with comments
 
@@ -254,13 +250,12 @@ const not_used = @import("dep");
 Bespoke rules can be added to your project. For example, maybe you really don't like cats, and refuse to let any `cats` exist in any identifier. See example rule [`no_cats`](./integration_tests/src/no_cats.zig), which is then integrated like builtin rules in your `build.zig`:
 
 ```zig
-const lint_cmd = b.step("lint", "Lint source code.");
-lint_cmd.dependOn(try zlinter.buildStep(b, .{
-    .rules = &.{
-        zlinter.buildRule(b, .{ .custom = .{ .name = "no_cats", .path = "src/no_cats.zig" } }, .{}),
-        // .. other rules ...
-    },
-}));
+builder.addRule(b, .{ 
+  .custom = .{
+    .name = "no_cats",
+    .path = "src/no_cats.zig",
+  },
+}, .{});
 ```
 
 ## For contributors
