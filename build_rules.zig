@@ -24,22 +24,36 @@ pub fn main() !void {
         \\
     );
     var buffer: [2048]u8 = undefined;
-    for (args[2..]) |arg| {
-        try output_file.writeAll(
-            try std.fmt.bufPrint(&buffer, "@import(\"{s}\").buildRule(.{{}}),\n", .{arg}),
-        );
+    {
+        var i: usize = 2;
+        while (i < args.len) : (i += 2) {
+            const arg = args[i];
+            const config = args[i + 1];
+            _ = config;
+
+            try output_file.writeAll(
+                try std.fmt.bufPrint(&buffer, "@import(\"{s}\").buildRule(.{{}}),\n", .{arg}),
+            );
+        }
     }
+
     try output_file.writeAll(
         \\};
         \\
-        \\pub const RulesConfig = struct {
+        \\pub const configs = struct {
         \\
     );
 
-    for (args[2..]) |arg| {
-        try output_file.writeAll(
-            try std.fmt.bufPrint(&buffer, "@\"{s}\": @import(\"{s}\").Config = .{{}},\n", .{ arg, arg }),
-        );
+    {
+        var i: usize = 2;
+        while (i < args.len) : (i += 2) {
+            const arg = args[i];
+            const config = args[i + 1];
+
+            try output_file.writeAll(
+                try std.fmt.bufPrint(&buffer, "pub const @\"{s}\": @import(\"{s}\").Config = {s};\n", .{ arg, arg, config }),
+            );
+        }
     }
 
     try output_file.writeAll(

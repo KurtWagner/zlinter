@@ -20,13 +20,13 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
         .rules = &.{
-            zlinter.buildRule(b, .{ .builtin = .no_unused }, options),
-            zlinter.buildRule(b, .{ .builtin = .field_naming }, options),
-            zlinter.buildRule(b, .{ .builtin = .declaration_naming }, options),
-            zlinter.buildRule(b, .{ .builtin = .function_naming }, options),
-            zlinter.buildRule(b, .{ .builtin = .file_naming }, options),
-            zlinter.buildRule(b, .{ .builtin = .no_deprecation }, options),
-            zlinter.buildRule(b, .{ .custom = .{ .name = "no_cats", .path = "src/no_cats.zig" } }, options),
+            zlinter.buildRule(b, .{ .builtin = .no_unused }, options, .{}),
+            zlinter.buildRule(b, .{ .builtin = .field_naming }, options, .{}),
+            zlinter.buildRule(b, .{ .builtin = .declaration_naming }, options, .{}),
+            zlinter.buildRule(b, .{ .builtin = .function_naming }, options, .{}),
+            zlinter.buildRule(b, .{ .builtin = .file_naming }, options, .{}),
+            zlinter.buildRule(b, .{ .builtin = .no_deprecation }, options, .{}),
+            zlinter.buildRule(b, .{ .custom = .{ .name = "no_cats", .path = "src/no_cats.zig" } }, options, .{}),
         },
     }));
 }

@@ -44,6 +44,11 @@ pub const BuildRuleSource = union(enum) {
 
 pub const BuiltRule = struct {
     import: std.Build.Module.Import,
+    zon_config_str: []const u8,
+
+    pub fn deinit(self: *BuiltRule, allocator: std.mem.Allocator) void {
+        allocator.free(self.zon_config_str);
+    }
 };
 
 pub const BuildStepError = error{
@@ -56,6 +61,11 @@ pub fn buildStep(
     b: *std.Build,
     options: BuildStepOptions,
 ) BuildStepError!*std.Build.Step {
+    defer {
+        // for (options.rules) |*rule| {
+        //     rule.deinit(b.allocator);
+        // }
+    }
     return try buildStepWithDependency(
         b,
         options.rules,
@@ -72,11 +82,13 @@ pub fn buildRule(
     b: *std.Build,
     comptime source: BuildRuleSource,
     options: BuildRuleOptions,
+    config: anytype,
 ) BuiltRule {
     const zlinter_import = std.Build.Module.Import{
         .name = "zlinter",
         .module = b.dependencyFromBuildZig(@This(), .{}).module("zlinter"),
     };
+
     return switch (source) {
         .builtin => |builtin| buildRuleWithDependency(
             b,
@@ -87,6 +99,7 @@ pub fn buildRule(
                 .zlinter_dependency = b.dependencyFromBuildZig(@This(), .{}),
                 .zlinter_import = zlinter_import,
             },
+            config,
         ),
         .custom => |custom| .{
             .import = .{
@@ -98,12 +111,10 @@ pub fn buildRule(
                     .imports = &.{zlinter_import},
                 }),
             },
+            .zon_config_str = toZonString(config, b.allocator) catch @panic("Invalid Rule config"),
         },
     };
 }
-
-// const zlinter_json_config_file_name = ".zlinter.json";
-const zlinter_zon_config_file_name = "zlinter.zon";
 
 /// zlinters own build file for running its tests and itself on itself
 pub fn build(b: *std.Build) !void {
@@ -136,6 +147,7 @@ pub fn build(b: *std.Build) !void {
     // --------------------------------------------------------------------
     // Generate dynamic rules list and configs
     // --------------------------------------------------------------------
+    var rules: [@typeInfo(BuiltinLintRule).@"enum".fields.len]BuiltRule = undefined;
     var rule_imports: [@typeInfo(BuiltinLintRule).@"enum".fields.len]std.Build.Module.Import = undefined;
     inline for (std.meta.fields(BuiltinLintRule), 0..) |enum_type, i| {
         const rule_module = b.createModule(.{
@@ -156,29 +168,11 @@ pub fn build(b: *std.Build) !void {
             .name = enum_type.name,
             .module = rule_module,
         };
+        rules[i] = .{
+            .import = rule_imports[i],
+            .zon_config_str = ".{}",
+        };
     }
-
-    const build_rules_step, const build_rules_output = addBuildRulesStep(
-        b,
-        b.path("build_rules.zig"),
-        &rule_imports,
-    );
-    const rules_module = try createRulesModule(
-        b,
-        zlinter_import,
-        &rule_imports,
-        build_rules_output,
-    );
-
-    const build_rules_config_step = addBuildRulesConfigStep(
-        b,
-        b.path("build_rules_config.zig"),
-        rules_module,
-        zlinter_lib_module,
-    );
-    build_rules_config_step.step.dependOn(&build_rules_step.step);
-    addOptionalFileArg(b, build_rules_config_step, zlinter_zon_config_file_name);
-    // addOptionalFileArg(b, build_rules_config_step, zlinter_json_config_file_name);
 
     // ------------------------------------------------------------------------
     // zig build test
@@ -209,12 +203,12 @@ pub fn build(b: *std.Build) !void {
     lint_cmd.dependOn(try buildStepWithDependency(
         b,
         &.{
-            buildRuleWithDependency(b, .no_unused, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }),
-            buildRuleWithDependency(b, .field_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }),
-            buildRuleWithDependency(b, .declaration_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }),
-            buildRuleWithDependency(b, .function_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }),
-            buildRuleWithDependency(b, .file_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }),
-            buildRuleWithDependency(b, .no_deprecation, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }),
+            buildRuleWithDependency(b, .no_unused, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildRuleWithDependency(b, .field_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildRuleWithDependency(b, .declaration_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildRuleWithDependency(b, .function_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildRuleWithDependency(b, .file_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildRuleWithDependency(b, .no_deprecation, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
         },
         .{
             .target = target,
@@ -222,6 +216,15 @@ pub fn build(b: *std.Build) !void {
             .zlinter = .{ .module = zlinter_lib_module },
         },
     ));
+}
+
+fn toZonString(val: anytype, allocator: std.mem.Allocator) ![]const u8 {
+    var zon = std.ArrayListUnmanaged(u8).empty;
+    defer zon.deinit(allocator);
+
+    try std.zon.stringify.serialize(val, .{}, zon.writer(allocator));
+
+    return zon.toOwnedSlice(allocator);
 }
 
 fn buildStepWithDependency(
@@ -237,7 +240,7 @@ fn buildStepWithDependency(
         },
     },
 ) BuildStepError!*std.Build.Step {
-    const zlinter_lib_module: *std.Build.Module, const exe_file: std.Build.LazyPath, const build_rules_exe_file: std.Build.LazyPath, const build_rules_config_exe_file: std.Build.LazyPath = switch (options.zlinter) {
+    const zlinter_lib_module: *std.Build.Module, const exe_file: std.Build.LazyPath, const build_rules_exe_file: std.Build.LazyPath, _ = switch (options.zlinter) {
         .dependency => |d| .{ d.module("zlinter"), d.path("src/exe/run_linter.zig"), d.path("build_rules.zig"), d.path("build_rules_config.zig") },
         .module => |m| .{ m, b.path("src/exe/run_linter.zig"), b.path("build_rules.zig"), b.path("build_rules_config.zig") },
     };
@@ -263,30 +266,17 @@ fn buildStepWithDependency(
     for (rules) |r| try rule_imports.append(b.allocator, r.import);
     defer rule_imports.deinit(b.allocator);
 
-    const build_rules_step, const build_rules_output = addBuildRulesStep(b, build_rules_exe_file, rule_imports.items);
     const rules_module = try createRulesModule(
         b,
         zlinter_import,
         rule_imports.items,
-        build_rules_output,
+        addBuildRulesStep(
+            b,
+            build_rules_exe_file,
+            rules,
+        ),
     );
     exe_module.addImport("rules", rules_module);
-
-    const build_rules_config_step = addBuildRulesConfigStep(
-        b,
-        build_rules_config_exe_file,
-        rules_module,
-        zlinter_lib_module,
-    );
-    build_rules_config_step.step.dependOn(&build_rules_step.step);
-
-    exe_module.addImport("rules_config", b.createModule(.{
-        .root_source_file = build_rules_config_step.addOutputFileArg("rules_config.zon"),
-        .imports = &.{},
-    }));
-    addOptionalFileArg(b, build_rules_config_step, zlinter_zon_config_file_name);
-    // addOptionalFileArg(b, build_rules_config_step, zlinter_json_config_file_name);
-
     // --------------------------------------------------------------------
     // Generate linter exe
     // --------------------------------------------------------------------
@@ -331,6 +321,7 @@ fn buildRuleWithDependency(
         zlinter_dependency: ?*std.Build.Dependency = null,
         zlinter_import: std.Build.Module.Import,
     },
+    config: anytype,
 ) BuiltRule {
     return switch (rule) {
         inline else => |inline_rule| .{
@@ -343,41 +334,16 @@ fn buildRuleWithDependency(
                     .imports = &.{options.zlinter_import},
                 }),
             },
+            .zon_config_str = toZonString(config, b.allocator) catch @panic("Invalid rule config"),
         },
     };
-}
-
-fn addBuildRulesConfigStep(
-    b: *std.Build,
-    root_source_file: std.Build.LazyPath,
-    rules_module: *std.Build.Module,
-    zlinter_lib_module: *std.Build.Module,
-) *std.Build.Step.Run {
-    return b.addRunArtifact(b.addExecutable(.{
-        .name = "build_rules_config",
-        .root_module = b.createModule(.{
-            .root_source_file = root_source_file,
-            .target = b.graph.host,
-            .optimize = .Debug,
-            .imports = &.{
-                .{
-                    .name = "rules",
-                    .module = rules_module,
-                },
-                .{
-                    .name = "zlinter",
-                    .module = zlinter_lib_module,
-                },
-            },
-        }),
-    }));
 }
 
 fn addBuildRulesStep(
     b: *std.Build,
     root_source_path: std.Build.LazyPath,
-    rule_imports: []const std.Build.Module.Import,
-) struct { *std.Build.Step.Run, std.Build.LazyPath } {
+    rules: []const BuiltRule,
+) std.Build.LazyPath {
     var run = b.addRunArtifact(b.addExecutable(.{
         .name = "build_rules",
         .root_module = b.createModule(.{
@@ -388,9 +354,13 @@ fn addBuildRulesStep(
     }));
 
     const output = run.addOutputFileArg("rules.zig");
-    for (rule_imports) |rule| run.addArg(rule.name);
 
-    return .{ run, output };
+    for (rules) |rule| {
+        run.addArg(rule.import.name);
+        run.addArg(rule.zon_config_str);
+    }
+
+    return output;
 }
 
 fn createRulesModule(
@@ -413,15 +383,4 @@ fn createRulesModule(
         .root_source_file = build_rules_output,
         .imports = rules_imports,
     });
-}
-
-fn addOptionalFileArg(b: *std.Build, step: *std.Build.Step.Run, raw_path: []const u8) void {
-    var path = b.path(raw_path);
-    const relative_path = path.getPath3(b, &step.step).sub_path;
-    const exists = if (std.fs.cwd().access(relative_path, .{})) true else |e| e != error.FileNotFound;
-    if (exists) {
-        step.addFileArg(path);
-    } else {
-        step.addArg(relative_path);
-    }
 }
