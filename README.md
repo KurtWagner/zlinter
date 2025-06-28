@@ -107,7 +107,7 @@ try builder.addRule(.{ .builtin = .file_naming }, .{
   .struct_field_that_is_type = .title_case,
   .struct_field_that_is_fn = .camel_case,
 });
-try builder.addRule(.{ .builtin = .no_deprecation }, {
+try builder.addRule(.{ .builtin = .no_deprecation }, .{
   .severity = .warning,
 });
 ```
