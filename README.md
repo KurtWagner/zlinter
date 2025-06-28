@@ -1,8 +1,6 @@
 # Zlinter - Linter for Zig
 
-A Zig linter that is integrated and built from within your projects `build.zig`.
-
-Zlinter is **not** a binary you download and execute. See [getting started](#getting-started) for how to integrate it into your project.
+An extendable and customizable **Zig linter** that is integrated and built from within your own `build.zig`.
 
 ![Screenshot](./screenshot.png)
 
@@ -61,6 +59,8 @@ This may change, especially when `zig` is "stable" at `1.x`.
     # For 0.14.x
     zig fetch --save git+https://github.com/kurtwagner/zlinter#0.14.x
 
+    # OR
+    
     # For master (0.15.x-dev)
     zig fetch --save git+https://github.com/kurtwagner/zlinter#master
     ```
@@ -88,7 +88,7 @@ This may change, especially when `zig` is "stable" at `1.x`.
     ```shell
     zig build lint
 
-    // or be specific with paths
+    // OR be specific with paths
     zig build lint -- src/ file.zig
     ```
 
