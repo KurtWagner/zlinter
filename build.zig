@@ -18,7 +18,7 @@ pub const BuildStepOptions = struct {
 };
 
 pub const BuiltinLintRule = enum {
-    no_unused_container_declarations,
+    no_unused,
     field_naming,
     declaration_naming,
     function_naming,
@@ -203,7 +203,7 @@ pub fn build(b: *std.Build) !void {
     lint_cmd.dependOn(try buildStepWithDependency(
         b,
         &.{
-            buildRuleWithDependency(b, .no_unused_container_declarations, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }),
+            buildRuleWithDependency(b, .no_unused, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }),
             buildRuleWithDependency(b, .field_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }),
             buildRuleWithDependency(b, .declaration_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }),
             buildRuleWithDependency(b, .function_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }),

@@ -1,21 +1,21 @@
 //! Enforces that container declarations are referenced.
 
-/// Config for no_unused_container_declaration rule.
+/// Config for no_unused rule.
 pub const Config = struct {
-    severity: zlinter.LintProblemSeverity = .warning,
+    container_declaration: zlinter.LintProblemSeverity = .warning,
 };
 
-/// Builds and returns the no_unused_container_declaration rule.
+/// Builds and returns the no_unused rule.
 pub fn buildRule(options: zlinter.LintRuleOptions) zlinter.LintRule {
     _ = options;
 
     return zlinter.LintRule{
-        .rule_id = @tagName(.no_unused_container_declarations),
+        .rule_id = @tagName(.no_unused),
         .run = &run,
     };
 }
 
-/// Runs the no_unused_container_declaration rule.
+/// Runs the no_unused rule.
 fn run(
     rule: zlinter.LintRule,
     _: zlinter.LintContext,
@@ -107,7 +107,7 @@ fn run(
 
             try lint_problems.append(allocator, .{
                 .rule_id = rule.rule_id,
-                .severity = config.severity,
+                .severity = config.container_declaration,
                 .start = .startOfToken(tree, first_token),
                 .end = .endOfToken(tree, last_token),
                 .message = try allocator.dupe(u8, "Unused declaration"),
@@ -175,7 +175,7 @@ fn isContainerRoot(container: anytype) bool {
     };
 }
 
-test "no_unused_container_declarations" {
+test "no_unused" {
     std.testing.refAllDecls(@This());
 
     const rule = buildRule(.{});
@@ -205,7 +205,7 @@ test "no_unused_container_declarations" {
     try zlinter.testing.expectProblemsEqual(
         &[_]zlinter.LintProblem{
             .{
-                .rule_id = "no_unused_container_declarations",
+                .rule_id = "no_unused",
                 .severity = .warning,
                 .start = .{
                     .offset = 1,
@@ -225,7 +225,7 @@ test "no_unused_container_declarations" {
                 },
             },
             .{
-                .rule_id = "no_unused_container_declarations",
+                .rule_id = "no_unused",
                 .severity = .warning,
                 .start = .{
                     .offset = 53,
@@ -245,7 +245,7 @@ test "no_unused_container_declarations" {
                 },
             },
             .{
-                .rule_id = "no_unused_container_declarations",
+                .rule_id = "no_unused",
                 .severity = .warning,
                 .start = .{
                     .offset = 107,

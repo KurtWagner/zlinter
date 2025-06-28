@@ -20,7 +20,7 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
         .rules = &.{
-            zlinter.buildRule(b, .{ .builtin = .no_unused_container_declarations }, options),
+            zlinter.buildRule(b, .{ .builtin = .no_unused }, options),
             zlinter.buildRule(b, .{ .builtin = .field_naming }, options),
             zlinter.buildRule(b, .{ .builtin = .declaration_naming }, options),
             zlinter.buildRule(b, .{ .builtin = .function_naming }, options),
