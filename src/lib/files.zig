@@ -11,11 +11,17 @@ pub fn allocLintFiles(dir: std.fs.Dir, args: zlinter.Args, gpa: std.mem.Allocato
             const sub_dir = dir.openDir(file_or_dir, .{}) catch |err| {
                 switch (err) {
                     else => {
+                        const cwd = try std.process.getCwdAlloc(gpa);
+                        defer gpa.free(cwd);
+
+                        const relative = try std.fs.path.relative(gpa, cwd, file_or_dir);
+                        defer gpa.free(relative);
+
                         // Assume file.
                         // No validation is done at this point on whether the file
                         // even exists and can be opened as it'll be done when
                         // opening the file for parsing.
-                        try lint_files.append(gpa, try .init(gpa, file_or_dir));
+                        try lint_files.append(gpa, try .init(gpa, relative));
                         continue;
                     },
                 }

@@ -22,3 +22,5 @@ pub var gameDraw: *const fn () void = undefined;
 pub var badNum: u32;
 pub var anotherBadNum: u32 = 10;
 pub var YetAnotherBadNum: usize = 10;
+
+const shouldBeTitleCase: ?type = null;
