@@ -24,7 +24,7 @@ An extendable and customizable **Zig linter** that is integrated and built from 
     * [declaration_naming](#declaration_naming)
     * [field_naming](#field_naming)
     * [file_naming](#file_naming)
-
+    * [switch_case_ordering](#switch_case_ordering)
   * [Custom rules](#custom-rules)
 * [For contributors](#for-contributors)
   * [Contributions](#contributions)
@@ -77,6 +77,8 @@ This may change, especially when `zig` is "stable" at `1.x`.
     const lint_cmd = b.step("lint", "Lint source code.");
     lint_cmd.dependOn(step: {
         var builder = zlinter.builder(b, .{});
+
+        // FYI: You don't have to add all builtin rules
         try builder.addRule(.{ .builtin = .field_naming }, .{});
         try builder.addRule(.{ .builtin = .declaration_naming }, .{});
         try builder.addRule(.{ .builtin = .function_naming }, .{});
@@ -84,6 +86,7 @@ This may change, especially when `zig` is "stable" at `1.x`.
         try builder.addRule(.{ .builtin = .no_unused }, .{});
         try builder.addRule(.{ .builtin = .no_deprecation }, .{});
         try builder.addRule(.{ .builtin = .no_orelse_unreachable }, .{});
+        try builder.addRule(.{ .builtin = .switch_case_ordering }, .{});
         break :step try builder.build();
     });
     ```
@@ -225,6 +228,11 @@ const MyStruct = struct {
   name: [] const u8,
 };
 ```
+
+#### `switch_case_ordering`
+
+Enforces a specific ordering for switch statement cases. For example,
+by default, it'll warn if `else` is not the last condition (similar to an `if-else-if-else` statement).
 
 #### `no_unused`
 
