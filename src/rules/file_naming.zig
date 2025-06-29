@@ -2,13 +2,17 @@
 
 /// Config for file_naming rule.
 pub const Config = struct {
-    severity: zlinter.LintProblemSeverity = .@"error",
-
     /// File is a namespace (i.e., does not have root container fields)
-    file_namespace: zlinter.LintTextStyle = .snake_case,
+    file_namespace: zlinter.LintTextStyleWithSeverity = .{
+        .style = .snake_case,
+        .severity = .@"error",
+    },
 
     /// File is a struct (i.e., has root container fields)
-    file_struct: zlinter.LintTextStyle = .title_case,
+    file_struct: zlinter.LintTextStyleWithSeverity = .{
+        .style = .title_case,
+        .severity = .@"error",
+    },
 };
 
 /// Builds and returns the file_naming rule.
@@ -32,22 +36,28 @@ fn run(
     _ = ctx;
     const config = options.getConfig(Config);
 
-    const error_message: ?[]const u8 = msg: {
+    const error_message: ?[]const u8, const severity: ?zlinter.LintProblemSeverity = msg: {
         const basename = std.fs.path.basename(doc.path);
         if (zlinter.analyzer.isRootImplicitStruct(doc.handle.tree)) {
-            if (!config.file_struct.check(basename)) {
-                break :msg try std.fmt.allocPrint(allocator, "File is struct so name should be {s}", .{config.file_struct.name()});
+            if (!config.file_struct.style.check(basename)) {
+                break :msg .{
+                    try std.fmt.allocPrint(allocator, "File is struct so name should be {s}", .{config.file_struct.style.name()}),
+                    config.file_struct.severity,
+                };
             }
-        } else if (!config.file_namespace.check(basename)) {
-            break :msg try std.fmt.allocPrint(allocator, "File is namespace so name should be {s}", .{config.file_namespace.name()});
+        } else if (!config.file_namespace.style.check(basename)) {
+            break :msg .{
+                try std.fmt.allocPrint(allocator, "File is namespace so name should be {s}", .{config.file_namespace.style.name()}),
+                config.file_struct.severity,
+            };
         }
-        break :msg null;
+        break :msg .{ null, null };
     };
 
     if (error_message) |message| {
         var lint_problems = try allocator.alloc(zlinter.LintProblem, 1);
         lint_problems[0] = .{
-            .severity = config.severity,
+            .severity = severity.?,
             .rule_id = rule.rule_id,
             .start = .zero,
             .end = .zero,

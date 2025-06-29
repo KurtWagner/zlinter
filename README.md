@@ -102,10 +102,10 @@ This may change, especially when `zig` is "stable" at `1.x`.
 
 ```zig
 try builder.addRule(.{ .builtin = .field_naming }, .{
-  .enum_field = .snake_case,
+  .enum_field = .{ .style = .snake_case, .severity = .warning },
   .union_field = .off,
-  .struct_field_that_is_type = .title_case,
-  .struct_field_that_is_fn = .camel_case,
+  .struct_field_that_is_type = .{ .style = .title_case, .severity = .@"error" },
+  .struct_field_that_is_fn = .{ .style = .camel_case, .severity = .@"error" },
 });
 try builder.addRule(.{ .builtin = .no_deprecation }, .{
   .severity = .warning,

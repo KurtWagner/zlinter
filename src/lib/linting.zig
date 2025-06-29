@@ -401,6 +401,16 @@ test "LintFileRenderer" {
     }
 }
 
+pub const LintTextStyleWithSeverity = struct {
+    style: LintTextStyle,
+    severity: LintProblemSeverity,
+
+    pub const off = LintTextStyleWithSeverity{
+        .style = .off,
+        .severity = .off,
+    };
+};
+
 pub const LintTextStyle = enum {
     /// No style check - can be any style
     off,

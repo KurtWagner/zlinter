@@ -3,31 +3,53 @@
 
 /// Config for field_naming rule.
 pub const Config = struct {
-    severity: zlinter.LintProblemSeverity = .@"error",
-
     /// Errors defined within an `error { ... }` container
-    error_field: zlinter.LintTextStyle = .title_case,
+    error_field: zlinter.LintTextStyleWithSeverity = .{
+        .style = .title_case,
+        .severity = .@"error",
+    },
 
     /// Enum values defined within an `enum { ... }` container
-    enum_field: zlinter.LintTextStyle = .snake_case,
+    enum_field: zlinter.LintTextStyleWithSeverity = .{
+        .style = .snake_case,
+        .severity = .@"error",
+    },
 
     /// Struct fields defined within a `struct { ... }` container
-    struct_field: zlinter.LintTextStyle = .snake_case,
+    struct_field: zlinter.LintTextStyleWithSeverity = .{
+        .style = .snake_case,
+        .severity = .@"error",
+    },
 
     /// Like `struct_field` but for fields with type `type`
-    struct_field_that_is_type: zlinter.LintTextStyle = .title_case,
+    struct_field_that_is_type: zlinter.LintTextStyleWithSeverity = .{
+        .style = .title_case,
+        .severity = .@"error",
+    },
 
     /// Like `struct_field` but for fields with a namespace type
-    struct_field_that_is_namespace: zlinter.LintTextStyle = .snake_case,
+    struct_field_that_is_namespace: zlinter.LintTextStyleWithSeverity = .{
+        .style = .snake_case,
+        .severity = .@"error",
+    },
 
     /// Like `struct_field` but for fields with a callable/function type
-    struct_field_that_is_fn: zlinter.LintTextStyle = .camel_case,
+    struct_field_that_is_fn: zlinter.LintTextStyleWithSeverity = .{
+        .style = .camel_case,
+        .severity = .@"error",
+    },
 
     /// Like `struct_field_that_is_fn` but the callable/function returns a `type`
-    struct_field_that_is_type_fn: zlinter.LintTextStyle = .title_case,
+    struct_field_that_is_type_fn: zlinter.LintTextStyleWithSeverity = .{
+        .style = .title_case,
+        .severity = .@"error",
+    },
 
     /// Union fields defined within a `union { ... }` block
-    union_field: zlinter.LintTextStyle = .snake_case,
+    union_field: zlinter.LintTextStyleWithSeverity = .{
+        .style = .snake_case,
+        .severity = .@"error",
+    },
 };
 
 /// Builds and returns the field_naming rule.
@@ -65,7 +87,7 @@ fn run(
                 if (tree.fullContainerField(member)) |container_field| {
                     const maybe_node_type = try doc.resolveTypeOfNode(member);
 
-                    const style: zlinter.LintTextStyle, const container_name: []const u8 = tuple: {
+                    const style_with_severity: zlinter.LintTextStyleWithSeverity, const container_name: []const u8 = tuple: {
                         break :tuple switch (container_tag) {
                             .keyword_struct => if (maybe_node_type) |t|
                                 if (t.resolveDeclLiteralResultType().isTypeFunc())
@@ -89,13 +111,13 @@ fn run(
                     const name_token = container_field.ast.main_token;
                     const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
 
-                    if (!style.check(name)) {
+                    if (!style_with_severity.style.check(name)) {
                         try lint_problems.append(allocator, .{
                             .rule_id = rule.rule_id,
-                            .severity = config.severity,
+                            .severity = style_with_severity.severity,
                             .start = .startOfToken(tree, name_token),
                             .end = .endOfToken(tree, name_token),
-                            .message = try std.fmt.allocPrint(allocator, "{s} fields should be {s}", .{ container_name, style.name() }),
+                            .message = try std.fmt.allocPrint(allocator, "{s} fields should be {s}", .{ container_name, style_with_severity.style.name() }),
                         });
                     }
                 }
@@ -111,13 +133,13 @@ fn run(
             var token = rbrace - 1;
             while (token >= tree.firstToken(node.toNodeIndex())) : (token -= 1) {
                 switch (tree.tokens.items(.tag)[token]) {
-                    .identifier => if (!config.error_field.check(zlinter.strings.normalizeIdentifierName(tree.tokenSlice(token)))) {
+                    .identifier => if (!config.error_field.style.check(zlinter.strings.normalizeIdentifierName(tree.tokenSlice(token)))) {
                         try lint_problems.append(allocator, .{
                             .rule_id = rule.rule_id,
-                            .severity = config.severity,
+                            .severity = config.error_field.severity,
                             .start = .startOfToken(tree, token),
                             .end = .endOfToken(tree, token),
-                            .message = try std.fmt.allocPrint(allocator, "Error fields should be {s}", .{config.error_field.name()}),
+                            .message = try std.fmt.allocPrint(allocator, "Error fields should be {s}", .{config.error_field.style.name()}),
                         });
                     },
                     else => {},

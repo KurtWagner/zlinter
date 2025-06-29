@@ -2,25 +2,41 @@
 
 /// Config for function_naming rule.
 pub const Config = struct {
-    severity: zlinter.LintProblemSeverity = .@"error",
-
     /// Non-type functions
-    function: zlinter.LintTextStyle = .camel_case,
+    function: zlinter.LintTextStyleWithSeverity = .{
+        .style = .camel_case,
+        .severity = .@"error",
+    },
 
     /// Type functions
-    function_that_returns_type: zlinter.LintTextStyle = .title_case,
+    function_that_returns_type: zlinter.LintTextStyleWithSeverity = .{
+        .style = .title_case,
+        .severity = .@"error",
+    },
 
     /// Standard function arg
-    function_arg: zlinter.LintTextStyle = .snake_case,
+    function_arg: zlinter.LintTextStyleWithSeverity = .{
+        .style = .snake_case,
+        .severity = .@"error",
+    },
 
     /// Type function arg
-    function_arg_that_is_type: zlinter.LintTextStyle = .title_case,
+    function_arg_that_is_type: zlinter.LintTextStyleWithSeverity = .{
+        .style = .title_case,
+        .severity = .@"error",
+    },
 
     /// Non-type function function arg
-    function_arg_that_is_fn: zlinter.LintTextStyle = .camel_case,
+    function_arg_that_is_fn: zlinter.LintTextStyleWithSeverity = .{
+        .style = .camel_case,
+        .severity = .@"error",
+    },
 
     /// Type function function arg
-    function_arg_that_is_type_fn: zlinter.LintTextStyle = .title_case,
+    function_arg_that_is_type_fn: zlinter.LintTextStyleWithSeverity = .{
+        .style = .title_case,
+        .severity = .@"error",
+    },
 };
 
 /// Builds and returns the function_naming rule.
@@ -59,26 +75,30 @@ fn run(
                 .@"0.15" => fn_proto.ast.return_type.unwrap().?,
             }), "type");
 
-            const error_message: ?[]const u8 = msg: {
+            const error_message: ?[]const u8, const severity: ?zlinter.LintProblemSeverity = msg: {
                 if (fn_returns_type) {
-                    const style = config.function_that_returns_type;
-                    if (!style.check(fn_name)) {
-                        break :msg try std.fmt.allocPrint(allocator, "Callable returning `type` should be {s}", .{style.name()});
+                    if (!config.function_that_returns_type.style.check(fn_name)) {
+                        break :msg .{
+                            try std.fmt.allocPrint(allocator, "Callable returning `type` should be {s}", .{config.function_that_returns_type.style.name()}),
+                            config.function_that_returns_type.severity,
+                        };
                     }
                 } else {
-                    const style = config.function;
-                    if (!style.check(fn_name)) {
-                        break :msg try std.fmt.allocPrint(allocator, "Callable should be {s}", .{style.name()});
+                    if (!config.function.style.check(fn_name)) {
+                        break :msg .{
+                            try std.fmt.allocPrint(allocator, "Callable should be {s}", .{config.function.style.name()}),
+                            config.function.severity,
+                        };
                     }
                 }
-                break :msg null;
+                break :msg .{ null, null };
             };
 
             if (error_message) |message| {
                 try lint_problems.append(
                     allocator,
                     .{
-                        .severity = config.severity,
+                        .severity = severity.?,
                         .rule_id = rule.rule_id,
                         .start = .startOfToken(tree, fn_name_token),
                         .end = .endOfToken(tree, fn_name_token),
@@ -105,7 +125,7 @@ fn run(
 
                     const underlying_type = param_type.resolveDeclLiteralResultType();
 
-                    const style: zlinter.LintTextStyle, const desc: []const u8 =
+                    const style_with_severity: zlinter.LintTextStyleWithSeverity, const desc: []const u8 =
                         if (underlying_type.isTypeFunc())
                             .{ config.function_arg_that_is_type_fn, "Function argument of type function" }
                         else if (underlying_type.isFunc())
@@ -115,13 +135,13 @@ fn run(
                         else
                             .{ config.function_arg, "Function argument" };
 
-                    if (!style.check(identifier)) {
+                    if (!style_with_severity.style.check(identifier)) {
                         try lint_problems.append(allocator, .{
                             .rule_id = rule.rule_id,
-                            .severity = config.severity,
+                            .severity = style_with_severity.severity,
                             .start = .startOfToken(tree, identifer_token),
                             .end = .endOfToken(tree, identifer_token),
-                            .message = try std.fmt.allocPrint(allocator, "{s} should be {s}", .{ desc, style.name() }),
+                            .message = try std.fmt.allocPrint(allocator, "{s} should be {s}", .{ desc, style_with_severity.style.name() }),
                         });
                     }
                 }
