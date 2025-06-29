@@ -2,25 +2,41 @@
 
 /// Config for declaration_naming rule.
 pub const Config = struct {
-    severity: zlinter.LintProblemSeverity = .@"error",
-
     /// Declarations with `const` mutability
-    var_decl: zlinter.LintTextStyle = .snake_case,
+    var_decl: zlinter.LintTextStyleWithSeverity = .{
+        .style = .snake_case,
+        .severity = .@"error",
+    },
 
     /// Declarations with `var` mutability
-    const_decl: zlinter.LintTextStyle = .snake_case,
+    const_decl: zlinter.LintTextStyleWithSeverity = .{
+        .style = .snake_case,
+        .severity = .@"error",
+    },
 
     /// Type declarations
-    decl_that_is_type: zlinter.LintTextStyle = .title_case,
+    decl_that_is_type: zlinter.LintTextStyleWithSeverity = .{
+        .style = .title_case,
+        .severity = .@"error",
+    },
 
     /// Namespace declarations
-    decl_that_is_namespace: zlinter.LintTextStyle = .snake_case,
+    decl_that_is_namespace: zlinter.LintTextStyleWithSeverity = .{
+        .style = .snake_case,
+        .severity = .@"error",
+    },
 
     /// Non-type function declarations
-    decl_that_is_fn: zlinter.LintTextStyle = .camel_case,
+    decl_that_is_fn: zlinter.LintTextStyleWithSeverity = .{
+        .style = .camel_case,
+        .severity = .@"error",
+    },
 
     /// Type function declarations
-    decl_that_is_type_fn: zlinter.LintTextStyle = .title_case,
+    decl_that_is_type_fn: zlinter.LintTextStyleWithSeverity = .{
+        .style = .title_case,
+        .severity = .@"error",
+    },
 };
 
 /// Builds and returns the declaration_naming rule.
@@ -56,7 +72,7 @@ fn run(
                 const name_token = var_decl.ast.mut_token + 1;
                 const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
 
-                const style: zlinter.LintTextStyle, const var_desc: []const u8 =
+                const style_with_severity: zlinter.LintTextStyleWithSeverity, const var_desc: []const u8 =
                     if (decl_type.isTypeFunc())
                         .{ config.decl_that_is_type_fn, "Type function" }
                     else if (decl_type.isFunc())
@@ -71,13 +87,13 @@ fn run(
                         else => unreachable,
                     };
 
-                if (!style.check(name)) {
+                if (!style_with_severity.style.check(name)) {
                     try lint_problems.append(allocator, .{
                         .rule_id = rule.rule_id,
-                        .severity = config.severity,
+                        .severity = style_with_severity.severity,
                         .start = .startOfToken(tree, name_token),
                         .end = .endOfToken(tree, name_token),
-                        .message = try std.fmt.allocPrint(allocator, "{s} declaration should be {s}", .{ var_desc, style.name() }),
+                        .message = try std.fmt.allocPrint(allocator, "{s} declaration should be {s}", .{ var_desc, style_with_severity.style.name() }),
                     });
                 }
             }
