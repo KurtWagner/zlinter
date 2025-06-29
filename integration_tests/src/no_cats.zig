@@ -5,6 +5,7 @@ const zlinter = @import("zlinter");
 
 pub const Config = struct {
     severity: zlinter.LintProblemSeverity = .warning,
+    message: ?[]const u8 = null,
 };
 
 pub fn buildRule(options: zlinter.LintRuleOptions) zlinter.LintRule {
@@ -39,7 +40,7 @@ fn run(
                     .severity = config.severity,
                     .start = .startOfToken(tree, token),
                     .end = .endOfToken(tree, token),
-                    .message = try allocator.dupe(u8, "I'm allergic to cats"),
+                    .message = try allocator.dupe(u8, config.message orelse "I'm scared of cats"),
                 });
             }
         }
