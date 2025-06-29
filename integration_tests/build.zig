@@ -53,7 +53,12 @@ pub fn build(b: *std.Build) !void {
         try builder.addRule(.{ .builtin = .no_unused }, .{});
         try builder.addRule(.{ .builtin = .field_naming }, .{});
         try builder.addRule(.{ .builtin = .declaration_naming }, .{});
-        try builder.addRule(.{ .builtin = .function_naming }, .{});
+        try builder.addRule(.{ .builtin = .function_naming }, .{
+            .function_that_returns_type = .{
+                .severity = .warning,
+                .style = .title_case,
+            },
+        });
         try builder.addRule(.{ .builtin = .file_naming }, .{});
         try builder.addRule(.{ .builtin = .no_deprecation }, .{});
         try builder.addRule(.{ .custom = .{ .name = "no_cats", .path = "src/no_cats.zig" } }, .{});
