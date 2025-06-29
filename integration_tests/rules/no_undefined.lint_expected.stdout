@@ -1,0 +1,16 @@
+warning Take care when using `undefined` [rules/no_undefined.input.zig:1:30] no_undefined
+
+ 1 | var questionable: ?[123]u8 = undefined;
+   |                              ^^^^^^^^^^
+
+warning Take care when using `undefined` [rules/no_undefined.input.zig:4:41] no_undefined
+
+ 4 |     const message = questionable orelse undefined;
+   |                                         ^^^^^^^^^^
+
+warning Take care when using `undefined` [rules/no_undefined.input.zig:5:27] no_undefined
+
+ 5 |     std.fmt.log("{s}", .{ undefined, message });
+   |                           ^^^^^^^^^^
+
+x 3 warnings

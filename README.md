@@ -20,6 +20,7 @@ An extendable and customizable **Zig linter** that is integrated and built from 
     * [no_deprecated](#no_deprecated)
     * [no_unused](#no_unused)
     * [no_orelse_unreachable](#no_orelse_unreachable)
+    * [no_undefined](#no_undefined)
     * [function_naming](#function_naming)
     * [declaration_naming](#declaration_naming)
     * [field_naming](#field_naming)
@@ -77,16 +78,15 @@ This may change, especially when `zig` is "stable" at `1.x`.
     const lint_cmd = b.step("lint", "Lint source code.");
     lint_cmd.dependOn(step: {
         var builder = zlinter.builder(b, .{});
-
-        // FYI: You don't have to add all builtin rules
         try builder.addRule(.{ .builtin = .field_naming }, .{});
         try builder.addRule(.{ .builtin = .declaration_naming }, .{});
         try builder.addRule(.{ .builtin = .function_naming }, .{});
         try builder.addRule(.{ .builtin = .file_naming }, .{});
+        try builder.addRule(.{ .builtin = .switch_case_ordering }, .{});
         try builder.addRule(.{ .builtin = .no_unused }, .{});
         try builder.addRule(.{ .builtin = .no_deprecation }, .{});
         try builder.addRule(.{ .builtin = .no_orelse_unreachable }, .{});
-        try builder.addRule(.{ .builtin = .switch_case_ordering }, .{});
+        // try builder.addRule(.{ .builtin = .no_undefined }, .{}); // Noisy, uncomment if desired
         break :step try builder.build();
     });
     ```
@@ -266,6 +266,17 @@ const a = b.?;
 
 // over
 const a = b orelse unreachable;
+```
+
+#### `no_undefined`
+
+Take care when using `undefined`. Some usage is ok, in which case you can
+disable the linter with an explanation. For example,
+
+```zig
+// zlinter-disable-next-line no_undefined - stack memory for message
+var buffer:[128]u8 = undefined;
+const message = try std.fmt.bufPrint(&buffer, fmt, .{arg1, arg2});
 ```
 
 ### Custom rules
