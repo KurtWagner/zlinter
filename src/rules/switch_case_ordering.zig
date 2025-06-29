@@ -31,7 +31,7 @@ fn run(
 
     var node: zlinter.analyzer.NodeIndexShim = .init(0);
     while (node.index < tree.nodes.len) : (node.index += 1) {
-        const switch_info = tree.fullSwitch(node.index) orelse continue;
+        const switch_info = tree.fullSwitch(node.toNodeIndex()) orelse continue;
 
         for (switch_info.ast.cases, 0..) |case_node, i| {
             const switch_case = tree.fullSwitchCase(case_node).?;
