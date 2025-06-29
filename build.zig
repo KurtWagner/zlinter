@@ -13,6 +13,7 @@ pub const BuiltinLintRule = enum {
     no_unused,
     no_deprecation,
     no_orelse_unreachable,
+    switch_case_ordering,
 };
 
 const BuildRuleSource = union(enum) {
@@ -191,6 +192,7 @@ pub fn build(b: *std.Build) !void {
             buildBuiltinRule(b, .function_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
             buildBuiltinRule(b, .file_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
             buildBuiltinRule(b, .no_unused, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .switch_case_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
             buildBuiltinRule(b, .no_deprecation, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
             buildBuiltinRule(b, .no_orelse_unreachable, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
         },
