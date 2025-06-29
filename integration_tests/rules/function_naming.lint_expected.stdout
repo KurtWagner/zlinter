@@ -8,7 +8,7 @@ error Callable should be camelCase [rules/function_naming.input.zig:3:4] functio
  3 | fn ThisIsAlsoNotOk() void {}
    |    ^^^^^^^^^^^^^^^
 
-error Callable returning `type` should be TitleCase [rules/function_naming.input.zig:9:4] function_naming
+warning Callable returning `type` should be TitleCase [rules/function_naming.input.zig:9:4] function_naming
 
  9 | fn thisIsNotOk() type {}
    |    ^^^^^^^^^^^
@@ -23,7 +23,7 @@ error Callable should be camelCase [rules/function_naming.input.zig:14:8] functi
  14 |     fn ThisIsAlsoNotOk() void {}
     |        ^^^^^^^^^^^^^^^
 
-error Callable returning `type` should be TitleCase [rules/function_naming.input.zig:20:8] function_naming
+warning Callable returning `type` should be TitleCase [rules/function_naming.input.zig:20:8] function_naming
 
  20 |     fn thisIsNotOk() type {}
     |        ^^^^^^^^^^^
@@ -48,4 +48,5 @@ error Function argument should be snake_case [rules/function_naming.input.zig:23
  23 | fn here(Arg: u32, t: type, fn_call: *const fn (A: u32) void) t {
     |                                                ^
 
-x 10 errors
+x 8 errors
+x 2 warnings

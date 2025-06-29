@@ -1,5 +1,0 @@
-.{
-    .no_deprecation = .{
-        .severity = .warning,
-    },
-}
