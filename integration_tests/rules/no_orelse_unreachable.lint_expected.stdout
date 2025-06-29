@@ -1,0 +1,6 @@
+warning Prefer `.?` over `orelse unreachable` [rules/no_orelse_unreachable.input.zig:4:11] no_orelse_unreachable
+
+ 4 | const b = optional orelse unreachable;
+   |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+x 1 warnings

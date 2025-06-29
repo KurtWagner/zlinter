@@ -6,12 +6,13 @@ const zls_version: []const u8 = switch (version.zig) {
 };
 
 pub const BuiltinLintRule = enum {
-    no_unused,
     field_naming,
     declaration_naming,
     function_naming,
     file_naming,
+    no_unused,
     no_deprecation,
+    no_orelse_unreachable,
 };
 
 const BuildRuleSource = union(enum) {
@@ -185,12 +186,13 @@ pub fn build(b: *std.Build) !void {
     lint_cmd.dependOn(try buildStep(
         b,
         &.{
-            buildBuiltinRule(b, .no_unused, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
             buildBuiltinRule(b, .field_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
             buildBuiltinRule(b, .declaration_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
             buildBuiltinRule(b, .function_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
             buildBuiltinRule(b, .file_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_unused, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
             buildBuiltinRule(b, .no_deprecation, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_orelse_unreachable, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
         },
         .{
             .target = target,

@@ -18,11 +18,13 @@ An extendable and customizable **Zig linter** that is integrated and built from 
 * [Rules](#rules)
   * [Builtin rules](#builtin-rules)
     * [no_deprecated](#no_deprecated)
+    * [no_unused](#no_unused)
+    * [no_orelse_unreachable](#no_orelse_unreachable)
     * [function_naming](#function_naming)
     * [declaration_naming](#declaration_naming)
     * [field_naming](#field_naming)
     * [file_naming](#file_naming)
-    * [no_unused](#no_unused)
+
   * [Custom rules](#custom-rules)
 * [For contributors](#for-contributors)
   * [Contributions](#contributions)
@@ -75,12 +77,13 @@ This may change, especially when `zig` is "stable" at `1.x`.
     const lint_cmd = b.step("lint", "Lint source code.");
     lint_cmd.dependOn(step: {
         var builder = zlinter.builder(b, .{});
-        try builder.addRule(.{ .builtin = .no_unused }, .{});
         try builder.addRule(.{ .builtin = .field_naming }, .{});
         try builder.addRule(.{ .builtin = .declaration_naming }, .{});
         try builder.addRule(.{ .builtin = .function_naming }, .{});
         try builder.addRule(.{ .builtin = .file_naming }, .{});
+        try builder.addRule(.{ .builtin = .no_unused }, .{});
         try builder.addRule(.{ .builtin = .no_deprecation }, .{});
+        try builder.addRule(.{ .builtin = .no_orelse_unreachable }, .{});
         break :step try builder.build();
     });
     ```
@@ -243,6 +246,18 @@ pub fn ok() void {
 
 // Not ok:
 const not_used = @import("dep");
+```
+
+#### `no_orelse_unreachable`
+
+Prefer `.?` over `orelse unreachable` as it offers comptime checks, where as, `orelse` controls flow and is runtime.
+
+```zig
+// prefer
+const a = b.?;
+
+// over
+const a = b orelse unreachable;
 ```
 
 ### Custom rules
