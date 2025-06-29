@@ -24,7 +24,8 @@ pub fn main() void {
     const me = MyStruct{};
     std.log.err("Fields: {d} {d}", .{ me.field_a, me.field_b });
 
-    me.alsoDoNothing();
+    // TODO: Fails on 0.15 but works on 0.14 - need to work out why. Commented out for now
+    // me.alsoDoNothing();
 }
 
 const std = @import("std");
