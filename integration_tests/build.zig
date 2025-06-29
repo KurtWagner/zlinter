@@ -51,6 +51,7 @@ pub fn build(b: *std.Build) !void {
     lint_cmd.dependOn(step: {
         var builder = zlinter.builder(b, .{ .target = target, .optimize = optimize });
         try builder.addRule(.{ .builtin = .no_unused }, .{});
+        try builder.addRule(.{ .builtin = .no_undefined }, .{});
         try builder.addRule(.{ .builtin = .switch_case_ordering }, .{});
         try builder.addRule(.{ .builtin = .field_naming }, .{});
         try builder.addRule(.{ .builtin = .declaration_naming }, .{});

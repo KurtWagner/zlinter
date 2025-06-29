@@ -13,6 +13,7 @@ pub const BuiltinLintRule = enum {
     no_unused,
     no_deprecation,
     no_orelse_unreachable,
+    no_undefined,
     switch_case_ordering,
 };
 
@@ -195,6 +196,7 @@ pub fn build(b: *std.Build) !void {
             buildBuiltinRule(b, .switch_case_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
             buildBuiltinRule(b, .no_deprecation, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
             buildBuiltinRule(b, .no_orelse_unreachable, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            // buildBuiltinRule(b, .no_undefined, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
         },
         .{
             .target = target,
