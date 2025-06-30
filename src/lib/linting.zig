@@ -12,11 +12,23 @@ pub const LintDocument = struct {
         gpa.free(self.path);
     }
 
+    // TODO: Add tests for this:
     pub inline fn resolveTypeOfNode(self: @This(), node: std.zig.Ast.Node.Index) !?zls.Analyser.Type {
         return switch (version.zig) {
             .@"0.15" => self.analyser.resolveTypeOfNode(.of(node, self.handle)),
             .@"0.14" => self.analyser.resolveTypeOfNode(.{ .handle = self.handle, .node = node }),
         };
+    }
+
+    // TODO: Add tests for this:
+    pub inline fn resolveTypeOfTypeNode(self: @This(), node: std.zig.Ast.Node.Index) !?zls.Analyser.Type {
+        const resolved_type = try self.resolveTypeOfNode(node) orelse return null;
+        const instance_type = if (resolved_type.isMetaType()) resolved_type else switch (version.zig) {
+            .@"0.14" => resolved_type.instanceTypeVal(self.analyser) orelse resolved_type,
+            .@"0.15" => try resolved_type.instanceTypeVal(self.analyser) orelse resolved_type,
+        };
+
+        return instance_type.resolveDeclLiteralResultType();
     }
 };
 

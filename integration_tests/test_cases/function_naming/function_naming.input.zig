@@ -12,16 +12,15 @@ fn badFnType() type {
     return u32;
 }
 
-// TODO: Fix these cases
-// fn GoodFnTypeGeneric(T: type) T {
-//     return T;
-// }
-// fn bad_fn_typeGeneric(T: type) T {
-//     return T;
-// }
-// fn badFnTypeGeneric(T: type) T {
-//     return u32;
-// }
+fn goodFnTypeGeneric(T: type) T {
+    return T;
+}
+fn bad_fn_typeGeneric(T: type) T {
+    return T;
+}
+fn BadFnTypeGeneric(T: type) T {
+    return u32;
+}
 
 // In nested namespace:
 pub const Parent = struct {
@@ -74,8 +73,3 @@ fn exampleE(_: goodFn) void {}
 // Function of function args
 fn exampleF(_: *const fn (good_int: u32, GoodType: type, goodFn: fn () void) void) void {}
 fn exampleG(_: *const fn (badInt: u32, bad_type: type, BadFn: fn () void) void) void {}
-
-// fn alsoHere(arg: u32, T: type, fnCall: *const fn (a: u32) void) T {
-//     fnCall(arg);
-//     return @intCast(arg);
-// }
