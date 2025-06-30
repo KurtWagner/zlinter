@@ -70,13 +70,16 @@ fn run(
         if (namedFnProto(tree, &buffer, node.toNodeIndex())) |fn_proto| {
             const fn_name_token = fn_proto.name_token.?;
             const fn_name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(fn_name_token));
-            const fn_returns_type = std.mem.eql(u8, tree.getNodeSource(switch (zlinter.version.zig) {
-                .@"0.14" => fn_proto.ast.return_type,
-                .@"0.15" => fn_proto.ast.return_type.unwrap().?,
-            }), "type");
+
+            const return_type = (try doc.resolveTypeOfTypeNode(
+                switch (zlinter.version.zig) {
+                    .@"0.14" => fn_proto.ast.return_type,
+                    .@"0.15" => fn_proto.ast.return_type.unwrap().?,
+                },
+            )) orelse break;
 
             const error_message: ?[]const u8, const severity: ?zlinter.LintProblemSeverity = msg: {
-                if (fn_returns_type) {
+                if (return_type.isMetaType()) {
                     if (!config.function_that_returns_type.style.check(fn_name)) {
                         break :msg .{
                             try std.fmt.allocPrint(allocator, "Callable returning `type` should be {s}", .{config.function_that_returns_type.style.name()}),
@@ -108,6 +111,7 @@ fn run(
             }
         }
 
+        // Check arguments:
         if (fnProto(tree, &buffer, node.toNodeIndex())) |fn_proto| {
             for (fn_proto.ast.params) |param| {
                 const colon_token = tree.firstToken(param) - 1;
@@ -117,20 +121,15 @@ fn run(
                 if (tree.tokens.items(.tag)[identifer_token] != .identifier) continue;
                 const identifier = tree.tokenSlice(identifer_token);
 
-                if (try doc.resolveTypeOfNode(param)) |t| {
-                    const param_type = if (t.isMetaType()) t else switch (zlinter.version.zig) {
-                        .@"0.14" => t.instanceTypeVal(doc.analyser) orelse continue,
-                        .@"0.15" => try t.instanceTypeVal(doc.analyser) orelse continue,
-                    };
+                if (identifier.len == 1 and identifier[0] == '_') continue;
 
-                    const underlying_type = param_type.resolveDeclLiteralResultType();
-
+                if (try doc.resolveTypeOfTypeNode(param)) |param_type| {
                     const style_with_severity: zlinter.LintTextStyleWithSeverity, const desc: []const u8 =
-                        if (underlying_type.isTypeFunc())
+                        if (param_type.isTypeFunc())
                             .{ config.function_arg_that_is_type_fn, "Function argument of type function" }
-                        else if (underlying_type.isFunc())
+                        else if (param_type.isFunc())
                             .{ config.function_arg_that_is_fn, "Function argument of function" }
-                        else if (underlying_type.isMetaType())
+                        else if (param_type.isMetaType())
                             .{ config.function_arg_that_is_type, "Function argument of type" }
                         else
                             .{ config.function_arg, "Function argument" };
