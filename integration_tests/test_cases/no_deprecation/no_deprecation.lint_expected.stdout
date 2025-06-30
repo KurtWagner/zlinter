@@ -1,0 +1,21 @@
+warning Deprecated - don't use this [test_cases/no_deprecation/no_deprecation.input.zig:17:35] no_deprecation
+
+ 17 |     std.log.err("Message: {s}", .{message});
+    |                                   ^^^^^^^
+
+warning Deprecated - don't use this [test_cases/no_deprecation/no_deprecation.input.zig:19:25] no_deprecation
+
+ 19 |     const indirection = message;
+    |                         ^^^^^^^
+
+warning Deprecated - - function not good [test_cases/no_deprecation/no_deprecation.input.zig:22:5] no_deprecation
+
+ 22 |     doNothing();
+    |     ^^^^^^^^^
+
+warning Deprecated: also not this [test_cases/no_deprecation/no_deprecation.input.zig:25:39] no_deprecation
+
+ 25 |     std.log.err("Fields: {d} {d}", .{ me.field_a, me.field_b });
+    |                                       ^^^^^^^^^^
+
+x 4 warnings
