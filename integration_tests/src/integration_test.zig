@@ -16,8 +16,12 @@ test "integration test rules" {
     var fix_stdout_expected_file: ?[:0]u8 = null;
 
     // First arg is executable
+    // Second arg is rule name
+    // Third arg is test name
     const rule_name = args[1];
-    for (args[2..]) |arg| {
+    const test_name = args[2];
+    _ = test_name;
+    for (args[3..]) |arg| {
         if (std.mem.endsWith(u8, arg, input_suffix)) {
             input_zig_file = arg;
         } else if (std.mem.endsWith(u8, arg, lint_output_suffix)) {
@@ -36,8 +40,6 @@ test "integration test rules" {
     // Lint command "zig build lint -- <file>.zig"
     // --------------------------------------------------------------------
     {
-        const basename = std.fs.path.basename(input_zig_file.?);
-        const name = basename[0..(basename.len - input_suffix.len)];
         const lint_output = try runLintCommand(
             &.{
                 "zig",
@@ -45,7 +47,7 @@ test "integration test rules" {
                 "lint",
                 "--",
                 "--rule",
-                name,
+                rule_name,
                 input_zig_file.?,
             },
         );

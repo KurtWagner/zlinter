@@ -6,14 +6,15 @@ pub fn build(b: *std.Build) !void {
 
     const test_step = b.step("test", "Run tests");
 
-    const data_path = b.path("rules/").getPath3(b, null).sub_path;
-    var dir = try std.fs.cwd().openDir(data_path, .{});
-    defer dir.close();
+    const test_cases_path = b.path("test_cases/").getPath3(b, null).sub_path;
+    var test_cases_dir = try std.fs.cwd().openDir(test_cases_path, .{});
+    defer test_cases_dir.close();
 
-    var walker = try dir.walk(b.allocator);
+    var walker = try test_cases_dir.walk(b.allocator);
     defer walker.deinit();
 
     while (try walker.next()) |item| {
+        if (item.kind != .file) continue;
         if (!std.mem.endsWith(u8, item.path, input_suffix)) continue;
 
         const run_integration_test = b.addRunArtifact(b.addTest(.{
@@ -28,9 +29,17 @@ pub fn build(b: *std.Build) !void {
             },
         }));
 
+        // Format: <rule_name>/<test_name>.input.zig
+        const rule_name = item.path[0 .. std.mem.indexOfScalar(u8, item.path, '/') orelse {
+            std.log.err("Test case file skipped as its invalid: {s}", .{item.path});
+            continue;
+        }];
+        run_integration_test.addArg(rule_name);
+
+        const test_name = item.basename[0..(item.basename.len - input_suffix.len)];
+        run_integration_test.addArg(test_name);
+
         var buffer: [2048]u8 = undefined;
-        const name = item.basename[0..(item.basename.len - input_suffix.len)];
-        run_integration_test.addArg(name);
         inline for (&.{
             ".input.zig",
             ".lint_expected.stdout",
@@ -40,7 +49,7 @@ pub fn build(b: *std.Build) !void {
             addFileArgIfExists(
                 b,
                 run_integration_test,
-                std.fmt.bufPrint(&buffer, "{s}/{s}{s}", .{ data_path, name, suffix }) catch unreachable,
+                std.fmt.bufPrint(&buffer, "{s}/{s}/{s}{s}", .{ test_cases_path, rule_name, test_name, suffix }) catch unreachable,
             );
         }
         test_step.dependOn(&run_integration_test.step);
