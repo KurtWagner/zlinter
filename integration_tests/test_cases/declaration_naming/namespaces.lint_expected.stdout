@@ -1,0 +1,11 @@
+error Namespace declaration should be snake_case [test_cases/declaration_naming/namespaces.input.zig:4:7] declaration_naming
+
+ 4 | const MyBadNamespace = my_good_namespace;
+   |       ^^^^^^^^^^^^^^
+
+error Namespace declaration should be snake_case [test_cases/declaration_naming/namespaces.input.zig:5:7] declaration_naming
+
+ 5 | const myBadNamespace = my_good_namespace;
+   |       ^^^^^^^^^^^^^^
+
+x 2 errors
