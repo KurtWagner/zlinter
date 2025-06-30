@@ -10,7 +10,9 @@ pub const MyStruct = struct {
     field_b: u32 = 11,
 
     /// Deprecated - not good
-    fn alsoDoNothing() void {}
+    pub fn alsoDoNothing(self: MyStruct) u32 {
+        return self.field_a;
+    }
 };
 
 pub fn main() void {
@@ -25,7 +27,7 @@ pub fn main() void {
     std.log.err("Fields: {d} {d}", .{ me.field_a, me.field_b });
 
     // TODO: Fails on 0.15 but works on 0.14 - need to work out why. Commented out for now
-    // me.alsoDoNothing();
+    _ = me.alsoDoNothing();
 }
 
 const std = @import("std");

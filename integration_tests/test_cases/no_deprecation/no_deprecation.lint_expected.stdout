@@ -1,21 +1,31 @@
-warning Deprecated - don't use this [test_cases/no_deprecation/no_deprecation.input.zig:17:35] no_deprecation
+warning Deprecated: also not this [test_cases/no_deprecation/no_deprecation.input.zig:14:16] no_deprecation
 
- 17 |     std.log.err("Message: {s}", .{message});
+ 14 |         return self.field_a;
+    |                ^^^^^^^^^^^^
+
+warning Deprecated - don't use this [test_cases/no_deprecation/no_deprecation.input.zig:19:35] no_deprecation
+
+ 19 |     std.log.err("Message: {s}", .{message});
     |                                   ^^^^^^^
 
-warning Deprecated - don't use this [test_cases/no_deprecation/no_deprecation.input.zig:19:25] no_deprecation
+warning Deprecated - don't use this [test_cases/no_deprecation/no_deprecation.input.zig:21:25] no_deprecation
 
- 19 |     const indirection = message;
+ 21 |     const indirection = message;
     |                         ^^^^^^^
 
-warning Deprecated - - function not good [test_cases/no_deprecation/no_deprecation.input.zig:22:5] no_deprecation
+warning Deprecated - - function not good [test_cases/no_deprecation/no_deprecation.input.zig:24:5] no_deprecation
 
- 22 |     doNothing();
+ 24 |     doNothing();
     |     ^^^^^^^^^
 
-warning Deprecated: also not this [test_cases/no_deprecation/no_deprecation.input.zig:25:39] no_deprecation
+warning Deprecated: also not this [test_cases/no_deprecation/no_deprecation.input.zig:27:39] no_deprecation
 
- 25 |     std.log.err("Fields: {d} {d}", .{ me.field_a, me.field_b });
+ 27 |     std.log.err("Fields: {d} {d}", .{ me.field_a, me.field_b });
     |                                       ^^^^^^^^^^
 
-x 4 warnings
+warning Deprecated: - not good [test_cases/no_deprecation/no_deprecation.input.zig:30:9] no_deprecation
+
+ 30 |     _ = me.alsoDoNothing();
+    |         ^^^^^^^^^^^^^^^^
+
+x 6 warnings
