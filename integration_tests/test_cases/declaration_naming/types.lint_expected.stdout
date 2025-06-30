@@ -1,0 +1,51 @@
+error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:3:7] declaration_naming
+
+ 3 | const myBadStruct = struct { a: u32 };
+   |       ^^^^^^^^^^^
+
+error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:4:7] declaration_naming
+
+ 4 | const my_bad_struct = MyGoodStruct;
+   |       ^^^^^^^^^^^^^
+
+error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:7:7] declaration_naming
+
+ 7 | const myBadEnum = enum { a, b };
+   |       ^^^^^^^^^
+
+error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:8:7] declaration_naming
+
+ 8 | const my_bad_enum = MyGoodEnum;
+   |       ^^^^^^^^^^^
+
+error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:11:7] declaration_naming
+
+ 11 | const myBadUnion = union(enum) { a: u32, b: u64 };
+    |       ^^^^^^^^^^
+
+error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:12:7] declaration_naming
+
+ 12 | const my_bad_union = MyGoodUnion;
+    |       ^^^^^^^^^^^^
+
+error Variable declaration should be snake_case [test_cases/declaration_naming/types.input.zig:15:5] declaration_naming
+
+ 15 | var BadInt = 10;
+    |     ^^^^^^
+
+error Variable declaration should be snake_case [test_cases/declaration_naming/types.input.zig:16:5] declaration_naming
+
+ 16 | var badInt = 10;
+    |     ^^^^^^
+
+error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:19:5] declaration_naming
+
+ 19 | var badType = u32;
+    |     ^^^^^^^
+
+error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:20:5] declaration_naming
+
+ 20 | var bad_type = @TypeOf(badType);
+    |     ^^^^^^^^
+
+x 10 errors
