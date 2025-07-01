@@ -159,23 +159,27 @@ pub const LintDocument = struct {
                 // std.debug.print("InitNode - Resolved type: {}\n", .{decl});
                 // try self.dumpType(decl, 0);
 
-                const is_error_container = switch (decl.data) {
-                    .container => |container| result: {
-                        const container_node, const container_tree = switch (version.zig) {
-                            .@"0.14" => .{ container.toNode(), container.handle.tree },
-                            .@"0.15" => .{ container.scope_handle.toNode(), container.scope_handle.handle.tree },
-                        };
+                const is_error_container =
+                    if (std.meta.hasMethod(@TypeOf(decl), "isErrorSetType"))
+                        decl.isErrorSetType(self.analyser)
+                    else switch (decl.data) {
+                        .container => |container| result: {
+                            const container_node, const container_tree = switch (version.zig) {
+                                .@"0.14" => .{ container.toNode(), container.handle.tree },
+                                .@"0.15" => .{ container.scope_handle.toNode(), container.scope_handle.handle.tree },
+                            };
 
-                        if (shims.NodeIndexShim.init(container_node).index != 0) {
-                            switch (shims.nodeTag(container_tree, container_node)) {
-                                .error_set_decl => break :result true,
-                                else => {},
+                            if (shims.NodeIndexShim.init(container_node).index != 0) {
+                                std.debug.print("{}\n", .{shims.nodeTag(container_tree, container_node)});
+                                switch (shims.nodeTag(container_tree, container_node)) {
+                                    .error_set_decl => break :result true,
+                                    else => {},
+                                }
                             }
-                        }
-                        break :result false;
-                    },
-                    else => false,
-                };
+                            break :result false;
+                        },
+                        else => false,
+                    };
 
                 if (is_error_container) {
                     return .error_type;
