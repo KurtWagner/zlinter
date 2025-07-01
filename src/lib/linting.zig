@@ -31,33 +31,46 @@ pub const LintDocument = struct {
         return instance_type.resolveDeclLiteralResultType();
     }
 
-    // TODO: Clean this up as they're not all really possible
+    // TODO: Write tests and clean this up as they're not really all needed
     pub const TypeKind = enum {
+        /// Fallback when it's not a type or any of the identifiable `*_instance`
+        /// kinds - usually this means its a primitive. e.g., `var age: u32 = 24;`
         other,
-
-        // Instances of a type
+        /// e.g., has type `fn () void`
         @"fn",
+        /// e.g., has type `fn () type`
         fn_returns_type,
-        namespace_instance,
         opaque_instance,
+        /// e.g., has type `enum { ... }`
         enum_instance,
+        /// e.g., has type `struct { field: u32 }`
         struct_instance,
+        /// e.g., has type `union { a: u32, b: u32 }`
         union_instance,
+        /// e.g., `const MyError = error { NotFound, Invalid };`
         error_type,
-
-        // Actual types
-        type_fn,
-        type_fn_returns_type,
+        /// e.g., `const Callback = *const fn () void;`
+        fn_type,
+        /// e.g., `const Callback = *const fn () void;`
+        fn_type_returns_type,
+        /// Is type `type` and not categorized as any other `*_type`
         type,
+        /// e.g., `const Result = enum { good, bad };`
         enum_type,
+        /// e.g., `const Person = struct { name: [] const u8 };`
         struct_type,
+        /// e.g., `const colors = struct { const color = "red"; };`
         namespace_type,
+        /// e.g., `const Color = union { rgba: Rgba, rgb: Rgb };`
         union_type,
         opaque_type,
     };
 
     /// Resolves a given declaration or container field by looking at the type
     /// node (if any) and then the value node (if any) to resolve the type.
+    ///
+    /// This will return null if the kind could not be resolved, usually indicating
+    /// that the input was unexpected / invalid.
     pub fn resolveTypeKind(self: @This(), input: union(enum) {
         var_decl: std.zig.Ast.full.VarDecl,
         container_field: std.zig.Ast.full.ContainerField,
@@ -102,17 +115,19 @@ pub const LintDocument = struct {
 
                     // If it's a function proto, then return whether or not the function returns a type
                     return if (shims.isIdentiferKind(tree, shims.unwrapNode(tree, return_node, .{}), .type))
-                        .type_fn_returns_type
+                        .fn_returns_type
                     else
-                        .type_fn;
+                        .@"fn";
                 } else {
-                    return .type_fn;
+                    return .@"fn";
                 }
             } else if (tree.fullContainerDecl(&container_decl_buffer, node)) |container_decl| {
 
                 // If's it's a container declaration (e.g., struct {}) then resolve what type of container
                 switch (tree.tokens.items(.tag)[container_decl.ast.main_token]) {
-                    .keyword_struct => return if (analyzer.isContainerNamespace(tree, container_decl)) .namespace_instance else .struct_instance,
+                    // Instance of namespace should be impossible but to be safe
+                    // we will just return null to say we couldn't resolve the kind
+                    .keyword_struct => return if (analyzer.isContainerNamespace(tree, container_decl)) null else .struct_instance,
                     .keyword_union => return .union_instance,
                     .keyword_opaque => return .opaque_instance,
                     .keyword_enum => return .enum_instance,
@@ -215,9 +230,9 @@ pub const LintDocument = struct {
                 } else if (decl.isStructType()) {
                     return if (init_node_type.is_type_val) .struct_type else .struct_instance;
                 } else if (decl.isTypeFunc()) {
-                    return if (init_node_type.is_type_val) .type_fn_returns_type else .fn_returns_type;
+                    return if (init_node_type.is_type_val) .fn_type_returns_type else .fn_returns_type;
                 } else if (decl.isFunc()) {
-                    return if (init_node_type.is_type_val) .type_fn else .@"fn";
+                    return if (init_node_type.is_type_val) .fn_type else .@"fn";
                 } else {
                     if (init_node_type.is_type_val) {
                         switch (init_node_type.data) {
@@ -913,8 +928,26 @@ pub const LintProblemFix = struct {
 // ----------------------------------------------------------------------------
 
 pub const testing = struct {
+    /// See `testing.runRule` for example
+    pub fn loadFakeDocument(ctx: *LintContext, dir: std.fs.Dir, file_name: []const u8, contents: [:0]const u8, arena: std.mem.Allocator) !?LintDocument {
+        assertTestOnly();
+
+        if (std.fs.path.dirname(file_name)) |dir_name|
+            try dir.makePath(dir_name);
+
+        const file = try dir.createFile(file_name, .{});
+        defer file.close();
+
+        var buffer: [2024]u8 = undefined;
+        const real_path = try dir.realpath(file_name, &buffer);
+
+        try file.writeAll(contents);
+
+        return (try ctx.loadDocument(real_path, ctx.gpa, arena)).?;
+    }
+
     /// Builds and runs a rule with fake file name and content.
-    pub fn runRule(rule: LintRule, file_path: []const u8, contents: [:0]const u8) !?LintResult {
+    pub fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8) !?LintResult {
         assertTestOnly();
 
         var ctx: LintContext = undefined;
@@ -924,23 +957,17 @@ pub const testing = struct {
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
 
-        if (std.fs.path.dirname(file_path)) |dir_name|
-            try tmp.dir.makePath(dir_name);
-
-        const file = try tmp.dir.createFile(file_path, .{});
-        defer file.close();
-
-        var buffer: [2024]u8 = undefined;
-        const real_path = try tmp.dir.realpath(file_path, &buffer);
-
-        try file.writeAll(contents);
-
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
 
-        var doc = (try ctx.loadDocument(real_path, ctx.gpa, arena.allocator())).?;
-
-        defer doc.deinit(std.testing.allocator);
+        var doc = (try loadFakeDocument(
+            &ctx,
+            tmp.dir,
+            file_name,
+            contents,
+            arena.allocator(),
+        )).?;
+        defer doc.deinit(ctx.gpa);
 
         const ast = doc.handle.tree;
         std.testing.expectEqual(ast.errors.len, 0) catch |err| {
@@ -988,6 +1015,316 @@ pub const testing = struct {
         comptime if (!@import("builtin").is_test) @compileError("Test only");
     }
 };
+
+test "LintDocument.resolveTypeKind" {
+    const TestCase = struct {
+        contents: [:0]const u8,
+        kind: ?LintDocument.TypeKind,
+    };
+
+    for ([_]TestCase{
+        // Other:
+        // ------
+        .{
+            .contents = "var ok:u32 = 10;",
+            .kind = .other,
+        },
+        .{
+            .contents = "age:u8 = 10,",
+            .kind = .other,
+        },
+        .{
+            .contents = "name :[] const u8,",
+            .kind = .other,
+        },
+        // Type:
+        // -----
+        .{
+            .contents = "const A: type = u32;",
+            .kind = .type,
+        },
+        .{
+            .contents = "const A = u32;",
+            .kind = .type,
+        },
+        .{
+            .contents = "const A:?type = u32;",
+            .kind = .type,
+        },
+        .{
+            .contents = "const A:?type = null;",
+            .kind = .type,
+        },
+        .{
+            .contents = "const A = @TypeOf(u32);",
+            .kind = .type,
+        },
+        .{
+            .contents =
+            \\const A = BuildType();
+            \\fn BuildType() type {
+            \\   return u32;
+            \\}
+            ,
+            .kind = .type,
+        },
+        // Struct type:
+        // ------------
+        .{
+            .contents =
+            \\const A = BuildType();
+            \\fn BuildType() type {
+            \\   return struct { field: u32 };
+            \\}
+            ,
+            .kind = .struct_type,
+        },
+        .{
+            .contents = "const A = struct { field: u32; };",
+            .kind = .struct_type,
+        },
+        // Namespace type:
+        // ---------------
+        .{
+            .contents = "const a = struct { const decl: u32 = 1; };",
+            .kind = .namespace_type,
+        },
+        .{
+            .contents =
+            \\const a = struct {
+            \\   pub fn hello() []const u8 {
+            \\      return "Hello";
+            \\   }
+            \\};
+            ,
+            .kind = .namespace_type,
+        },
+        // Namespace instance (invalid use)
+        // --------------------------------
+        .{
+            .contents =
+            \\ const pointless = my_namespace{};
+            \\ const my_namespace = struct { const decl: u32 = 1; };
+            ,
+            .kind = null,
+        },
+        // Function:
+        // ---------------
+        .{
+            .contents = "var a: fn () void = undefined;",
+            .kind = .@"fn",
+        },
+        .{
+            .contents =
+            \\var a = &func;
+            \\fn func() u32 {
+            \\  return 10;
+            \\}
+            ,
+            .kind = .@"fn",
+        },
+        // Type that is function
+        .{
+            .contents = "var a = fn() void;",
+            .kind = .fn_type,
+        },
+        .{
+            .contents =
+            \\const RefFunc = FuncType;
+            \\const FuncType = fn() void;
+            ,
+            .kind = .fn_type,
+        },
+        .{
+            .contents = "var a = *const fn() void;",
+            .kind = .fn_type,
+        },
+        .{
+            .contents =
+            \\const RefFunc = FuncType;
+            \\const FuncType = *const fn() void;
+            ,
+            .kind = .fn_type,
+        },
+        // Type that is function that returns type
+        .{
+            .contents = "var a = fn() type;",
+            .kind = .fn_type_returns_type,
+        },
+        .{
+            .contents =
+            \\const RefFunc = FuncType;
+            \\const FuncType = fn() type;
+            ,
+            .kind = .fn_type_returns_type,
+        },
+        .{
+            .contents = "var a = *const fn() type;",
+            .kind = .fn_type_returns_type,
+        },
+        .{
+            .contents =
+            \\const RefFunc = FuncType;
+            \\const FuncType = *const fn() type;
+            ,
+            .kind = .fn_type_returns_type,
+        },
+        // Function that returns type
+        .{
+            .contents =
+            \\var a = &func;
+            \\fn func() type {
+            \\  return f32;
+            \\}
+            ,
+            .kind = .fn_returns_type,
+        },
+        .{
+            .contents =
+            \\var a: *const fn () type = undefined;
+            ,
+            .kind = .fn_returns_type,
+        },
+        // Error type
+        .{
+            .contents =
+            \\var MyError = error {a,b,c};
+            ,
+            .kind = .error_type,
+        },
+        // TODO: Fix this and add test with error union
+        // .{
+        //     .contents =
+        //     \\var MyError = Reference;
+        //     \\const Reference = error {a,b,c}
+        //     ,
+        //     .kind = .error_type,
+        // },
+
+        // Error instance
+        .{
+            .contents =
+            \\const err = error.MyError;
+            ,
+            // TODO: This should be error_instance but for now its other
+            .kind = .other,
+        },
+        // Union instance:
+        .{
+            .contents =
+            \\const u = U{.a=1};
+            \\const U = union { a: u32, b: f32 };
+            ,
+            .kind = .union_instance,
+        },
+        .{
+            .contents =
+            \\const a = u;
+            \\const u = U{.a=1};
+            \\const U = union { a: u32, b: f32 };
+            ,
+            .kind = .union_instance,
+        },
+        // Struct instance:
+        .{
+            .contents =
+            \\const s = S{.a=1};
+            \\const S = struct { a: u32  };
+            ,
+            .kind = .struct_instance,
+        },
+        .{
+            .contents =
+            \\const a = s;
+            \\const s = S{.a=1};
+            \\const S = struct { a: u32 };
+            ,
+            .kind = .struct_instance,
+        },
+        // Struct instance:
+        .{
+            .contents =
+            \\const s = E.a;
+            \\const E = enum { a, b  };
+            ,
+            .kind = .enum_instance,
+        },
+        .{
+            .contents =
+            \\const a = s;
+            \\const s = E.a;
+            \\const E = enum { a, b };
+            ,
+            .kind = .enum_instance,
+        },
+        // Opaque type
+        .{
+            .contents =
+            \\const Window = opaque {
+            \\  fn show(self: *Window) void {
+            \\    show_window(self);
+            \\  }
+            \\};
+            \\
+            \\extern fn show_window(*Window) callconv(.C) void;
+            ,
+            .kind = .opaque_type,
+        },
+        // Opaque instance
+        .{
+            .contents =
+            \\var main_window: *Window = undefined;
+            \\const Window = opaque {
+            \\  fn show(self: *Window) void {
+            \\    show_window(self);
+            \\  }
+            \\};
+            \\
+            \\extern fn show_window(*Window) callconv(.C) void;
+            ,
+            // TODO: This should be opaque_instance but for now its other
+            .kind = .other,
+        },
+    }) |test_case| {
+        var ctx: LintContext = undefined;
+        try ctx.init(.{}, std.testing.allocator);
+        defer ctx.deinit();
+
+        var tmp = std.testing.tmpDir(.{});
+        defer tmp.cleanup();
+
+        var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+        defer arena.deinit();
+
+        var doc = (try testing.loadFakeDocument(
+            &ctx,
+            tmp.dir,
+            "test.zig",
+            test_case.contents,
+            arena.allocator(),
+        )).?;
+        defer doc.deinit(ctx.gpa);
+
+        const node = doc.handle.tree.rootDecls()[0];
+        const actual_kind = if (doc.handle.tree.fullVarDecl(node)) |var_decl|
+            try doc.resolveTypeKind(.{ .var_decl = var_decl })
+        else if (doc.handle.tree.fullContainerField(node)) |container_field|
+            try doc.resolveTypeKind(.{ .container_field = container_field })
+        else
+            @panic("Fail");
+
+        std.testing.expectEqual(test_case.kind, actual_kind) catch |e| {
+            const border: [50]u8 = @splat('-');
+            var writer = std.io.getStdErr().writer();
+            try writer.print("Node:\n{s}\n{s}\n{s}\n", .{ border, doc.handle.tree.getNodeSource(node), border });
+            try writer.print("Expected: {any}\n", .{test_case.kind});
+            try writer.print("Actual: {any}\n", .{actual_kind});
+            try writer.print("Contents:\n{s}\n{s}\n{s}\n", .{ border, test_case.contents, border });
+
+            return e;
+        };
+    }
+}
 
 const std = @import("std");
 const builtin = @import("builtin");

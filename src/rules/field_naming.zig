@@ -90,9 +90,10 @@ fn run(
                         break :tuple switch (container_tag) {
                             .keyword_struct => if (type_kind) |kind|
                                 switch (kind) {
-                                    .fn_returns_type, .type_fn_returns_type => .{ config.struct_field_that_is_type_fn, "Type function" },
-                                    .@"fn", .type_fn => .{ config.struct_field_that_is_fn, "Function" },
+                                    .fn_returns_type => .{ config.struct_field_that_is_type_fn, "Type function" },
+                                    .@"fn" => .{ config.struct_field_that_is_fn, "Function" },
                                     .namespace_type => .{ config.struct_field_that_is_namespace, "Namespace" },
+                                    .fn_type, .fn_type_returns_type => .{ config.struct_field_that_is_type, "Function Type" },
                                     .type => .{ config.struct_field_that_is_type, "Type" },
                                     else => .{ config.struct_field, "Struct" },
                                 }
