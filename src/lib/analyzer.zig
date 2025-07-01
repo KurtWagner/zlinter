@@ -13,5 +13,4 @@ pub fn isContainerNamespace(tree: std.zig.Ast, container_decl: std.zig.Ast.full.
 }
 
 const shims = @import("shims.zig");
-const zls = @import("zls");
 const std = @import("std");
