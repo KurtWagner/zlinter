@@ -170,7 +170,6 @@ pub const LintDocument = struct {
                             };
 
                             if (shims.NodeIndexShim.init(container_node).index != 0) {
-                                std.debug.print("{}\n", .{shims.nodeTag(container_tree, container_node)});
                                 switch (shims.nodeTag(container_tree, container_node)) {
                                     .error_set_decl => break :result true,
                                     else => {},
@@ -892,8 +891,13 @@ pub const LintProblemFix = struct {
 // ----------------------------------------------------------------------------
 
 pub const testing = struct {
-    pub fn loadDocument(ctx: *LintContext, file_path: []const u8, contents: [:0]const u8) !LintDocument {
+    /// Builds and runs a rule with fake file name and content.
+    pub fn runRule(rule: LintRule, file_path: []const u8, contents: [:0]const u8) !?LintResult {
         assertTestOnly();
+
+        var ctx: LintContext = undefined;
+        try ctx.init(.{}, std.testing.allocator);
+        defer ctx.deinit();
 
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
@@ -912,18 +916,8 @@ pub const testing = struct {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
 
-        return (try ctx.loadDocument(real_path, ctx.gpa, arena.allocator())).?;
-    }
+        var doc = (try ctx.loadDocument(real_path, ctx.gpa, arena.allocator())).?;
 
-    /// Builds and runs a rule with fake file name and content.
-    pub fn runRule(rule: LintRule, file_path: []const u8, contents: [:0]const u8) !?LintResult {
-        assertTestOnly();
-
-        var ctx: LintContext = undefined;
-        try ctx.init(.{}, std.testing.allocator);
-        defer ctx.deinit();
-
-        var doc = try loadDocument(&ctx, file_path, contents);
         defer doc.deinit(std.testing.allocator);
 
         const ast = doc.handle.tree;
