@@ -5,11 +5,11 @@
     .dependencies = .{
         .zls = .{
             // 0.14.x
-            .url = "git+https://github.com/zigtools/zls?ref=0.14.0#7485feeeda45d1ad09422ae83af73307ab9e6c9e",
-            .hash = "zls-0.14.0-rmm5fjKFIADiTeGEPxU79BXPmOqepsgJPJrghXzTStc5",
+            // .url = "git+https://github.com/zigtools/zls?ref=0.14.0#7485feeeda45d1ad09422ae83af73307ab9e6c9e",
+            // .hash = "zls-0.14.0-rmm5fjKFIADiTeGEPxU79BXPmOqepsgJPJrghXzTStc5",
             // 0.15.x
-            // .url = "git+https://github.com/zigtools/zls?ref=master#9a96d395ea3bc3c83e32ede65252a688213f8987",
-            // .hash = "zls-0.15.0-dev-rmm5fkbqIwCWZuWJnyUKcpeFR2LvFbqt8LKmowxqKWqm",
+            .url = "git+https://github.com/zigtools/zls?ref=master#9a96d395ea3bc3c83e32ede65252a688213f8987",
+            .hash = "zls-0.15.0-dev-rmm5fkbqIwCWZuWJnyUKcpeFR2LvFbqt8LKmowxqKWqm",
         },
     },
     .paths = .{
