@@ -85,21 +85,17 @@ fn run(
 
             for (container_decl.ast.members) |member| {
                 if (tree.fullContainerField(member)) |container_field| {
-                    const maybe_node_type = try doc.resolveTypeOfNode(member);
-
+                    const type_kind = try doc.resolveTypeKind(.{ .container_field = container_field });
                     const style_with_severity: zlinter.LintTextStyleWithSeverity, const container_name: []const u8 = tuple: {
                         break :tuple switch (container_tag) {
-                            .keyword_struct => if (maybe_node_type) |t|
-                                if (t.resolveDeclLiteralResultType().isTypeFunc())
-                                    .{ config.struct_field_that_is_type_fn, "Type function" }
-                                else if (t.resolveDeclLiteralResultType().isFunc())
-                                    .{ config.struct_field_that_is_fn, "Function" }
-                                else if (t.resolveDeclLiteralResultType().isNamespace())
-                                    .{ config.struct_field_that_is_namespace, "Namespace" }
-                                else if (t.is_type_val)
-                                    .{ config.struct_field_that_is_type, "Type" }
-                                else
-                                    .{ config.struct_field, "Struct" }
+                            .keyword_struct => if (type_kind) |kind|
+                                switch (kind) {
+                                    .fn_returns_type, .type_fn_returns_type => .{ config.struct_field_that_is_type_fn, "Type function" },
+                                    .@"fn", .type_fn => .{ config.struct_field_that_is_fn, "Function" },
+                                    .namespace_type => .{ config.struct_field_that_is_namespace, "Namespace" },
+                                    .type => .{ config.struct_field_that_is_type, "Type" },
+                                    else => .{ config.struct_field, "Struct" },
+                                }
                             else
                                 .{ config.struct_field, "Struct" },
                             .keyword_union => .{ config.union_field, "Union" },
