@@ -31,6 +31,7 @@ pub const LintDocument = struct {
         return instance_type.resolveDeclLiteralResultType();
     }
 
+    // TODO: Clean this up as they're not all really possible
     pub const TypeKind = enum {
         other,
 
