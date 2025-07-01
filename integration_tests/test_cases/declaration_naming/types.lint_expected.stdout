@@ -1,9 +1,9 @@
-error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:3:7] declaration_naming
+error Struct declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:3:7] declaration_naming
 
  3 | const myBadStruct = struct { a: u32 };
    |       ^^^^^^^^^^^
 
-error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:4:7] declaration_naming
+error Struct declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:4:7] declaration_naming
 
  4 | const my_bad_struct = MyGoodStruct;
    |       ^^^^^^^^^^^^^
@@ -18,22 +18,22 @@ error Type declaration should be TitleCase [test_cases/declaration_naming/types.
  6 | const my_bad_optional_struct: ?type = struct { a: u32 };
    |       ^^^^^^^^^^^^^^^^^^^^^^
 
-error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:9:7] declaration_naming
+error Enum declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:9:7] declaration_naming
 
  9 | const myBadEnum = enum { a, b };
    |       ^^^^^^^^^
 
-error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:10:7] declaration_naming
+error Enum declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:10:7] declaration_naming
 
  10 | const my_bad_enum = MyGoodEnum;
     |       ^^^^^^^^^^^
 
-error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:13:7] declaration_naming
+error Union declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:13:7] declaration_naming
 
  13 | const myBadUnion = union(enum) { a: u32, b: u64 };
     |       ^^^^^^^^^^
 
-error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:14:7] declaration_naming
+error Union declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:14:7] declaration_naming
 
  14 | const my_bad_union = MyGoodUnion;
     |       ^^^^^^^^^^^^
@@ -78,4 +78,14 @@ error Type declaration should be TitleCase [test_cases/declaration_naming/types.
  33 |     const bad_any_type = @TypeOf(in);
     |           ^^^^^^^^^^^^
 
-x 16 errors
+error Error declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:39:7] declaration_naming
+
+ 39 | const myBadError = error{ ErrorA, ErrorB };
+    |       ^^^^^^^^^^
+
+error Error declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:40:7] declaration_naming
+
+ 40 | const my_bad_error = MyGoodError;
+    |       ^^^^^^^^^^^^
+
+x 18 errors

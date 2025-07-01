@@ -42,6 +42,7 @@ pub const LintDocument = struct {
         enum_instance,
         struct_instance,
         union_instance,
+        error_type,
 
         // Actual types
         type_fn,
@@ -132,6 +133,7 @@ pub const LintDocument = struct {
                         }
                     }
                 },
+                .error_set_decl => return .error_type,
                 else => {},
             }
 
@@ -152,7 +154,20 @@ pub const LintDocument = struct {
                 // std.debug.print("InitNode - Resolved type: {}\n", .{decl});
                 // try self.dumpType(decl, 0);
 
-                if (decl.isNamespace()) {
+                const is_error_container = switch (decl.data) {
+                    .container => |info| if (shims.NodeIndexShim.init(info.toNode()).index != 0)
+                        switch (shims.nodeTag(info.handle.tree, info.toNode())) {
+                            .error_set_decl => true,
+                            else => false,
+                        }
+                    else
+                        false,
+                    else => false,
+                };
+
+                if (is_error_container) {
+                    return .error_type;
+                } else if (decl.isNamespace()) {
                     return if (init_node_type.is_type_val) .namespace_type else null;
                 } else if (decl.isUnionType()) {
                     return if (init_node_type.is_type_val) .union_type else .union_instance;

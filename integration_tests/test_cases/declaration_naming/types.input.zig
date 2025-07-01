@@ -33,3 +33,8 @@ pub inline fn anytypeSampleA(in: anytype) struct { type, type, type } {
     const bad_any_type = @TypeOf(in);
     return .{ GoodAnyType, badAnyType, bad_any_type };
 }
+
+// Errors
+const MyGoodError = error{ ErrorA, ErrorB };
+const myBadError = error{ ErrorA, ErrorB };
+const my_bad_error = MyGoodError;

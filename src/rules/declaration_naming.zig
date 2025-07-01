@@ -73,16 +73,15 @@ fn run(
 
                 const style_with_severity: zlinter.LintTextStyleWithSeverity, const var_desc: []const u8 =
                     switch (type_kind) {
-                        .fn_returns_type => .{ config.decl_that_is_type_fn, "Type function" },
+                        .fn_returns_type, .type_fn_returns_type => .{ config.decl_that_is_type_fn, "Type function" },
                         .@"fn", .type_fn => .{ config.decl_that_is_fn, "Function" },
                         .namespace_type => .{ config.decl_that_is_namespace, "Namespace" },
-                        .type,
-                        .struct_type,
-                        .enum_type,
-                        .union_type,
-                        .opaque_type,
-                        .type_fn_returns_type,
-                        => .{ config.decl_that_is_type, "Type" },
+                        .type => .{ config.decl_that_is_type, "Type" },
+                        .struct_type => .{ config.decl_that_is_type, "Struct" },
+                        .enum_type => .{ config.decl_that_is_type, "Enum" },
+                        .union_type => .{ config.decl_that_is_type, "Union" },
+                        .opaque_type => .{ config.decl_that_is_type, "Opaque" },
+                        .error_type => .{ config.decl_that_is_type, "Error" },
                         else => switch (tree.tokens.items(.tag)[var_decl.ast.mut_token]) {
                             .keyword_const => .{ config.const_decl, "Constant" },
                             .keyword_var => .{ config.var_decl, "Variable" },
