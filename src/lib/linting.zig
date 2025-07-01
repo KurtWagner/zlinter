@@ -56,18 +56,40 @@ pub const LintDocument = struct {
         opaque_type,
     };
 
-    pub fn resolveVarDeclType(self: @This(), var_decl: std.zig.Ast.full.VarDecl) !?TypeKind {
+    /// Resolves a given declaration or container field by looking at the type
+    /// node (if any) and then the value node (if any) to resolve the type.
+    pub fn resolveTypeKind(self: @This(), input: union(enum) {
+        var_decl: std.zig.Ast.full.VarDecl,
+        container_field: std.zig.Ast.full.ContainerField,
+    }) !?TypeKind {
+        const maybe_type_node, const maybe_value_node = inputs: {
+            const t, const v = switch (input) {
+                .var_decl => |var_decl| .{
+                    var_decl.ast.type_node,
+                    var_decl.ast.init_node,
+                },
+                .container_field => |container_field| .{
+                    container_field.ast.type_expr,
+                    container_field.ast.value_expr,
+                },
+            };
+            break :inputs .{
+                shims.NodeIndexShim.initOptional(t),
+                shims.NodeIndexShim.initOptional(v),
+            };
+        };
+
         var container_decl_buffer: [2]std.zig.Ast.Node.Index = undefined;
         var fn_proto_buffer: [1]std.zig.Ast.Node.Index = undefined;
 
         const tree = self.handle.tree;
 
         // First we try looking for a type node in the declaration
-        if (shims.NodeIndexShim.initOptional(var_decl.ast.type_node)) |shim_node| {
-            // std.debug.print("TypeNode - Before: {s}\n", .{tree.getNodeSource(shim_node.toNodeIndex())});
-            // std.debug.print("TypeNode - Tag Before: {}\n", .{shims.nodeTag(tree, shim_node.toNodeIndex())});
+        if (maybe_type_node) |type_node| {
+            // std.debug.print("TypeNode - Before: {s}\n", .{tree.getNodeSource(type_node.toNodeIndex())});
+            // std.debug.print("TypeNode - Tag Before: {}\n", .{shims.nodeTag(tree, type_node.toNodeIndex())});
 
-            const node = shims.unwrapNode(tree, shim_node.toNodeIndex(), .{});
+            const node = shims.unwrapNode(tree, type_node.toNodeIndex(), .{});
             // std.debug.print("TypeNode - After: {s}\n", .{tree.getNodeSource(node)});
             // std.debug.print("TypeNode - Tag After: {}\n", .{shims.nodeTag(tree, node)});
 
@@ -116,11 +138,11 @@ pub const LintDocument = struct {
         }
 
         // Then we look at the initialisation value if a type couldn't be used
-        if (shims.NodeIndexShim.initOptional(var_decl.ast.init_node)) |init_node_shim| {
-            // std.debug.print("InitNode - Before: {s}\n", .{tree.getNodeSource(init_node_shim.toNodeIndex())});
-            // std.debug.print("InitNode - Tag Before: {}\n", .{shims.nodeTag(tree, init_node_shim.toNodeIndex())});
+        if (maybe_value_node) |value_node| {
+            // std.debug.print("InitNode - Before: {s}\n", .{tree.getNodeSource(value_node.toNodeIndex())});
+            // std.debug.print("InitNode - Tag Before: {}\n", .{shims.nodeTag(tree, value_node.toNodeIndex())});
 
-            const node = shims.unwrapNode(tree, init_node_shim.toNodeIndex(), .{});
+            const node = shims.unwrapNode(tree, value_node.toNodeIndex(), .{});
             // std.debug.print("InitNode - After: {s}\n", .{tree.getNodeSource(node)});
             // std.debug.print("InitNode - Tag After: {}\n", .{shims.nodeTag(tree, node)});
 
