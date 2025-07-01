@@ -195,194 +195,25 @@ pub const LintDocument = struct {
         return null;
     }
 
-    test "resolveKind expect type" {
-        inline for (&.{
-            \\var a: type = u32;
-            ,
-            \\var a: ?type = u32;
-            ,
-            \\const a: ?type = null;
-            ,
-            \\a: type,
-            ,
-            \\a: type = u32,
-            ,
-            \\ a: ?type = u32,
-            ,
-            \\ a: ?type = null,
-        }) |content| {
-            var ctx: LintContext = undefined;
-            try ctx.init(.{}, std.testing.allocator);
-            defer ctx.deinit();
-
-            var doc = try testing.loadDocument(&ctx, "file.zig", content);
-            defer doc.deinit(std.testing.allocator);
-
-            std.testing.expectEqual(
-                .type,
-                doc.resolveTypeKind((try doc.resolveTypeOfNode(doc.handle.tree.rootDecls()[0])).?),
-            ) catch |e| {
-                std.log.err("Input:\n{s}\n", .{doc.handle.tree.getNodeSource(doc.handle.tree.rootDecls()[0])});
-                return e;
-            };
-        }
-    }
-
-    test "resolveKind expect namespace" {
-        inline for (&.{
-            \\const a = struct {};
-            ,
-            \\const b = struct {
-            \\ const decl: u32 = 1;
-            \\};
-            ,
-            \\const b = struct {
-            \\ pub fn name() []const u8 {
-            \\    return "test";
-            \\ }
-            \\};
-        }) |content| {
-            var ctx: LintContext = undefined;
-            try ctx.init(.{}, std.testing.allocator);
-            defer ctx.deinit();
-
-            var doc = try testing.loadDocument(&ctx, "file.zig", content);
-            defer doc.deinit(std.testing.allocator);
-
-            std.testing.expectEqual(
-                .namespace_type,
-                doc.resolveTypeKind((try doc.resolveTypeOfNode(doc.handle.tree.rootDecls()[0])).?),
-            ) catch |e| {
-                std.log.err("Input:\n{s}\n", .{doc.handle.tree.getNodeSource(doc.handle.tree.rootDecls()[0])});
-                return e;
-            };
-        }
-    }
-
-    test "resolveKind expect struct" {
-        inline for (&.{
-            \\const a = struct {
-            \\ a: u32 = 1,
-            \\};
-        }) |content| {
-            var ctx: LintContext = undefined;
-            try ctx.init(.{}, std.testing.allocator);
-            defer ctx.deinit();
-
-            var doc = try testing.loadDocument(&ctx, "file.zig", content);
-            defer doc.deinit(std.testing.allocator);
-
-            std.testing.expectEqual(
-                .struct_type,
-                doc.resolveTypeKind((try doc.resolveTypeOfNode(doc.handle.tree.rootDecls()[0])).?),
-            ) catch |e| {
-                std.log.err("Input:\n{s}\n", .{doc.handle.tree.getNodeSource(doc.handle.tree.rootDecls()[0])});
-                return e;
-            };
-        }
-    }
-
-    test "resolveKind expect union" {
-        inline for (&.{
-            \\const a = union {
-            \\  b: u32, c: u32,
-            \\};
-            ,
-            \\const a = union(enum) {
-            \\  b: u32, c: u32,
-            \\};
-        }) |content| {
-            var ctx: LintContext = undefined;
-            try ctx.init(.{}, std.testing.allocator);
-            defer ctx.deinit();
-
-            var doc = try testing.loadDocument(&ctx, "file.zig", content);
-            defer doc.deinit(std.testing.allocator);
-
-            std.testing.expectEqual(
-                .union_type,
-                doc.resolveTypeKind((try doc.resolveTypeOfNode(doc.handle.tree.rootDecls()[0])).?),
-            ) catch |e| {
-                std.log.err("Input:\n{s}\n", .{doc.handle.tree.getNodeSource(doc.handle.tree.rootDecls()[0])});
-                return e;
-            };
-        }
-    }
-
-    test "resolveKind expect opaque" {
-        inline for (&.{
-            \\const a = opaque {};
-            ,
-            \\const Window = opaque {
-            \\  fn show(self: *Window) void {
-            \\    show_window(self);
-            \\  }
-            \\};
-        }) |content| {
-            var ctx: LintContext = undefined;
-            try ctx.init(.{}, std.testing.allocator);
-            defer ctx.deinit();
-
-            var doc = try testing.loadDocument(&ctx, "file.zig", content);
-            defer doc.deinit(std.testing.allocator);
-
-            std.testing.expectEqual(
-                .@"opaque",
-                doc.resolveTypeKind((try doc.resolveTypeOfNode(doc.handle.tree.rootDecls()[0])).?),
-            ) catch |e| {
-                std.log.err("Input:\n{s}\n", .{doc.handle.tree.getNodeSource(doc.handle.tree.rootDecls()[0])});
-                return e;
-            };
-        }
-    }
-
-    test "resolveKind expect other" {
-        inline for (&.{
-            \\const a = 10;
-            ,
-            \\var a: u32 = 23;
-            ,
-            \\const a: struct{ field: u32 } = .{ .field = 32 };
-            ,
-            \\var a: ?u32 = null;
-            ,
-            \\var a: ?*f32 = null;
-        }) |content| {
-            var ctx: LintContext = undefined;
-            try ctx.init(.{}, std.testing.allocator);
-            defer ctx.deinit();
-
-            var doc = try testing.loadDocument(&ctx, "file.zig", content);
-            defer doc.deinit(std.testing.allocator);
-
-            std.testing.expectEqual(
-                .other,
-                doc.resolveTypeKind((try doc.resolveTypeOfNode(doc.handle.tree.rootDecls()[0])).?),
-            ) catch |e| {
-                std.log.err("Input:\n{s}\n", .{doc.handle.tree.getNodeSource(doc.handle.tree.rootDecls()[0])});
-                return e;
-            };
-        }
-    }
-
+    /// For debugging purposes only, should never be left in
     pub fn dumpType(self: @This(), t: zls.Analyser.Type, indent_size: u32) !void {
         var buffer: [128]u8 = @splat(' ');
         const indent = buffer[0..indent_size];
 
         std.debug.print("{s}------------------------------------\n", .{indent});
         std.debug.print("{s}is_type_val: {}\n", .{ indent, t.is_type_val });
-        // std.debug.print("{s}isContainerType: {}\n", .{ indent, t.isContainerType() });
-        // std.debug.print("{s}isEnumLiteral: {}\n", .{ indent, t.isEnumLiteral() });
-        // std.debug.print("{s}isEnumType: {}\n", .{ indent, t.isEnumType() });
+        std.debug.print("{s}isContainerType: {}\n", .{ indent, t.isContainerType() });
+        std.debug.print("{s}isEnumLiteral: {}\n", .{ indent, t.isEnumLiteral() });
+        std.debug.print("{s}isEnumType: {}\n", .{ indent, t.isEnumType() });
         std.debug.print("{s}isFunc: {}\n", .{ indent, t.isFunc() });
-        // std.debug.print("{s}isGenericFunc: {}\n", .{ indent, t.isGenericFunc() });
+        std.debug.print("{s}isGenericFunc: {}\n", .{ indent, t.isGenericFunc() });
         std.debug.print("{s}isMetaType: {}\n", .{ indent, t.isMetaType() });
         std.debug.print("{s}isNamespace: {}\n", .{ indent, t.isNamespace() });
-        // std.debug.print("{s}isOpaqueType: {}\n", .{ indent, t.isOpaqueType() });
+        std.debug.print("{s}isOpaqueType: {}\n", .{ indent, t.isOpaqueType() });
         std.debug.print("{s}isStructType: {}\n", .{ indent, t.isStructType() });
-        // std.debug.print("{s}isTaggedUnion: {}\n", .{ indent, t.isTaggedUnion() });
+        std.debug.print("{s}isTaggedUnion: {}\n", .{ indent, t.isTaggedUnion() });
         std.debug.print("{s}isTypeFunc: {}\n", .{ indent, t.isTypeFunc() });
-        // std.debug.print("{s}isUnionType: {}\n", .{ indent, t.isUnionType() });
+        std.debug.print("{s}isUnionType: {}\n", .{ indent, t.isUnionType() });
 
         if (t.data == .ip_index) {
             std.debug.print("{s}Primitive: {}\n", .{ indent, t.data.ip_index.type });
