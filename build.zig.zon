@@ -2,6 +2,7 @@
     .name = .zlinter,
     .fingerprint = 0x10e04548f134343a,
     .version = "0.0.1",
+    .minimum_zig_version = "0.14.0",
     .dependencies = .{
         .zls = .{
             // 0.14.x
