@@ -67,7 +67,7 @@ fn run(
     var node: zlinter.shims.NodeIndexShim = .init(1); // Skip root node at 0
     while (node.index < tree.nodes.len) : (node.index += 1) {
         if (tree.fullVarDecl(node.toNodeIndex())) |var_decl| {
-            if (try doc.resolveVarDeclType(var_decl)) |type_kind| {
+            if (try doc.resolveTypeKind(.{ .var_decl = var_decl })) |type_kind| {
                 const name_token = var_decl.ast.mut_token + 1;
                 const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
 
