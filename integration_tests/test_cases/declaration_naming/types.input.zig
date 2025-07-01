@@ -2,6 +2,8 @@
 const MyGoodStruct = struct { a: u32 };
 const myBadStruct = struct { a: u32 };
 const my_bad_struct = MyGoodStruct;
+const myBadOptionalStruct: ?type = struct { a: u32 };
+const my_bad_optional_struct: ?type = struct { a: u32 };
 
 const MyGoodEnum = enum { a, b };
 const myBadEnum = enum { a, b };

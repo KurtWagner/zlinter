@@ -149,6 +149,8 @@ pub const LintDocument = struct {
                     return if (init_node_type.is_type_val) .type_fn_returns_type else .fn_returns_type;
                 } else if (decl.isFunc()) {
                     return if (init_node_type.is_type_val) .type_fn else .@"fn";
+                } else {
+                    return .other;
                 }
             }
         }

@@ -8,34 +8,64 @@ error Type declaration should be TitleCase [test_cases/declaration_naming/types.
  4 | const my_bad_struct = MyGoodStruct;
    |       ^^^^^^^^^^^^^
 
-error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:7:7] declaration_naming
+error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:5:7] declaration_naming
 
- 7 | const myBadEnum = enum { a, b };
+ 5 | const myBadOptionalStruct: ?type = struct { a: u32 };
+   |       ^^^^^^^^^^^^^^^^^^^
+
+error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:6:7] declaration_naming
+
+ 6 | const my_bad_optional_struct: ?type = struct { a: u32 };
+   |       ^^^^^^^^^^^^^^^^^^^^^^
+
+error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:9:7] declaration_naming
+
+ 9 | const myBadEnum = enum { a, b };
    |       ^^^^^^^^^
 
-error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:8:7] declaration_naming
+error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:10:7] declaration_naming
 
- 8 | const my_bad_enum = MyGoodEnum;
-   |       ^^^^^^^^^^^
+ 10 | const my_bad_enum = MyGoodEnum;
+    |       ^^^^^^^^^^^
 
-error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:11:7] declaration_naming
+error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:13:7] declaration_naming
 
- 11 | const myBadUnion = union(enum) { a: u32, b: u64 };
+ 13 | const myBadUnion = union(enum) { a: u32, b: u64 };
     |       ^^^^^^^^^^
 
-error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:12:7] declaration_naming
+error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:14:7] declaration_naming
 
- 12 | const my_bad_union = MyGoodUnion;
+ 14 | const my_bad_union = MyGoodUnion;
     |       ^^^^^^^^^^^^
 
-error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:24:5] declaration_naming
+error Variable declaration should be snake_case [test_cases/declaration_naming/types.input.zig:17:5] declaration_naming
 
- 24 | var badOptionalType: ?type = null;
+ 17 | var BadInt = 10;
+    |     ^^^^^^
+
+error Variable declaration should be snake_case [test_cases/declaration_naming/types.input.zig:18:5] declaration_naming
+
+ 18 | var badInt = 10;
+    |     ^^^^^^
+
+error Variable declaration should be snake_case [test_cases/declaration_naming/types.input.zig:21:5] declaration_naming
+
+ 21 | var badType = u32;
+    |     ^^^^^^^
+
+error Variable declaration should be snake_case [test_cases/declaration_naming/types.input.zig:23:5] declaration_naming
+
+ 23 | var GoodType = u32;
+    |     ^^^^^^^^
+
+error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:26:5] declaration_naming
+
+ 26 | var badOptionalType: ?type = null;
     |     ^^^^^^^^^^^^^^^
 
-error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:25:5] declaration_naming
+error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:27:5] declaration_naming
 
- 25 | var bad_optional_type: ?type = null;
+ 27 | var bad_optional_type: ?type = null;
     |     ^^^^^^^^^^^^^^^^^
 
-x 8 errors
+x 14 errors
