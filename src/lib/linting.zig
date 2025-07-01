@@ -118,6 +118,23 @@ pub const LintDocument = struct {
             // std.debug.print("InitNode - After: {s}\n", .{tree.getNodeSource(node)});
             // std.debug.print("InitNode - Tag After: {}\n", .{shims.nodeTag(tree, node)});
 
+            // LIMITATION: All builtin calls to type of and type will return
+            // `type` without any resolution.
+            switch (shims.nodeTag(tree, node)) {
+                .builtin_call_two,
+                .builtin_call_two_comma,
+                .builtin_call,
+                .builtin_call_comma,
+                => {
+                    inline for (&.{ "@Type", "@TypeOf" }) |builtin_name| {
+                        if (std.mem.eql(u8, builtin_name, tree.tokenSlice(shims.nodeMainToken(tree, node)))) {
+                            return .type;
+                        }
+                    }
+                },
+                else => {},
+            }
+
             if (tree.fullContainerDecl(&container_decl_buffer, node)) |container_decl| {
                 switch (tree.tokens.items(.tag)[container_decl.ast.main_token]) {
                     .keyword_struct => return if (analyzer.isContainerNamespace(tree, container_decl)) .namespace_type else .struct_type,
@@ -150,6 +167,12 @@ pub const LintDocument = struct {
                 } else if (decl.isFunc()) {
                     return if (init_node_type.is_type_val) .type_fn else .@"fn";
                 } else {
+                    if (init_node_type.is_type_val) {
+                        switch (init_node_type.data) {
+                            .ip_index => return .type,
+                            else => {},
+                        }
+                    }
                     return .other;
                 }
             }

@@ -25,3 +25,11 @@ var GoodType = u32;
 var GoodOptionalType: ?type = null;
 var badOptionalType: ?type = null;
 var bad_optional_type: ?type = null;
+
+// Typeof anytype
+pub inline fn anytypeSampleA(in: anytype) struct { type, type, type } {
+    const GoodAnyType = @TypeOf(in);
+    const badAnyType = @TypeOf(in);
+    const bad_any_type = @TypeOf(in);
+    return .{ GoodAnyType, badAnyType, bad_any_type };
+}

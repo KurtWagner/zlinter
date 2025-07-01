@@ -48,14 +48,14 @@ error Variable declaration should be snake_case [test_cases/declaration_naming/t
  18 | var badInt = 10;
     |     ^^^^^^
 
-error Variable declaration should be snake_case [test_cases/declaration_naming/types.input.zig:21:5] declaration_naming
+error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:21:5] declaration_naming
 
  21 | var badType = u32;
     |     ^^^^^^^
 
-error Variable declaration should be snake_case [test_cases/declaration_naming/types.input.zig:23:5] declaration_naming
+error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:22:5] declaration_naming
 
- 23 | var GoodType = u32;
+ 22 | var bad_type = @TypeOf(badType);
     |     ^^^^^^^^
 
 error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:26:5] declaration_naming
@@ -68,4 +68,14 @@ error Type declaration should be TitleCase [test_cases/declaration_naming/types.
  27 | var bad_optional_type: ?type = null;
     |     ^^^^^^^^^^^^^^^^^
 
-x 14 errors
+error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:32:11] declaration_naming
+
+ 32 |     const badAnyType = @TypeOf(in);
+    |           ^^^^^^^^^^
+
+error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:33:11] declaration_naming
+
+ 33 |     const bad_any_type = @TypeOf(in);
+    |           ^^^^^^^^^^^^
+
+x 16 errors
