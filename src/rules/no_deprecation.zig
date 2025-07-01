@@ -36,22 +36,22 @@ fn run(
     var arena_buffer = std.heap.FixedBufferAllocator.init(&arena_mem);
     const arena = arena_buffer.allocator();
 
-    var node: zlinter.analyzer.NodeIndexShim = .init(0);
+    var node: zlinter.shims.NodeIndexShim = .init(0);
     while (node.index < handle.tree.nodes.len) : (node.index += 1) {
         defer arena_buffer.reset();
 
-        const identifier_token: std.zig.Ast.TokenIndex = switch (zlinter.analyzer.nodeTag(tree, node.toNodeIndex())) {
+        const identifier_token: std.zig.Ast.TokenIndex = switch (zlinter.shims.nodeTag(tree, node.toNodeIndex())) {
             .builtin_call,
             .builtin_call_comma,
             .builtin_call_two,
             .builtin_call_two_comma,
             .identifier,
             .enum_literal,
-            => zlinter.analyzer.nodeMainToken(tree, node.toNodeIndex()),
+            => zlinter.shims.nodeMainToken(tree, node.toNodeIndex()),
             .field_access,
             => switch (zlinter.version.zig) {
-                .@"0.14" => zlinter.analyzer.nodeData(tree, node.toNodeIndex()).rhs,
-                .@"0.15" => zlinter.analyzer.nodeData(tree, node.toNodeIndex()).node_and_token.@"1",
+                .@"0.14" => zlinter.shims.nodeData(tree, node.toNodeIndex()).rhs,
+                .@"0.15" => zlinter.shims.nodeData(tree, node.toNodeIndex()).node_and_token.@"1",
             },
             else => continue,
         };

@@ -37,12 +37,12 @@ fn run(
     var container_references = map: {
         var map = std.StringHashMapUnmanaged(void).empty;
 
-        var node: zlinter.analyzer.NodeIndexShim = .init(0);
+        var node: zlinter.shims.NodeIndexShim = .init(0);
         while (node.index < tree.nodes.len) : (node.index += 1) {
-            switch (zlinter.analyzer.nodeTag(tree, node.toNodeIndex())) {
-                .identifier => try map.put(allocator, tree.tokenSlice(zlinter.analyzer.nodeMainToken(tree, node.toNodeIndex())), {}),
+            switch (zlinter.shims.nodeTag(tree, node.toNodeIndex())) {
+                .identifier => try map.put(allocator, tree.tokenSlice(zlinter.shims.nodeMainToken(tree, node.toNodeIndex())), {}),
                 .field_access => if (try isFieldAccessOfRootContainer(doc, node.toNodeIndex())) {
-                    const node_data = zlinter.analyzer.nodeData(tree, node.toNodeIndex());
+                    const node_data = zlinter.shims.nodeData(tree, node.toNodeIndex());
                     try map.put(allocator, tree.tokenSlice(switch (zlinter.version.zig) {
                         .@"0.14" => node_data.rhs,
                         .@"0.15" => node_data.node_and_token.@"1",
@@ -136,10 +136,10 @@ fn namedFnDeclProto(
     buffer: *[1]std.zig.Ast.Node.Index,
     node: std.zig.Ast.Node.Index,
 ) ?std.zig.Ast.full.FnProto {
-    if (switch (zlinter.analyzer.nodeTag(tree, node)) {
+    if (switch (zlinter.shims.nodeTag(tree, node)) {
         .fn_decl => tree.fullFnProto(buffer, switch (zlinter.version.zig) {
-            .@"0.14" => zlinter.analyzer.nodeData(tree, node).lhs,
-            .@"0.15" => zlinter.analyzer.nodeData(tree, node).node_and_node.@"0",
+            .@"0.14" => zlinter.shims.nodeData(tree, node).lhs,
+            .@"0.15" => zlinter.shims.nodeData(tree, node).node_and_node.@"0",
         }),
         else => null,
     }) |fn_proto| {
@@ -149,11 +149,11 @@ fn namedFnDeclProto(
 }
 
 fn isFieldAccessOfRootContainer(doc: zlinter.LintDocument, node: std.zig.Ast.Node.Index) error{OutOfMemory}!bool {
-    std.debug.assert(zlinter.analyzer.nodeTag(doc.handle.tree, node) == .field_access);
+    std.debug.assert(zlinter.shims.nodeTag(doc.handle.tree, node) == .field_access);
 
     const tree = doc.handle.tree;
 
-    const node_data = zlinter.analyzer.nodeData(tree, node);
+    const node_data = zlinter.shims.nodeData(tree, node);
     const lhs = switch (zlinter.version.zig) {
         .@"0.14" => node_data.lhs,
         .@"0.15" => node_data.node_and_token.@"0",

@@ -1,14 +1,31 @@
 // Function declarations:
 const goodFn = fn () void{};
-const GoodFnType: fn () type = undefined;
+var GoodFnType: fn () type = undefined;
 const Badfn = fn () void{};
-const badfnType: fn () type = undefined;
+var badfnType: fn () type = undefined;
 
 // Function pointers:
-const goodFnPtr = *const fn () void{};
-const GoodFnPtrType: *const fn () type = undefined;
-const BadFnPtr = *const fn () void{};
-const badFnPtrType: *const fn () type = undefined;
+var goodFnPtrWithTypeNode: *const fn () void = undefined;
+var GoodFnPtrTypeWithTypeNode: *const fn () type = undefined;
+var BadFnPtrWithTypeNode: *const fn () void = undefined;
+var bad_fn_ptr_with_type_node: *const fn () void = undefined;
+var badFnPtrTypeWithTypeNode: *const fn () type = undefined;
+var bad_fn_ptr_type_with_type_node: *const fn () type = undefined;
+
+const goodFnPtrWithInitNode = &noop;
+const GoodFnPtrTypeWithInitNode = &GiveType;
+const BadFnPtrWithInitNode = &noop;
+const bad_fn_ptr_with_init_node = &noop;
+const badFnPtrTypeWithInitNode = &GiveType;
+const bad_fn_ptr_type_with_init_node = &GiveType;
+
+fn noop() void {
+    std.debug.assert(1 == 1);
+}
+
+fn GiveType() type {
+    return u32;
+}
 
 // Function optionals:
 const goodFnPtrOptional: ?*const fn () void = null;
@@ -18,6 +35,8 @@ const badFnPtrOptionalType: ?*const fn () type = null;
 
 pub var my_struct_namespace = struct {
     // Some nested examples:
-    const goodNestedFn = *const fn () void{};
-    const BadNestedFn = *const fn () void{};
+    var goodNestedFn: *const fn () void = undefined;
+    var BadNestedFn: *const fn () void = undefined;
 };
+
+const std = @import("std");

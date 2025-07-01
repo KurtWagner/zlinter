@@ -31,9 +31,9 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    var node: zlinter.analyzer.NodeIndexShim = .init(0);
+    var node: zlinter.shims.NodeIndexShim = .init(0);
     while (node.index < tree.nodes.len) : (node.index += 1) {
-        if (zlinter.analyzer.nodeTag(tree, node.toNodeIndex()) != .identifier) continue;
+        if (zlinter.shims.nodeTag(tree, node.toNodeIndex()) != .identifier) continue;
 
         if (std.mem.eql(u8, tree.getNodeSource(node.toNodeIndex()), "undefined")) {
             try lint_problems.append(allocator, .{
