@@ -1,18 +1,30 @@
 pub const NodeIndexShim = struct {
     index: u32,
 
-    /// Supports init from OptionalIndex, Index, u32
+    /// Supports init from Index, u32, see initOptional for optionals in 0.15
     pub inline fn init(node: anytype) NodeIndexShim {
         return switch (@typeInfo(@TypeOf(node))) {
             .@"enum" => .{
                 .index = @intFromEnum(
                     if (std.meta.hasFn(@TypeOf(node), "unwrap"))
-                        node.unwrap().?
+                        node.unwrap() orelse .root
                     else
                         node,
                 ),
             },
             else => .{ .index = node },
+        };
+    }
+
+    pub inline fn initOptional(node: anytype) ?NodeIndexShim {
+        return switch (@typeInfo(@TypeOf(node))) {
+            .@"enum" => .{
+                .index = if (std.meta.hasFn(@TypeOf(node), "unwrap"))
+                    if (node.unwrap()) |n| @intFromEnum(n) else return null
+                else
+                    return @intFromEnum(node),
+            },
+            else => .{ .index = if (node == 0) return null else node },
         };
     }
 
@@ -56,18 +68,18 @@ pub fn unwrapNode(
         switch (nodeTag(tree, current)) {
             .unwrap_optional => if (options.unwrap_optional_unwrap) switch (version.zig) {
                 .@"0.14" => current = nodeData(tree, current).lhs,
-                .@"0.15" => @compileError("TODO"),
+                .@"0.15" => current = nodeData(tree, current).node_and_token.@"0",
             } else break,
             .optional_type => if (options.unwrap_optional) switch (version.zig) {
                 .@"0.14" => current = nodeData(tree, current).lhs,
-                .@"0.15" => @compileError("TODO"),
+                .@"0.15" => current = nodeData(tree, current).node,
             } else break,
             .ptr_type_aligned,
             .ptr_type_sentinel,
             .ptr_type,
             => if (options.unwrap_pointer) switch (version.zig) {
                 .@"0.14" => current = nodeData(tree, current).rhs,
-                .@"0.15" => @compileError("TODO"),
+                .@"0.15" => current = nodeData(tree, current).opt_node_and_node.@"1",
             } else break,
             // .ptr_type_aligned => {},
             else => break,

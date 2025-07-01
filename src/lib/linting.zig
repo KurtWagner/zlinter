@@ -63,25 +63,29 @@ pub const LintDocument = struct {
         const tree = self.handle.tree;
 
         // First we try looking for a type node in the declaration
-        if (shims.NodeIndexShim.init(var_decl.ast.type_node).index > 0) {
-            // std.debug.print("TypeNode - Before: {s}\n", .{tree.getNodeSource(var_decl.ast.type_node)});
-            // std.debug.print("TypeNode - Tag Before: {}\n", .{shims.nodeTag(tree, var_decl.ast.type_node)});
+        if (shims.NodeIndexShim.initOptional(var_decl.ast.type_node)) |shim_node| {
+            // std.debug.print("TypeNode - Before: {s}\n", .{tree.getNodeSource(shim_node.toNodeIndex())});
+            // std.debug.print("TypeNode - Tag Before: {}\n", .{shims.nodeTag(tree, shim_node.toNodeIndex())});
 
-            const node = shims.unwrapNode(tree, var_decl.ast.type_node, .{});
+            const node = shims.unwrapNode(tree, shim_node.toNodeIndex(), .{});
             // std.debug.print("TypeNode - After: {s}\n", .{tree.getNodeSource(node)});
             // std.debug.print("TypeNode - Tag After: {}\n", .{shims.nodeTag(tree, node)});
 
             if (tree.fullFnProto(&fn_proto_buffer, node)) |fn_proto| {
-                const return_node = shims.unwrapNode(tree, fn_proto.ast.return_type, .{});
+                if (shims.NodeIndexShim.initOptional(fn_proto.ast.return_type)) |return_node_shim| {
+                    const return_node = shims.unwrapNode(tree, return_node_shim.toNodeIndex(), .{});
 
-                // std.debug.print("TypeNode - Return unwrapped: {s}\n", .{tree.getNodeSource(return_node)});
-                // std.debug.print("TypeNode - Return unwrapped tag: {}\n", .{shims.nodeTag(tree, return_node)});
+                    // std.debug.print("TypeNode - Return unwrapped: {s}\n", .{tree.getNodeSource(return_node)});
+                    // std.debug.print("TypeNode - Return unwrapped tag: {}\n", .{shims.nodeTag(tree, return_node)});
 
-                // If it's a function proto, then return whether or not the function returns a type
-                return if (shims.isIdentiferKind(tree, shims.unwrapNode(tree, return_node, .{}), .type))
-                    .type_fn_returns_type
-                else
-                    .type_fn;
+                    // If it's a function proto, then return whether or not the function returns a type
+                    return if (shims.isIdentiferKind(tree, shims.unwrapNode(tree, return_node, .{}), .type))
+                        .type_fn_returns_type
+                    else
+                        .type_fn;
+                } else {
+                    return .type_fn;
+                }
             } else if (tree.fullContainerDecl(&container_decl_buffer, node)) |container_decl| {
 
                 // If's it's a container declaration (e.g., struct {}) then resolve what type of container
@@ -112,11 +116,11 @@ pub const LintDocument = struct {
         }
 
         // Then we look at the initialisation value if a type couldn't be used
-        if (shims.NodeIndexShim.init(var_decl.ast.init_node).index > 0) {
-            // std.debug.print("InitNode - Before: {s}\n", .{tree.getNodeSource(var_decl.ast.init_node)});
-            // std.debug.print("InitNode - Tag Before: {}\n", .{shims.nodeTag(tree, var_decl.ast.init_node)});
+        if (shims.NodeIndexShim.initOptional(var_decl.ast.init_node)) |init_node_shim| {
+            // std.debug.print("InitNode - Before: {s}\n", .{tree.getNodeSource(init_node_shim.toNodeIndex())});
+            // std.debug.print("InitNode - Tag Before: {}\n", .{shims.nodeTag(tree, init_node_shim.toNodeIndex())});
 
-            const node = shims.unwrapNode(tree, var_decl.ast.init_node, .{});
+            const node = shims.unwrapNode(tree, init_node_shim.toNodeIndex(), .{});
             // std.debug.print("InitNode - After: {s}\n", .{tree.getNodeSource(node)});
             // std.debug.print("InitNode - Tag After: {}\n", .{shims.nodeTag(tree, node)});
 
@@ -156,13 +160,20 @@ pub const LintDocument = struct {
                 // try self.dumpType(decl, 0);
 
                 const is_error_container = switch (decl.data) {
-                    .container => |info| if (shims.NodeIndexShim.init(info.toNode()).index != 0)
-                        switch (shims.nodeTag(info.handle.tree, info.toNode())) {
-                            .error_set_decl => true,
-                            else => false,
+                    .container => |container| result: {
+                        const container_node, const container_tree = switch (version.zig) {
+                            .@"0.14" => .{ container.toNode(), container.handle.tree },
+                            .@"0.15" => .{ container.scope_handle.toNode(), container.scope_handle.handle.tree },
+                        };
+
+                        if (shims.NodeIndexShim.init(container_node).index != 0) {
+                            switch (shims.nodeTag(container_tree, container_node)) {
+                                .error_set_decl => break :result true,
+                                else => {},
+                            }
                         }
-                    else
-                        false,
+                        break :result false;
+                    },
                     else => false,
                 };
 
