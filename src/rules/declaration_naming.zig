@@ -73,10 +73,11 @@ fn run(
 
                 const style_with_severity: zlinter.LintTextStyleWithSeverity, const var_desc: []const u8 =
                     switch (type_kind) {
-                        .fn_returns_type, .type_fn_returns_type => .{ config.decl_that_is_type_fn, "Type function" },
-                        .@"fn", .type_fn => .{ config.decl_that_is_fn, "Function" },
+                        .fn_returns_type => .{ config.decl_that_is_type_fn, "Type function" },
+                        .@"fn" => .{ config.decl_that_is_fn, "Function" },
                         .namespace_type => .{ config.decl_that_is_namespace, "Namespace" },
                         .type => .{ config.decl_that_is_type, "Type" },
+                        .fn_type, .fn_type_returns_type => .{ config.decl_that_is_type, "Function type" },
                         .struct_type => .{ config.decl_that_is_type, "Struct" },
                         .enum_type => .{ config.decl_that_is_type, "Enum" },
                         .union_type => .{ config.decl_that_is_type, "Union" },
