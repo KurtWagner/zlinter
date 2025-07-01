@@ -28,24 +28,14 @@ error Type declaration should be TitleCase [test_cases/declaration_naming/types.
  12 | const my_bad_union = MyGoodUnion;
     |       ^^^^^^^^^^^^
 
-error Variable declaration should be snake_case [test_cases/declaration_naming/types.input.zig:15:5] declaration_naming
+error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:24:5] declaration_naming
 
- 15 | var BadInt = 10;
-    |     ^^^^^^
+ 24 | var badOptionalType: ?type = null;
+    |     ^^^^^^^^^^^^^^^
 
-error Variable declaration should be snake_case [test_cases/declaration_naming/types.input.zig:16:5] declaration_naming
+error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:25:5] declaration_naming
 
- 16 | var badInt = 10;
-    |     ^^^^^^
+ 25 | var bad_optional_type: ?type = null;
+    |     ^^^^^^^^^^^^^^^^^
 
-error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:19:5] declaration_naming
-
- 19 | var badType = u32;
-    |     ^^^^^^^
-
-error Type declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:20:5] declaration_naming
-
- 20 | var bad_type = @TypeOf(badType);
-    |     ^^^^^^^^
-
-x 10 errors
+x 8 errors

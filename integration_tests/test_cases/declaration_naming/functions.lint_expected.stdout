@@ -3,34 +3,64 @@ error Function declaration should be camelCase [test_cases/declaration_naming/fu
  4 | const Badfn = fn () void{};
    |       ^^^^^
 
-error Type function declaration should be TitleCase [test_cases/declaration_naming/functions.input.zig:5:7] declaration_naming
+error Type declaration should be TitleCase [test_cases/declaration_naming/functions.input.zig:5:5] declaration_naming
 
- 5 | const badfnType: fn () type = undefined;
-   |       ^^^^^^^^^
+ 5 | var badfnType: fn () type = undefined;
+   |     ^^^^^^^^^
 
-error Function declaration should be camelCase [test_cases/declaration_naming/functions.input.zig:10:7] declaration_naming
+error Function declaration should be camelCase [test_cases/declaration_naming/functions.input.zig:10:5] declaration_naming
 
- 10 | const BadFnPtr = *const fn () void{};
-    |       ^^^^^^^^
+ 10 | var BadFnPtrWithTypeNode: *const fn () void = undefined;
+    |     ^^^^^^^^^^^^^^^^^^^^
 
-error Type function declaration should be TitleCase [test_cases/declaration_naming/functions.input.zig:11:7] declaration_naming
+error Function declaration should be camelCase [test_cases/declaration_naming/functions.input.zig:11:5] declaration_naming
 
- 11 | const badFnPtrType: *const fn () type = undefined;
-    |       ^^^^^^^^^^^^
+ 11 | var bad_fn_ptr_with_type_node: *const fn () void = undefined;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-error Function declaration should be camelCase [test_cases/declaration_naming/functions.input.zig:16:7] declaration_naming
+error Type declaration should be TitleCase [test_cases/declaration_naming/functions.input.zig:12:5] declaration_naming
 
- 16 | const BadFnPtrOptional: ?*const fn () void = null;
-    |       ^^^^^^^^^^^^^^^^
+ 12 | var badFnPtrTypeWithTypeNode: *const fn () type = undefined;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
 
-error Type function declaration should be TitleCase [test_cases/declaration_naming/functions.input.zig:17:7] declaration_naming
+error Type declaration should be TitleCase [test_cases/declaration_naming/functions.input.zig:13:5] declaration_naming
 
- 17 | const badFnPtrOptionalType: ?*const fn () type = null;
+ 13 | var bad_fn_ptr_type_with_type_node: *const fn () type = undefined;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error Function declaration should be camelCase [test_cases/declaration_naming/functions.input.zig:17:7] declaration_naming
+
+ 17 | const BadFnPtrWithInitNode = &noop;
     |       ^^^^^^^^^^^^^^^^^^^^
 
-error Function declaration should be camelCase [test_cases/declaration_naming/functions.input.zig:22:11] declaration_naming
+error Function declaration should be camelCase [test_cases/declaration_naming/functions.input.zig:18:7] declaration_naming
 
- 22 |     const BadNestedFn = *const fn () void{};
-    |           ^^^^^^^^^^^
+ 18 | const bad_fn_ptr_with_init_node = &noop;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-x 7 errors
+error Type function declaration should be TitleCase [test_cases/declaration_naming/functions.input.zig:19:7] declaration_naming
+
+ 19 | const badFnPtrTypeWithInitNode = &GiveType;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error Type function declaration should be TitleCase [test_cases/declaration_naming/functions.input.zig:20:7] declaration_naming
+
+ 20 | const bad_fn_ptr_type_with_init_node = &GiveType;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error Function declaration should be camelCase [test_cases/declaration_naming/functions.input.zig:33:7] declaration_naming
+
+ 33 | const BadFnPtrOptional: ?*const fn () void = null;
+    |       ^^^^^^^^^^^^^^^^
+
+error Type declaration should be TitleCase [test_cases/declaration_naming/functions.input.zig:34:7] declaration_naming
+
+ 34 | const badFnPtrOptionalType: ?*const fn () type = null;
+    |       ^^^^^^^^^^^^^^^^^^^^
+
+error Function declaration should be camelCase [test_cases/declaration_naming/functions.input.zig:39:9] declaration_naming
+
+ 39 |     var BadNestedFn: *const fn () void = undefined;
+    |         ^^^^^^^^^^^
+
+x 13 errors

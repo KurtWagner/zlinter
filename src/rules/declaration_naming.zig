@@ -64,27 +64,30 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    var node: zlinter.analyzer.NodeIndexShim = .init(1); // Skip root node at 0
+    var node: zlinter.shims.NodeIndexShim = .init(1); // Skip root node at 0
     while (node.index < tree.nodes.len) : (node.index += 1) {
         if (tree.fullVarDecl(node.toNodeIndex())) |var_decl| {
-            if (try doc.resolveTypeOfNode(node.toNodeIndex())) |t| {
-                const decl_type = t.resolveDeclLiteralResultType();
+            if (try doc.resolveVarDeclType(var_decl)) |type_kind| {
                 const name_token = var_decl.ast.mut_token + 1;
                 const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
 
                 const style_with_severity: zlinter.LintTextStyleWithSeverity, const var_desc: []const u8 =
-                    if (decl_type.isTypeFunc())
-                        .{ config.decl_that_is_type_fn, "Type function" }
-                    else if (decl_type.isFunc())
-                        .{ config.decl_that_is_fn, "Function" }
-                    else if (decl_type.isNamespace())
-                        .{ config.decl_that_is_namespace, "Namespace" }
-                    else if (t.is_type_val)
-                        .{ config.decl_that_is_type, "Type" }
-                    else switch (tree.tokens.items(.tag)[var_decl.ast.mut_token]) {
-                        .keyword_const => .{ config.const_decl, "Constant" },
-                        .keyword_var => .{ config.var_decl, "Variable" },
-                        else => unreachable,
+                    switch (type_kind) {
+                        .fn_returns_type => .{ config.decl_that_is_type_fn, "Type function" },
+                        .@"fn", .type_fn => .{ config.decl_that_is_fn, "Function" },
+                        .namespace_type => .{ config.decl_that_is_namespace, "Namespace" },
+                        .type,
+                        .struct_type,
+                        .enum_type,
+                        .union_type,
+                        .opaque_type,
+                        .type_fn_returns_type,
+                        => .{ config.decl_that_is_type, "Type" },
+                        else => switch (tree.tokens.items(.tag)[var_decl.ast.mut_token]) {
+                            .keyword_const => .{ config.const_decl, "Constant" },
+                            .keyword_var => .{ config.var_decl, "Variable" },
+                            else => unreachable,
+                        },
                     };
 
                 if (!style_with_severity.style.check(name)) {

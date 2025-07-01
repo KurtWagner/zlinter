@@ -78,7 +78,7 @@ fn run(
     const tree = doc.handle.tree;
     var buffer: [2]std.zig.Ast.Node.Index = undefined;
 
-    var node: zlinter.analyzer.NodeIndexShim = .init(0);
+    var node: zlinter.shims.NodeIndexShim = .init(0);
     while (node.index < tree.nodes.len) : (node.index += 1) {
         if (tree.fullContainerDecl(&buffer, node.toNodeIndex())) |container_decl| {
             const container_tag = if (node.index == 0) .keyword_struct else tree.tokens.items(.tag)[container_decl.ast.main_token];
@@ -122,8 +122,8 @@ fn run(
                     }
                 }
             }
-        } else if (zlinter.analyzer.nodeTag(tree, node.toNodeIndex()) == .error_set_decl) {
-            const node_data = zlinter.analyzer.nodeData(tree, node.toNodeIndex());
+        } else if (zlinter.shims.nodeTag(tree, node.toNodeIndex()) == .error_set_decl) {
+            const node_data = zlinter.shims.nodeData(tree, node.toNodeIndex());
 
             const rbrace = switch (zlinter.version.zig) {
                 .@"0.14" => node_data.rhs,

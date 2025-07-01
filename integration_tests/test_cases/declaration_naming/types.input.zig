@@ -20,5 +20,6 @@ var badType = u32;
 var bad_type = @TypeOf(badType);
 var GoodType = u32;
 
-// TODO: Fix this?
-// var GoodOptionalType: ?type = null;
+var GoodOptionalType: ?type = null;
+var badOptionalType: ?type = null;
+var bad_optional_type: ?type = null;

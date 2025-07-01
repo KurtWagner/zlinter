@@ -64,7 +64,7 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    var node: zlinter.analyzer.NodeIndexShim = .init(1); // Skip root node at 0
+    var node: zlinter.shims.NodeIndexShim = .init(1); // Skip root node at 0
     while (node.index < tree.nodes.len) : (node.index += 1) {
         var buffer: [1]std.zig.Ast.Node.Index = undefined;
         if (namedFnProto(tree, &buffer, node.toNodeIndex())) |fn_proto| {
@@ -168,7 +168,7 @@ pub fn namedFnProto(tree: std.zig.Ast, buffer: *[1]std.zig.Ast.Node.Index, node:
 
 /// Returns fn proto if node is fn proto and has a name token.
 pub fn fnProto(tree: std.zig.Ast, buffer: *[1]std.zig.Ast.Node.Index, node: std.zig.Ast.Node.Index) ?std.zig.Ast.full.FnProto {
-    if (switch (zlinter.analyzer.nodeTag(tree, node)) {
+    if (switch (zlinter.shims.nodeTag(tree, node)) {
         .fn_proto => tree.fnProto(node),
         .fn_proto_multi => tree.fnProtoMulti(node),
         .fn_proto_one => tree.fnProtoOne(buffer, node),
