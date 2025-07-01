@@ -31,7 +31,7 @@ pub const LintDocument = struct {
         return instance_type.resolveDeclLiteralResultType();
     }
 
-    // TODO: Clean this up as they're not all really possible
+    // TODO: Write tests and clean this up as they're not really all needed
     pub const TypeKind = enum {
         other,
 
@@ -913,8 +913,26 @@ pub const LintProblemFix = struct {
 // ----------------------------------------------------------------------------
 
 pub const testing = struct {
+    /// See `testing.runRule` for example
+    pub fn loadFakeDocument(ctx: *LintContext, dir: std.fs.Dir, file_name: []const u8, contents: [:0]const u8, arena: std.mem.Allocator) !?LintDocument {
+        assertTestOnly();
+
+        if (std.fs.path.dirname(file_name)) |dir_name|
+            try dir.makePath(dir_name);
+
+        const file = try dir.createFile(file_name, .{});
+        defer file.close();
+
+        var buffer: [2024]u8 = undefined;
+        const real_path = try dir.realpath(file_name, &buffer);
+
+        try file.writeAll(contents);
+
+        return (try ctx.loadDocument(real_path, ctx.gpa, arena)).?;
+    }
+
     /// Builds and runs a rule with fake file name and content.
-    pub fn runRule(rule: LintRule, file_path: []const u8, contents: [:0]const u8) !?LintResult {
+    pub fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8) !?LintResult {
         assertTestOnly();
 
         var ctx: LintContext = undefined;
@@ -924,23 +942,17 @@ pub const testing = struct {
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
 
-        if (std.fs.path.dirname(file_path)) |dir_name|
-            try tmp.dir.makePath(dir_name);
-
-        const file = try tmp.dir.createFile(file_path, .{});
-        defer file.close();
-
-        var buffer: [2024]u8 = undefined;
-        const real_path = try tmp.dir.realpath(file_path, &buffer);
-
-        try file.writeAll(contents);
-
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
 
-        var doc = (try ctx.loadDocument(real_path, ctx.gpa, arena.allocator())).?;
-
-        defer doc.deinit(std.testing.allocator);
+        var doc = (try loadFakeDocument(
+            &ctx,
+            tmp.dir,
+            file_name,
+            contents,
+            arena.allocator(),
+        )).?;
+        defer doc.deinit(ctx.gpa);
 
         const ast = doc.handle.tree;
         std.testing.expectEqual(ast.errors.len, 0) catch |err| {
@@ -988,6 +1000,176 @@ pub const testing = struct {
         comptime if (!@import("builtin").is_test) @compileError("Test only");
     }
 };
+
+test "LintDocument.resolveTypeKind" {
+    const TestCase = struct {
+        contents: [:0]const u8,
+        kind: ?LintDocument.TypeKind,
+    };
+
+    for ([_]TestCase{
+        // Other:
+        // ------
+        .{
+            .contents = "var ok:u32 = 10;",
+            .kind = .other,
+        },
+        .{
+            .contents = "age:u8 = 10,",
+            .kind = .other,
+        },
+        .{
+            .contents = "name :[] const u8,",
+            .kind = .other,
+        },
+        // Type:
+        // -----
+        .{
+            .contents = "const A: type = u32;",
+            .kind = .type,
+        },
+        .{
+            .contents = "const A = u32;",
+            .kind = .type,
+        },
+        .{
+            .contents = "const A:?type = u32;",
+            .kind = .type,
+        },
+        .{
+            .contents = "const A:?type = null;",
+            .kind = .type,
+        },
+        .{
+            .contents = "const A = @TypeOf(u32);",
+            .kind = .type,
+        },
+        .{
+            .contents =
+            \\const A = BuildType();
+            \\fn BuildType() type {
+            \\   return u32;
+            \\}
+            ,
+            .kind = .type,
+        },
+        // Struct type:
+        // ------------
+        .{
+            .contents =
+            \\const A = BuildType();
+            \\fn BuildType() type {
+            \\   return struct { field: u32 };
+            \\}
+            ,
+            .kind = .struct_type,
+        },
+        .{
+            .contents = "const A = struct { field: u32; };",
+            .kind = .struct_type,
+        },
+        // Namespace type:
+        // ---------------
+        .{
+            .contents = "const a = struct { const decl: u32 = 1; };",
+            .kind = .namespace_type,
+        },
+        .{
+            .contents =
+            \\const a = struct {
+            \\   pub fn hello() []const u8 {
+            \\      return "Hello";
+            \\   }
+            \\};
+            ,
+            .kind = .namespace_type,
+        },
+        // Function type:
+        // ---------------
+        .{
+            .contents = "var a: fn() void;",
+            .kind = .type_fn, // TODO: Do we need this type or should this just be fn
+        },
+        .{
+            .contents =
+            \\var a = &func;
+            \\fn func() u32 {
+            \\  return 10;
+            \\}
+            ,
+            .kind = .@"fn",
+        },
+        // Function that returns type
+        .{
+            .contents =
+            \\var a = &func;
+            \\fn func() type {
+            \\  return f32;
+            \\}
+            ,
+            .kind = .fn_returns_type,
+        },
+        .{
+            .contents =
+            \\var a: *const fn () type = undefined;
+            ,
+            .kind = .type_fn_returns_type,
+        },
+        // Error type
+        .{
+            .contents =
+            \\var MyError = error {a,b,c};
+            ,
+            .kind = .error_type,
+        },
+        // TODO: Fix this and add test with error union
+        // .{
+        //     .contents =
+        //     \\var MyError = Reference;
+        //     \\const Reference = error {a,b,c}
+        //     ,
+        //     .kind = .error_type,
+        // },
+    }) |test_case| {
+        var ctx: LintContext = undefined;
+        try ctx.init(.{}, std.testing.allocator);
+        defer ctx.deinit();
+
+        var tmp = std.testing.tmpDir(.{});
+        defer tmp.cleanup();
+
+        var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+        defer arena.deinit();
+
+        var doc = (try testing.loadFakeDocument(
+            &ctx,
+            tmp.dir,
+            "test.zig",
+            test_case.contents,
+            arena.allocator(),
+        )).?;
+        defer doc.deinit(ctx.gpa);
+
+        const node = doc.handle.tree.rootDecls()[0];
+        const actual_kind = if (doc.handle.tree.fullVarDecl(node)) |var_decl|
+            try doc.resolveTypeKind(.{ .var_decl = var_decl })
+        else if (doc.handle.tree.fullContainerField(node)) |container_field|
+            try doc.resolveTypeKind(.{ .container_field = container_field })
+        else
+            @panic("Fail");
+
+        std.testing.expectEqual(test_case.kind, actual_kind) catch |e| {
+            const border: [50]u8 = @splat('-');
+            var writer = std.io.getStdErr().writer();
+            try writer.print("Node:\n{s}\n{s}\n{s}\n", .{ border, doc.handle.tree.getNodeSource(node), border });
+            try writer.print("Expected: {any}\n", .{test_case.kind});
+            try writer.print("Actual: {any}\n", .{actual_kind});
+            try writer.print("Contents:\n{s}\n{s}\n{s}\n", .{ border, test_case.contents, border });
+
+            return e;
+        };
+    }
+}
 
 const std = @import("std");
 const builtin = @import("builtin");
