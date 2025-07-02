@@ -85,7 +85,7 @@ test "good cases" {
     {
         var result = try zlinter.testing.runRule(
             rule,
-            "path/to/my_file.zig",
+            zlinter.testing.paths.posix("path/to/my_file.zig"),
             "pub const hit_points: f32 = 1;",
         );
         defer {
@@ -95,7 +95,7 @@ test "good cases" {
     {
         var result = try zlinter.testing.runRule(
             rule,
-            "path/to/file.zig",
+            zlinter.testing.paths.posix("path/to/file.zig"),
             "pub const hit_points: f32 = 1;",
         );
         defer {
@@ -105,7 +105,7 @@ test "good cases" {
     {
         var result = try zlinter.testing.runRule(
             rule,
-            "path/to/File.zig",
+            zlinter.testing.paths.posix("path/to/File.zig"),
             "hit_points: f32,",
         );
         defer {
@@ -115,7 +115,7 @@ test "good cases" {
     {
         var result = try zlinter.testing.runRule(
             rule,
-            "path/to/MyFile.zig",
+            zlinter.testing.paths.posix("path/to/MyFile.zig"),
             "hit_points: f32,",
         );
         defer {
@@ -129,14 +129,14 @@ test "expects snake_case with TitleCase" {
 
     var result = (try zlinter.testing.runRule(
         rule,
-        "path/to/File.zig",
+        zlinter.testing.paths.posix("path/to/File.zig"),
         "pub const hit_points: f32 = 1;",
     )).?;
     defer result.deinit(std.testing.allocator);
 
     try std.testing.expectStringEndsWith(
         result.file_path,
-        "path/to/File.zig",
+        zlinter.testing.paths.posix("path/to/File.zig"),
     );
 
     try zlinter.testing.expectProblemsEqual(
@@ -166,14 +166,14 @@ test "expects snake_case with camelCase" {
 
     var result = (try zlinter.testing.runRule(
         rule,
-        "path/to/myFile.zig",
+        zlinter.testing.paths.posix("path/to/myFile.zig"),
         "pub const hit_points: f32 = 1;",
     )).?;
     defer result.deinit(std.testing.allocator);
 
     try std.testing.expectStringEndsWith(
         result.file_path,
-        "path/to/myFile.zig",
+        zlinter.testing.paths.posix("path/to/myFile.zig"),
     );
 
     try zlinter.testing.expectProblemsEqual(
@@ -203,14 +203,14 @@ test "expects TitleCase with snake_case" {
 
     var result = (try zlinter.testing.runRule(
         rule,
-        "path/to/myFile.zig",
+        zlinter.testing.paths.posix("path/to/myFile.zig"),
         "hit_points: f32,",
     )).?;
     defer result.deinit(std.testing.allocator);
 
     try std.testing.expectStringEndsWith(
         result.file_path,
-        "path/to/myFile.zig",
+        zlinter.testing.paths.posix("path/to/myFile.zig"),
     );
 
     try zlinter.testing.expectProblemsEqual(
@@ -240,14 +240,14 @@ test "expects TitleCase with under_score" {
 
     var result = (try zlinter.testing.runRule(
         rule,
-        "path/to/my_file.zig",
+        zlinter.testing.paths.posix("path/to/my_file.zig"),
         "hit_points: f32,",
     )).?;
     defer result.deinit(std.testing.allocator);
 
     try std.testing.expectStringEndsWith(
         result.file_path,
-        "path/to/my_file.zig",
+        zlinter.testing.paths.posix("path/to/my_file.zig"),
     );
 
     try zlinter.testing.expectProblemsEqual(

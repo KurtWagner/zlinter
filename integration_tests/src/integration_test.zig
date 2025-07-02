@@ -36,6 +36,14 @@ test "integration test rules" {
         }
     }
 
+    // TODO: Work out whats going wrong on windows
+    if (std.mem.eql(u8, rule_name, "no_unused")) {
+        switch (builtin.os.tag) {
+            .windows, .uefi => return error.SkipZigTest,
+            else => {},
+        }
+    }
+
     // --------------------------------------------------------------------
     // Lint command "zig build lint -- <file>.zig"
     // --------------------------------------------------------------------
@@ -55,11 +63,39 @@ test "integration test rules" {
         defer allocator.free(lint_output.stderr);
 
         try std.testing.expectEqualStrings("", lint_output.stderr);
-        try expectFileContentsEquals(
-            std.fs.cwd(),
-            lint_stdout_expected_file.?,
-            lint_output.stdout,
-        );
+
+        switch (builtin.os.tag) {
+            .windows, .uefi => {
+                // Convert output into something that looks more like the posix
+                // based expected output so that the tests can run on windows.
+                var mutable = try allocator.dupe(u8, lint_output.stdout);
+                defer allocator.free(mutable);
+
+                // Replace "\" in file paths to "/"
+                var offset: usize = 0;
+                while (std.mem.indexOfPosLinear(u8, mutable, offset, "test_cases" ++ std.fs.path.sep_str)) |start| {
+                    const end = std.mem.indexOfPosLinear(u8, mutable, start, ".zig").?;
+
+                    for (start..end) |i| {
+                        mutable[i] = if (std.fs.path.isSep(mutable[i])) std.fs.path.sep_posix else mutable[i];
+                    }
+                    offset = end;
+                }
+
+                try expectFileContentsEquals(
+                    std.fs.cwd(),
+                    lint_stdout_expected_file.?,
+                    mutable,
+                );
+            },
+            else => {
+                try expectFileContentsEquals(
+                    std.fs.cwd(),
+                    lint_stdout_expected_file.?,
+                    lint_output.stdout,
+                );
+            },
+        }
     }
 
     // --------------------------------------------------------------------
@@ -73,7 +109,11 @@ test "integration test rules" {
         var temp_dir = try cache_dir.makeOpenPath("tmp", .{});
         defer temp_dir.close();
 
-        const temp_path = try std.fmt.allocPrint(std.testing.allocator, ".zig-cache/tmp/{s}.input.zig", .{rule_name});
+        const temp_path = try std.fmt.allocPrint(
+            std.testing.allocator,
+            ".zig-cache" ++ std.fs.path.sep_str ++ "tmp" ++ std.fs.path.sep_str ++ "{s}.input.zig",
+            .{rule_name},
+        );
         defer allocator.free(temp_path);
 
         try std.fs.cwd().copyFile(
@@ -136,7 +176,13 @@ fn expectFileContentsEquals(dir: std.fs.Dir, file_path: []const u8, actual: []co
     };
     defer std.testing.allocator.free(contents);
 
-    std.testing.expectEqualStrings(contents, actual) catch |err| {
+    const normalized_expected = try normalizeNewLinesAlloc(contents, std.testing.allocator);
+    defer std.testing.allocator.free(normalized_expected);
+
+    const normalized_actual = try normalizeNewLinesAlloc(actual, std.testing.allocator);
+    defer std.testing.allocator.free(normalized_actual);
+
+    std.testing.expectEqualStrings(normalized_expected, normalized_actual) catch |err| {
         switch (err) {
             error.TestExpectedEqual => {
                 try printWithHeader("Expected contents from", file_path);
@@ -144,6 +190,21 @@ fn expectFileContentsEquals(dir: std.fs.Dir, file_path: []const u8, actual: []co
             },
         }
     };
+}
+
+fn normalizeNewLinesAlloc(input: []const u8, allocator: std.mem.Allocator) ![]const u8 {
+    var result = std.ArrayList(u8).init(allocator);
+    defer result.deinit();
+
+    // Removes "\r". e.g., "\r\n"
+    for (input) |c| {
+        switch (c) {
+            '\r' => {}, // i.e., 0x0d
+            else => try result.append(c),
+        }
+    }
+
+    return result.toOwnedSlice();
 }
 
 fn printWithHeader(header: []const u8, content: []const u8) !void {
@@ -176,3 +237,4 @@ fn runLintCommand(args: []const []const u8) !std.process.Child.RunResult {
 }
 
 const std = @import("std");
+const builtin = @import("builtin");

@@ -16,6 +16,37 @@ pub fn loadFakeDocument(ctx: *LintContext, dir: std.fs.Dir, file_name: []const u
     return (try ctx.loadDocument(real_path, ctx.gpa, arena)).?;
 }
 
+pub const paths = struct {
+    /// Comptime join parts using the systems path separator (for tests only)
+    pub fn join(comptime parts: []const []const u8) []const u8 {
+        assertTestOnly();
+
+        if (parts.len == 0) @compileError("Needs at least one part");
+        if (parts.len == 1) return parts[0];
+
+        comptime var result: []const u8 = "";
+        result = result ++ parts[0];
+        inline for (1..parts.len) |i| {
+            result = result ++ std.fs.path.sep_str ++ parts[i];
+        }
+        return result;
+    }
+
+    /// Comptime posix path to system path separater convertor (for tests only)
+    pub fn posix(comptime posix_path: []const u8) []const u8 {
+        assertTestOnly();
+
+        comptime var result: []const u8 = "";
+        inline for (0..posix_path.len) |i| {
+            result = result ++ std.fmt.comptimePrint("{c}", .{switch (posix_path[i]) {
+                std.fs.path.sep_posix => std.fs.path.sep,
+                else => |c| c,
+            }});
+        }
+        return result;
+    }
+};
+
 pub fn expectContainsExactlyStrings(expected: []const []const u8, actual: []const []const u8) !void {
     try std.testing.expectEqual(expected.len, actual.len);
 

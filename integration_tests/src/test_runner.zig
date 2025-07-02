@@ -1,5 +1,6 @@
 const ansi_red_bold = "\x1B[31;1m";
 const ansi_green_bold = "\x1B[32;1m";
+const ansi_yellow_bold = "\x1B[33;1m";
 const ansi_bold = "\x1B[1m";
 const ansi_reset = "\x1B[0m";
 const ansi_gray = "\x1B[90m";
@@ -31,6 +32,7 @@ pub fn main() !void {
 
     var pretty_name_buffer: [128]u8 = undefined;
     var test_desc_buffer: [128]u8 = undefined;
+    var fail: bool = false;
     for (builtin.test_functions) |t| {
         const test_description = if (std.mem.eql(u8, test_name, rule_name))
             ""
@@ -45,17 +47,31 @@ pub fn main() !void {
                 "passed",
                 ansi_reset,
             });
-        } else |err| {
-            try std.fmt.format(out, output_fmt ++ ": {}\n", .{
-                rule_name,
-                test_description,
-                ansi_red_bold,
-                "failed",
-                ansi_reset,
-                err,
-            });
+        } else |err| switch (err) {
+            error.SkipZigTest => {
+                try std.fmt.format(out, output_fmt ++ "\n", .{
+                    rule_name,
+                    test_description,
+                    ansi_yellow_bold,
+                    "skipped",
+                    ansi_reset,
+                });
+            },
+            else => {
+                fail = true;
+                try std.fmt.format(out, output_fmt ++ ": {}\n", .{
+                    rule_name,
+                    test_description,
+                    ansi_red_bold,
+                    "failed",
+                    ansi_reset,
+                    err,
+                });
+            },
         }
     }
+
+    std.posix.exit(if (fail) 1 else 0);
 }
 
 fn prettyName(buffer: []u8, input: []const u8) []const u8 {
