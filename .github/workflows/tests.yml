@@ -5,16 +5,17 @@ jobs:
   test:
     runs-on: ubuntu-latest
     name: Build and Test
+    timeout-minutes: 3
     steps:
       - name: "Checkout repo"
-      - uses: actions/checkout@v4
+        uses: actions/checkout@v4
       - name: "Setup zig environment"
-      - uses: mlugg/setup-zig@v2
+        uses: mlugg/setup-zig@v2
         with:
           version: 0.14.1
       - name: "Run unit tests"
-      - run: zig build unit-test
+        run: zig build unit-test
       - name: "Run integration tests"
-      - run: zig build integration-test
+        run: zig build integration-test
       - name: "Run linter"
-      - run: zig build lint -- src/ *.zig integration_tests/*.zig
+        run: zig build lint -- src/ *.zig integration_tests/*.zig
