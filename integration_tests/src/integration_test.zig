@@ -60,19 +60,7 @@ test "integration test rules" {
             .windows, .uefi => {
                 // Convert output into something that looks more like the posix
                 // based expected output so that the tests can run on windows.
-
-                var result = std.ArrayList(u8).init(allocator);
-                defer result.deinit();
-
-                // Removes "\r" from "\r\n"
-                for (lint_output.stdout) |c| {
-                    switch (c) {
-                        '\r' => {},
-                        else => try result.append(c),
-                    }
-                }
-
-                var mutable = try result.toOwnedSlice();
+                var mutable = try allocator.dupe(u8, lint_output.stdout);
                 defer allocator.free(mutable);
 
                 // Replace "\" in file paths to "/"
@@ -180,7 +168,13 @@ fn expectFileContentsEquals(dir: std.fs.Dir, file_path: []const u8, actual: []co
     };
     defer std.testing.allocator.free(contents);
 
-    std.testing.expectEqualStrings(contents, actual) catch |err| {
+    const normalized_expected = try normalizeNewLinesAlloc(contents, std.testing.allocator);
+    defer std.testing.allocator.free(normalized_expected);
+
+    const normalized_actual = try normalizeNewLinesAlloc(actual, std.testing.allocator);
+    defer std.testing.allocator.free(normalized_actual);
+
+    std.testing.expectEqualStrings(normalized_expected, normalized_actual) catch |err| {
         switch (err) {
             error.TestExpectedEqual => {
                 try printWithHeader("Expected contents from", file_path);
@@ -188,6 +182,21 @@ fn expectFileContentsEquals(dir: std.fs.Dir, file_path: []const u8, actual: []co
             },
         }
     };
+}
+
+fn normalizeNewLinesAlloc(input: []const u8, allocator: std.mem.Allocator) ![]const u8 {
+    var result = std.ArrayList(u8).init(allocator);
+    defer result.deinit();
+
+    // Removes "\r". e.g., "\r\n"
+    for (input) |c| {
+        switch (c) {
+            '\r' => {}, // i.e., 0x0d
+            else => try result.append(c),
+        }
+    }
+
+    return result.toOwnedSlice();
 }
 
 fn printWithHeader(header: []const u8, content: []const u8) !void {
