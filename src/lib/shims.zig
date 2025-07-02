@@ -76,10 +76,14 @@ pub fn unwrapNode(
             } else break,
             .ptr_type_aligned,
             .ptr_type_sentinel,
-            .ptr_type,
             => if (options.unwrap_pointer) switch (version.zig) {
                 .@"0.14" => current = nodeData(tree, current).rhs,
                 .@"0.15" => current = nodeData(tree, current).opt_node_and_node.@"1",
+            } else break,
+            .ptr_type,
+            => if (options.unwrap_pointer) switch (version.zig) {
+                .@"0.14" => current = nodeData(tree, current).rhs,
+                .@"0.15" => current = nodeData(tree, current).extra_and_node.@"1",
             } else break,
             else => break,
         }
