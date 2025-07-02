@@ -8,7 +8,7 @@ pub fn allocLintFiles(dir: std.fs.Dir, args: zlinter.Args, gpa: std.mem.Allocato
 
     if (args.files) |files| {
         for (files) |file_or_dir| {
-            const sub_dir = dir.openDir(file_or_dir, .{}) catch |err| {
+            const sub_dir = dir.openDir(file_or_dir, .{ .iterate = true }) catch |err| {
                 switch (err) {
                     else => {
                         const cwd = try std.process.getCwdAlloc(gpa);
@@ -72,11 +72,7 @@ fn walkDirectory(
 }
 
 test "allocLintFiles - with default args" {
-    var tmp_dir = std.testing.tmpDir(.{
-        .access_sub_paths = true,
-        .iterate = true,
-        .no_follow = false,
-    });
+    var tmp_dir = std.testing.tmpDir(.{ .iterate = true });
     defer tmp_dir.cleanup();
 
     try testing.createFiles(tmp_dir.dir, @constCast(&[_][]const u8{
@@ -108,11 +104,8 @@ test "allocLintFiles - with default args" {
 }
 
 test "allocLintFiles - with arg files" {
-    var tmp_dir = std.testing.tmpDir(.{
-        .access_sub_paths = true,
-        .iterate = true,
-        .no_follow = false,
-    });
+    var tmp_dir = std.testing.tmpDir(.{ .iterate = true });
+
     defer tmp_dir.cleanup();
 
     try testing.createFiles(tmp_dir.dir, @constCast(&[_][]const u8{
@@ -151,21 +144,6 @@ test "allocLintFiles - with arg files" {
     }, lint_files);
 }
 
-const testing = struct {
-    fn createFiles(dir: std.fs.Dir, file_paths: [][]const u8) !void {
-        assertTestOnly();
-
-        for (file_paths) |file_path| {
-            if (std.fs.path.dirname(file_path)) |parent|
-                try dir.makePath(parent);
-            (try dir.createFile(file_path, .{})).close();
-        }
-    }
-
-    inline fn assertTestOnly() void {
-        comptime if (!@import("builtin").is_test) @compileError("Test only");
-    }
-};
-
+const testing = @import("testing.zig");
 const std = @import("std");
 const zlinter = @import("./zlinter.zig");

@@ -60,7 +60,7 @@ pub fn main() !u8 {
         file_lint_problems.deinit();
     }
 
-    var dir = try std.fs.cwd().openDir("./", .{});
+    var dir = try std.fs.cwd().openDir("./", .{ .iterate = true });
     defer dir.close();
 
     const lint_files = try zlinter.allocLintFiles(dir, args, gpa);
