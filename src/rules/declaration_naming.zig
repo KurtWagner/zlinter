@@ -118,7 +118,7 @@ test "declaration_naming" {
 
     const rule = buildRule(.{});
 
-    var result = (try zlinter.testing.runRule(rule, "path/to/file.zig",
+    var result = (try zlinter.testing.runRule(rule, zlinter.testing.paths.posix("path/to/file.zig"),
         \\
         \\pub const hit_points: f32 = 1;
         \\const HitPoints: f32 = 1;
@@ -140,7 +140,7 @@ test "declaration_naming" {
     )).?;
     defer result.deinit(std.testing.allocator);
 
-    try std.testing.expectStringEndsWith(result.file_path, "path/to/file.zig");
+    try std.testing.expectStringEndsWith(result.file_path, zlinter.testing.paths.posix("path/to/file.zig"));
 
     try zlinter.testing.expectProblemsEqual(
         &[_]zlinter.LintProblem{

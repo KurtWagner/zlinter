@@ -57,7 +57,7 @@ fn walkDirectory(
 
     while (try walker.next()) |item| {
         if (item.kind != .file) continue;
-        if (!zlinter.isLintableFilePath(item.path)) continue;
+        if (!try zlinter.isLintableFilePath(item.path)) continue;
 
         try lint_files.append(allocator, zlinter.LintFile{
             .pathname = try std.fs.path.resolve(
@@ -76,15 +76,15 @@ test "allocLintFiles - with default args" {
     defer tmp_dir.cleanup();
 
     try testing.createFiles(tmp_dir.dir, @constCast(&[_][]const u8{
-        "a.zig",
-        "zig",
-        ".zig",
-        "src/A.zig",
-        "src/zig",
-        "src/.zig",
+        testing.paths.posix("a.zig"),
+        testing.paths.posix("zig"),
+        testing.paths.posix(".zig"),
+        testing.paths.posix("src/A.zig"),
+        testing.paths.posix("src/zig"),
+        testing.paths.posix("src/.zig"),
         // Zig cache and Zig bin is ignored
-        ".zig-cache/a.zig",
-        "zig-out/a.zig",
+        testing.paths.posix(".zig-cache/a.zig"),
+        testing.paths.posix("zig-out/a.zig"),
     }));
 
     const lint_files = try allocLintFiles(tmp_dir.dir, .{}, std.testing.allocator);
@@ -94,7 +94,10 @@ test "allocLintFiles - with default args" {
     }
 
     try std.testing.expectEqual(2, lint_files.len);
-    try testing.expectContainsExactlyStrings(&.{ "a.zig", "src/A.zig" }, &.{ lint_files[0].pathname, lint_files[1].pathname });
+    try testing.expectContainsExactlyStrings(&.{
+        testing.paths.posix("a.zig"),
+        testing.paths.posix("src/A.zig"),
+    }, &.{ lint_files[0].pathname, lint_files[1].pathname });
 }
 
 test "allocLintFiles - with arg files" {
@@ -102,24 +105,24 @@ test "allocLintFiles - with arg files" {
     defer tmp_dir.cleanup();
 
     try testing.createFiles(tmp_dir.dir, @constCast(&[_][]const u8{
-        "a.zig",
-        "b.zig",
-        "c.zig",
-        "d.zig",
-        "zig",
-        ".zig",
-        "src/A.zig",
-        "src/zig",
-        "src/.zig",
+        testing.paths.posix("a.zig"),
+        testing.paths.posix("b.zig"),
+        testing.paths.posix("c.zig"),
+        testing.paths.posix("d.zig"),
+        testing.paths.posix("zig"),
+        testing.paths.posix(".zig"),
+        testing.paths.posix("src/A.zig"),
+        testing.paths.posix("src/zig"),
+        testing.paths.posix("src/.zig"),
         // Zig cache and Zig bin is ignored
-        ".zig-cache/a.zig",
-        "zig-out/a.zig",
+        testing.paths.posix(".zig-cache/a.zig"),
+        testing.paths.posix("zig-out/a.zig"),
     }));
 
     const lint_files = try allocLintFiles(tmp_dir.dir, .{ .files = @constCast(
         &[_][]const u8{
-            "a.zig",
-            "src/",
+            testing.paths.posix("a.zig"),
+            testing.paths.posix("src/"),
         },
     ) }, std.testing.allocator);
     defer {
@@ -128,7 +131,10 @@ test "allocLintFiles - with arg files" {
     }
 
     try std.testing.expectEqual(2, lint_files.len);
-    try testing.expectContainsExactlyStrings(&.{ "a.zig", "src/A.zig" }, &.{ lint_files[0].pathname, lint_files[1].pathname });
+    try testing.expectContainsExactlyStrings(&.{
+        testing.paths.posix("a.zig"),
+        testing.paths.posix("src/A.zig"),
+    }, &.{ lint_files[0].pathname, lint_files[1].pathname });
 }
 
 const testing = @import("testing.zig");

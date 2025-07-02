@@ -181,7 +181,7 @@ test "no_unused" {
     const rule = buildRule(.{});
     var result = (try zlinter.testing.runRule(
         rule,
-        "path/to/my_file.zig",
+        zlinter.testing.paths.posix("path/to/my_file.zig"),
         \\
         \\const a = @import("a");
         \\pub const c = @import("c");
@@ -199,7 +199,7 @@ test "no_unused" {
 
     try std.testing.expectStringEndsWith(
         result.file_path,
-        "path/to/my_file.zig",
+        zlinter.testing.paths.posix("path/to/my_file.zig"),
     );
 
     try zlinter.testing.expectProblemsEqual(

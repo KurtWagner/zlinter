@@ -442,7 +442,7 @@ pub const LintFile = struct {
     }
 };
 
-pub fn isLintableFilePath(file_path: []const u8) bool {
+pub fn isLintableFilePath(file_path: []const u8) !bool {
     // TODO: Should we support gitignore parsing?
     const extension = ".zig";
 
@@ -461,26 +461,38 @@ pub fn isLintableFilePath(file_path: []const u8) bool {
 
 test "isLintableFilePath" {
     // Good:
-    try std.testing.expect(isLintableFilePath("a.zig"));
-    try std.testing.expect(isLintableFilePath("file.zig"));
-    try std.testing.expect(isLintableFilePath("some/path/file.zig"));
-    try std.testing.expect(isLintableFilePath("./some/path/file.zig"));
+    inline for (&.{
+        "a.zig",
+        "file.zig",
+        "some/path/file.zig",
+        "./some/path/file.zig",
+    }) |file_path| {
+        try std.testing.expect(try isLintableFilePath(testing.paths.posix(file_path)));
+    }
 
     // Bad extensions:
-    try std.testing.expect(!isLintableFilePath(".zig"));
-    try std.testing.expect(!isLintableFilePath("file.zi"));
-    try std.testing.expect(!isLintableFilePath("file.z"));
-    try std.testing.expect(!isLintableFilePath("file."));
-    try std.testing.expect(!isLintableFilePath("zig"));
-    try std.testing.expect(!isLintableFilePath("src/.zig"));
-    try std.testing.expect(!isLintableFilePath("src/zig"));
+    inline for (&.{
+        ".zig",
+        "file.zi",
+        "file.z",
+        "file.",
+        "zig",
+        "src/.zig",
+        "src/zig",
+    }) |file_path| {
+        try std.testing.expect(!try isLintableFilePath(testing.paths.posix(file_path)));
+    }
 
     // Bad parent directory
-    try std.testing.expect(!isLintableFilePath("zig-out/file.zig"));
-    try std.testing.expect(!isLintableFilePath("./zig-out/file.zig"));
-    try std.testing.expect(!isLintableFilePath(".zig-cache/file.zig"));
-    try std.testing.expect(!isLintableFilePath("./parent/.zig-cache/file.zig"));
-    try std.testing.expect(!isLintableFilePath("/other/parent/.zig-cache/file.zig"));
+    inline for (&.{
+        "zig-out/file.zig",
+        "./zig-out/file.zig",
+        ".zig-cache/file.zig",
+        "./parent/.zig-cache/file.zig",
+        "/other/parent/.zig-cache/file.zig",
+    }) |file_path| {
+        try std.testing.expect(!try isLintableFilePath(testing.paths.posix(file_path)));
+    }
 }
 
 pub const LintFileRenderer = struct {

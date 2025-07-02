@@ -1,10 +1,15 @@
-name: zlinter-linux-tests
-run-name: Linux Tests
-on: push
+name: zlinter-windows-tests
+run-name: Windows Tests
+on:
+  push:
+    branches:
+      - main
+      - 0.14.x
+      - 0.14.x-windows-action
 jobs:
   test:
-    runs-on: ubuntu-latest
-    name: Test Linux
+    runs-on: windows-latest
+    name: Test Windows
     timeout-minutes: 3
     steps:
       - name: "Checkout repo"
@@ -18,4 +23,4 @@ jobs:
       - name: "Run integration tests"
         run: zig build integration-test
       - name: "Run linter"
-        run: zig build lint -- src/ *.zig integration_tests/*.zig
+        run: zig build lint -- src\ build.zig build_rules.zig integration_tests\src\ integration_tests\build.zig
