@@ -30,7 +30,7 @@ pub fn build(b: *std.Build) !void {
         }));
 
         // Format: <rule_name>/<test_name>.input.zig
-        const rule_name = item.path[0 .. std.mem.indexOfScalar(u8, item.path, '/') orelse {
+        const rule_name = item.path[0 .. std.mem.indexOfScalar(u8, item.path, std.fs.path.sep) orelse {
             std.log.err("Test case file skipped as its invalid: {s}", .{item.path});
             continue;
         }];

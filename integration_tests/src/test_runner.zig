@@ -31,6 +31,7 @@ pub fn main() !void {
 
     var pretty_name_buffer: [128]u8 = undefined;
     var test_desc_buffer: [128]u8 = undefined;
+    var fail: bool = false;
     for (builtin.test_functions) |t| {
         const test_description = if (std.mem.eql(u8, test_name, rule_name))
             ""
@@ -46,6 +47,7 @@ pub fn main() !void {
                 ansi_reset,
             });
         } else |err| {
+            fail = true;
             try std.fmt.format(out, output_fmt ++ ": {}\n", .{
                 rule_name,
                 test_description,
@@ -56,6 +58,8 @@ pub fn main() !void {
             });
         }
     }
+
+    std.posix.exit(if (fail) 1 else 0);
 }
 
 fn prettyName(buffer: []u8, input: []const u8) []const u8 {
