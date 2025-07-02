@@ -300,7 +300,7 @@ pub fn main() !u8 {
                     }
                 }
             }
-            break :exit_code exit_codes.lint_error;
+            break :exit_code exit_codes.success;
         };
 
         const formatter = switch (args.format) {
