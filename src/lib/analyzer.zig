@@ -1,4 +1,4 @@
-//! Shared analyzers
+//! Shared analyzers and ast helpers
 
 /// Returns true if the tree is of a file that's an implicit struct with fields and not namespace
 pub fn isRootImplicitStruct(tree: std.zig.Ast) bool {

@@ -34,6 +34,10 @@ pub const NodeIndexShim = struct {
             else => self.index, // == 0.14.x
         };
     }
+
+    pub fn compare(_: void, self: NodeIndexShim, other: NodeIndexShim) std.math.Order {
+        return std.math.order(self.index, other.index);
+    }
 };
 
 pub fn isIdentiferKind(
@@ -110,6 +114,26 @@ pub fn nodeData(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) std.zig.Ast.Nod
         return tree.nodeData(node);
     }
     return tree.nodes.items(.data)[node]; // 0.14.x
+}
+
+// TODO: Write unit tests for this
+/// Returns true if two non-root nodes are overlapping
+pub fn isNodeOverlapping(
+    tree: std.zig.Ast,
+    a: std.zig.Ast.Node.Index,
+    b: std.zig.Ast.Node.Index,
+) bool {
+    const node_a = NodeIndexShim.init(a);
+    const node_b = NodeIndexShim.init(b);
+
+    std.debug.assert(node_a.index != 0);
+    std.debug.assert(node_b.index != 0);
+
+    const span_a = tree.nodeToSpan(node_a.toNodeIndex());
+    const span_b = tree.nodeToSpan(node_b.toNodeIndex());
+
+    return (span_a.start >= span_b.start and span_a.start <= span_b.end) or
+        (span_b.start >= span_a.start and span_b.start <= span_a.end);
 }
 
 const std = @import("std");
