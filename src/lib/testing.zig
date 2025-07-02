@@ -39,7 +39,7 @@ pub const paths = struct {
         comptime var result: []const u8 = "";
         inline for (0..posix_path.len) |i| {
             result = result ++ std.fmt.comptimePrint("{c}", .{switch (posix_path[i]) {
-                '/' => std.fs.path.sep,
+                std.fs.path.sep_posix => std.fs.path.sep,
                 else => |c| c,
             }});
         }
