@@ -8,8 +8,8 @@ const default_formatter = zlinter.formatters.DefaultFormatter{};
 
 const exit_codes = struct {
     const success: u8 = 0;
-    const usage_error: u8 = 0;
-    const lint_error: u8 = 0;
+    const lint_error: u8 = 1;
+    const usage_error: u8 = 2;
 };
 
 pub const std_options: std.Options = .{
@@ -295,12 +295,12 @@ pub fn main() !u8 {
         const exit_code = exit_code: {
             for (flattened.items) |result| {
                 for (result.problems) |problem| {
-                    if (problem.severity == .@"error") {
+                    if (problem.severity == .@"error" and !problem.disabled_by_comment) {
                         break :exit_code exit_codes.lint_error;
                     }
                 }
             }
-            break :exit_code exit_codes.lint_error;
+            break :exit_code exit_codes.success;
         };
 
         const formatter = switch (args.format) {
