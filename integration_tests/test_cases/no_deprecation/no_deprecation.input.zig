@@ -37,7 +37,9 @@ pub fn main() void {
 
     doNothing();
 
-    const me = MyStruct{ .state = .really_deprecated };
+    var me = MyStruct{ .state = .really_deprecated };
+    me = MyStruct{ .state = test_case_references.State.really_deprecated };
+
     std.log.err("Fields: {d} {d}", .{ me.deprecated_field, me.field_b });
 
     // TODO: Fails on 0.15 but works on 0.14 - need to work out why. Commented out for now
