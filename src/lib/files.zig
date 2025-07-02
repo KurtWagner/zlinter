@@ -105,7 +105,6 @@ test "allocLintFiles - with default args" {
 
 test "allocLintFiles - with arg files" {
     var tmp_dir = std.testing.tmpDir(.{ .iterate = true });
-
     defer tmp_dir.cleanup();
 
     try testing.createFiles(tmp_dir.dir, @constCast(&[_][]const u8{
