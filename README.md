@@ -2,6 +2,9 @@
 
 # Zlinter - Linter for Zig
 
++[![linux](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml/badge.svg?branch=master)](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml)
++[![windows](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml/badge.svg?branch=master)](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml)
+
 An extendable and customizable **Zig linter** that is integrated and built from within your own `build.zig`.
 
 ![Screenshot](./screenshot.png)
