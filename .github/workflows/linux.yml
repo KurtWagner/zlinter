@@ -1,4 +1,4 @@
-name: zlinter-linux-tests
+name: linux
 run-name: Linux Tests
 on: push
 jobs:

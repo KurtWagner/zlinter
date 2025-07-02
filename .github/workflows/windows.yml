@@ -1,4 +1,4 @@
-name: zlinter-windows-tests
+name: windows
 run-name: Windows Tests
 on:
   push:
