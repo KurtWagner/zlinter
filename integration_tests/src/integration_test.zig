@@ -73,7 +73,11 @@ test "integration test rules" {
         var temp_dir = try cache_dir.makeOpenPath("tmp", .{});
         defer temp_dir.close();
 
-        const temp_path = try std.fmt.allocPrint(std.testing.allocator, ".zig-cache/tmp/{s}.input.zig", .{rule_name});
+        const temp_path = try std.fmt.allocPrint(
+            std.testing.allocator,
+            ".zig-cache" ++ std.fs.path.sep_str ++ "tmp" ++ std.fs.path.sep_str ++ "{s}.input.zig",
+            .{rule_name},
+        );
         defer allocator.free(temp_path);
 
         try std.fs.cwd().copyFile(

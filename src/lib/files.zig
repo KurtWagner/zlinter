@@ -57,7 +57,7 @@ fn walkDirectory(
 
     while (try walker.next()) |item| {
         if (item.kind != .file) continue;
-        if (!zlinter.isLintableFilePath(item.path)) continue;
+        if (!try zlinter.isLintableFilePath(item.path)) continue;
 
         try lint_files.append(allocator, zlinter.LintFile{
             .pathname = try std.fs.path.resolve(
