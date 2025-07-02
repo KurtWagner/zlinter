@@ -8,8 +8,8 @@ const default_formatter = zlinter.formatters.DefaultFormatter{};
 
 const exit_codes = struct {
     const success: u8 = 0;
-    const usage_error: u8 = 0;
-    const lint_error: u8 = 0;
+    const lint_error: u8 = 1;
+    const usage_error: u8 = 2;
 };
 
 pub const std_options: std.Options = .{
