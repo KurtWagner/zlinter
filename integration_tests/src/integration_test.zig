@@ -56,34 +56,49 @@ test "integration test rules" {
 
         try std.testing.expectEqualStrings("", lint_output.stderr);
 
-        // If the platform is not using a posix separater than do a quick and
-        // dirty conversion so that the test expected data (which is posix) is
-        // valid.
-        if (std.fs.path.sep != std.fs.path.sep_posix) {
-            var mutable = try allocator.dupe(u8, lint_output.stdout);
-            defer allocator.free(mutable);
+        switch (builtin.os.tag) {
+            .windows, .uefi => {
+                // Convert output into something that looks more like the posix
+                // based expected output so that the tests can run on windows.
 
-            var offset: usize = 0;
-            while (std.mem.indexOfPosLinear(u8, mutable, offset, "test_cases" ++ std.fs.path.sep_str)) |start| {
-                const end = std.mem.indexOfPosLinear(u8, mutable, start, ".zig").?;
+                var result = std.ArrayList(u8).init(allocator);
+                defer result.deinit();
 
-                for (start..end) |i| {
-                    mutable[i] = if (std.fs.path.isSep(mutable[i])) std.fs.path.sep_posix else mutable[i];
+                // Removes "\r" from "\r\n"
+                for (lint_output.stdout) |c| {
+                    switch (c) {
+                        '\r' => {},
+                        else => try result.append(c),
+                    }
                 }
-                offset = end;
-            }
 
-            try expectFileContentsEquals(
-                std.fs.cwd(),
-                lint_stdout_expected_file.?,
-                mutable,
-            );
-        } else {
-            try expectFileContentsEquals(
-                std.fs.cwd(),
-                lint_stdout_expected_file.?,
-                lint_output.stdout,
-            );
+                var mutable = try result.toOwnedSlice();
+                defer allocator.free(mutable);
+
+                // Replace "\" in file paths to "/"
+                var offset: usize = 0;
+                while (std.mem.indexOfPosLinear(u8, mutable, offset, "test_cases" ++ std.fs.path.sep_str)) |start| {
+                    const end = std.mem.indexOfPosLinear(u8, mutable, start, ".zig").?;
+
+                    for (start..end) |i| {
+                        mutable[i] = if (std.fs.path.isSep(mutable[i])) std.fs.path.sep_posix else mutable[i];
+                    }
+                    offset = end;
+                }
+
+                try expectFileContentsEquals(
+                    std.fs.cwd(),
+                    lint_stdout_expected_file.?,
+                    mutable,
+                );
+            },
+            else => {
+                try expectFileContentsEquals(
+                    std.fs.cwd(),
+                    lint_stdout_expected_file.?,
+                    lint_output.stdout,
+                );
+            },
         }
     }
 
@@ -205,3 +220,4 @@ fn runLintCommand(args: []const []const u8) !std.process.Child.RunResult {
 }
 
 const std = @import("std");
+const builtin = @import("builtin");
