@@ -954,7 +954,11 @@ pub const testing = struct {
         try ctx.init(.{}, std.testing.allocator);
         defer ctx.deinit();
 
-        var tmp = std.testing.tmpDir(.{});
+        var tmp = std.testing.tmpDir(.{
+            .access_sub_paths = true,
+            .iterate = true,
+            .no_follow = false,
+        });
         defer tmp.cleanup();
 
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1290,7 +1294,11 @@ test "LintDocument.resolveTypeKind" {
         try ctx.init(.{}, std.testing.allocator);
         defer ctx.deinit();
 
-        var tmp = std.testing.tmpDir(.{});
+        var tmp = std.testing.tmpDir(.{
+            .access_sub_paths = true,
+            .iterate = true,
+            .no_follow = false,
+        });
         defer tmp.cleanup();
 
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);

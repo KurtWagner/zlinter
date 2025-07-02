@@ -72,7 +72,11 @@ fn walkDirectory(
 }
 
 test "allocLintFiles - with default args" {
-    var tmp_dir = std.testing.tmpDir(.{});
+    var tmp_dir = std.testing.tmpDir(.{
+        .access_sub_paths = true,
+        .iterate = true,
+        .no_follow = false,
+    });
     defer tmp_dir.cleanup();
 
     try testing.createFiles(tmp_dir.dir, @constCast(&[_][]const u8{
@@ -104,7 +108,11 @@ test "allocLintFiles - with default args" {
 }
 
 test "allocLintFiles - with arg files" {
-    var tmp_dir = std.testing.tmpDir(.{});
+    var tmp_dir = std.testing.tmpDir(.{
+        .access_sub_paths = true,
+        .iterate = true,
+        .no_follow = false,
+    });
     defer tmp_dir.cleanup();
 
     try testing.createFiles(tmp_dir.dir, @constCast(&[_][]const u8{
