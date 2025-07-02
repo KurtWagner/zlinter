@@ -2,6 +2,10 @@
 
 # Zlinter - Linter for Zig
 
+> [!IMPORTANT]
+> **2025-07-03:** `zlinter` is new and may experience some breaking changes while it finds
+> its footings.
+
 [![linux](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml/badge.svg?branch=0.14.x)](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml)
 [![windows](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml/badge.svg?branch=0.14.x)](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml)
 
@@ -36,7 +40,12 @@ An extendable and customizable **Zig linter** that is integrated and built from 
 
 ## Background
 
-This was written to be used across my personal projects and experiments. I'm opening it up incase it's more generally useful, and happy to let it organically evolve around needs, if there's value in doing so.
+This was written to be used across my personal projects. The primary driver was
+something that can be easily versionined into any zig project and customized
+with bespoke needs while also providing decent opinionated defaults.
+
+I'm opening it up incase it's more generally useful, and happy to let it
+organically evolve around needs, if there's value in doing so.
 
 It uses [`zls`](https://github.com/zigtools/zls) (an awesome project) and `std.zig` to build and analyze zig source files.
 
@@ -59,6 +68,10 @@ This may change, especially when `zig` is "stable" at `1.x`.
 * [ ] Interchangeable result formatters (e.g., json, checkstyle)
 
 ## Getting started
+
+`zlinter` is not a standalone binary - it's built into your projects `build.zig`.
+This makes it flexible to each projects needs. Simply add the dependency and
+hook it up to a build step, like `zig build lint`:
 
 1. Save dependency to your zig project:
 
