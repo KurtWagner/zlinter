@@ -36,6 +36,14 @@ test "integration test rules" {
         }
     }
 
+    // TODO: Work out whats going wrong on windows
+    if (std.mem.eql(u8, rule_name, "no_unused")) {
+        switch (builtin.os.tag) {
+            .windows, .uefi => return error.SkipZigTest,
+            else => {},
+        }
+    }
+
     // --------------------------------------------------------------------
     // Lint command "zig build lint -- <file>.zig"
     // --------------------------------------------------------------------

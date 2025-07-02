@@ -1,5 +1,6 @@
 const ansi_red_bold = "\x1B[31;1m";
 const ansi_green_bold = "\x1B[32;1m";
+const ansi_yellow_bold = "\x1B[33;1m";
 const ansi_bold = "\x1B[1m";
 const ansi_reset = "\x1B[0m";
 const ansi_gray = "\x1B[90m";
@@ -46,16 +47,27 @@ pub fn main() !void {
                 "passed",
                 ansi_reset,
             });
-        } else |err| {
-            fail = true;
-            try std.fmt.format(out, output_fmt ++ ": {}\n", .{
-                rule_name,
-                test_description,
-                ansi_red_bold,
-                "failed",
-                ansi_reset,
-                err,
-            });
+        } else |err| switch (err) {
+            error.SkipZigTest => {
+                try std.fmt.format(out, output_fmt ++ "\n", .{
+                    rule_name,
+                    test_description,
+                    ansi_yellow_bold,
+                    "skipped",
+                    ansi_reset,
+                });
+            },
+            else => {
+                fail = true;
+                try std.fmt.format(out, output_fmt ++ ": {}\n", .{
+                    rule_name,
+                    test_description,
+                    ansi_red_bold,
+                    "failed",
+                    ansi_reset,
+                    err,
+                });
+            },
         }
     }
 
