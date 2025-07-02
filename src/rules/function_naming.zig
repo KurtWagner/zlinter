@@ -205,12 +205,12 @@ test "run" {
         \\    return @intCast(arg);
         \\}
     ;
-    var result = (try zlinter.testing.runRule(rule, "path/to/file.zig", source)).?;
+    var result = (try zlinter.testing.runRule(rule, zlinter.testing.paths.posix("path/to/file.zig"), source)).?;
     defer result.deinit(std.testing.allocator);
 
     try std.testing.expectStringEndsWith(
         result.file_path,
-        "path/to/file.zig",
+        zlinter.testing.paths.posix("path/to/file.zig"),
     );
 
     try zlinter.testing.expectProblemsEqual(&[_]zlinter.LintProblem{
