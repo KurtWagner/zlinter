@@ -9,6 +9,7 @@ pub const strings = @import("strings.zig");
 pub const analyzer = @import("analyzer.zig");
 pub const version = @import("version.zig");
 pub const shims = @import("shims.zig");
+pub const testing = @import("testing.zig");
 
 pub const formatters = struct {
     pub const Formatter = @import("./formatters/Formatter.zig");
