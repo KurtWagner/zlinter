@@ -32,7 +32,7 @@ fn run(
     const tree = doc.handle.tree;
     const token_starts = handle.tree.tokens.items(.start);
 
-    var arena_mem: [8 * 1024]u8 = undefined;
+    var arena_mem: [32 * 1024]u8 = undefined;
     var arena_buffer = std.heap.FixedBufferAllocator.init(&arena_mem);
     const arena = arena_buffer.allocator();
 
