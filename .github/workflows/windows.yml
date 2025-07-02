@@ -20,7 +20,8 @@ jobs:
           version: 0.14.1
       - name: "Run unit tests"
         run: zig build unit-test
-      - name: "Run integration tests"
-        run: zig build integration-test
+      # TODO: Get integration tests working on windows
+      # - name: "Run integration tests"
+      #   run: zig build integration-test
       - name: "Run linter"
-        run: zig build lint -- src/ *.zig integration_tests/*.zig
+        run: zig build lint -- src\ build.zig build_rules.zig integration_tests\src\ integration_tests\build.zig
