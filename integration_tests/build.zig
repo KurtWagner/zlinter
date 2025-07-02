@@ -7,7 +7,7 @@ pub fn build(b: *std.Build) !void {
     const test_step = b.step("test", "Run tests");
 
     const test_cases_path = b.path("test_cases/").getPath3(b, null).sub_path;
-    var test_cases_dir = try std.fs.cwd().openDir(test_cases_path, .{});
+    var test_cases_dir = try std.fs.cwd().openDir(test_cases_path, .{ .iterate = true });
     defer test_cases_dir.close();
 
     var walker = try test_cases_dir.walk(b.allocator);
