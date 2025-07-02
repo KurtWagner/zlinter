@@ -152,23 +152,12 @@ fn handleEnumLiteral(
     identifier_token: std.zig.Ast.TokenIndex,
     lint_problems: *std.ArrayListUnmanaged(zlinter.LintProblem),
 ) !void {
-    const handle = doc.handle;
-    const analyser = doc.analyser;
-
-    const decl =
-        switch (zlinter.version.zig) {
-            .@"0.14" => (try analyser.getSymbolEnumLiteral(
-                arena,
-                handle,
-                handle.tree.tokens.items(.start)[identifier_token],
-                doc.handle.tree.tokenSlice(identifier_token),
-            )) orelse return,
-            .@"0.15" => (try analyser.getSymbolEnumLiteral(
-                handle,
-                handle.tree.tokens.items(.start)[identifier_token],
-                doc.handle.tree.tokenSlice(identifier_token),
-            )) orelse return,
-        };
+    const decl = try getSymbolEnumLiteral(
+        doc,
+        node_index,
+        doc.handle.tree.tokenSlice(identifier_token),
+        gpa,
+    ) orelse return;
 
     if (try decl.docComments(arena)) |doc_comment| {
         if (getDeprecationFromDoc(doc_comment)) |message| {
@@ -181,6 +170,67 @@ fn handleEnumLiteral(
             });
         }
     }
+}
+
+fn getSymbolEnumLiteral(
+    doc: zlinter.LintDocument,
+    node: std.zig.Ast.Node.Index,
+    name: []const u8,
+    gpa: std.mem.Allocator,
+) error{OutOfMemory}!?zlinter.zls.Analyser.DeclWithHandle {
+    std.debug.assert(zlinter.shims.nodeTag(doc.handle.tree, node) == .enum_literal);
+
+    const tree = doc.handle.tree;
+
+    var ancestors = std.PriorityQueue(
+        zlinter.shims.NodeIndexShim,
+        void,
+        zlinter.shims.NodeIndexShim.compare,
+    ).init(gpa, {});
+    defer ancestors.deinit();
+
+    const node_shim = zlinter.shims.NodeIndexShim.init(node);
+    try ancestors.add(node_shim);
+
+    // Look back...
+    var current = zlinter.shims.NodeIndexShim.init(node_shim.index - 1);
+    while (current.index > 0) : (current.index -= 1) {
+        if (zlinter.shims.isNodeOverlapping(tree, current.toNodeIndex(), node)) {
+            try ancestors.add(current);
+        } else {
+            break;
+        }
+    }
+    // Look forward
+    current.index = node_shim.index + 1;
+    while (current.index < tree.nodes.len) : (current.index += 1) {
+        if (zlinter.shims.isNodeOverlapping(tree, current.toNodeIndex(), node)) {
+            try ancestors.add(current);
+        } else {
+            break;
+        }
+    }
+
+    // Bit of a pain as we need to flatten the shims
+    var flattened = std.ArrayList(std.zig.Ast.Node.Index).init(gpa);
+    defer flattened.deinit();
+    for (ancestors.items) |ancestor| {
+        try flattened.append(ancestor.toNodeIndex());
+    }
+
+    return switch (zlinter.version.zig) {
+        .@"0.14" => doc.analyser.lookupSymbolFieldInit(
+            doc.handle,
+            name,
+            flattened.items[0..],
+        ),
+        .@"0.15" => doc.analyser.lookupSymbolFieldInit(
+            doc.handle,
+            name,
+            flattened.items[0],
+            flattened.items[1..],
+        ),
+    };
 }
 
 fn handleFieldAccess(
