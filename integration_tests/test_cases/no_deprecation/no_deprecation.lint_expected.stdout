@@ -43,24 +43,29 @@ warning Deprecated - - function not good [test_cases/no_deprecation/no_deprecati
  38 |     doNothing();
     |     ^^^^^^^^^
 
-warning Deprecated: - please no more [test_cases/no_deprecation/no_deprecation.input.zig:40:35] no_deprecation
+warning Deprecated: - please no more [test_cases/no_deprecation/no_deprecation.input.zig:40:33] no_deprecation
 
- 40 |     const me = MyStruct{ .state = .really_deprecated };
-    |                                   ^^^^^^^^^^^^^^^^^^
+ 40 |     var me = MyStruct{ .state = .really_deprecated };
+    |                                 ^^^^^^^^^^^^^^^^^^
 
-warning Deprecated: also not this [test_cases/no_deprecation/no_deprecation.input.zig:41:39] no_deprecation
+warning Deprecated: - please no more [test_cases/no_deprecation/no_deprecation.input.zig:41:29] no_deprecation
 
- 41 |     std.log.err("Fields: {d} {d}", .{ me.deprecated_field, me.field_b });
+ 41 |     me = MyStruct{ .state = test_case_references.State.really_deprecated };
+    |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Deprecated: also not this [test_cases/no_deprecation/no_deprecation.input.zig:43:39] no_deprecation
+
+ 43 |     std.log.err("Fields: {d} {d}", .{ me.deprecated_field, me.field_b });
     |                                       ^^^^^^^^^^^^^^^^^^^
 
-warning Deprecated: - not good [test_cases/no_deprecation/no_deprecation.input.zig:44:9] no_deprecation
+warning Deprecated: - not good [test_cases/no_deprecation/no_deprecation.input.zig:46:9] no_deprecation
 
- 44 |     _ = me.alsoDoNothing();
+ 46 |     _ = me.alsoDoNothing();
     |         ^^^^^^^^^^^^^^^^
 
-warning Deprecated: Don't call this [test_cases/no_deprecation/no_deprecation.input.zig:46:32] no_deprecation
+warning Deprecated: Don't call this [test_cases/no_deprecation/no_deprecation.input.zig:48:32] no_deprecation
 
- 46 |     std.log.err("Hello {s}", .{test_case_references.doNotCallDeprecated()});
+ 48 |     std.log.err("Hello {s}", .{test_case_references.doNotCallDeprecated()});
     |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-x 13 warnings
+x 14 warnings
