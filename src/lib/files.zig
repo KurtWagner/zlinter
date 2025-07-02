@@ -8,7 +8,7 @@ pub fn allocLintFiles(dir: std.fs.Dir, args: zlinter.Args, gpa: std.mem.Allocato
 
     if (args.files) |files| {
         for (files) |file_or_dir| {
-            const sub_dir = dir.openDir(file_or_dir, .{}) catch |err| {
+            const sub_dir = dir.openDir(file_or_dir, .{ .iterate = true }) catch |err| {
                 switch (err) {
                     else => {
                         const cwd = try std.process.getCwdAlloc(gpa);
@@ -72,7 +72,7 @@ fn walkDirectory(
 }
 
 test "allocLintFiles - with default args" {
-    var tmp_dir = std.testing.tmpDir(.{});
+    var tmp_dir = std.testing.tmpDir(.{ .iterate = true });
     defer tmp_dir.cleanup();
 
     try testing.createFiles(tmp_dir.dir, @constCast(&[_][]const u8{
@@ -104,7 +104,7 @@ test "allocLintFiles - with default args" {
 }
 
 test "allocLintFiles - with arg files" {
-    var tmp_dir = std.testing.tmpDir(.{});
+    var tmp_dir = std.testing.tmpDir(.{ .iterate = true });
     defer tmp_dir.cleanup();
 
     try testing.createFiles(tmp_dir.dir, @constCast(&[_][]const u8{
