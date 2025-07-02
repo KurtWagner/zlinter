@@ -100,7 +100,7 @@ pub fn allocParseComments(source: [:0]const u8, allocator: std.mem.Allocator) er
             index += 1;
             switch (source[index]) {
                 0, '\n' => continue :state .parsing,
-                ' ', '\t' => continue :state .line_comment_start_word,
+                ' ', '\t', '\r' => continue :state .line_comment_start_word,
                 else => {
                     start_word_index = index;
                     continue :state .line_comment_word;
@@ -110,7 +110,7 @@ pub fn allocParseComments(source: [:0]const u8, allocator: std.mem.Allocator) er
         .line_comment_word => {
             index += 1;
             switch (source[index]) {
-                0, '\n', ' ', '\t' => {
+                0, ' ', '\t'...'\r' => {
                     continue :state .line_comment_end_word;
                 },
                 else => {
@@ -150,7 +150,7 @@ pub fn allocParseComments(source: [:0]const u8, allocator: std.mem.Allocator) er
             index += 1;
             switch (source[index]) {
                 '\n', 0, '-' => continue :state .disable_token_end,
-                '\t', ',', ' ' => continue :state .disable_token,
+                '\t', ',', ' ', '\r' => continue :state .disable_token,
                 else => continue :state .disable_token_rule_start,
             }
         },
@@ -171,7 +171,7 @@ pub fn allocParseComments(source: [:0]const u8, allocator: std.mem.Allocator) er
         .disable_token_rule => {
             index += 1;
             switch (source[index]) {
-                '\n', 0, ',', ' ', '\t' => continue :state .disable_token_rule_end,
+                '\n', 0, ',', ' ', '\t', '\r' => continue :state .disable_token_rule_end,
                 else => continue :state .disable_token_rule,
             }
         },
@@ -180,7 +180,7 @@ pub fn allocParseComments(source: [:0]const u8, allocator: std.mem.Allocator) er
 
             switch (source[index]) {
                 '\n', 0 => continue :state .disable_token_end,
-                ',', ' ', '\t' => continue :state .disable_token,
+                ',', ' ', '\t', '\r' => continue :state .disable_token,
                 else => continue :state .disable_token_rule,
             }
         },
@@ -190,66 +190,72 @@ pub fn allocParseComments(source: [:0]const u8, allocator: std.mem.Allocator) er
 }
 
 test "allocParseComments - zlinter-disable-current-line" {
-    const comments = try allocParseComments(
-        \\ var line_0 = 0;
-        \\ var line_1 = 0; // zlinter-disable-current-line
-        \\ var line_2 = 0; // zlinter-disable-current-line  rule_a   rule_b 
-        \\ var line_3 = 0; // zlinter-disable-current-line rule_c - comment
-    , std.testing.allocator);
-    defer {
-        for (comments) |*comment| comment.deinit(std.testing.allocator);
-        std.testing.allocator.free(comments);
-    }
+    inline for (&.{ "\n", "\r\n" }) |newline| {
+        const comments = try allocParseComments(
+            "var line_0 = 0;" ++ newline ++
+                "var line_1 = 0; // zlinter-disable-current-line" ++ newline ++
+                "var line_2 = 0; // \t zlinter-disable-current-line  rule_a \t  rule_b " ++ newline ++
+                "var line_3 = 0; // zlinter-disable-current-line rule_c - comment",
+            std.testing.allocator,
+        );
+        defer {
+            for (comments) |*comment| comment.deinit(std.testing.allocator);
+            std.testing.allocator.free(comments);
+        }
 
-    try std.testing.expectEqualDeep(&.{
-        LintDisableComment{
-            .line_start = 1,
-            .line_end = 1,
-            .rule_ids = &.{},
-        },
-        LintDisableComment{
-            .line_start = 2,
-            .line_end = 2,
-            .rule_ids = &.{ "rule_a", "rule_b" },
-        },
-        LintDisableComment{
-            .line_start = 3,
-            .line_end = 3,
-            .rule_ids = &.{"rule_c"},
-        },
-    }, comments);
+        try std.testing.expectEqualDeep(&.{
+            LintDisableComment{
+                .line_start = 1,
+                .line_end = 1,
+                .rule_ids = &.{},
+            },
+            LintDisableComment{
+                .line_start = 2,
+                .line_end = 2,
+                .rule_ids = &.{ "rule_a", "rule_b" },
+            },
+            LintDisableComment{
+                .line_start = 3,
+                .line_end = 3,
+                .rule_ids = &.{"rule_c"},
+            },
+        }, comments);
+    }
 }
 
 test "allocParseComments - zlinter-disable-next-line" {
-    const comments = try allocParseComments(
-        \\ var line_0 = 0;
-        \\ // zlinter-disable-next-line
-        \\ var line_2 = 0;
-        \\ // zlinter-disable-next-line rule_a, rule_b - comment
-        \\ var line_4 = 0;
-        \\ // zlinter-disable-next-line  rule_c 
-        \\ var line_6 = 0;
-    , std.testing.allocator);
-    defer {
-        for (comments) |*comment| comment.deinit(std.testing.allocator);
-        std.testing.allocator.free(comments);
-    }
+    inline for (&.{ "\n", "\r\n" }) |newline| {
+        const comments = try allocParseComments(
+            "var line_0 = 0;" ++ newline ++
+                "// zlinter-disable-next-line" ++ newline ++
+                "var line_2 = 0;" ++ newline ++
+                "// zlinter-disable-next-line \t rule_a, rule_b -  comment" ++ newline ++
+                "var line_4 = 0;" ++ newline ++
+                "// zlinter-disable-next-line  rule_c " ++ newline ++
+                "var line_6 = 0;",
+            std.testing.allocator,
+        );
+        defer {
+            for (comments) |*comment| comment.deinit(std.testing.allocator);
+            std.testing.allocator.free(comments);
+        }
 
-    try std.testing.expectEqualDeep(&.{
-        LintDisableComment{
-            .line_start = 2,
-            .line_end = 2,
-            .rule_ids = &.{},
-        },
-        LintDisableComment{
-            .line_start = 4,
-            .line_end = 4,
-            .rule_ids = &.{ "rule_a", "rule_b" },
-        },
-        LintDisableComment{
-            .line_start = 6,
-            .line_end = 6,
-            .rule_ids = &.{"rule_c"},
-        },
-    }, comments);
+        try std.testing.expectEqualDeep(&.{
+            LintDisableComment{
+                .line_start = 2,
+                .line_end = 2,
+                .rule_ids = &.{},
+            },
+            LintDisableComment{
+                .line_start = 4,
+                .line_end = 4,
+                .rule_ids = &.{ "rule_a", "rule_b" },
+            },
+            LintDisableComment{
+                .line_start = 6,
+                .line_end = 6,
+                .rule_ids = &.{"rule_c"},
+            },
+        }, comments);
+    }
 }

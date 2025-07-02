@@ -3,9 +3,9 @@ run-name: Windows Tests
 on:
   push:
     branches:
-      - main
+      - master
       - 0.14.x
-      - 0.14.x-windows-action
+      - 0.14.x-dev
 jobs:
   test:
     runs-on: windows-latest

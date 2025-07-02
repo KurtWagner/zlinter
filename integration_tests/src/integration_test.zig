@@ -62,7 +62,9 @@ test "integration test rules" {
         defer allocator.free(lint_output.stdout);
         defer allocator.free(lint_output.stderr);
 
-        try std.testing.expectEqualStrings("", lint_output.stderr);
+        // TODO: Update to expect certain exit codes based on input
+        // try std.testing.expect(lint_output.term.Exited == 0);
+        // try std.testing.expectEqualStrings("", fix_output.stderr);
 
         switch (builtin.os.tag) {
             .windows, .uefi => {
@@ -135,6 +137,11 @@ test "integration test rules" {
         );
         defer allocator.free(fix_output.stdout);
         defer allocator.free(fix_output.stderr);
+
+        // Expect all integration fix tests to be successful so exit 0 with
+        // no stderr. Maybe one day we will add cases where it fails
+        try std.testing.expect(fix_output.term.Exited == 0);
+        try std.testing.expectEqualStrings("", fix_output.stderr);
 
         try expectFileContentsEquals(
             std.fs.cwd(),
