@@ -54,11 +54,15 @@ test "integration test rules" {
         defer allocator.free(lint_output.stdout);
         defer allocator.free(lint_output.stderr);
 
+        try std.testing.expectEqualStrings("", lint_output.stderr);
+
         // If the platform is not using a posix separater than do a quick and
         // dirty conversion so that the test expected data (which is posix) is
         // valid.
         if (std.fs.path.sep != std.fs.path.sep_posix) {
             var mutable = try allocator.dupe(u8, lint_output.stdout);
+            defer allocator.free(mutable);
+
             var offset: usize = 0;
             while (std.mem.indexOfPosLinear(u8, mutable, offset, "test_cases" ++ std.fs.path.sep_str)) |start| {
                 const end = std.mem.indexOfPosLinear(u8, mutable, start, ".zig").?;
@@ -68,14 +72,19 @@ test "integration test rules" {
                 }
                 offset = end;
             }
-        }
 
-        try std.testing.expectEqualStrings("", lint_output.stderr);
-        try expectFileContentsEquals(
-            std.fs.cwd(),
-            lint_stdout_expected_file.?,
-            lint_output.stdout,
-        );
+            try expectFileContentsEquals(
+                std.fs.cwd(),
+                lint_stdout_expected_file.?,
+                mutable,
+            );
+        } else {
+            try expectFileContentsEquals(
+                std.fs.cwd(),
+                lint_stdout_expected_file.?,
+                lint_output.stdout,
+            );
+        }
     }
 
     // --------------------------------------------------------------------
