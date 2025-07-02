@@ -923,99 +923,6 @@ pub const LintProblemFix = struct {
     }
 };
 
-// ----------------------------------------------------------------------------
-// Test helpers:
-// ----------------------------------------------------------------------------
-
-pub const testing = struct {
-    /// See `testing.runRule` for example
-    pub fn loadFakeDocument(ctx: *LintContext, dir: std.fs.Dir, file_name: []const u8, contents: [:0]const u8, arena: std.mem.Allocator) !?LintDocument {
-        assertTestOnly();
-
-        if (std.fs.path.dirname(file_name)) |dir_name|
-            try dir.makePath(dir_name);
-
-        const file = try dir.createFile(file_name, .{});
-        defer file.close();
-
-        var buffer: [2024]u8 = undefined;
-        const real_path = try dir.realpath(file_name, &buffer);
-
-        try file.writeAll(contents);
-
-        return (try ctx.loadDocument(real_path, ctx.gpa, arena)).?;
-    }
-
-    /// Builds and runs a rule with fake file name and content.
-    pub fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8) !?LintResult {
-        assertTestOnly();
-
-        var ctx: LintContext = undefined;
-        try ctx.init(.{}, std.testing.allocator);
-        defer ctx.deinit();
-
-        var tmp = std.testing.tmpDir(.{});
-        defer tmp.cleanup();
-
-        var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-        defer arena.deinit();
-
-        var doc = (try loadFakeDocument(
-            &ctx,
-            tmp.dir,
-            file_name,
-            contents,
-            arena.allocator(),
-        )).?;
-        defer doc.deinit(ctx.gpa);
-
-        const ast = doc.handle.tree;
-        std.testing.expectEqual(ast.errors.len, 0) catch |err| {
-            std.debug.print("Failed to parse AST:\n", .{});
-            for (ast.errors) |ast_err| {
-                try ast.renderError(ast_err, std.io.getStdErr().writer());
-            }
-            return err;
-        };
-
-        return try rule.run(
-            rule,
-            ctx,
-            doc,
-            std.testing.allocator,
-            .{},
-        );
-    }
-
-    /// Expectation for problems with "pretty" printing on error that can be
-    /// copied back into assertions.
-    pub fn expectProblemsEqual(expected: []const LintProblem, actual: []LintProblem) !void {
-        assertTestOnly();
-
-        std.testing.expectEqualDeep(expected, actual) catch |e| {
-            switch (e) {
-                error.TestExpectedEqual => {
-                    std.debug.print(
-                        \\--------------------------------------------------
-                        \\ Actual Lint Problems:
-                        \\--------------------------------------------------
-                        \\
-                    , .{});
-
-                    for (actual) |problem| problem.debugPrint(std.debug);
-                    std.debug.print("--------------------------------------------------\n", .{});
-
-                    return e;
-                },
-            }
-        };
-    }
-
-    inline fn assertTestOnly() void {
-        comptime if (!@import("builtin").is_test) @compileError("Test only");
-    }
-};
-
 test "LintDocument.resolveTypeKind" {
     const TestCase = struct {
         contents: [:0]const u8,
@@ -1334,3 +1241,4 @@ const version = @import("version.zig");
 const ansi = @import("ansi.zig");
 const analyzer = @import("analyzer.zig");
 const shims = @import("shims.zig");
+const testing = @import("testing.zig");

@@ -66,6 +66,13 @@ test "integration test rules" {
     // Fix command "zig build fix -- <file>.zig"
     // --------------------------------------------------------------------
     if (fix_stdout_expected_file != null or fix_zig_expected_file != null) {
+        const cwd = std.fs.cwd();
+        var cache_dir = try cwd.makeOpenPath(".zig-cache", .{});
+        defer cache_dir.close();
+
+        var temp_dir = try cache_dir.makeOpenPath("tmp", .{});
+        defer temp_dir.close();
+
         const temp_path = try std.fmt.allocPrint(std.testing.allocator, ".zig-cache/tmp/{s}.input.zig", .{rule_name});
         defer allocator.free(temp_path);
 

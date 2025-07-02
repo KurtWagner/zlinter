@@ -93,14 +93,8 @@ test "allocLintFiles - with default args" {
         std.testing.allocator.free(lint_files);
     }
 
-    try std.testing.expectEqualDeep(&.{
-        zlinter.LintFile{
-            .pathname = "a.zig",
-        },
-        zlinter.LintFile{
-            .pathname = "src/A.zig",
-        },
-    }, lint_files);
+    try std.testing.expectEqual(2, lint_files.len);
+    try testing.expectContainsExactlyStrings(&.{ "a.zig", "src/A.zig" }, &.{ lint_files[0].pathname, lint_files[1].pathname });
 }
 
 test "allocLintFiles - with arg files" {
@@ -133,31 +127,10 @@ test "allocLintFiles - with arg files" {
         std.testing.allocator.free(lint_files);
     }
 
-    try std.testing.expectEqualDeep(&.{
-        zlinter.LintFile{
-            .pathname = "a.zig",
-        },
-        zlinter.LintFile{
-            .pathname = "src/A.zig",
-        },
-    }, lint_files);
+    try std.testing.expectEqual(2, lint_files.len);
+    try testing.expectContainsExactlyStrings(&.{ "a.zig", "src/A.zig" }, &.{ lint_files[0].pathname, lint_files[1].pathname });
 }
 
-const testing = struct {
-    fn createFiles(dir: std.fs.Dir, file_paths: [][]const u8) !void {
-        assertTestOnly();
-
-        for (file_paths) |file_path| {
-            if (std.fs.path.dirname(file_path)) |parent|
-                try dir.makePath(parent);
-            (try dir.createFile(file_path, .{})).close();
-        }
-    }
-
-    inline fn assertTestOnly() void {
-        comptime if (!@import("builtin").is_test) @compileError("Test only");
-    }
-};
-
+const testing = @import("testing.zig");
 const std = @import("std");
 const zlinter = @import("./zlinter.zig");
