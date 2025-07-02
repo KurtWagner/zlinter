@@ -30,7 +30,6 @@ fn run(
 
     const handle = doc.handle;
     const tree = doc.handle.tree;
-    const token_starts = handle.tree.tokens.items(.start);
 
     var arena_mem: [32 * 1024]u8 = undefined;
     var arena_buffer = std.heap.FixedBufferAllocator.init(&arena_mem);
@@ -40,34 +39,38 @@ fn run(
     while (node.index < handle.tree.nodes.len) : (node.index += 1) {
         defer arena_buffer.reset();
 
-        const identifier_token: std.zig.Ast.TokenIndex = switch (zlinter.shims.nodeTag(tree, node.toNodeIndex())) {
-            .builtin_call,
-            .builtin_call_comma,
-            .builtin_call_two,
-            .builtin_call_two_comma,
-            .identifier,
-            .enum_literal,
-            => zlinter.shims.nodeMainToken(tree, node.toNodeIndex()),
-            .field_access,
-            => switch (zlinter.version.zig) {
-                .@"0.14" => zlinter.shims.nodeData(tree, node.toNodeIndex()).rhs,
-                .@"0.15" => zlinter.shims.nodeData(tree, node.toNodeIndex()).node_and_token.@"1",
-            },
-            else => continue,
-        };
-
-        const pos_ctx = try zls.Analyser.getPositionContext(
-            arena,
-            tree,
-            token_starts[identifier_token],
-            true,
-        );
-
-        switch (pos_ctx) {
-            .var_access => try handleVarAccess(rule, gpa, arena, doc, node.toNodeIndex(), identifier_token, &lint_problems),
-            .field_access => try handleFieldAccess(rule, gpa, arena, doc, node.toNodeIndex(), identifier_token, &lint_problems),
-            .builtin => try handleBuiltin(rule, gpa, arena, doc, node.toNodeIndex(), identifier_token, &lint_problems),
-            .enum_literal => try handleEnumLiteral(rule, gpa, arena, doc, node.toNodeIndex(), identifier_token, &lint_problems),
+        const tag = zlinter.shims.nodeTag(tree, node.toNodeIndex());
+        switch (tag) {
+            .enum_literal => try handleEnumLiteral(
+                rule,
+                gpa,
+                arena,
+                doc,
+                node.toNodeIndex(),
+                zlinter.shims.nodeMainToken(tree, node.toNodeIndex()),
+                &lint_problems,
+            ),
+            .field_access => try handleFieldAccess(
+                rule,
+                gpa,
+                arena,
+                doc,
+                node.toNodeIndex(),
+                switch (zlinter.version.zig) {
+                    .@"0.14" => zlinter.shims.nodeData(tree, node.toNodeIndex()).rhs,
+                    .@"0.15" => zlinter.shims.nodeData(tree, node.toNodeIndex()).node_and_token.@"1",
+                },
+                &lint_problems,
+            ),
+            .identifier => try handleVarAccess(
+                rule,
+                gpa,
+                arena,
+                doc,
+                node.toNodeIndex(),
+                zlinter.shims.nodeMainToken(tree, node.toNodeIndex()),
+                &lint_problems,
+            ),
             else => continue,
         }
     }
@@ -138,26 +141,6 @@ fn handleVarAccess(
             });
         }
     }
-}
-
-fn handleBuiltin(
-    rule: zlinter.LintRule,
-    gpa: std.mem.Allocator,
-    arena: std.mem.Allocator,
-    doc: zlinter.LintDocument,
-    node_index: std.zig.Ast.Node.Index,
-    identifier_token: std.zig.Ast.TokenIndex,
-    lint_problems: *std.ArrayListUnmanaged(zlinter.LintProblem),
-) !void {
-    _ = arena;
-    _ = gpa;
-    _ = rule;
-    _ = doc;
-    _ = node_index;
-    _ = identifier_token;
-    _ = lint_problems;
-
-    // TODO: Needs implementation.
 }
 
 fn handleEnumLiteral(
@@ -301,4 +284,3 @@ test {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const zls = zlinter.zls;
