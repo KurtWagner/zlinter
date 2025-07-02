@@ -16,6 +16,30 @@ pub fn loadFakeDocument(ctx: *LintContext, dir: std.fs.Dir, file_name: []const u
     return (try ctx.loadDocument(real_path, ctx.gpa, arena)).?;
 }
 
+pub fn expectContainsExactlyStrings(expected: []const []const u8, actual: []const []const u8) !void {
+    try std.testing.expectEqual(expected.len, actual.len);
+
+    const copy_expected = try std.testing.allocator.dupe([]const u8, expected);
+    defer std.testing.allocator.free(copy_expected);
+
+    const copy_actual = try std.testing.allocator.dupe([]const u8, actual);
+    defer std.testing.allocator.free(copy_actual);
+
+    std.mem.sort([]const u8, copy_expected, {}, stringLessThan);
+    std.mem.sort([]const u8, copy_actual, {}, stringLessThan);
+
+    for (0..copy_expected.len) |i| {
+        std.testing.expectEqualStrings(copy_expected[i], copy_actual[i]) catch |e| {
+            std.log.err("Expected {s} to contain {s}", .{ copy_actual, copy_expected });
+            return e;
+        };
+    }
+}
+
+fn stringLessThan(_: void, lhs: []const u8, rhs: []const u8) bool {
+    return std.mem.order(u8, lhs, rhs) == .lt;
+}
+
 /// Builds and runs a rule with fake file name and content.
 pub fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8) !?LintResult {
     assertTestOnly();

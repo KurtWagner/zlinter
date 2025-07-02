@@ -94,8 +94,7 @@ test "allocLintFiles - with default args" {
     }
 
     try std.testing.expectEqual(2, lint_files.len);
-    try std.testing.expectEqualStrings("a.zig", lint_files[0].pathname);
-    try std.testing.expectEqualStrings("src/A.zig", lint_files[1].pathname);
+    try testing.expectContainsExactlyStrings(&.{ "a.zig", "src/A.zig" }, &.{ lint_files[0].pathname, lint_files[1].pathname });
 }
 
 test "allocLintFiles - with arg files" {
@@ -128,14 +127,8 @@ test "allocLintFiles - with arg files" {
         std.testing.allocator.free(lint_files);
     }
 
-    try std.testing.expectEqualDeep(&.{
-        zlinter.LintFile{
-            .pathname = "a.zig",
-        },
-        zlinter.LintFile{
-            .pathname = "src/A.zig",
-        },
-    }, lint_files);
+    try std.testing.expectEqual(2, lint_files.len);
+    try testing.expectContainsExactlyStrings(&.{ "a.zig", "src/A.zig" }, &.{ lint_files[0].pathname, lint_files[1].pathname });
 }
 
 const testing = @import("testing.zig");
