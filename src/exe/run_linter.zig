@@ -295,7 +295,7 @@ pub fn main() !u8 {
         const exit_code = exit_code: {
             for (flattened.items) |result| {
                 for (result.problems) |problem| {
-                    if (problem.severity == .@"error") {
+                    if (problem.severity == .@"error" and !problem.disabled_by_comment) {
                         break :exit_code exit_codes.lint_error;
                     }
                 }
