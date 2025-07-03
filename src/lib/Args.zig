@@ -21,6 +21,10 @@ fix: bool = false,
 /// are owned by the struct and should be freed by calling deinit.
 files: ?[][]const u8 = null,
 
+/// Exclude these from linting. To add exclude paths, put an exclamation
+/// in front of the path argument.
+exclude_paths: ?[][]const u8 = null,
+
 /// The format to print the lint result output in.
 format: enum { default } = .default,
 
@@ -51,6 +55,13 @@ pub fn deinit(self: Args, allocator: std.mem.Allocator) void {
         allocator.free(files);
     }
 
+    if (self.exclude_paths) |exclude_paths| {
+        for (exclude_paths) |path| {
+            allocator.free(path);
+        }
+        allocator.free(exclude_paths);
+    }
+
     if (self.unknown_args) |unknown_args| {
         for (unknown_args) |arg| {
             allocator.free(arg);
@@ -75,6 +86,11 @@ pub fn allocParse(args: [][:0]u8, available_rules: []const LintRule, allocator: 
 
     var files = std.ArrayListUnmanaged([]const u8).empty;
     defer files.deinit(allocator);
+    errdefer for (files.items) |p| allocator.free(p);
+
+    var exclude_paths = std.ArrayListUnmanaged([]const u8).empty;
+    defer exclude_paths.deinit(allocator);
+    errdefer for (exclude_paths.items) |p| allocator.free(p);
 
     var rules = std.ArrayListUnmanaged([]const u8).empty;
     defer rules.deinit(allocator);
@@ -192,7 +208,11 @@ pub fn allocParse(args: [][:0]u8, available_rules: []const LintRule, allocator: 
             continue :state State.parsing;
         },
         .file_arg => {
-            try files.append(allocator, try allocator.dupe(u8, arg));
+            if (arg[0] == '!') {
+                try exclude_paths.append(allocator, try allocator.dupe(u8, arg[1..]));
+            } else {
+                try files.append(allocator, try allocator.dupe(u8, arg[0..]));
+            }
             continue :state State.parsing;
         },
     }
@@ -202,6 +222,9 @@ pub fn allocParse(args: [][:0]u8, available_rules: []const LintRule, allocator: 
     }
     if (files.items.len > 0) {
         lint_args.files = try files.toOwnedSlice(allocator);
+    }
+    if (exclude_paths.items.len > 0) {
+        lint_args.exclude_paths = try exclude_paths.toOwnedSlice(allocator);
     }
     if (rules.items.len > 0) {
         lint_args.rules = try rules.toOwnedSlice(allocator);
