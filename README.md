@@ -22,6 +22,7 @@ An extendable and customizable **Zig linter** that is integrated and built from 
 * [Configure](#configure)
   * [Project config](#project-config)
   * [Disable with comments](#disable-with-comments)
+  * [Command line args](#command-line-args)
 * [Rules](#rules)
   * [Builtin rules](#builtin-rules)
     * [no_deprecated](#no_deprecated)
@@ -151,6 +152,18 @@ Disable all rules or an explicit set of rules for the current source code line. 
 
 ```zig
 const a = this.is.deprecated(); // zlinter-disable-current-line
+```
+
+### Command line args
+
+```shell
+zig build lint -- [file ...] [--exclude <file> ...] [--rule <name> ...]
+```
+
+For example
+
+```shell
+zig build lint -- src/ android/ --exclude src/generated.zig --rule no_deprecated --rule no_unused
 ```
 
 ## Rules

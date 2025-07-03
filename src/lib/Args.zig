@@ -97,6 +97,8 @@ pub fn allocParse(args: [][:0]u8, available_rules: []const LintRule, allocator: 
     var rules = std.ArrayListUnmanaged([]const u8).empty;
     defer rules.deinit(allocator);
 
+    var stderr_writer = std.io.getStdErr().writer();
+
     const State = enum {
         parsing,
         fix_arg,
@@ -107,6 +109,7 @@ pub fn allocParse(args: [][:0]u8, available_rules: []const LintRule, allocator: 
         format_arg,
         file_arg,
         rule_arg,
+        exclude_arg,
     };
 
     state: switch (State.parsing) {
@@ -118,6 +121,8 @@ pub fn allocParse(args: [][:0]u8, available_rules: []const LintRule, allocator: 
                     continue :state State.fix_arg;
                 } else if (std.mem.eql(u8, arg, "--rule")) {
                     continue :state State.rule_arg;
+                } else if (std.mem.eql(u8, arg, "--exclude")) {
+                    continue :state State.exclude_arg;
                 } else if (std.mem.eql(u8, arg, "--zig_exe")) {
                     continue :state State.zig_exe_arg;
                 } else if (std.mem.eql(u8, arg, "--zig_lib_directory")) {
@@ -135,7 +140,7 @@ pub fn allocParse(args: [][:0]u8, available_rules: []const LintRule, allocator: 
         .zig_exe_arg => {
             index += 1;
             if (index == args.len) {
-                std.log.warn("--zig_exe missing path", .{});
+                stderr_writer.print("--zig_exe missing path\n", .{}) catch {};
                 return error.InvalidArgs;
             }
             lint_args.zig_exe = try allocator.dupe(u8, args[index]);
@@ -144,7 +149,7 @@ pub fn allocParse(args: [][:0]u8, available_rules: []const LintRule, allocator: 
         .zig_lib_directory_arg => {
             index += 1;
             if (index == args.len) {
-                std.log.warn("--zig_lib_directory missing path", .{});
+                stderr_writer.print("--zig_lib_directory missing path\n", .{}) catch {};
                 return error.InvalidArgs;
             }
             lint_args.zig_lib_directory = try allocator.dupe(u8, args[index]);
@@ -153,7 +158,7 @@ pub fn allocParse(args: [][:0]u8, available_rules: []const LintRule, allocator: 
         .global_cache_root_arg => {
             index += 1;
             if (index == args.len) {
-                std.log.warn("--global_cache_root missing path", .{});
+                stderr_writer.print("--global_cache_root missing path\n", .{}) catch {};
                 return error.InvalidArgs;
             }
             lint_args.global_cache_root = try allocator.dupe(u8, args[index]);
@@ -162,7 +167,7 @@ pub fn allocParse(args: [][:0]u8, available_rules: []const LintRule, allocator: 
         .rule_arg => {
             index += 1;
             if (index == args.len) {
-                std.log.warn("--rule missing rule name", .{});
+                stderr_writer.print("--rule missing rule name\n", .{}) catch {};
                 return error.InvalidArgs;
             }
 
@@ -173,17 +178,26 @@ pub fn allocParse(args: [][:0]u8, available_rules: []const LintRule, allocator: 
                 break :exists false;
             };
             if (!rule_exists) {
-                std.log.warn("rule '{s}' not found", .{args[index]});
+                stderr_writer.print("rule '{s}' not found\n", .{args[index]}) catch {};
                 return error.InvalidArgs;
             }
 
             try rules.append(allocator, try allocator.dupe(u8, args[index]));
             continue :state State.parsing;
         },
+        .exclude_arg => {
+            index += 1;
+            if (index == args.len) {
+                stderr_writer.print("--exclude arg missing expression\n", .{}) catch {};
+                return error.InvalidArgs;
+            }
+            try exclude_paths.append(allocator, try allocator.dupe(u8, args[index]));
+            continue :state State.parsing;
+        },
         .format_arg => {
             index += 1;
             if (index == args.len) {
-                std.log.warn("--format missing path", .{});
+                stderr_writer.print("--format missing path\n", .{}) catch {};
                 return error.InvalidArgs;
             }
             inline for (std.meta.fields(@FieldType(Args, "format"))) |field| {
@@ -192,13 +206,13 @@ pub fn allocParse(args: [][:0]u8, available_rules: []const LintRule, allocator: 
                     continue :state State.parsing;
                 }
             }
-            std.log.warn("--format only supports: {s}", .{comptime formats: {
+            stderr_writer.print("--format only supports: {s}\n", .{comptime formats: {
                 var formats: []u8 = "";
                 for (std.meta.fieldNames(@FieldType(Args, "format"))) |name| {
                     formats = @constCast(formats ++ name ++ " ");
                 }
                 break :formats formats;
-            }});
+            }}) catch {};
             return error.InvalidArgs;
         },
         .fix_arg => {
@@ -210,11 +224,7 @@ pub fn allocParse(args: [][:0]u8, available_rules: []const LintRule, allocator: 
             continue :state State.parsing;
         },
         .file_arg => {
-            if (arg[0] == '!') {
-                try exclude_paths.append(allocator, try allocator.dupe(u8, arg[1..]));
-            } else {
-                try files.append(allocator, try allocator.dupe(u8, arg[0..]));
-            }
+            try files.append(allocator, try allocator.dupe(u8, arg[0..]));
             continue :state State.parsing;
         },
     }
@@ -280,6 +290,21 @@ test "allocParse with fix arg and files" {
     }, args);
 }
 
+test "allocParse with duplicate files files" {
+    const args = try allocParse(
+        testing.cliArgs(&.{ "a/b.zig", "a/b.zig" }),
+        &.{},
+        std.testing.allocator,
+    );
+    defer args.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualDeep(Args{
+        .fix = false,
+        .files = @constCast(&[_][]const u8{ "a/b.zig", "a/b.zig" }),
+        .unknown_args = null,
+    }, args);
+}
+
 test "allocParse with files" {
     const args = try allocParse(
         testing.cliArgs(&.{ "a/b.zig", "./c.zig" }),
@@ -297,7 +322,14 @@ test "allocParse with files" {
 
 test "allocParse with exclude files" {
     const args = try allocParse(
-        testing.cliArgs(&.{ "!a/b.zig", "!./c.zig", "!d.zig" }),
+        testing.cliArgs(&.{
+            "--exclude",
+            "a/b.zig",
+            "--exclude",
+            "./c.zig",
+            "--exclude",
+            "d.zig",
+        }),
         &.{},
         std.testing.allocator,
     );
@@ -312,7 +344,7 @@ test "allocParse with exclude files" {
 
 test "allocParse with exclude and include files" {
     const args = try allocParse(
-        testing.cliArgs(&.{ "!a/b.zig", "./c.zig", "!d.zig" }),
+        testing.cliArgs(&.{ "--exclude", "a/b.zig", "./c.zig", "--exclude", "d.zig" }),
         &.{},
         std.testing.allocator,
     );
