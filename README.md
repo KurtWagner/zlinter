@@ -163,8 +163,11 @@ zig build lint -- [file ...] [--exclude <file> ...] [--rule <name> ...]
 For example
 
 ```shell
-zig build lint -- src/ android/ --exclude src/generated.zig --rule no_deprecated --rule no_unused
+zig build lint -- src/ android/ --exclude src/generated.zig --rule no_deprecation --rule no_unused
 ```
+
+* Will resolve all zig files under `src/` and `android/` but will exclude linting `src/generated.zig`; and
+* Only rules `no_deprecation` and `no_unused` will be ran.
 
 ## Rules
 
