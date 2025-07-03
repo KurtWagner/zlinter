@@ -61,7 +61,7 @@ This may change, especially when `zig` is "stable" at `1.x`.
 
 ## Features
 
-* [x] Integrates into your `build.zig`
+* [x] Integrates from source into your `build.zig`
 * [x] Builtin rules (e.g., [`no_deprecated`](#no_deprecated) and [`field_naming`](#field_naming))
 * [x] Custom rules (e.g., if your project has bespoke rules you need to follow)
 * [x] Per rule configurability (e.g., deprecations as warnings)

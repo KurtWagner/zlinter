@@ -46,6 +46,8 @@ pub const BuilderOptions = struct {
 pub fn builder(b: *std.Build, options: BuilderOptions) StepBuilder {
     return .{
         .rules = .empty,
+        .include_paths = .init(b.allocator),
+        .exclude_paths = .init(b.allocator),
         .b = b,
         .optimize = options.optimize,
         .target = options.target orelse b.graph.host,
@@ -54,6 +56,8 @@ pub fn builder(b: *std.Build, options: BuilderOptions) StepBuilder {
 
 const StepBuilder = struct {
     rules: std.ArrayListUnmanaged(BuiltRule),
+    include_paths: std.BufSet,
+    exclude_paths: std.BufSet,
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
@@ -77,6 +81,24 @@ const StepBuilder = struct {
         );
     }
 
+    /// Set the paths to include or exclude when running the linter.
+    ///
+    /// Include defaults to the current working directory. `zig-out` and
+    /// `.zig-cache` are always excluded - you don't need to explicitly include
+    /// them if setting exclude paths.
+    pub fn addPaths(
+        self: *StepBuilder,
+        paths: struct {
+            include: ?[]const []const u8 = null,
+            exclude: ?[]const []const u8 = null,
+        },
+    ) !void {
+        if (paths.include) |includes|
+            for (includes) |path| try self.include_paths.insert(path);
+        if (paths.exclude) |excludes|
+            for (excludes) |path| try self.exclude_paths.insert(path);
+    }
+
     /// Returns a build step and cleans itself up.
     pub fn build(self: *StepBuilder) BuildStepError!*std.Build.Step {
         defer self.deinit();
@@ -93,12 +115,17 @@ const StepBuilder = struct {
                         .{},
                     ),
                 },
+                .include_paths = self.include_paths,
+                .exclude_paths = self.exclude_paths,
             },
         );
     }
 
     fn deinit(self: *StepBuilder) void {
+        self.include_paths.deinit();
+        self.exclude_paths.deinit();
         for (self.rules.items) |*r| r.deinit(self.b.allocator);
+        self.* = undefined;
     }
 };
 
@@ -225,6 +252,8 @@ fn buildStep(
             dependency: *std.Build.Dependency,
             module: *std.Build.Module,
         },
+        include_paths: ?std.BufSet = null,
+        exclude_paths: ?std.BufSet = null,
     },
 ) BuildStepError!*std.Build.Step {
     const zlinter_lib_module: *std.Build.Module, const exe_file: std.Build.LazyPath, const build_rules_exe_file: std.Build.LazyPath, _ = switch (options.zlinter) {
@@ -274,6 +303,22 @@ fn buildStep(
     const run_cmd = b.addRunArtifact(exe);
     if (b.args) |args| {
         run_cmd.addArgs(args);
+    }
+
+    if (options.include_paths) |include_paths| {
+        var it = include_paths.iterator();
+        while (it.next()) |path| {
+            run_cmd.addArg(path.*);
+        }
+    }
+
+    if (options.exclude_paths) |exclude_paths| {
+        var it = exclude_paths.iterator();
+        var path_buffer: [4096 + 1]u8 = undefined;
+        while (it.next()) |path| {
+            run_cmd.addArg(std.fmt.bufPrint(&path_buffer, "!{s}", .{path.*}) catch
+                @panic("Exclude path too long"));
+        }
     }
 
     run_cmd.addArgs(&.{ "--zig_exe", b.graph.zig_exe });
