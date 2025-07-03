@@ -20,7 +20,8 @@ An extendable and customizable **Zig linter** that is integrated and built from 
 * [Features](#features)
 * [Getting started](#getting-started)
 * [Configure](#configure)
-  * [Project config](#project-config)
+  * [Paths](#configure-paths)
+  * [Rules](#configure-rules)
   * [Disable with comments](#disable-with-comments)
   * [Command line args](#command-line-args)
 * [Rules](#rules)
@@ -117,7 +118,21 @@ hook it up to a build step, like `zig build lint`:
 
 ## Configure
 
-### Project config
+### Configure paths
+
+The builder used in `build.zig` has a method `addPaths`, which can be used to
+add included and excluded paths. For example,
+
+```zig
+try builder.addPaths(.{
+    .include = &.{ "engine-src/", "src/" },
+    .exclude = &.{ "src/android/", "engine-src/generated.zig" },
+});
+```
+
+would lint zig files under `engine-src/` and `src/` except for `engine-src/generated.zig` and any zig files under `src/android/`.
+
+### Configure Rules
 
 `addRule` accepts an anonymous struct representing the `Config` of rule being added. For example,
 
