@@ -169,6 +169,9 @@ zig build lint -- src/ android/ --exclude src/generated.zig --rule no_deprecatio
 * Will resolve all zig files under `src/` and `android/` but will exclude linting `src/generated.zig`; and
 * Only rules `no_deprecation` and `no_unused` will be ran.
 
+> [!WARNING]
+> The `--exclude` argument does not support unix file wildcards when the wildcard matches multiple files.
+
 ## Rules
 
 ### Builtin rules
