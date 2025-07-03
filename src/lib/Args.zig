@@ -40,6 +40,9 @@ unknown_args: ?[][]const u8 = null,
 /// should be run. This can be used to focus a run on a single rule
 rules: ?[][]const u8 = null,
 
+/// Whether to write additional information out to stdout.
+verbose: bool = false,
+
 pub fn deinit(self: Args, allocator: std.mem.Allocator) void {
     if (self.zig_exe) |zig_exe|
         allocator.free(zig_exe);
@@ -77,7 +80,11 @@ pub fn deinit(self: Args, allocator: std.mem.Allocator) void {
     }
 }
 
-pub fn allocParse(args: [][:0]u8, available_rules: []const LintRule, allocator: std.mem.Allocator) !Args {
+pub fn allocParse(
+    args: [][:0]u8,
+    available_rules: []const LintRule,
+    allocator: std.mem.Allocator,
+) error{ OutOfMemory, InvalidArgs }!Args {
     var index: usize = 0;
     var arg: [:0]u8 = undefined;
 
@@ -102,6 +109,7 @@ pub fn allocParse(args: [][:0]u8, available_rules: []const LintRule, allocator: 
     const State = enum {
         parsing,
         fix_arg,
+        verbose_arg,
         zig_exe_arg,
         zig_lib_directory_arg,
         global_cache_root_arg,
@@ -119,6 +127,8 @@ pub fn allocParse(args: [][:0]u8, available_rules: []const LintRule, allocator: 
                 arg = args[index];
                 if (std.mem.eql(u8, arg, "--fix")) {
                     continue :state State.fix_arg;
+                } else if (std.mem.eql(u8, arg, "--verbose")) {
+                    continue :state State.verbose_arg;
                 } else if (std.mem.eql(u8, arg, "--rule")) {
                     continue :state State.rule_arg;
                 } else if (std.mem.eql(u8, arg, "--exclude")) {
@@ -219,6 +229,10 @@ pub fn allocParse(args: [][:0]u8, available_rules: []const LintRule, allocator: 
             lint_args.fix = true;
             continue :state State.parsing;
         },
+        .verbose_arg => {
+            lint_args.verbose = true;
+            continue :state State.parsing;
+        },
         .unknown_arg => {
             try unknown_args.append(allocator, try allocator.dupe(u8, arg));
             continue :state State.parsing;
@@ -270,6 +284,21 @@ test "allocParse with fix arg" {
 
     try std.testing.expectEqualDeep(Args{
         .fix = true,
+        .files = null,
+        .unknown_args = null,
+    }, args);
+}
+
+test "allocParse with verbose arg" {
+    const args = try allocParse(
+        testing.cliArgs(&.{"--verbose"}),
+        &.{},
+        std.testing.allocator,
+    );
+    defer args.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualDeep(Args{
+        .verbose = true,
         .files = null,
         .unknown_args = null,
     }, args);

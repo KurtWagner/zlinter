@@ -32,7 +32,10 @@ pub fn main() !u8 {
         const raw_args = try std.process.argsAlloc(gpa);
         defer std.process.argsFree(gpa, raw_args);
 
-        break :args try zlinter.Args.allocParse(raw_args, &rules, gpa);
+        break :args zlinter.Args.allocParse(raw_args, &rules, gpa) catch |e| switch (e) {
+            error.InvalidArgs => return exit_codes.usage_error,
+            error.OutOfMemory => return e,
+        };
     };
     defer args.deinit(gpa);
 
