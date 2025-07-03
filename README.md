@@ -3,13 +3,16 @@
 # Zlinter - Linter for Zig
 
 > [!IMPORTANT]
-> **2025-07-03:** `zlinter` is new and may experience some breaking changes while it finds
-> its footings.
+> **2025-07-03:** `zlinter` is new (aka unstable) so it may
+>   1. make breaking changes between commits while it finds its footing; and
+>   2. not work completely as documented or expected
+> 
+> Please don't hesitate to help improve `zlinter` by reporting issues and contributing improvements.
 
 [![linux](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml/badge.svg?branch=master)](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml)
 [![windows](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml/badge.svg?branch=master)](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml)
 
-An extendable and customizable **Zig linter** that is integrated and built from within your own `build.zig`.
+An extendable and customizable **Zig linter** that is integrated from source into your `build.zig`.
 
 ![Screenshot](./screenshot.png)
 
@@ -42,14 +45,14 @@ An extendable and customizable **Zig linter** that is integrated and built from 
 
 ## Background
 
-This was written to be used across my personal projects. The primary driver was
-something that can be easily versionined into any zig project and customized
-with bespoke needs while also providing decent opinionated defaults.
+`zlinter` was written to be used across my personal projects. The main motivation was to have it integrated from source through a build step so that it can be
+1. customized at build time (e.g., byo rules); and
+2. versioned with your projects source control (no separate binary to juggle)
 
 I'm opening it up incase it's more generally useful, and happy to let it
 organically evolve around needs, if there's value in doing so.
 
-It uses [`zls`](https://github.com/zigtools/zls) (an awesome project) and `std.zig` to build and analyze zig source files.
+It uses [`zls`](https://github.com/zigtools/zls) (an awesome project, go check it out if you haven't already) and `std.zig` to build and analyze zig source files.
 
 ## Versioning
 
@@ -59,14 +62,14 @@ It uses [`zls`](https://github.com/zigtools/zls) (an awesome project) and `std.z
 * use branch `master` for `zig` `master` releases; and
 * use branch `0.14.x` for `zig` `0.14.x` releases.
 
-This may change, especially when `zig` is "stable" at `1.x`.
+This may change, especially when `zig` is "stable" at `1.x`. If you have opinions on this, feel free to comment on [#20](https://github.com/KurtWagner/zlinter/issues/20).
 
 ## Features
 
-* [x] Integrates from source into your `build.zig`
-* [x] Builtin rules (e.g., [`no_deprecated`](#no_deprecated) and [`field_naming`](#field_naming))
-* [x] Custom rules (e.g., if your project has bespoke rules you need to follow)
-* [x] Per rule configurability (e.g., deprecations as warnings)
+* [x] [Integrates from source into your `build.zig`](#getting-started)
+* [x] [Builtin rules](#builtin-rules) (e.g., [`no_deprecated`](#no_deprecated) and [`field_naming`](#field_naming))
+* [x] [Custom / BYO rules](#custom-rules) (e.g., if your project has bespoke rules you need to follow)
+* [x] [Per rule configurability](#configure-rules) (e.g., deprecations as warnings)
 * [ ] Interchangeable result formatters (e.g., json, checkstyle)
 
 ## Getting started
@@ -186,6 +189,9 @@ zig build lint -- src/ android/ --exclude src/generated.zig --rule no_deprecated
 
 > [!WARNING]
 > The `--exclude` argument does not support unix file wildcards when the wildcard matches multiple files.
+
+> [!WARNING]
+> Include paths from CLI when you've configured paths in `build.zig` has some [quirks](https://github.com/KurtWagner/zlinter/issues/25) being worked out
 
 ## Rules
 
