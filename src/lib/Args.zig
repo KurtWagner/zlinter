@@ -22,7 +22,9 @@ fix: bool = false,
 files: ?[][]const u8 = null,
 
 /// Exclude these from linting. To add exclude paths, put an exclamation
-/// in front of the path argument.
+/// in front of the path argument. This will only be set if at least one
+/// exclude path exists. These are owned by the struct and should be freed by
+/// calling deinit.
 exclude_paths: ?[][]const u8 = null,
 
 /// The format to print the lint result output in.
@@ -289,6 +291,37 @@ test "allocParse with files" {
     try std.testing.expectEqualDeep(Args{
         .fix = false,
         .files = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig" }),
+        .unknown_args = null,
+    }, args);
+}
+
+test "allocParse with exclude files" {
+    const args = try allocParse(
+        testing.cliArgs(&.{ "!a/b.zig", "!./c.zig", "!d.zig" }),
+        &.{},
+        std.testing.allocator,
+    );
+    defer args.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualDeep(Args{
+        .fix = false,
+        .exclude_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig", "d.zig" }),
+        .unknown_args = null,
+    }, args);
+}
+
+test "allocParse with exclude and include files" {
+    const args = try allocParse(
+        testing.cliArgs(&.{ "!a/b.zig", "./c.zig", "!d.zig" }),
+        &.{},
+        std.testing.allocator,
+    );
+    defer args.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualDeep(Args{
+        .fix = false,
+        .exclude_paths = @constCast(&[_][]const u8{ "a/b.zig", "d.zig" }),
+        .files = @constCast(&[_][]const u8{"./c.zig"}),
         .unknown_args = null,
     }, args);
 }
