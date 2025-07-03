@@ -2,11 +2,11 @@
 ///
 /// If an explicit list of file paths was provided in the args, this will be
 /// used, otherwise it'll walk relative to working path.
-pub fn allocLintFiles(dir: std.fs.Dir, args: zlinter.Args, gpa: std.mem.Allocator) ![]zlinter.LintFile {
+pub fn allocLintFiles(dir: std.fs.Dir, maybe_files: ?[]const []const u8, gpa: std.mem.Allocator) ![]zlinter.LintFile {
     var lint_files = std.ArrayListUnmanaged(zlinter.LintFile).empty;
     defer lint_files.deinit(gpa);
 
-    if (args.files) |files| {
+    if (maybe_files) |files| {
         for (files) |file_or_dir| {
             const sub_dir = dir.openDir(file_or_dir, .{ .iterate = true }) catch |err| {
                 switch (err) {
@@ -87,7 +87,7 @@ test "allocLintFiles - with default args" {
         testing.paths.posix("zig-out/a.zig"),
     }));
 
-    const lint_files = try allocLintFiles(tmp_dir.dir, .{}, std.testing.allocator);
+    const lint_files = try allocLintFiles(tmp_dir.dir, null, std.testing.allocator);
     defer {
         for (lint_files) |*file| file.deinit(std.testing.allocator);
         std.testing.allocator.free(lint_files);
@@ -119,12 +119,10 @@ test "allocLintFiles - with arg files" {
         testing.paths.posix("zig-out/a.zig"),
     }));
 
-    const lint_files = try allocLintFiles(tmp_dir.dir, .{ .files = @constCast(
-        &[_][]const u8{
-            testing.paths.posix("a.zig"),
-            testing.paths.posix("src/"),
-        },
-    ) }, std.testing.allocator);
+    const lint_files = try allocLintFiles(tmp_dir.dir, &.{
+        testing.paths.posix("a.zig"),
+        testing.paths.posix("src/"),
+    }, std.testing.allocator);
     defer {
         for (lint_files) |*file| file.deinit(std.testing.allocator);
         std.testing.allocator.free(lint_files);

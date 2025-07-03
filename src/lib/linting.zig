@@ -433,6 +433,10 @@ pub const LintFile = struct {
     /// is owned and free'd in `deinit`.
     pathname: []const u8,
 
+    /// Whether or not the path was resolved but subsequently excluded by
+    /// an exclude path argument. If this is true, the file should NOT be linted
+    excluded: bool = false,
+
     pub fn init(allocator: std.mem.Allocator, pathname: []const u8) error{OutOfMemory}!LintFile {
         return .{ .pathname = try allocator.dupe(u8, pathname) };
     }

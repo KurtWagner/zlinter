@@ -63,10 +63,33 @@ pub fn main() !u8 {
     var dir = try std.fs.cwd().openDir("./", .{ .iterate = true });
     defer dir.close();
 
-    const lint_files = try zlinter.allocLintFiles(dir, args, gpa);
+    const lint_files = try zlinter.allocLintFiles(dir, args.files orelse null, gpa);
     defer {
         for (lint_files) |*lint_file| lint_file.deinit(gpa);
         gpa.free(lint_files);
+    }
+
+    const exclude_lint_files: ?[]zlinter.LintFile = exclude: {
+        if (args.exclude_paths) |p| {
+            std.debug.assert(p.len > 0);
+            break :exclude try zlinter.allocLintFiles(dir, p, gpa);
+        } else break :exclude null;
+    };
+    defer {
+        if (exclude_lint_files) |exclude| {
+            for (exclude) |*lint_file| lint_file.deinit(gpa);
+            gpa.free(exclude);
+        }
+    }
+
+    if (exclude_lint_files) |exclude| {
+        var index = std.StringHashMap(void).init(gpa);
+        defer index.deinit();
+        for (exclude) |file| try index.put(file.pathname, {});
+
+        for (lint_files) |*file| {
+            file.excluded = index.contains(file.pathname);
+        }
     }
 
     var ctx: zlinter.LintContext = undefined;
@@ -82,6 +105,8 @@ pub fn main() !u8 {
     // ------------------------------------------------------------------------
 
     for (lint_files) |lint_file| {
+        if (lint_file.excluded) continue;
+
         var arena = std.heap.ArenaAllocator.init(gpa);
         defer arena.deinit();
         const arena_allocator = arena.allocator();
