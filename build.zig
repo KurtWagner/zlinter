@@ -314,10 +314,8 @@ fn buildStep(
 
     if (options.exclude_paths) |exclude_paths| {
         var it = exclude_paths.iterator();
-        var path_buffer: [4096 + 1]u8 = undefined;
         while (it.next()) |path| {
-            run_cmd.addArg(std.fmt.bufPrint(&path_buffer, "!{s}", .{path.*}) catch
-                @panic("Exclude path too long"));
+            run_cmd.addArgs(&.{ "--exclude", path.* });
         }
     }
 
