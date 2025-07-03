@@ -38,7 +38,7 @@ An extendable and customizable **Zig linter** that is integrated and built from 
 * [For contributors](#for-contributors)
   * [Contributions](#contributions)
   * [Run tests](#run-tests)
-  * [Run on self](#run-on-self)
+  * [Run on self](#run-lint-on-self)
 
 ## Background
 
@@ -101,7 +101,7 @@ hook it up to a build step, like `zig build lint`:
         try builder.addRule(.{ .builtin = .file_naming }, .{});
         try builder.addRule(.{ .builtin = .switch_case_ordering }, .{});
         try builder.addRule(.{ .builtin = .no_unused }, .{});
-        try builder.addRule(.{ .builtin = .no_deprecation }, .{});
+        try builder.addRule(.{ .builtin = .no_deprecated }, .{});
         try builder.addRule(.{ .builtin = .no_orelse_unreachable }, .{});
         break :step try builder.build();
     });
@@ -143,12 +143,12 @@ try builder.addRule(.{ .builtin = .field_naming }, .{
   .struct_field_that_is_type = .{ .style = .title_case, .severity = .@"error" },
   .struct_field_that_is_fn = .{ .style = .camel_case, .severity = .@"error" },
 });
-try builder.addRule(.{ .builtin = .no_deprecation }, .{
+try builder.addRule(.{ .builtin = .no_deprecated }, .{
   .severity = .warning,
 });
 ```
 
-where `Config` struct are found in the rule source files [`no_deprecation.Config`](./src/rules/no_deprecation.zig) and [`field_naming.Config`](./src/rules/field_naming.zig).
+where `Config` struct are found in the rule source files [`no_deprecated.Config`](./src/rules/no_deprecated.zig) and [`field_naming.Config`](./src/rules/field_naming.zig).
 
 ### Disable with comments
 
@@ -157,7 +157,7 @@ where `Config` struct are found in the rule source files [`no_deprecation.Config
 Disable all rules or an explicit set of rules for the next source code line. For example,
 
 ```zig
-// zlinter-disable-next-line no_deprecation - not updating so safe
+// zlinter-disable-next-line no_deprecated - not updating so safe
 const a = this.is.deprecated();
 ```
 
@@ -178,11 +178,11 @@ zig build lint -- [file ...] [--exclude <file> ...] [--rule <name> ...]
 For example
 
 ```shell
-zig build lint -- src/ android/ --exclude src/generated.zig --rule no_deprecation --rule no_unused
+zig build lint -- src/ android/ --exclude src/generated.zig --rule no_deprecated --rule no_unused
 ```
 
 * Will resolve all zig files under `src/` and `android/` but will exclude linting `src/generated.zig`; and
-* Only rules `no_deprecation` and `no_unused` will be ran.
+* Only rules `no_deprecated` and `no_unused` will be ran.
 
 > [!WARNING]
 > The `--exclude` argument does not support unix file wildcards when the wildcard matches multiple files.
@@ -200,7 +200,7 @@ zig build lint -- src/ android/ --exclude src/generated.zig --rule no_deprecatio
 
 #### `no_deprecated`
 
-* [Source code](./src/rules/no_deprecation.zig)
+* [Source code](./src/rules/no_deprecated.zig)
 
 Enforces that there are no references to fields or functions that are
 documented as deprecated.
@@ -217,9 +217,7 @@ pub const z = x + 10; // <---- Problem
 
 ##### When not to use
 
-If you're targetting fixed versions of a dependency or zig then using deprecated
-fields and functions is not a huge deal. Although, still worth undertsanding why
-they're deprecated, as there may be risks associated with use.
+If you're indefinitely targetting fixed versions of a dependency or zig then using deprecated items may not be a big deal. Although, it's still worth undertsanding why they're deprecated, as there may be risks associated with use.
 
 #### `function_naming`
 
@@ -358,8 +356,8 @@ All tests:
 zig build test
 ```
 
-### Run on self
+### Run lint on self
 
 ```shell
-zig build lint -- src/ *.zig
+zig build lint
 ```
