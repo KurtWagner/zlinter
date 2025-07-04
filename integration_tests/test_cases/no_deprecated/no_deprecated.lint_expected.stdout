@@ -1,69 +1,69 @@
-warning Deprecated: - please no more [test_cases/no_deprecation/no_deprecation.input.zig:15:41] no_deprecation
+warning Deprecated: - please no more [test_cases/no_deprecated/no_deprecated.input.zig:15:41] no_deprecated
 
  15 |     state: test_case_references.State = .really_deprecated,
     |                                         ^^^^^^^^^^^^^^^^^^
 
-warning Deprecated - Just because [test_cases/no_deprecation/no_deprecation.input.zig:17:28] no_deprecation
+warning Deprecated - Just because [test_cases/no_deprecated/no_deprecated.input.zig:17:28] no_deprecated
 
  17 |     deprecated_enum_field: MyDeprecatedEnum = .a,
     |                            ^^^^^^^^^^^^^^^^
 
-warning Deprecated - Just because [test_cases/no_deprecation/no_deprecation.input.zig:19:38] no_deprecation
+warning Deprecated - Just because [test_cases/no_deprecated/no_deprecated.input.zig:19:38] no_deprecated
 
  19 |     const deprecated_container_decl: MyDeprecatedEnum = .b;
     |                                      ^^^^^^^^^^^^^^^^
 
-warning Deprecated: also not this [test_cases/no_deprecation/no_deprecation.input.zig:23:16] no_deprecation
+warning Deprecated: also not this [test_cases/no_deprecated/no_deprecated.input.zig:23:16] no_deprecated
 
  23 |         return self.deprecated_field;
     |                ^^^^^^^^^^^^^^^^^^^^^
 
-warning Deprecated: - Super dooper deprecated [test_cases/no_deprecation/no_deprecation.input.zig:28:18] no_deprecation
+warning Deprecated: - Super dooper deprecated [test_cases/no_deprecated/no_deprecated.input.zig:28:18] no_deprecated
 
  28 |     const data = test_case_references.MyDeprecatedData{
     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-warning Deprecated - don't use this [test_cases/no_deprecation/no_deprecation.input.zig:33:44] no_deprecation
+warning Deprecated - don't use this [test_cases/no_deprecated/no_deprecated.input.zig:33:44] no_deprecated
 
  33 |     std.log.err("Message: {s} {d} {d}", .{ message, data.deprecated_field, data.ok_field });
     |                                            ^^^^^^^
 
-warning Deprecated: - big time [test_cases/no_deprecation/no_deprecation.input.zig:33:53] no_deprecation
+warning Deprecated: - big time [test_cases/no_deprecated/no_deprecated.input.zig:33:53] no_deprecated
 
  33 |     std.log.err("Message: {s} {d} {d}", .{ message, data.deprecated_field, data.ok_field });
     |                                                     ^^^^^^^^^^^^^^^^^^^^^
 
-warning Deprecated - don't use this [test_cases/no_deprecation/no_deprecation.input.zig:35:25] no_deprecation
+warning Deprecated - don't use this [test_cases/no_deprecated/no_deprecated.input.zig:35:25] no_deprecated
 
  35 |     const indirection = message;
     |                         ^^^^^^^
 
-warning Deprecated - - function not good [test_cases/no_deprecation/no_deprecation.input.zig:38:5] no_deprecation
+warning Deprecated - - function not good [test_cases/no_deprecated/no_deprecated.input.zig:38:5] no_deprecated
 
  38 |     doNothing();
     |     ^^^^^^^^^
 
-warning Deprecated: - please no more [test_cases/no_deprecation/no_deprecation.input.zig:40:33] no_deprecation
+warning Deprecated: - please no more [test_cases/no_deprecated/no_deprecated.input.zig:40:33] no_deprecated
 
  40 |     var me = MyStruct{ .state = .really_deprecated };
     |                                 ^^^^^^^^^^^^^^^^^^
 
-warning Deprecated: - please no more [test_cases/no_deprecation/no_deprecation.input.zig:41:29] no_deprecation
+warning Deprecated: - please no more [test_cases/no_deprecated/no_deprecated.input.zig:41:29] no_deprecated
 
  41 |     me = MyStruct{ .state = test_case_references.State.really_deprecated };
     |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-warning Deprecated: also not this [test_cases/no_deprecation/no_deprecation.input.zig:43:39] no_deprecation
+warning Deprecated: also not this [test_cases/no_deprecated/no_deprecated.input.zig:43:39] no_deprecated
 
  43 |     std.log.err("Fields: {d} {d}", .{ me.deprecated_field, me.field_b });
     |                                       ^^^^^^^^^^^^^^^^^^^
 
-warning Deprecated: - not good [test_cases/no_deprecation/no_deprecation.input.zig:46:9] no_deprecation
+warning Deprecated: - not good [test_cases/no_deprecated/no_deprecated.input.zig:46:9] no_deprecated
 
  46 |     _ = me.alsoDoNothing();
     |         ^^^^^^^^^^^^^^^^
 
-warning Deprecated: Don't call this [test_cases/no_deprecation/no_deprecation.input.zig:48:32] no_deprecation
+warning Deprecated: Don't call this [test_cases/no_deprecated/no_deprecated.input.zig:48:32] no_deprecated
 
  48 |     std.log.err("Hello {s}", .{test_case_references.doNotCallDeprecated()});
     |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

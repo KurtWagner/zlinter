@@ -71,7 +71,7 @@ pub fn build(b: *std.Build) !void {
             },
         });
         try builder.addRule(.{ .builtin = .file_naming }, .{});
-        try builder.addRule(.{ .builtin = .no_deprecation }, .{});
+        try builder.addRule(.{ .builtin = .no_deprecated }, .{});
         try builder.addRule(.{ .builtin = .no_orelse_unreachable }, .{});
         try builder.addRule(.{ .custom = .{ .name = "no_cats", .path = "src/no_cats.zig" } }, .{
             .message = "I'm allergic to cats",

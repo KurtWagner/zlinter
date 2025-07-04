@@ -11,7 +11,7 @@ pub const BuiltinLintRule = enum {
     function_naming,
     file_naming,
     no_unused,
-    no_deprecation,
+    no_deprecated,
     no_orelse_unreachable,
     no_undefined,
     switch_case_ordering,
@@ -212,25 +212,35 @@ pub fn build(b: *std.Build) !void {
     // zig build lint
     // ------------------------------------------------------------------------
     const lint_cmd = b.step("lint", "Lint the linters own source code.");
-    lint_cmd.dependOn(try buildStep(
-        b,
-        &.{
-            buildBuiltinRule(b, .field_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-            buildBuiltinRule(b, .declaration_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-            buildBuiltinRule(b, .function_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-            buildBuiltinRule(b, .file_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-            buildBuiltinRule(b, .no_unused, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-            buildBuiltinRule(b, .switch_case_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-            buildBuiltinRule(b, .no_deprecation, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-            buildBuiltinRule(b, .no_orelse_unreachable, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-            // buildBuiltinRule(b, .no_undefined, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-        },
-        .{
-            .target = target,
-            .optimize = optimize,
-            .zlinter = .{ .module = zlinter_lib_module },
-        },
-    ));
+    lint_cmd.dependOn(step: {
+        // TODO: Update the self lint step to use the step builder methods like end users would
+        var exclude_paths = std.BufSet.init(b.allocator);
+        defer exclude_paths.deinit();
+
+        try exclude_paths.insert("integration_tests/test_cases");
+        try exclude_paths.insert("integration_tests/src/test_case_references.zig");
+
+        break :step try buildStep(
+            b,
+            &.{
+                buildBuiltinRule(b, .field_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+                buildBuiltinRule(b, .declaration_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+                buildBuiltinRule(b, .function_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+                buildBuiltinRule(b, .file_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+                buildBuiltinRule(b, .no_unused, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+                buildBuiltinRule(b, .switch_case_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+                buildBuiltinRule(b, .no_deprecated, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+                buildBuiltinRule(b, .no_orelse_unreachable, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+                // buildBuiltinRule(b, .no_undefined, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            },
+            .{
+                .target = target,
+                .optimize = optimize,
+                .exclude_paths = exclude_paths,
+                .zlinter = .{ .module = zlinter_lib_module },
+            },
+        );
+    });
 }
 
 fn toZonString(val: anytype, allocator: std.mem.Allocator) ![]const u8 {

@@ -1,21 +1,21 @@
 //! Enforces that references aren't deprecated (i.e., doc commented with `Deprecated: `)
 
-/// Config for no_deprecation rule.
+/// Config for no_deprecated rule.
 pub const Config = struct {
     severity: zlinter.LintProblemSeverity = .warning,
 };
 
-/// Builds and returns the no_deprecation rule.
+/// Builds and returns the no_deprecated rule.
 pub fn buildRule(options: zlinter.LintRuleOptions) zlinter.LintRule {
     _ = options;
 
     return zlinter.LintRule{
-        .rule_id = @tagName(.no_deprecation),
+        .rule_id = @tagName(.no_deprecated),
         .run = &run,
     };
 }
 
-/// Runs the no_deprecation rule.
+/// Runs the no_deprecated rule.
 fn run(
     rule: zlinter.LintRule,
     _: zlinter.LintContext,
