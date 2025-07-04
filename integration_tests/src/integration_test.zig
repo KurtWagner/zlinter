@@ -56,6 +56,7 @@ test "integration test rules" {
                 "--",
                 "--rule",
                 rule_name,
+                "--include",
                 input_zig_file.?,
             },
         );
@@ -132,6 +133,7 @@ test "integration test rules" {
                 "lint",
                 "--",
                 "--fix",
+                "--include",
                 temp_path,
             },
         );

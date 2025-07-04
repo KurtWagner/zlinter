@@ -4,9 +4,10 @@
 
 > [!IMPORTANT]
 > **2025-07-03:** `zlinter` is new (aka unstable) so it may
->   1. make breaking changes between commits while it finds its footing; and
->   2. not work completely as documented or expected
-> 
+>
+> 1. make breaking changes between commits while it finds its footing; and
+> 2. not work completely as documented or expected
+>
 > Please don't hesitate to help improve `zlinter` by reporting issues and contributing improvements.
 
 [![linux](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml/badge.svg?branch=0.14.x)](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml)
@@ -46,6 +47,7 @@ An extendable and customizable **Zig linter** that is integrated from source int
 ## Background
 
 `zlinter` was written to be used across my personal projects. The main motivation was to have it integrated from source through a build step so that it can be
+
 1. customized at build time (e.g., byo rules); and
 2. versioned with your projects source control (no separate binary to juggle)
 
@@ -175,23 +177,21 @@ const a = this.is.deprecated(); // zlinter-disable-current-line
 ### Command line args
 
 ```shell
-zig build lint -- [file ...] [--exclude <file> ...] [--rule <name> ...]
+zig build lint -- [--include <path> ...] [--exclude <path> ...] [--filter <path> ...] [--rule <name> ...]
 ```
+
+* `--include` run the linter on these path ignoring the includes and excludes defined in the `build.zig` forcing these paths to be resolved and linted (if they exist).
+* `--exclude` exclude these paths from linting. This argument will be used in conjunction with the excludes defined in the `build.zig` unless used with `--include`.
+* `--filter` used to filter the run to a specific set of already resolved paths. Unlike `--include` this leaves the includes and excludes defined in the `build.zig` as is.
 
 For example
 
 ```shell
-zig build lint -- src/ android/ --exclude src/generated.zig --rule no_deprecated --rule no_unused
+zig build lint -- --include src/ android/ --exclude src/generated.zig --rule no_deprecated no_unused
 ```
 
 * Will resolve all zig files under `src/` and `android/` but will exclude linting `src/generated.zig`; and
 * Only rules `no_deprecated` and `no_unused` will be ran.
-
-> [!WARNING]
-> The `--exclude` argument does not support unix file wildcards when the wildcard matches multiple files.
-
-> [!WARNING]
-> Include paths from CLI when you've configured paths in `build.zig` has some [quirks](https://github.com/KurtWagner/zlinter/issues/25) being worked out
 
 ## Rules
 

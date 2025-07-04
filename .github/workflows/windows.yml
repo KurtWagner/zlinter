@@ -23,4 +23,4 @@ jobs:
       - name: "Run integration tests"
         run: zig build integration-test
       - name: "Run linter"
-        run: zig build lint -- src\ build.zig build_rules.zig integration_tests\src\ integration_tests\build.zig
+        run: zig build lint
