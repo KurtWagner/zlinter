@@ -17,8 +17,8 @@ pub const std_options: std.Options = .{
 };
 
 pub fn main() !u8 {
-    var timer: ?std.time.Timer = std.time.Timer.start() catch null;
-    var total_timer: ?std.time.Timer = std.time.Timer.start() catch null;
+    var timer = Timer.createStarted();
+    var total_timer = Timer.createStarted();
 
     const gpa, const is_debug = gpa: {
         if (builtin.os.tag == .wasi) break :gpa .{ std.heap.wasm_allocator, false };
@@ -46,10 +46,11 @@ pub fn main() !u8 {
     // while parsing args, so this would probably be better as a build option
     // but for now this should be fine and keeps args together at runtime...
     zlinter.output.process_printer.verbose = args.verbose;
+    var printer = zlinter.output.process_printer;
 
     if (args.unknown_args) |unknown_args| {
         for (unknown_args) |arg|
-            zlinter.output.process_printer.println(.err, "Unknown argument: {s}", .{arg});
+            printer.println(.err, "Unknown argument: {s}", .{arg});
         return exit_codes.usage_error; // TODO: Print help docs.
     }
 
@@ -70,6 +71,10 @@ pub fn main() !u8 {
         }
         file_lint_problems.deinit();
     }
+
+    // ------------------------------------------------------------------------
+    // Resolve files then apply excludes and filters
+    // ------------------------------------------------------------------------
 
     var dir = try std.fs.cwd().openDir("./", .{ .iterate = true });
     defer dir.close();
@@ -99,7 +104,7 @@ pub fn main() !u8 {
             file.excluded = !index.contains(file.pathname);
     }
 
-    if (timer) |*t| zlinter.output.process_printer.println(.verbose, "Resolving {d} files took: {d}ms", .{ lint_files.len, @constCast(t).lap() / std.time.ns_per_ms });
+    if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "Resolving {d} files took: {d}ms", .{ lint_files.len, ms });
 
     var ctx: zlinter.LintContext = undefined;
     try ctx.init(.{
@@ -114,35 +119,73 @@ pub fn main() !u8 {
     // ------------------------------------------------------------------------
 
     defer {
-        zlinter.output.process_printer.println(.verbose, "Linted {d} files", .{lint_files.len});
-        if (total_timer) |*t| {
-            zlinter.output.process_printer.println(.verbose, "Took {d}ms", .{@constCast(t).read() / std.time.ns_per_ms});
-        }
+        printer.printBanner(.verbose);
+        printer.println(.verbose, "Linted {d} files", .{lint_files.len});
+        if (total_timer.lapMilliseconds()) |ms| printer.println(.verbose, "Took {d}ms", .{ms});
+        printer.printBanner(.verbose);
     }
+
+    var maybe_slowest_files = if (args.verbose) SlowestItemQueue.init(gpa) else null;
+    defer if (maybe_slowest_files) |*slowest_files| {
+        defer slowest_files.deinit();
+        slowest_files.print("Files", printer, gpa);
+    };
+
+    var maybe_rule_elapsed_times = if (args.verbose)
+        std.StringHashMap(u64).init(gpa)
+    else
+        null;
+    defer if (maybe_rule_elapsed_times) |*e| e.deinit();
+    defer if (maybe_rule_elapsed_times) |*rule_elapsed_times| {
+        var item_timers = SlowestItemQueue.init(gpa);
+        defer item_timers.deinit();
+
+        var it = rule_elapsed_times.iterator();
+        while (it.next()) |e| {
+            item_timers.add(.{
+                .name = e.key_ptr.*,
+                .elapsed_ns = e.value_ptr.*,
+            });
+        }
+        item_timers.print("Rules", printer, gpa);
+    };
 
     for (lint_files, 0..) |lint_file, i| {
         if (lint_file.excluded) {
-            zlinter.output.process_printer.println(.verbose, "[{d}/{d}] Excluding: {s}", .{ i + 1, lint_files.len, lint_file.pathname });
+            printer.println(.verbose, "[{d}/{d}] Excluding: {s}", .{ i + 1, lint_files.len, lint_file.pathname });
             continue;
         }
-        zlinter.output.process_printer.println(.verbose, "[{d}/{d}] Linting: {s}", .{ i + 1, lint_files.len, lint_file.pathname });
+        printer.println(.verbose, "[{d}/{d}] Linting: {s}", .{ i + 1, lint_files.len, lint_file.pathname });
+
+        var rule_timer = Timer.createStarted();
+        defer {
+            if (rule_timer.lapNanoseconds()) |ns| {
+                printer.println(.verbose, "  - Total elapsed {d}ms", .{ns / std.time.ns_per_ms});
+                if (maybe_slowest_files) |*slowest_files| {
+                    slowest_files.add(.{
+                        .name = lint_file.pathname,
+                        .elapsed_ns = ns,
+                    });
+                }
+            }
+        }
 
         var arena = std.heap.ArenaAllocator.init(gpa);
         defer arena.deinit();
         const arena_allocator = arena.allocator();
 
         var doc = try ctx.loadDocument(lint_file.pathname, ctx.gpa, arena_allocator) orelse {
-            zlinter.output.process_printer.println(.err, "Unable to open file: {s}", .{lint_file.pathname});
+            printer.println(.err, "Unable to open file: {s}", .{lint_file.pathname});
             continue;
         };
         defer doc.deinit(ctx.gpa);
-        if (timer) |*t|
-            zlinter.output.process_printer.println(.verbose, "  - Load document: {d}ms", .{@constCast(t).lap() / std.time.ns_per_ms})
+        if (timer.lapMilliseconds()) |ms|
+            printer.println(.verbose, "  - Load document: {d}ms", .{ms})
         else
-            zlinter.output.process_printer.println(.verbose, "  - Load document", .{});
-        zlinter.output.process_printer.println(.verbose, "    - {d} bytes", .{doc.handle.tree.source.len});
-        zlinter.output.process_printer.println(.verbose, "    - {d} nodes", .{doc.handle.tree.nodes.len});
-        zlinter.output.process_printer.println(.verbose, "    - {d} tokens", .{doc.handle.tree.tokens.len});
+            printer.println(.verbose, "  - Load document", .{});
+        printer.println(.verbose, "    - {d} bytes", .{doc.handle.tree.source.len});
+        printer.println(.verbose, "    - {d} nodes", .{doc.handle.tree.nodes.len});
+        printer.println(.verbose, "    - {d} tokens", .{doc.handle.tree.tokens.len});
 
         var results = std.ArrayListUnmanaged(zlinter.LintResult).empty;
         defer results.deinit(gpa);
@@ -176,14 +219,14 @@ pub fn main() !u8 {
                 },
             );
         }
-        if (timer) |*t| zlinter.output.process_printer.println(.verbose, "  - Process syntax errors: {d}ms", .{@constCast(t).lap() / std.time.ns_per_ms});
+        if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "  - Process syntax errors: {d}ms", .{ms});
 
         const disable_comments = try zlinter.allocParseComments(ast.source, gpa);
         defer {
             for (disable_comments) |*dc| dc.deinit(gpa);
             gpa.free(disable_comments);
         }
-        if (timer) |*t| zlinter.output.process_printer.println(.verbose, "  - Parsing doc comments: {d}ms", .{@constCast(t).lap() / std.time.ns_per_ms});
+        if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "  - Parsing doc comments: {d}ms", .{ms});
 
         var rule_filter_map = map: {
             var map = std.StringHashMapUnmanaged(void).empty;
@@ -197,7 +240,7 @@ pub fn main() !u8 {
         };
         defer if (rule_filter_map) |*m| m.deinit(gpa);
 
-        zlinter.output.process_printer.println(.verbose, "  - Rules", .{});
+        printer.println(.verbose, "  - Rules", .{});
         for (rules) |rule| {
             if (rule_filter_map) |map|
                 if (!map.contains(rule.rule_id)) continue;
@@ -214,7 +257,7 @@ pub fn main() !u8 {
                                 break :config @as(*anyopaque, @constCast(&@field(configs, decl.name)));
                             }
                         }
-                        zlinter.output.process_printer.println(.err, "Failed to lookup rule config for {s}", .{rule.rule_id});
+                        printer.println(.err, "Failed to lookup rule config for {s}", .{rule.rule_id});
                         @panic("Failed to find rule config");
                     },
                 },
@@ -227,7 +270,17 @@ pub fn main() !u8 {
                 try results.append(gpa, result);
             }
 
-            if (timer) |*t| zlinter.output.process_printer.println(.verbose, "    - {s}: {d}ms", .{ rule.rule_id, @constCast(t).lap() / std.time.ns_per_ms });
+            if (timer.lapNanoseconds()) |ns| {
+                if (maybe_rule_elapsed_times) |*rule_elapsed_time| {
+                    if (rule_elapsed_time.getPtr(rule.rule_id)) |elapsed_ns| {
+                        elapsed_ns.* += ns;
+                    } else {
+                        rule_elapsed_time.put(rule.rule_id, ns) catch {};
+                    }
+                }
+
+                printer.println(.verbose, "    - {s}: {d}ms", .{ rule.rule_id, ns / std.time.ns_per_ms });
+            } else printer.println(.verbose, "    - {s}", .{rule.rule_id});
         }
 
         if (results.items.len > 0) {
@@ -239,7 +292,7 @@ pub fn main() !u8 {
     }
 
     // ------------------------------------------------------------------------
-    // Do something with results:
+    // Print out results:
     // ------------------------------------------------------------------------
 
     const output_writer = std.io.getStdOut().writer();
@@ -485,6 +538,96 @@ fn buildFilterIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Args)
     for (filter_paths) |file| try index.insert(file.pathname);
     return index;
 }
+
+/// Simple more forgiving timer for optionally timing laps in verbose mode.
+const Timer = struct {
+    backing: ?std.time.Timer = null,
+
+    pub fn createStarted() Timer {
+        return .{ .backing = std.time.Timer.start() catch null };
+    }
+
+    pub fn lapNanoseconds(self: *Timer) ?u64 {
+        return (self.backing orelse return null).lap();
+    }
+
+    pub fn lapMilliseconds(self: *Timer) ?u64 {
+        return (self.lapNanoseconds() orelse return null) / std.time.ns_per_ms;
+    }
+};
+
+/// Used to track the slowest rules and files in a priority queue in verbose mode.
+const SlowestItemQueue = struct {
+    max: usize = 10,
+    queue: std.PriorityQueue(
+        Item,
+        void,
+        Item.compare,
+    ),
+
+    const Item = struct {
+        name: []const u8,
+        elapsed_ns: u64,
+
+        pub fn compare(_: void, a: Item, b: Item) std.math.Order {
+            return std.math.order(a.elapsed_ns, b.elapsed_ns);
+        }
+
+        pub fn lessThanFn(_: void, a: Item, b: Item) bool {
+            return a.elapsed_ns < b.elapsed_ns;
+        }
+    };
+
+    fn init(gpa: std.mem.Allocator) SlowestItemQueue {
+        return .{ .queue = .init(gpa, {}) };
+    }
+
+    fn deinit(self: *SlowestItemQueue) void {
+        self.queue.deinit();
+        self.* = undefined;
+    }
+
+    fn add(self: *SlowestItemQueue, item: Item) void {
+        if (self.queue.add(item)) {
+            if (self.queue.count() > self.max) {
+                _ = self.queue.remove();
+            }
+        } else |_| {}
+    }
+
+    fn print(self: SlowestItemQueue, name: []const u8, printer: *zlinter.output.Printer, gpa: std.mem.Allocator) void {
+        if (self.queue.count() == 0) return;
+
+        printer.printBanner(.verbose);
+        printer.println(.verbose, "Slowest {d} {s}:", .{
+            self.queue.items.len,
+            name,
+        });
+        printer.printBanner(.verbose);
+
+        const items = gpa.dupe(Item, self.queue.items) catch return;
+        defer gpa.free(items);
+
+        std.mem.sort(
+            Item,
+            items,
+            {},
+            Item.lessThanFn,
+        );
+
+        var i = items.len;
+        while (i > 0) : (i -= 1) {
+            const item = items[i - 1];
+            printer.println(.verbose, "  {d:02} -  {s}[{d}ms]{s} {s}", .{
+                items.len - i + 1,
+                zlinter.ansi.get(&.{.bold}),
+                item.elapsed_ns / std.time.ns_per_ms,
+                zlinter.ansi.get(&.{.reset}),
+                item.name,
+            });
+        }
+    }
+};
 
 test {
     std.testing.refAllDecls(@This());

@@ -2,7 +2,7 @@ var printer_singleton: Printer = .{ .verbose = false };
 /// Singleton printer for use for the lifetime of the process
 pub var process_printer = &printer_singleton;
 
-const Printer = struct {
+pub const Printer = struct {
     verbose: bool,
     stdout: ?Writer = null,
     stderr: ?Writer = null,
@@ -12,6 +12,12 @@ const Printer = struct {
         verbose,
         err,
     };
+
+    const banner: [60]u8 = @splat('-');
+
+    pub inline fn printBanner(self: Printer, kind: Kind) void {
+        return self.println(kind, &banner, .{});
+    }
 
     pub inline fn println(self: Printer, kind: Kind, comptime fmt: []const u8, args: anytype) void {
         return self.print(kind, fmt ++ "\n", args);
