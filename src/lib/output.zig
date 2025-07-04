@@ -4,8 +4,8 @@ pub var process_printer = &printer_singleton;
 
 const Printer = struct {
     verbose: bool,
-    stdout: Writer = .{ .context = .{ .file = std.io.getStdOut() } },
-    stderr: Writer = .{ .context = .{ .file = std.io.getStdErr() } },
+    stdout: ?Writer = null,
+    stderr: ?Writer = null,
 
     pub const Kind = enum {
         out,
@@ -18,13 +18,13 @@ const Printer = struct {
     }
 
     pub fn print(self: Printer, kind: Kind, comptime fmt: []const u8, args: anytype) void {
-        var writer = switch (kind) {
+        var writer: Writer = switch (kind) {
             .verbose => if (self.verbose)
-                self.stdout
+                self.stdout orelse .{ .context = .{ .file = std.io.getStdOut() } }
             else
                 return,
-            .err => self.stderr,
-            .out => self.stdout,
+            .err => self.stderr orelse .{ .context = .{ .file = std.io.getStdErr() } },
+            .out => self.stdout orelse .{ .context = .{ .file = std.io.getStdOut() } },
         };
 
         return writer.print(fmt, args) catch |e| {
