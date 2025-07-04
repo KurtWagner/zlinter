@@ -58,14 +58,14 @@ warning Deprecated: also not this [test_cases/no_deprecated/no_deprecated.input.
  43 |     std.log.err("Fields: {d} {d}", .{ me.deprecated_field, me.field_b });
     |                                       ^^^^^^^^^^^^^^^^^^^
 
-warning Deprecated: - not good [test_cases/no_deprecated/no_deprecated.input.zig:46:9] no_deprecated
+warning Deprecated: - not good [test_cases/no_deprecated/no_deprecated.input.zig:45:9] no_deprecated
 
- 46 |     _ = me.alsoDoNothing();
+ 45 |     _ = me.alsoDoNothing();
     |         ^^^^^^^^^^^^^^^^
 
-warning Deprecated: Don't call this [test_cases/no_deprecated/no_deprecated.input.zig:48:32] no_deprecated
+warning Deprecated: Don't call this [test_cases/no_deprecated/no_deprecated.input.zig:47:32] no_deprecated
 
- 48 |     std.log.err("Hello {s}", .{test_case_references.doNotCallDeprecated()});
+ 47 |     std.log.err("Hello {s}", .{test_case_references.doNotCallDeprecated()});
     |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 x 14 warnings
