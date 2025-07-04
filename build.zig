@@ -318,14 +318,14 @@ fn buildStep(
     if (options.include_paths) |include_paths| {
         var it = include_paths.iterator();
         while (it.next()) |path| {
-            run_cmd.addArg(path.*);
+            run_cmd.addArgs(&.{ "--build-include", path.* });
         }
     }
 
     if (options.exclude_paths) |exclude_paths| {
         var it = exclude_paths.iterator();
         while (it.next()) |path| {
-            run_cmd.addArgs(&.{ "--exclude", path.* });
+            run_cmd.addArgs(&.{ "--build-exclude", path.* });
         }
     }
 
