@@ -102,7 +102,7 @@ pub fn main() !u8 {
             file.excluded = index.contains(file.pathname);
         }
     }
-    if (timer) |*t| zlinter.output.println(.verbose, "Resolving files took: {d}ms", .{@constCast(t).lap() / std.time.ns_per_ms});
+    if (timer) |*t| zlinter.output.println(.verbose, "Resolving {d} files took: {d}ms", .{ lint_files.len, @constCast(t).lap() / std.time.ns_per_ms });
 
     var ctx: zlinter.LintContext = undefined;
     try ctx.init(.{
@@ -123,12 +123,12 @@ pub fn main() !u8 {
         }
     }
 
-    for (lint_files) |lint_file| {
+    for (lint_files, 0..) |lint_file, i| {
         if (lint_file.excluded) {
-            zlinter.output.println(.verbose, "Excluding file: {s}", .{lint_file.pathname});
+            zlinter.output.println(.verbose, "[{d}/{d}] Excluding: {s}", .{ i + 1, lint_files.len, lint_file.pathname });
             continue;
         }
-        zlinter.output.println(.verbose, "Linting file: {s}", .{lint_file.pathname});
+        zlinter.output.println(.verbose, "[{d}/{d}] Linting: {s}", .{ i + 1, lint_files.len, lint_file.pathname });
 
         var arena = std.heap.ArenaAllocator.init(gpa);
         defer arena.deinit();
