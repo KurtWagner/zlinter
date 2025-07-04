@@ -74,34 +74,31 @@ pub fn main() !u8 {
     var dir = try std.fs.cwd().openDir("./", .{ .iterate = true });
     defer dir.close();
 
-    const lint_files = try zlinter.allocLintFiles(dir, args.files orelse null, gpa);
+    const lint_files = try zlinter.allocLintFiles(
+        dir,
+        // `--include` argument supersedes build defined includes and excludes
+        args.include_paths orelse args.build_include_paths orelse null,
+        gpa,
+    );
     defer {
         for (lint_files) |*lint_file| lint_file.deinit(gpa);
         gpa.free(lint_files);
     }
 
-    const exclude_lint_files: ?[]zlinter.LintFile = exclude: {
-        if (args.exclude_paths) |p| {
-            std.debug.assert(p.len > 0);
-            break :exclude try zlinter.allocLintFiles(dir, p, gpa);
-        } else break :exclude null;
-    };
-    defer {
-        if (exclude_lint_files) |exclude| {
-            for (exclude) |*lint_file| lint_file.deinit(gpa);
-            gpa.free(exclude);
-        }
-    }
+    if (try buildExcludesIndex(gpa, dir, args)) |*index| {
+        defer @constCast(index).deinit();
 
-    if (exclude_lint_files) |exclude| {
-        var index = std.StringHashMap(void).init(gpa);
-        defer index.deinit();
-        for (exclude) |file| try index.put(file.pathname, {});
-
-        for (lint_files) |*file| {
+        for (lint_files) |*file|
             file.excluded = index.contains(file.pathname);
-        }
     }
+
+    if (try buildFilterIndex(gpa, dir, args)) |*index| {
+        defer @constCast(index).deinit();
+
+        for (lint_files) |*file|
+            file.excluded = !index.contains(file.pathname);
+    }
+
     if (timer) |*t| zlinter.output.process_printer.println(.verbose, "Resolving {d} files took: {d}ms", .{ lint_files.len, @constCast(t).lap() / std.time.ns_per_ms });
 
     var ctx: zlinter.LintContext = undefined;
@@ -200,7 +197,7 @@ pub fn main() !u8 {
         };
         defer if (rule_filter_map) |*m| m.deinit(gpa);
 
-        zlinter.output.process_printer.println(.verbose, "  - {d} rules", .{rules.len});
+        zlinter.output.process_printer.println(.verbose, "  - Rules", .{});
         for (rules) |rule| {
             if (rule_filter_map) |map|
                 if (!map.contains(rule.rule_id)) continue;
@@ -417,6 +414,76 @@ fn shouldSkip(disable_comments: []zlinter.LintDisableComment, err: zlinter.LintP
         }
     }
     return false;
+}
+
+// TODO: Could do with being moved to lib and having tests written for it
+
+/// Returns an index of files to exclude if exclude configuration is found in args
+fn buildExcludesIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Args) !?std.BufSet {
+    if (args.exclude_paths == null and args.build_exclude_paths == null) return null;
+
+    const exclude_lint_paths: ?[]zlinter.LintFile = exclude: {
+        if (args.exclude_paths) |p| {
+            std.debug.assert(p.len > 0);
+            break :exclude try zlinter.allocLintFiles(dir, p, gpa);
+        } else break :exclude null;
+    };
+    defer {
+        if (exclude_lint_paths) |exclude| {
+            for (exclude) |*lint_file| lint_file.deinit(gpa);
+            gpa.free(exclude);
+        }
+    }
+
+    const build_exclude_lint_paths: ?[]zlinter.LintFile = exclude: {
+        // `--include` argument supersedes build defined includes and excludes
+        if (args.include_paths != null) break :exclude null;
+
+        if (args.build_exclude_paths) |p| {
+            std.debug.assert(p.len > 0);
+            break :exclude try zlinter.allocLintFiles(dir, p, gpa);
+        } else break :exclude null;
+    };
+    defer {
+        if (build_exclude_lint_paths) |files| {
+            for (files) |*file| file.deinit(gpa);
+            gpa.free(files);
+        }
+    }
+
+    var index = std.BufSet.init(gpa);
+    errdefer index.deinit();
+
+    if (exclude_lint_paths) |files| {
+        for (files) |file| try index.insert(file.pathname);
+    }
+
+    if (build_exclude_lint_paths) |files| {
+        for (files) |file| try index.insert(file.pathname);
+    }
+
+    return index;
+}
+
+// TODO: Could do with being moved to lib and having tests written for it
+/// Returns an index of files to only include if filter configuration is found in args
+fn buildFilterIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Args) !?std.BufSet {
+    const filter_paths: []zlinter.LintFile = exclude: {
+        if (args.filter_paths) |p| {
+            std.debug.assert(p.len > 0);
+            break :exclude try zlinter.allocLintFiles(dir, p, gpa);
+        } else return null;
+    };
+    defer {
+        for (filter_paths) |*lint_file| lint_file.deinit(gpa);
+        gpa.free(filter_paths);
+    }
+
+    var index = std.BufSet.init(gpa);
+    errdefer index.deinit();
+
+    for (filter_paths) |file| try index.insert(file.pathname);
+    return index;
 }
 
 test {

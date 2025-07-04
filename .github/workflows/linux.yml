@@ -18,4 +18,4 @@ jobs:
       - name: "Run integration tests"
         run: zig build integration-test
       - name: "Run linter"
-        run: zig build lint -- src/ *.zig integration_tests/*.zig
+        run: zig build lint

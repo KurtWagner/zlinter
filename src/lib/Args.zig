@@ -18,14 +18,26 @@ zig_lib_directory: ?[]const u8 = null,
 fix: bool = false,
 
 /// Only lint or fix (if using the fix argument) the given files. These
-/// are owned by the struct and should be freed by calling deinit.
-files: ?[][]const u8 = null,
+/// are owned by the struct and should be freed by calling deinit. This will
+/// replace any file resolution provided by the build file.
+/// /// This is populated with the `--include <path>` flag.
+include_paths: ?[][]const u8 = null,
 
-/// Exclude these from linting. To add exclude paths, put an exclamation
-/// in front of the path argument. This will only be set if at least one
-/// exclude path exists. These are owned by the struct and should be freed by
-/// calling deinit.
+/// Similar to `files` but will be used to filter out files after resolution.
+/// This is populated with the `--filter <path>` flag.
+filter_paths: ?[][]const u8 = null,
+
+/// Exclude these from linting irrespective of how the files were resolved.
+/// This is populated with the `--exclude <path>` flag.
 exclude_paths: ?[][]const u8 = null,
+
+/// Similar to `exclude_paths` but is populated by the build runner using the
+/// flag `--build-exclude`. This should never be used by an end user of the CLI.
+build_exclude_paths: ?[][]const u8 = null,
+
+/// Similar to `include_paths` but is populated by the build runner using the
+/// flag `--build-include`. This should never be used by an end user of the CLI.
+build_include_paths: ?[][]const u8 = null,
 
 /// The format to print the lint result output in.
 format: enum { default } = .default,
@@ -53,30 +65,19 @@ pub fn deinit(self: Args, allocator: std.mem.Allocator) void {
     if (self.zig_lib_directory) |zig_lib_directory|
         allocator.free(zig_lib_directory);
 
-    if (self.files) |files| {
-        for (files) |file| {
-            allocator.free(file);
+    inline for (&.{
+        "exclude_paths",
+        "include_paths",
+        "filter_paths",
+        "build_include_paths",
+        "build_exclude_paths",
+        "unknown_args",
+        "rules",
+    }) |field_name| {
+        if (@field(self, field_name)) |v| {
+            for (v) |s| allocator.free(s);
+            allocator.free(v);
         }
-        allocator.free(files);
-    }
-
-    if (self.exclude_paths) |exclude_paths| {
-        for (exclude_paths) |path| {
-            allocator.free(path);
-        }
-        allocator.free(exclude_paths);
-    }
-
-    if (self.unknown_args) |unknown_args| {
-        for (unknown_args) |arg| {
-            allocator.free(arg);
-        }
-        allocator.free(unknown_args);
-    }
-
-    if (self.rules) |rules| {
-        for (rules) |rule| allocator.free(rule);
-        allocator.free(rules);
     }
 }
 
@@ -93,13 +94,25 @@ pub fn allocParse(
     var unknown_args = std.ArrayListUnmanaged([]const u8).empty;
     defer unknown_args.deinit(allocator);
 
-    var files = std.ArrayListUnmanaged([]const u8).empty;
-    defer files.deinit(allocator);
-    errdefer for (files.items) |p| allocator.free(p);
+    var include_paths = std.ArrayListUnmanaged([]const u8).empty;
+    defer include_paths.deinit(allocator);
+    errdefer for (include_paths.items) |p| allocator.free(p);
 
     var exclude_paths = std.ArrayListUnmanaged([]const u8).empty;
     defer exclude_paths.deinit(allocator);
     errdefer for (exclude_paths.items) |p| allocator.free(p);
+
+    var build_include_paths = std.ArrayListUnmanaged([]const u8).empty;
+    defer build_include_paths.deinit(allocator);
+    errdefer for (build_include_paths.items) |p| allocator.free(p);
+
+    var build_exclude_paths = std.ArrayListUnmanaged([]const u8).empty;
+    defer build_exclude_paths.deinit(allocator);
+    errdefer for (build_exclude_paths.items) |p| allocator.free(p);
+
+    var filter_paths = std.ArrayListUnmanaged([]const u8).empty;
+    defer filter_paths.deinit(allocator);
+    errdefer for (filter_paths.items) |p| allocator.free(p);
 
     var rules = std.ArrayListUnmanaged([]const u8).empty;
     defer rules.deinit(allocator);
@@ -113,9 +126,12 @@ pub fn allocParse(
         global_cache_root_arg,
         unknown_arg,
         format_arg,
-        file_arg,
         rule_arg,
-        exclude_arg,
+        filter_path_arg,
+        include_path_arg,
+        exclude_path_arg,
+        build_include_path_arg,
+        build_exclude_path_arg,
     };
 
     state: switch (State.parsing) {
@@ -123,14 +139,24 @@ pub fn allocParse(
             index += 1; // ignore first arg as this is the binary.
             if (index < args.len) {
                 arg = args[index];
-                if (std.mem.eql(u8, arg, "--fix")) {
+                if (arg.len == 0)
+                    continue :state .parsing
+                else if (std.mem.eql(u8, arg, "--fix")) {
                     continue :state State.fix_arg;
                 } else if (std.mem.eql(u8, arg, "--verbose")) {
                     continue :state State.verbose_arg;
                 } else if (std.mem.eql(u8, arg, "--rule")) {
                     continue :state State.rule_arg;
+                } else if (std.mem.eql(u8, arg, "--include")) {
+                    continue :state State.include_path_arg;
                 } else if (std.mem.eql(u8, arg, "--exclude")) {
-                    continue :state State.exclude_arg;
+                    continue :state State.exclude_path_arg;
+                } else if (std.mem.eql(u8, arg, "--build-include")) {
+                    continue :state State.build_include_path_arg;
+                } else if (std.mem.eql(u8, arg, "--build-exclude")) {
+                    continue :state State.build_exclude_path_arg;
+                } else if (std.mem.eql(u8, arg, "--filter")) {
+                    continue :state State.filter_path_arg;
                 } else if (std.mem.eql(u8, arg, "--zig_exe")) {
                     continue :state State.zig_exe_arg;
                 } else if (std.mem.eql(u8, arg, "--zig_lib_directory")) {
@@ -139,10 +165,8 @@ pub fn allocParse(
                     continue :state State.global_cache_root_arg;
                 } else if (std.mem.eql(u8, arg, "--format")) {
                     continue :state State.format_arg;
-                } else if (std.mem.startsWith(u8, arg, "-")) {
-                    continue :state State.unknown_arg;
                 }
-                continue :state State.file_arg;
+                continue :state State.unknown_arg;
             }
         },
         .zig_exe_arg => {
@@ -191,21 +215,57 @@ pub fn allocParse(
             }
 
             try rules.append(allocator, try allocator.dupe(u8, args[index]));
-            continue :state State.parsing;
+            continue :state if (index + 1 < args.len and notArgKey(args[index + 1])) State.rule_arg else State.parsing;
         },
-        .exclude_arg => {
+        .include_path_arg => {
             index += 1;
             if (index == args.len) {
-                output.process_printer.println(.err, "--exclude arg missing expression", .{});
+                output.process_printer.println(.err, "--include arg missing paths", .{});
+                return error.InvalidArgs;
+            }
+            try include_paths.append(allocator, try allocator.dupe(u8, args[index]));
+            continue :state if (index + 1 < args.len and notArgKey(args[index + 1])) State.include_path_arg else State.parsing;
+        },
+        .exclude_path_arg => {
+            index += 1;
+            if (index == args.len) {
+                output.process_printer.println(.err, "--exclude arg missing paths", .{});
                 return error.InvalidArgs;
             }
             try exclude_paths.append(allocator, try allocator.dupe(u8, args[index]));
-            continue :state State.parsing;
+            continue :state if (index + 1 < args.len and notArgKey(args[index + 1])) State.exclude_path_arg else State.parsing;
+        },
+        .build_exclude_path_arg => {
+            index += 1;
+            if (index == args.len) {
+                output.process_printer.println(.err, "--build-exclude arg missing paths", .{});
+                return error.InvalidArgs;
+            }
+            try build_exclude_paths.append(allocator, try allocator.dupe(u8, args[index]));
+            continue :state if (index + 1 < args.len and notArgKey(args[index + 1])) State.build_exclude_path_arg else State.parsing;
+        },
+        .build_include_path_arg => {
+            index += 1;
+            if (index == args.len) {
+                output.process_printer.println(.err, "--build-include arg missing paths", .{});
+                return error.InvalidArgs;
+            }
+            try build_include_paths.append(allocator, try allocator.dupe(u8, args[index]));
+            continue :state if (index + 1 < args.len and notArgKey(args[index + 1])) State.build_include_path_arg else State.parsing;
+        },
+        .filter_path_arg => {
+            index += 1;
+            if (index == args.len) {
+                output.process_printer.println(.err, "--filter arg missing paths", .{});
+                return error.InvalidArgs;
+            }
+            try filter_paths.append(allocator, try allocator.dupe(u8, args[index]));
+            continue :state if (index + 1 < args.len and notArgKey(args[index + 1])) State.filter_path_arg else State.parsing;
         },
         .format_arg => {
             index += 1;
             if (index == args.len) {
-                output.process_printer.println(.err, "--format missing path", .{});
+                output.process_printer.println(.err, "--format missing value", .{});
                 return error.InvalidArgs;
             }
             inline for (std.meta.fields(@FieldType(Args, "format"))) |field| {
@@ -235,26 +295,35 @@ pub fn allocParse(
             try unknown_args.append(allocator, try allocator.dupe(u8, arg));
             continue :state State.parsing;
         },
-        .file_arg => {
-            try files.append(allocator, try allocator.dupe(u8, arg[0..]));
-            continue :state State.parsing;
-        },
     }
 
     if (unknown_args.items.len > 0) {
         lint_args.unknown_args = try unknown_args.toOwnedSlice(allocator);
     }
-    if (files.items.len > 0) {
-        lint_args.files = try files.toOwnedSlice(allocator);
+    if (filter_paths.items.len > 0) {
+        lint_args.filter_paths = try filter_paths.toOwnedSlice(allocator);
+    }
+    if (include_paths.items.len > 0) {
+        lint_args.include_paths = try include_paths.toOwnedSlice(allocator);
     }
     if (exclude_paths.items.len > 0) {
         lint_args.exclude_paths = try exclude_paths.toOwnedSlice(allocator);
+    }
+    if (build_include_paths.items.len > 0) {
+        lint_args.build_include_paths = try build_include_paths.toOwnedSlice(allocator);
+    }
+    if (build_exclude_paths.items.len > 0) {
+        lint_args.build_exclude_paths = try build_exclude_paths.toOwnedSlice(allocator);
     }
     if (rules.items.len > 0) {
         lint_args.rules = try rules.toOwnedSlice(allocator);
     }
 
     return lint_args;
+}
+
+fn notArgKey(arg: []const u8) bool {
+    return arg.len > 0 and arg[0] != '-';
 }
 
 test "allocParse with unknown args" {
@@ -267,7 +336,7 @@ test "allocParse with unknown args" {
 
     try std.testing.expectEqualDeep(Args{
         .fix = false,
-        .files = null,
+        .include_paths = null,
         .unknown_args = @constCast(&[_][]const u8{ "-", "-fix", "--a" }),
     }, args);
 }
@@ -282,7 +351,7 @@ test "allocParse with fix arg" {
 
     try std.testing.expectEqualDeep(Args{
         .fix = true,
-        .files = null,
+        .include_paths = null,
         .unknown_args = null,
     }, args);
 }
@@ -297,14 +366,14 @@ test "allocParse with verbose arg" {
 
     try std.testing.expectEqualDeep(Args{
         .verbose = true,
-        .files = null,
+        .include_paths = null,
         .unknown_args = null,
     }, args);
 }
 
 test "allocParse with fix arg and files" {
     const args = try allocParse(
-        testing.cliArgs(&.{ "--fix", "a/b.zig", "./c.zig" }),
+        testing.cliArgs(&.{ "--fix", "--include", "a/b.zig", "--include", "./c.zig" }),
         &.{},
         std.testing.allocator,
     );
@@ -312,66 +381,146 @@ test "allocParse with fix arg and files" {
 
     try std.testing.expectEqualDeep(Args{
         .fix = true,
-        .files = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig" }),
+        .include_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig" }),
         .unknown_args = null,
     }, args);
 }
 
 test "allocParse with duplicate files files" {
-    const args = try allocParse(
-        testing.cliArgs(&.{ "a/b.zig", "a/b.zig" }),
-        &.{},
-        std.testing.allocator,
-    );
-    defer args.deinit(std.testing.allocator);
+    inline for (&.{
+        &.{ "--include", "a/b.zig", "--include", "a/b.zig", "another.zig" },
+        &.{ "--include", "a/b.zig", "a/b.zig", "--include", "another.zig" },
+        &.{ "--include", "a/b.zig", "a/b.zig", "another.zig" },
+        &.{ "--include", "a/b.zig", "--include", "a/b.zig", "--include", "another.zig" },
+    }) |raw_args| {
+        const args = try allocParse(
+            testing.cliArgs(raw_args),
+            &.{},
+            std.testing.allocator,
+        );
+        defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
-        .fix = false,
-        .files = @constCast(&[_][]const u8{ "a/b.zig", "a/b.zig" }),
-        .unknown_args = null,
-    }, args);
+        try std.testing.expectEqualDeep(Args{
+            .fix = false,
+            .include_paths = @constCast(&[_][]const u8{ "a/b.zig", "a/b.zig", "another.zig" }),
+            .unknown_args = null,
+        }, args);
+    }
 }
 
 test "allocParse with files" {
-    const args = try allocParse(
-        testing.cliArgs(&.{ "a/b.zig", "./c.zig" }),
-        &.{},
-        std.testing.allocator,
-    );
-    defer args.deinit(std.testing.allocator);
+    inline for (&.{
+        &.{ "--include", "a/b.zig", "--include", "./c.zig", "another.zig" },
+        &.{ "--include", "a/b.zig", "./c.zig", "--include", "another.zig" },
+        &.{ "--include", "a/b.zig", "./c.zig", "another.zig" },
+        &.{ "--include", "a/b.zig", "--include", "./c.zig", "--include", "another.zig" },
+    }) |raw_args| {
+        const args = try allocParse(
+            testing.cliArgs(raw_args),
+            &.{},
+            std.testing.allocator,
+        );
+        defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
-        .fix = false,
-        .files = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig" }),
-        .unknown_args = null,
-    }, args);
+        try std.testing.expectEqualDeep(Args{
+            .fix = false,
+            .include_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig", "another.zig" }),
+            .unknown_args = null,
+        }, args);
+    }
 }
 
 test "allocParse with exclude files" {
-    const args = try allocParse(
-        testing.cliArgs(&.{
-            "--exclude",
-            "a/b.zig",
-            "--exclude",
-            "./c.zig",
-            "--exclude",
-            "d.zig",
-        }),
-        &.{},
-        std.testing.allocator,
-    );
-    defer args.deinit(std.testing.allocator);
+    inline for (&.{
+        &.{ "--exclude", "a/b.zig", "--exclude", "./c.zig", "another.zig" },
+        &.{ "--exclude", "a/b.zig", "./c.zig", "--exclude", "another.zig" },
+        &.{ "--exclude", "a/b.zig", "./c.zig", "another.zig" },
+        &.{ "--exclude", "a/b.zig", "--exclude", "./c.zig", "--exclude", "another.zig" },
+    }) |raw_args| {
+        const args = try allocParse(
+            testing.cliArgs(raw_args),
+            &.{},
+            std.testing.allocator,
+        );
+        defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
-        .fix = false,
-        .exclude_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig", "d.zig" }),
-        .unknown_args = null,
-    }, args);
+        try std.testing.expectEqualDeep(Args{
+            .fix = false,
+            .exclude_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig", "another.zig" }),
+            .unknown_args = null,
+        }, args);
+    }
+}
+
+test "allocParse with filter files" {
+    inline for (&.{
+        &.{ "--filter", "a/b.zig", "--filter", "./c.zig", "d.zig" },
+        &.{ "--filter", "a/b.zig", "./c.zig", "--filter", "d.zig" },
+        &.{ "--filter", "a/b.zig", "./c.zig", "d.zig" },
+        &.{ "--filter", "a/b.zig", "--filter", "./c.zig", "--filter", "d.zig" },
+    }) |raw_args| {
+        const args = try allocParse(
+            testing.cliArgs(raw_args),
+            &.{},
+            std.testing.allocator,
+        );
+        defer args.deinit(std.testing.allocator);
+
+        try std.testing.expectEqualDeep(Args{
+            .fix = false,
+            .filter_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig", "d.zig" }),
+            .unknown_args = null,
+        }, args);
+    }
+}
+
+test "allocParse with build-exclude files" {
+    inline for (&.{
+        &.{ "--build-exclude", "a/b.zig", "--build-exclude", "./c.zig", "d.zig" },
+        &.{ "--build-exclude", "a/b.zig", "./c.zig", "--build-exclude", "d.zig" },
+        &.{ "--build-exclude", "a/b.zig", "./c.zig", "d.zig" },
+        &.{ "--build-exclude", "a/b.zig", "--build-exclude", "./c.zig", "--build-exclude", "d.zig" },
+    }) |raw_args| {
+        const args = try allocParse(
+            testing.cliArgs(raw_args),
+            &.{},
+            std.testing.allocator,
+        );
+        defer args.deinit(std.testing.allocator);
+
+        try std.testing.expectEqualDeep(Args{
+            .fix = false,
+            .build_exclude_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig", "d.zig" }),
+            .unknown_args = null,
+        }, args);
+    }
+}
+
+test "allocParse with build-include files" {
+    inline for (&.{
+        &.{ "--build-include", "a/b.zig", "--build-include", "./c.zig", "d.zig" },
+        &.{ "--build-include", "a/b.zig", "./c.zig", "--build-include", "d.zig" },
+        &.{ "--build-include", "a/b.zig", "./c.zig", "d.zig" },
+        &.{ "--build-include", "a/b.zig", "--build-include", "./c.zig", "--build-include", "d.zig" },
+    }) |raw_args| {
+        const args = try allocParse(
+            testing.cliArgs(raw_args),
+            &.{},
+            std.testing.allocator,
+        );
+        defer args.deinit(std.testing.allocator);
+
+        try std.testing.expectEqualDeep(Args{
+            .fix = false,
+            .build_include_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig", "d.zig" }),
+            .unknown_args = null,
+        }, args);
+    }
 }
 
 test "allocParse with exclude and include files" {
     const args = try allocParse(
-        testing.cliArgs(&.{ "--exclude", "a/b.zig", "./c.zig", "--exclude", "d.zig" }),
+        testing.cliArgs(&.{ "--exclude", "a/b.zig", "--include", "./c.zig", "--exclude", "d.zig" }),
         &.{},
         std.testing.allocator,
     );
@@ -380,14 +529,14 @@ test "allocParse with exclude and include files" {
     try std.testing.expectEqualDeep(Args{
         .fix = false,
         .exclude_paths = @constCast(&[_][]const u8{ "a/b.zig", "d.zig" }),
-        .files = @constCast(&[_][]const u8{"./c.zig"}),
+        .include_paths = @constCast(&[_][]const u8{"./c.zig"}),
         .unknown_args = null,
     }, args);
 }
 
 test "allocParse with all combinations" {
     const args = try allocParse(
-        testing.cliArgs(&.{ "--fix", "--unknown", "a/b.zig", "./c.zig" }),
+        testing.cliArgs(&.{ "--fix", "--unknown", "--include", "a/b.zig", "--include", "./c.zig" }),
         &.{},
         std.testing.allocator,
     );
@@ -395,7 +544,7 @@ test "allocParse with all combinations" {
 
     try std.testing.expectEqualDeep(Args{
         .fix = true,
-        .files = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig" }),
+        .include_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig" }),
         .unknown_args = @constCast(&[_][]const u8{
             "--unknown",
         }),
@@ -455,19 +604,27 @@ test "allocParse with format arg" {
 }
 
 test "allocParse with rule arg" {
-    const args = try allocParse(
-        testing.cliArgs(&.{ "--rule", "my_rule" }),
-        &.{.{
-            .rule_id = "my_rule",
-            .run = undefined,
-        }},
-        std.testing.allocator,
-    );
-    defer args.deinit(std.testing.allocator);
+    inline for (&.{
+        &.{ "--rule", "my_rule_a", "my_rule_b" },
+        &.{ "--rule", "my_rule_a", "--rule", "my_rule_b" },
+    }) |raw_args| {
+        const args = try allocParse(
+            testing.cliArgs(raw_args),
+            &.{ .{
+                .rule_id = "my_rule_a",
+                .run = undefined,
+            }, .{
+                .rule_id = "my_rule_b",
+                .run = undefined,
+            } },
+            std.testing.allocator,
+        );
+        defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
-        .rules = @constCast(&[_][]const u8{"my_rule"}),
-    }, args);
+        try std.testing.expectEqualDeep(Args{
+            .rules = @constCast(&[_][]const u8{ "my_rule_a", "my_rule_b" }),
+        }, args);
+    }
 }
 
 test "allocParse with invalid rule arg" {
