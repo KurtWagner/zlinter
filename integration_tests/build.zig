@@ -59,24 +59,24 @@ pub fn build(b: *std.Build) !void {
     const lint_cmd = b.step("lint", "Lint source code.");
     lint_cmd.dependOn(step: {
         var builder = zlinter.builder(b, .{ .target = target, .optimize = optimize });
-        try builder.addRule(.{ .builtin = .no_unused }, .{});
-        try builder.addRule(.{ .builtin = .no_undefined }, .{});
-        try builder.addRule(.{ .builtin = .switch_case_ordering }, .{});
-        try builder.addRule(.{ .builtin = .field_naming }, .{});
-        try builder.addRule(.{ .builtin = .declaration_naming }, .{});
-        try builder.addRule(.{ .builtin = .function_naming }, .{
+        builder.addRule(.{ .builtin = .no_unused }, .{});
+        builder.addRule(.{ .builtin = .no_undefined }, .{});
+        builder.addRule(.{ .builtin = .switch_case_ordering }, .{});
+        builder.addRule(.{ .builtin = .field_naming }, .{});
+        builder.addRule(.{ .builtin = .declaration_naming }, .{});
+        builder.addRule(.{ .builtin = .function_naming }, .{
             .function_that_returns_type = .{
                 .severity = .warning,
                 .style = .title_case,
             },
         });
-        try builder.addRule(.{ .builtin = .file_naming }, .{});
-        try builder.addRule(.{ .builtin = .no_deprecated }, .{});
-        try builder.addRule(.{ .builtin = .no_orelse_unreachable }, .{});
-        try builder.addRule(.{ .custom = .{ .name = "no_cats", .path = "src/no_cats.zig" } }, .{
+        builder.addRule(.{ .builtin = .file_naming }, .{});
+        builder.addRule(.{ .builtin = .no_deprecated }, .{});
+        builder.addRule(.{ .builtin = .no_orelse_unreachable }, .{});
+        builder.addRule(.{ .custom = .{ .name = "no_cats", .path = "src/no_cats.zig" } }, .{
             .message = "I'm allergic to cats",
         });
-        break :step try builder.build();
+        break :step builder.build();
     });
 }
 

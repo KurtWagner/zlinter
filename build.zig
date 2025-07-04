@@ -66,8 +66,8 @@ const StepBuilder = struct {
         self: *StepBuilder,
         comptime source: BuildRuleSource,
         config: anytype,
-    ) error{OutOfMemory}!void {
-        try self.rules.append(
+    ) void {
+        self.rules.append(
             self.b.allocator,
             buildRule(
                 self.b,
@@ -78,7 +78,7 @@ const StepBuilder = struct {
                 },
                 config,
             ),
-        );
+        ) catch @panic("OOM");
     }
 
     /// Set the paths to include or exclude when running the linter.
@@ -92,18 +92,18 @@ const StepBuilder = struct {
             include: ?[]const []const u8 = null,
             exclude: ?[]const []const u8 = null,
         },
-    ) !void {
+    ) void {
         if (paths.include) |includes|
-            for (includes) |path| try self.include_paths.insert(path);
+            for (includes) |path| self.include_paths.insert(path) catch @panic("OOM");
         if (paths.exclude) |excludes|
-            for (excludes) |path| try self.exclude_paths.insert(path);
+            for (excludes) |path| self.exclude_paths.insert(path) catch @panic("OOM");
     }
 
     /// Returns a build step and cleans itself up.
-    pub fn build(self: *StepBuilder) BuildStepError!*std.Build.Step {
+    pub fn build(self: *StepBuilder) *std.Build.Step {
         defer self.deinit();
 
-        return try buildStep(
+        return buildStep(
             self.b,
             self.rules.items,
             .{
@@ -129,13 +129,8 @@ const StepBuilder = struct {
     }
 };
 
-pub const BuildStepError = error{
-    OutOfMemory,
-    InvalidConfig,
-};
-
 /// zlinters own build file for running its tests and itself on itself
-pub fn build(b: *std.Build) !void {
+pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
@@ -217,10 +212,10 @@ pub fn build(b: *std.Build) !void {
         var exclude_paths = std.BufSet.init(b.allocator);
         defer exclude_paths.deinit();
 
-        try exclude_paths.insert("integration_tests/test_cases");
-        try exclude_paths.insert("integration_tests/src/test_case_references.zig");
+        exclude_paths.insert("integration_tests/test_cases") catch @panic("OOM");
+        exclude_paths.insert("integration_tests/src/test_case_references.zig") catch @panic("OOM");
 
-        break :step try buildStep(
+        break :step buildStep(
             b,
             &.{
                 buildBuiltinRule(b, .field_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
@@ -243,13 +238,14 @@ pub fn build(b: *std.Build) !void {
     });
 }
 
-fn toZonString(val: anytype, allocator: std.mem.Allocator) ![]const u8 {
+fn toZonString(val: anytype, allocator: std.mem.Allocator) []const u8 {
     var zon = std.ArrayListUnmanaged(u8).empty;
     defer zon.deinit(allocator);
 
-    try std.zon.stringify.serialize(val, .{}, zon.writer(allocator));
+    std.zon.stringify.serialize(val, .{}, zon.writer(allocator)) catch
+        @panic("Invalid rule config");
 
-    return zon.toOwnedSlice(allocator);
+    return zon.toOwnedSlice(allocator) catch @panic("OOM");
 }
 
 fn buildStep(
@@ -265,7 +261,7 @@ fn buildStep(
         include_paths: ?std.BufSet = null,
         exclude_paths: ?std.BufSet = null,
     },
-) BuildStepError!*std.Build.Step {
+) *std.Build.Step {
     const zlinter_lib_module: *std.Build.Module, const exe_file: std.Build.LazyPath, const build_rules_exe_file: std.Build.LazyPath, _ = switch (options.zlinter) {
         .dependency => |d| .{ d.module("zlinter"), d.path("src/exe/run_linter.zig"), d.path("build_rules.zig"), d.path("build_rules_config.zig") },
         .module => |m| .{ m, b.path("src/exe/run_linter.zig"), b.path("build_rules.zig"), b.path("build_rules_config.zig") },
@@ -287,10 +283,10 @@ fn buildStep(
     // Generate dynamic rules and rules config
     // --------------------------------------------------------------------
     var rule_imports = std.ArrayListUnmanaged(std.Build.Module.Import).empty;
-    for (rules) |r| try rule_imports.append(b.allocator, r.import);
+    for (rules) |r| rule_imports.append(b.allocator, r.import) catch @panic("OOM");
     defer rule_imports.deinit(b.allocator);
 
-    const rules_module = try createRulesModule(
+    const rules_module = createRulesModule(
         b,
         zlinter_import,
         rule_imports.items,
@@ -386,7 +382,7 @@ fn buildRule(
                     .imports = &.{zlinter_import},
                 }),
             },
-            .zon_config_str = toZonString(config, b.allocator) catch @panic("Invalid Rule config"),
+            .zon_config_str = toZonString(config, b.allocator),
         },
     };
 }
@@ -413,7 +409,7 @@ fn buildBuiltinRule(
                     .imports = &.{options.zlinter_import},
                 }),
             },
-            .zon_config_str = toZonString(config, b.allocator) catch @panic("Invalid rule config"),
+            .zon_config_str = toZonString(config, b.allocator),
         },
     };
 }
@@ -447,15 +443,15 @@ fn createRulesModule(
     zlinter_import: std.Build.Module.Import,
     rule_imports: []const std.Build.Module.Import,
     build_rules_output: std.Build.LazyPath,
-) error{OutOfMemory}!*std.Build.Module {
-    const rules_imports = try std.mem.concat(
+) *std.Build.Module {
+    const rules_imports = std.mem.concat(
         b.allocator,
         std.Build.Module.Import,
         &.{
             &[1]std.Build.Module.Import{zlinter_import},
             rule_imports,
         },
-    );
+    ) catch @panic("OOM");
     defer b.allocator.free(rules_imports);
 
     return b.createModule(.{
