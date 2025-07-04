@@ -45,11 +45,11 @@ pub fn main() !u8 {
     // Technically a chicken and egg problem as you can't rely on verbose stdout
     // while parsing args, so this would probably be better as a build option
     // but for now this should be fine and keeps args together at runtime...
-    zlinter.output.verbose = args.verbose;
+    zlinter.output.process_printer.verbose = args.verbose;
 
     if (args.unknown_args) |unknown_args| {
         for (unknown_args) |arg|
-            zlinter.output.println(.err, "Unknown argument: {s}", .{arg});
+            zlinter.output.process_printer.println(.err, "Unknown argument: {s}", .{arg});
         return exit_codes.usage_error; // TODO: Print help docs.
     }
 
@@ -102,7 +102,7 @@ pub fn main() !u8 {
             file.excluded = index.contains(file.pathname);
         }
     }
-    if (timer) |*t| zlinter.output.println(.verbose, "Resolving {d} files took: {d}ms", .{ lint_files.len, @constCast(t).lap() / std.time.ns_per_ms });
+    if (timer) |*t| zlinter.output.process_printer.println(.verbose, "Resolving {d} files took: {d}ms", .{ lint_files.len, @constCast(t).lap() / std.time.ns_per_ms });
 
     var ctx: zlinter.LintContext = undefined;
     try ctx.init(.{
@@ -117,35 +117,35 @@ pub fn main() !u8 {
     // ------------------------------------------------------------------------
 
     defer {
-        zlinter.output.println(.verbose, "Linted {d} files", .{lint_files.len});
+        zlinter.output.process_printer.println(.verbose, "Linted {d} files", .{lint_files.len});
         if (total_timer) |*t| {
-            zlinter.output.println(.verbose, "Took {d}ms", .{@constCast(t).read() / std.time.ns_per_ms});
+            zlinter.output.process_printer.println(.verbose, "Took {d}ms", .{@constCast(t).read() / std.time.ns_per_ms});
         }
     }
 
     for (lint_files, 0..) |lint_file, i| {
         if (lint_file.excluded) {
-            zlinter.output.println(.verbose, "[{d}/{d}] Excluding: {s}", .{ i + 1, lint_files.len, lint_file.pathname });
+            zlinter.output.process_printer.println(.verbose, "[{d}/{d}] Excluding: {s}", .{ i + 1, lint_files.len, lint_file.pathname });
             continue;
         }
-        zlinter.output.println(.verbose, "[{d}/{d}] Linting: {s}", .{ i + 1, lint_files.len, lint_file.pathname });
+        zlinter.output.process_printer.println(.verbose, "[{d}/{d}] Linting: {s}", .{ i + 1, lint_files.len, lint_file.pathname });
 
         var arena = std.heap.ArenaAllocator.init(gpa);
         defer arena.deinit();
         const arena_allocator = arena.allocator();
 
         var doc = try ctx.loadDocument(lint_file.pathname, ctx.gpa, arena_allocator) orelse {
-            zlinter.output.println(.err, "Unable to open file: {s}", .{lint_file.pathname});
+            zlinter.output.process_printer.println(.err, "Unable to open file: {s}", .{lint_file.pathname});
             continue;
         };
         defer doc.deinit(ctx.gpa);
         if (timer) |*t|
-            zlinter.output.println(.verbose, "  - Load document: {d}ms", .{@constCast(t).lap() / std.time.ns_per_ms})
+            zlinter.output.process_printer.println(.verbose, "  - Load document: {d}ms", .{@constCast(t).lap() / std.time.ns_per_ms})
         else
-            zlinter.output.println(.verbose, "  - Load document", .{});
-        zlinter.output.println(.verbose, "    - {d} bytes", .{doc.handle.tree.source.len});
-        zlinter.output.println(.verbose, "    - {d} nodes", .{doc.handle.tree.nodes.len});
-        zlinter.output.println(.verbose, "    - {d} tokens", .{doc.handle.tree.tokens.len});
+            zlinter.output.process_printer.println(.verbose, "  - Load document", .{});
+        zlinter.output.process_printer.println(.verbose, "    - {d} bytes", .{doc.handle.tree.source.len});
+        zlinter.output.process_printer.println(.verbose, "    - {d} nodes", .{doc.handle.tree.nodes.len});
+        zlinter.output.process_printer.println(.verbose, "    - {d} tokens", .{doc.handle.tree.tokens.len});
 
         var results = std.ArrayListUnmanaged(zlinter.LintResult).empty;
         defer results.deinit(gpa);
@@ -179,14 +179,14 @@ pub fn main() !u8 {
                 },
             );
         }
-        if (timer) |*t| zlinter.output.println(.verbose, "  - Process syntax errors: {d}ms", .{@constCast(t).lap() / std.time.ns_per_ms});
+        if (timer) |*t| zlinter.output.process_printer.println(.verbose, "  - Process syntax errors: {d}ms", .{@constCast(t).lap() / std.time.ns_per_ms});
 
         const disable_comments = try zlinter.allocParseComments(ast.source, gpa);
         defer {
             for (disable_comments) |*dc| dc.deinit(gpa);
             gpa.free(disable_comments);
         }
-        if (timer) |*t| zlinter.output.println(.verbose, "  - Parsing doc comments: {d}ms", .{@constCast(t).lap() / std.time.ns_per_ms});
+        if (timer) |*t| zlinter.output.process_printer.println(.verbose, "  - Parsing doc comments: {d}ms", .{@constCast(t).lap() / std.time.ns_per_ms});
 
         var rule_filter_map = map: {
             var map = std.StringHashMapUnmanaged(void).empty;
@@ -200,7 +200,7 @@ pub fn main() !u8 {
         };
         defer if (rule_filter_map) |*m| m.deinit(gpa);
 
-        zlinter.output.println(.verbose, "  - {d} rules", .{rules.len});
+        zlinter.output.process_printer.println(.verbose, "  - {d} rules", .{rules.len});
         for (rules) |rule| {
             if (rule_filter_map) |map|
                 if (!map.contains(rule.rule_id)) continue;
@@ -217,7 +217,7 @@ pub fn main() !u8 {
                                 break :config @as(*anyopaque, @constCast(&@field(configs, decl.name)));
                             }
                         }
-                        zlinter.output.println(.err, "Failed to lookup rule config for {s}", .{rule.rule_id});
+                        zlinter.output.process_printer.println(.err, "Failed to lookup rule config for {s}", .{rule.rule_id});
                         @panic("Failed to find rule config");
                     },
                 },
@@ -230,7 +230,7 @@ pub fn main() !u8 {
                 try results.append(gpa, result);
             }
 
-            if (timer) |*t| zlinter.output.println(.verbose, "    - {s}: {d}ms", .{ rule.rule_id, @constCast(t).lap() / std.time.ns_per_ms });
+            if (timer) |*t| zlinter.output.process_printer.println(.verbose, "    - {s}: {d}ms", .{ rule.rule_id, @constCast(t).lap() / std.time.ns_per_ms });
         }
 
         if (results.items.len > 0) {
