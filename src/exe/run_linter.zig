@@ -417,6 +417,8 @@ fn shouldSkip(disable_comments: []zlinter.LintDisableComment, err: zlinter.LintP
 }
 
 // TODO: Could do with being moved to lib and having tests written for it
+
+/// Returns an index of files to exclude if exclude configuration is found in args
 fn buildExcludesIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Args) !?std.BufSet {
     if (args.exclude_paths == null and args.build_exclude_paths == null) return null;
 
@@ -464,6 +466,7 @@ fn buildExcludesIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Arg
 }
 
 // TODO: Could do with being moved to lib and having tests written for it
+/// Returns an index of files to only include if filter configuration is found in args
 fn buildFilterIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Args) !?std.BufSet {
     const filter_paths: []zlinter.LintFile = exclude: {
         if (args.filter_paths) |p| {
