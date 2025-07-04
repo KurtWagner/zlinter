@@ -100,15 +100,15 @@ hook it up to a build step, like `zig build lint`:
     const lint_cmd = b.step("lint", "Lint source code.");
     lint_cmd.dependOn(step: {
         var builder = zlinter.builder(b, .{});
-        try builder.addRule(.{ .builtin = .field_naming }, .{});
-        try builder.addRule(.{ .builtin = .declaration_naming }, .{});
-        try builder.addRule(.{ .builtin = .function_naming }, .{});
-        try builder.addRule(.{ .builtin = .file_naming }, .{});
-        try builder.addRule(.{ .builtin = .switch_case_ordering }, .{});
-        try builder.addRule(.{ .builtin = .no_unused }, .{});
-        try builder.addRule(.{ .builtin = .no_deprecated }, .{});
-        try builder.addRule(.{ .builtin = .no_orelse_unreachable }, .{});
-        break :step try builder.build();
+        builder.addRule(.{ .builtin = .field_naming }, .{});
+        builder.addRule(.{ .builtin = .declaration_naming }, .{});
+        builder.addRule(.{ .builtin = .function_naming }, .{});
+        builder.addRule(.{ .builtin = .file_naming }, .{});
+        builder.addRule(.{ .builtin = .switch_case_ordering }, .{});
+        builder.addRule(.{ .builtin = .no_unused }, .{});
+        builder.addRule(.{ .builtin = .no_deprecated }, .{});
+        builder.addRule(.{ .builtin = .no_orelse_unreachable }, .{});
+        break :step builder.build();
     });
     ```
 
@@ -129,7 +129,7 @@ The builder used in `build.zig` has a method `addPaths`, which can be used to
 add included and excluded paths. For example,
 
 ```zig
-try builder.addPaths(.{
+builder.addPaths(.{
     .include = &.{ "engine-src/", "src/" },
     .exclude = &.{ "src/android/", "engine-src/generated.zig" },
 });
@@ -142,13 +142,13 @@ would lint zig files under `engine-src/` and `src/` except for `engine-src/gener
 `addRule` accepts an anonymous struct representing the `Config` of rule being added. For example,
 
 ```zig
-try builder.addRule(.{ .builtin = .field_naming }, .{
+builder.addRule(.{ .builtin = .field_naming }, .{
   .enum_field = .{ .style = .snake_case, .severity = .warning },
   .union_field = .off,
   .struct_field_that_is_type = .{ .style = .title_case, .severity = .@"error" },
   .struct_field_that_is_fn = .{ .style = .camel_case, .severity = .@"error" },
 });
-try builder.addRule(.{ .builtin = .no_deprecated }, .{
+builder.addRule(.{ .builtin = .no_deprecated }, .{
   .severity = .warning,
 });
 ```
@@ -333,7 +333,7 @@ builder.addRule(b, .{
 }, .{});
 ```
 
-Alternatively, take a look at https://github.com/KurtWagner/zlinter-custom-rule-example, which is a minimal custom rule example with accompanying zig project.
+Alternatively, take a look at <https://github.com/KurtWagner/zlinter-custom-rule-example>, which is a minimal custom rule example with accompanying zig project.
 
 ## For contributors
 
