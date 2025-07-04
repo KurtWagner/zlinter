@@ -65,51 +65,19 @@ pub fn deinit(self: Args, allocator: std.mem.Allocator) void {
     if (self.zig_lib_directory) |zig_lib_directory|
         allocator.free(zig_lib_directory);
 
-    if (self.include_paths) |paths| {
-        for (paths) |file| {
-            allocator.free(file);
+    inline for (&.{
+        "exclude_paths",
+        "include_paths",
+        "filter_paths",
+        "build_include_paths",
+        "build_exclude_paths",
+        "unknown_args",
+        "rules",
+    }) |field_name| {
+        if (@field(self, field_name)) |v| {
+            for (v) |s| allocator.free(s);
+            allocator.free(v);
         }
-        allocator.free(paths);
-    }
-
-    if (self.exclude_paths) |paths| {
-        for (paths) |path| {
-            allocator.free(path);
-        }
-        allocator.free(paths);
-    }
-
-    if (self.build_include_paths) |paths| {
-        for (paths) |file| {
-            allocator.free(file);
-        }
-        allocator.free(paths);
-    }
-
-    if (self.build_exclude_paths) |paths| {
-        for (paths) |path| {
-            allocator.free(path);
-        }
-        allocator.free(paths);
-    }
-
-    if (self.filter_paths) |paths| {
-        for (paths) |path| {
-            allocator.free(path);
-        }
-        allocator.free(paths);
-    }
-
-    if (self.unknown_args) |args| {
-        for (args) |arg| {
-            allocator.free(arg);
-        }
-        allocator.free(args);
-    }
-
-    if (self.rules) |rules| {
-        for (rules) |rule| allocator.free(rule);
-        allocator.free(rules);
     }
 }
 
