@@ -701,7 +701,13 @@ pub const LintTextStyle = enum {
     snake_case,
     /// e.g., camelCase
     camel_case,
+    /// e.g., MACRO_CASE (aka "upper snake case")
+    macro_case,
 
+    /// A basic check if the content is not (obviously) breaking the style convention
+    ///
+    /// This is imperfect as it doesn't actually check if word boundaries are
+    /// correct but good enough for most cases.
     pub inline fn check(self: LintTextStyle, content: []const u8) bool {
         std.debug.assert(content.len > 0);
 
@@ -710,6 +716,7 @@ pub const LintTextStyle = enum {
             .snake_case => !strings.containsUpper(content),
             .title_case => strings.isCapitalized(content) and !strings.containsUnderscore(content),
             .camel_case => !strings.isCapitalized(content) and !strings.containsUnderscore(content),
+            .macro_case => !strings.containsLower(content),
         };
     }
 
@@ -733,14 +740,20 @@ pub const LintTextStyle = enum {
         inline for (&.{ "camelCase", "a", "aB" }) |content| {
             try std.testing.expect(LintTextStyle.camel_case.check(content));
         }
+
+        // Macro case:
+        inline for (&.{ "MACRO_CASE", "A", "1", "1B" }) |content| {
+            try std.testing.expect(LintTextStyle.macro_case.check(content));
+        }
     }
 
     pub inline fn name(self: LintTextStyle) []const u8 {
         return switch (self) {
-            .off => @panic("Style is off so we should never get its name"),
+            .off => @panic("Style is off so we should never call this method when off"),
             .snake_case => "snake_case",
             .title_case => "TitleCase",
             .camel_case => "camelCase",
+            .macro_case => "MACRO_CASE",
         };
     }
 };
