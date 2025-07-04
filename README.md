@@ -333,6 +333,8 @@ builder.addRule(b, .{
 }, .{});
 ```
 
+Alternatively, take a look at https://github.com/KurtWagner/zlinter-custom-rule-example, which is a minimal custom rule example with accompanying zig project.
+
 ## For contributors
 
 ### Contributions
