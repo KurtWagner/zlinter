@@ -6,10 +6,22 @@ const max_file_size_bytes = bytes: {
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 const default_formatter = zlinter.formatters.DefaultFormatter{};
 
-const exit_codes = struct {
-    const success: u8 = 0;
-    const lint_error: u8 = 1;
-    const usage_error: u8 = 2;
+const ExitCode = enum(u8) {
+    /// No lint errors - everything ran smoothly
+    success = 0,
+
+    /// The tool itself blew up (i.e., a bug to be reported)
+    tool_error = 1,
+
+    /// A lint problem with severity error is found (i.e., fixable by user)
+    lint_error = 2,
+
+    /// An error in the usage of zlinter occured. e.g., an incorrect flag (i.e., fixable by user)
+    usage_error = 3,
+
+    pub inline fn int(self: ExitCode) u8 {
+        return @intFromEnum(self);
+    }
 };
 
 pub const std_options: std.Options = .{
@@ -36,7 +48,7 @@ pub fn main() !u8 {
         defer std.process.argsFree(gpa, raw_args);
 
         break :args zlinter.Args.allocParse(raw_args, &rules, gpa) catch |e| switch (e) {
-            error.InvalidArgs => return exit_codes.usage_error,
+            error.InvalidArgs => return ExitCode.usage_error.int(),
             error.OutOfMemory => return e,
         };
     };
@@ -51,7 +63,7 @@ pub fn main() !u8 {
     if (args.unknown_args) |unknown_args| {
         for (unknown_args) |arg|
             printer.println(.err, "Unknown argument: {s}", .{arg});
-        return exit_codes.usage_error; // TODO: Print help docs.
+        return ExitCode.usage_error.int(); // TODO: Print help docs.
     }
 
     // Key is file path and value are errors for the file.
@@ -391,7 +403,7 @@ pub fn main() !u8 {
                 total_disabled_by_comment,
             },
         );
-        return exit_codes.success;
+        return ExitCode.success.int();
     } else {
         var arena = std.heap.ArenaAllocator.init(gpa);
         defer arena.deinit();
@@ -406,11 +418,11 @@ pub fn main() !u8 {
             for (flattened.items) |result| {
                 for (result.problems) |problem| {
                     if (problem.severity == .@"error" and !problem.disabled_by_comment) {
-                        break :exit_code exit_codes.lint_error;
+                        break :exit_code ExitCode.lint_error.int();
                     }
                 }
             }
-            break :exit_code exit_codes.success;
+            break :exit_code ExitCode.success.int();
         };
 
         const formatter = switch (args.format) {
