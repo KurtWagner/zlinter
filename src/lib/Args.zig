@@ -642,10 +642,13 @@ test "allocParse with rule arg" {
     }) |raw_args| {
         const args = try allocParse(
             testing.cliArgs(raw_args),
-            &.{.{
-                .rule_id = "my_rule",
+            &.{ .{
+                .rule_id = "my_rule_a",
                 .run = undefined,
-            }},
+            }, .{
+                .rule_id = "my_rule_b",
+                .run = undefined,
+            } },
             std.testing.allocator,
         );
         defer args.deinit(std.testing.allocator);
