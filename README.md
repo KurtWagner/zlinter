@@ -177,11 +177,12 @@ const a = this.is.deprecated(); // zlinter-disable-current-line
 ### Command line args
 
 ```shell
-zig build lint -- [--include file ...] [--exclude <file> ...] [--rule <name> ...]
+zig build lint -- [--include <path> ...] [--exclude <path> ...] [--filter <path> ...] [--rule <name> ...]
 ```
 
-* `--include` accepts one or more paths and will supersede the includes and excludes defined in the `build.zig` forcing these paths to be resolved and linted.
-* `--exclude` accepts one or more paths to exclude from linting. This argument will be used in conjunction with the excludes defined in the `build.zig` unless used in conjunction with `--include`.
+* `--include` run the linter on these path ignoring the includes and excludes defined in the `build.zig` forcing these paths to be resolved and linted (if they exist).
+* `--exclude` exclude these paths from linting. This argument will be used in conjunction with the excludes defined in the `build.zig` unless used with `--include`.
+* `--filter` used to filter the run to a specific set of already resolved paths. Unlike `--include` this leaves the includes and excludes defined in the `build.zig` as is.
 
 For example
 
