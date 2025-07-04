@@ -6,7 +6,6 @@ pub const ansi = @import("ansi.zig");
 pub const zls = @import("zls");
 pub const Args = @import("Args.zig");
 pub const strings = @import("strings.zig");
-pub const analyzer = @import("analyzer.zig");
 pub const version = @import("version.zig");
 pub const shims = @import("shims.zig");
 pub const testing = @import("testing.zig");

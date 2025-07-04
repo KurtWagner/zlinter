@@ -1,3 +1,5 @@
+//! Utilities for strings
+
 pub inline fn isCapitalized(name: []const u8) bool {
     return name.len > 0 and std.ascii.isUpper(name[0]);
 }

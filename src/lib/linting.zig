@@ -127,7 +127,7 @@ pub const LintDocument = struct {
                 switch (tree.tokens.items(.tag)[container_decl.ast.main_token]) {
                     // Instance of namespace should be impossible but to be safe
                     // we will just return null to say we couldn't resolve the kind
-                    .keyword_struct => return if (analyzer.isContainerNamespace(tree, container_decl)) null else .struct_instance,
+                    .keyword_struct => return if (shims.isContainerNamespace(tree, container_decl)) null else .struct_instance,
                     .keyword_union => return .union_instance,
                     .keyword_opaque => return .opaque_instance,
                     .keyword_enum => return .enum_instance,
@@ -181,7 +181,7 @@ pub const LintDocument = struct {
 
             if (tree.fullContainerDecl(&container_decl_buffer, node)) |container_decl| {
                 switch (tree.tokens.items(.tag)[container_decl.ast.main_token]) {
-                    .keyword_struct => return if (analyzer.isContainerNamespace(tree, container_decl)) .namespace_type else .struct_type,
+                    .keyword_struct => return if (shims.isContainerNamespace(tree, container_decl)) .namespace_type else .struct_type,
                     .keyword_union => return .union_type,
                     .keyword_opaque => return .opaque_type,
                     .keyword_enum => return .enum_type,
@@ -1251,6 +1251,5 @@ const zls = @import("zls");
 const strings = @import("strings.zig");
 const version = @import("version.zig");
 const ansi = @import("ansi.zig");
-const analyzer = @import("analyzer.zig");
 const shims = @import("shims.zig");
 const testing = @import("testing.zig");
