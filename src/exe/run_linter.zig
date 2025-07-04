@@ -17,8 +17,8 @@ pub const std_options: std.Options = .{
 };
 
 pub fn main() !u8 {
-    var timer = Timer.start();
-    var total_timer = Timer.start();
+    var timer = Timer.createStarted();
+    var total_timer = Timer.createStarted();
 
     const gpa, const is_debug = gpa: {
         if (builtin.os.tag == .wasi) break :gpa .{ std.heap.wasm_allocator, false };
@@ -72,6 +72,10 @@ pub fn main() !u8 {
         file_lint_problems.deinit();
     }
 
+    // ------------------------------------------------------------------------
+    // Resolve files then apply excludes and filters
+    // ------------------------------------------------------------------------
+
     var dir = try std.fs.cwd().openDir("./", .{ .iterate = true });
     defer dir.close();
 
@@ -100,7 +104,7 @@ pub fn main() !u8 {
             file.excluded = !index.contains(file.pathname);
     }
 
-    if (timer.lapMs()) |ms| printer.println(.verbose, "Resolving {d} files took: {d}ms", .{ lint_files.len, ms });
+    if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "Resolving {d} files took: {d}ms", .{ lint_files.len, ms });
 
     var ctx: zlinter.LintContext = undefined;
     try ctx.init(.{
@@ -117,7 +121,7 @@ pub fn main() !u8 {
     defer {
         printer.printBanner(.verbose);
         printer.println(.verbose, "Linted {d} files", .{lint_files.len});
-        if (total_timer.lapMs()) |ms| printer.println(.verbose, "Took {d}ms", .{ms});
+        if (total_timer.lapMilliseconds()) |ms| printer.println(.verbose, "Took {d}ms", .{ms});
         printer.printBanner(.verbose);
     }
 
@@ -153,9 +157,9 @@ pub fn main() !u8 {
         }
         printer.println(.verbose, "[{d}/{d}] Linting: {s}", .{ i + 1, lint_files.len, lint_file.pathname });
 
-        var rule_timer = Timer.start();
+        var rule_timer = Timer.createStarted();
         defer {
-            if (rule_timer.lapNs()) |ns| {
+            if (rule_timer.lapNanoseconds()) |ns| {
                 printer.println(.verbose, "  - Total elapsed {d}ms", .{ns / std.time.ns_per_ms});
                 if (maybe_slowest_files) |*slowest_files| {
                     slowest_files.add(.{
@@ -175,7 +179,7 @@ pub fn main() !u8 {
             continue;
         };
         defer doc.deinit(ctx.gpa);
-        if (timer.lapMs()) |ms|
+        if (timer.lapMilliseconds()) |ms|
             printer.println(.verbose, "  - Load document: {d}ms", .{ms})
         else
             printer.println(.verbose, "  - Load document", .{});
@@ -215,14 +219,14 @@ pub fn main() !u8 {
                 },
             );
         }
-        if (timer.lapMs()) |ms| printer.println(.verbose, "  - Process syntax errors: {d}ms", .{ms});
+        if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "  - Process syntax errors: {d}ms", .{ms});
 
         const disable_comments = try zlinter.allocParseComments(ast.source, gpa);
         defer {
             for (disable_comments) |*dc| dc.deinit(gpa);
             gpa.free(disable_comments);
         }
-        if (timer.lapMs()) |ms| printer.println(.verbose, "  - Parsing doc comments: {d}ms", .{ms});
+        if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "  - Parsing doc comments: {d}ms", .{ms});
 
         var rule_filter_map = map: {
             var map = std.StringHashMapUnmanaged(void).empty;
@@ -266,7 +270,7 @@ pub fn main() !u8 {
                 try results.append(gpa, result);
             }
 
-            if (timer.lapNs()) |ns| {
+            if (timer.lapNanoseconds()) |ns| {
                 if (maybe_rule_elapsed_times) |*rule_elapsed_time| {
                     if (rule_elapsed_time.getPtr(rule.rule_id)) |elapsed_ns| {
                         elapsed_ns.* += ns;
@@ -288,7 +292,7 @@ pub fn main() !u8 {
     }
 
     // ------------------------------------------------------------------------
-    // Do something with results:
+    // Print out results:
     // ------------------------------------------------------------------------
 
     const output_writer = std.io.getStdOut().writer();
@@ -535,26 +539,24 @@ fn buildFilterIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Args)
     return index;
 }
 
-/// Simple more forgiving timer for lapping
+/// Simple more forgiving timer for optionally timing laps in verbose mode.
 const Timer = struct {
     backing: ?std.time.Timer = null,
 
-    pub fn start() Timer {
+    pub fn createStarted() Timer {
         return .{ .backing = std.time.Timer.start() catch null };
     }
 
-    /// Returns nanoseconds
-    pub fn lapNs(self: *Timer) ?u64 {
+    pub fn lapNanoseconds(self: *Timer) ?u64 {
         return (self.backing orelse return null).lap();
     }
 
-    /// Returns milliseconds
-    pub fn lapMs(self: *Timer) ?u64 {
-        return (self.lapNs() orelse return null) / std.time.ns_per_ms;
+    pub fn lapMilliseconds(self: *Timer) ?u64 {
+        return (self.lapNanoseconds() orelse return null) / std.time.ns_per_ms;
     }
 };
 
-/// Used to track the slowest rules and files in a priority queue
+/// Used to track the slowest rules and files in a priority queue in verbose mode.
 const SlowestItemQueue = struct {
     max: usize = 10,
     queue: std.PriorityQueue(
@@ -616,9 +618,11 @@ const SlowestItemQueue = struct {
         var i = items.len;
         while (i > 0) : (i -= 1) {
             const item = items[i - 1];
-            printer.println(.verbose, "  {d:02} -  [{d}ms] {s}", .{
+            printer.println(.verbose, "  {d:02} -  {s}[{d}ms]{s} {s}", .{
                 items.len - i + 1,
+                zlinter.ansi.get(&.{.bold}),
                 item.elapsed_ns / std.time.ns_per_ms,
+                zlinter.ansi.get(&.{.reset}),
                 item.name,
             });
         }
