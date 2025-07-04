@@ -104,8 +104,6 @@ pub fn allocParse(
     var rules = std.ArrayListUnmanaged([]const u8).empty;
     defer rules.deinit(allocator);
 
-    var stderr_writer = std.io.getStdErr().writer();
-
     const State = enum {
         parsing,
         fix_arg,
@@ -150,7 +148,7 @@ pub fn allocParse(
         .zig_exe_arg => {
             index += 1;
             if (index == args.len) {
-                stderr_writer.print("--zig_exe missing path\n", .{}) catch {};
+                output.process_printer.println(.err, "--zig_exe missing path", .{});
                 return error.InvalidArgs;
             }
             lint_args.zig_exe = try allocator.dupe(u8, args[index]);
@@ -159,7 +157,7 @@ pub fn allocParse(
         .zig_lib_directory_arg => {
             index += 1;
             if (index == args.len) {
-                stderr_writer.print("--zig_lib_directory missing path\n", .{}) catch {};
+                output.process_printer.println(.err, "--zig_lib_directory missing path", .{});
                 return error.InvalidArgs;
             }
             lint_args.zig_lib_directory = try allocator.dupe(u8, args[index]);
@@ -168,7 +166,7 @@ pub fn allocParse(
         .global_cache_root_arg => {
             index += 1;
             if (index == args.len) {
-                stderr_writer.print("--global_cache_root missing path\n", .{}) catch {};
+                output.process_printer.println(.err, "--global_cache_root missing path", .{});
                 return error.InvalidArgs;
             }
             lint_args.global_cache_root = try allocator.dupe(u8, args[index]);
@@ -177,7 +175,7 @@ pub fn allocParse(
         .rule_arg => {
             index += 1;
             if (index == args.len) {
-                stderr_writer.print("--rule missing rule name\n", .{}) catch {};
+                output.process_printer.println(.err, "--rule missing rule name", .{});
                 return error.InvalidArgs;
             }
 
@@ -188,7 +186,7 @@ pub fn allocParse(
                 break :exists false;
             };
             if (!rule_exists) {
-                stderr_writer.print("rule '{s}' not found\n", .{args[index]}) catch {};
+                output.process_printer.println(.err, "rule '{s}' not found", .{args[index]});
                 return error.InvalidArgs;
             }
 
@@ -198,7 +196,7 @@ pub fn allocParse(
         .exclude_arg => {
             index += 1;
             if (index == args.len) {
-                stderr_writer.print("--exclude arg missing expression\n", .{}) catch {};
+                output.process_printer.println(.err, "--exclude arg missing expression", .{});
                 return error.InvalidArgs;
             }
             try exclude_paths.append(allocator, try allocator.dupe(u8, args[index]));
@@ -207,7 +205,7 @@ pub fn allocParse(
         .format_arg => {
             index += 1;
             if (index == args.len) {
-                stderr_writer.print("--format missing path\n", .{}) catch {};
+                output.process_printer.println(.err, "--format missing path", .{});
                 return error.InvalidArgs;
             }
             inline for (std.meta.fields(@FieldType(Args, "format"))) |field| {
@@ -216,13 +214,13 @@ pub fn allocParse(
                     continue :state State.parsing;
                 }
             }
-            stderr_writer.print("--format only supports: {s}\n", .{comptime formats: {
+            output.process_printer.println(.err, "--format only supports: {s}", .{comptime formats: {
                 var formats: []u8 = "";
                 for (std.meta.fieldNames(@FieldType(Args, "format"))) |name| {
                     formats = @constCast(formats ++ name ++ " ");
                 }
                 break :formats formats;
-            }}) catch {};
+            }});
             return error.InvalidArgs;
         },
         .fix_arg => {
@@ -473,7 +471,9 @@ test "allocParse with rule arg" {
 }
 
 test "allocParse with invalid rule arg" {
-    // TODO: Capture stderr and test it instead of using log.err
+    var stderr_sink = try output.process_printer.attachFakeStderrSink(std.testing.allocator);
+    defer stderr_sink.deinit();
+
     try std.testing.expectError(error.InvalidArgs, allocParse(
         testing.cliArgs(&.{ "--rule", "not_found_rule" }),
         &.{.{
@@ -482,6 +482,8 @@ test "allocParse with invalid rule arg" {
         }},
         std.testing.allocator,
     ));
+
+    try std.testing.expectEqualStrings("rule 'not_found_rule' not found\n", stderr_sink.output());
 }
 
 test "allocParse without args" {
@@ -545,3 +547,4 @@ const testing = struct {
 const std = @import("std");
 const builtin = @import("builtin");
 const LintRule = @import("./linting.zig").LintRule;
+const output = @import("./output.zig");
