@@ -26,6 +26,20 @@ test "containsUnderscore" {
         try std.testing.expect(!containsUnderscore(str));
 }
 
+pub inline fn containsLower(name: []const u8) bool {
+    for (name) |char|
+        if (std.ascii.isLower(char)) return true;
+    return false;
+}
+
+test "containsLower" {
+    inline for (&.{ "a", "aA", "Aa", "1a" }) |str|
+        try std.testing.expect(containsLower(str));
+
+    inline for (&.{ "", "A", "ABC", "1", "1A", "A1" }) |str|
+        try std.testing.expect(!containsLower(str));
+}
+
 pub inline fn containsUpper(name: []const u8) bool {
     for (name) |char|
         if (std.ascii.isUpper(char)) return true;
@@ -33,7 +47,7 @@ pub inline fn containsUpper(name: []const u8) bool {
 }
 
 test "containsUpper" {
-    inline for (&.{ "A", "aA", "Aa" }) |str|
+    inline for (&.{ "A", "aA", "Aa", "1A" }) |str|
         try std.testing.expect(containsUpper(str));
 
     inline for (&.{ "", "a", "abc", "1" }) |str|
