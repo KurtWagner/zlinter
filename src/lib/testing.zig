@@ -1,4 +1,6 @@
-/// See `testing.runRule` for example
+//! Test only utilities
+
+/// See `runRule` for example (test only)
 pub fn loadFakeDocument(ctx: *LintContext, dir: std.fs.Dir, file_name: []const u8, contents: [:0]const u8, arena: std.mem.Allocator) !?LintDocument {
     assertTestOnly();
 
@@ -17,7 +19,7 @@ pub fn loadFakeDocument(ctx: *LintContext, dir: std.fs.Dir, file_name: []const u
 }
 
 pub const paths = struct {
-    /// Comptime join parts using the systems path separator (for tests only)
+    /// Comptime join parts using the systems path separator (tests only)
     pub fn join(comptime parts: []const []const u8) []const u8 {
         assertTestOnly();
 
@@ -32,7 +34,7 @@ pub const paths = struct {
         return result;
     }
 
-    /// Comptime posix path to system path separater convertor (for tests only)
+    /// Comptime posix path to system path separater convertor (tests only)
     pub fn posix(comptime posix_path: []const u8) []const u8 {
         assertTestOnly();
 
@@ -56,8 +58,14 @@ pub fn expectContainsExactlyStrings(expected: []const []const u8, actual: []cons
     const copy_actual = try std.testing.allocator.dupe([]const u8, actual);
     defer std.testing.allocator.free(copy_actual);
 
-    std.mem.sort([]const u8, copy_expected, {}, stringLessThan);
-    std.mem.sort([]const u8, copy_actual, {}, stringLessThan);
+    const comparators = struct {
+        pub fn stringLessThan(_: void, lhs: []const u8, rhs: []const u8) bool {
+            return std.mem.order(u8, lhs, rhs) == .lt;
+        }
+    };
+
+    std.mem.sort([]const u8, copy_expected, {}, comparators.stringLessThan);
+    std.mem.sort([]const u8, copy_actual, {}, comparators.stringLessThan);
 
     for (0..copy_expected.len) |i| {
         std.testing.expectEqualStrings(copy_expected[i], copy_actual[i]) catch |e| {
@@ -67,11 +75,7 @@ pub fn expectContainsExactlyStrings(expected: []const []const u8, actual: []cons
     }
 }
 
-fn stringLessThan(_: void, lhs: []const u8, rhs: []const u8) bool {
-    return std.mem.order(u8, lhs, rhs) == .lt;
-}
-
-/// Builds and runs a rule with fake file name and content.
+/// Builds and runs a rule with fake file name and content (test only)
 pub fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8) !?LintResult {
     assertTestOnly();
 
@@ -113,7 +117,7 @@ pub fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8) !?
 }
 
 /// Expectation for problems with "pretty" printing on error that can be
-/// copied back into assertions.
+/// copied back into assertions (test only)
 pub fn expectProblemsEqual(expected: []const LintProblem, actual: []LintProblem) !void {
     assertTestOnly();
 
@@ -136,6 +140,7 @@ pub fn expectProblemsEqual(expected: []const LintProblem, actual: []LintProblem)
     };
 }
 
+/// Create empty files (test only)
 pub fn createFiles(dir: std.fs.Dir, file_paths: [][]const u8) !void {
     assertTestOnly();
 

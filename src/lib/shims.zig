@@ -1,3 +1,14 @@
+//! Utilities for interacting with Zig AST
+//!
+//! Types and functions may not all be shims in the traditional definition
+//! sense. I've used the name to give the caller some sense that its "safe" to
+//! call between zig versions.
+//!
+//! Perhaps one day this becomes more of a bag of AST utils instead "shims".
+
+/// A quick shim for node index as it was a u32 but is now a packed u32 enum.
+/// If it's an `OptionalIndex` in 0.15 then use `initOptional`, otherwise use
+/// `init`.
 pub const NodeIndexShim = struct {
     index: u32,
 
@@ -40,6 +51,7 @@ pub const NodeIndexShim = struct {
     }
 };
 
+/// Returns true if identifier node and itentifier node has the given kind.
 pub fn isIdentiferKind(
     tree: std.zig.Ast,
     node: std.zig.Ast.Node.Index,
@@ -53,16 +65,19 @@ pub fn isIdentiferKind(
     };
 }
 
-/// Unwraps pointers and optional nodes to the underlying node
+/// Unwraps pointers and optional nodes to the underlying node, this is useful
+/// when linting based on the underlying type of a field or argument.
+///
+/// For example if you want `?StructType` to be treated the same as `StructType`.
 pub fn unwrapNode(
     tree: std.zig.Ast,
     node: std.zig.Ast.Node.Index,
     options: struct {
-        // ?T => T
+        /// i.e., ?T => T
         unwrap_optional: bool = true,
-        // *T => T
+        /// i.e., *T => T
         unwrap_pointer: bool = true,
-        // T.? => T
+        /// i.e., T.? => T
         unwrap_optional_unwrap: bool = true,
     },
 ) std.zig.Ast.Node.Index {
@@ -96,28 +111,31 @@ pub fn unwrapNode(
 }
 
 pub fn nodeTag(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) std.zig.Ast.Node.Tag {
-    if (std.meta.hasMethod(@TypeOf(tree), "nodeTag")) {
-        return tree.nodeTag(node);
-    }
-    return tree.nodes.items(.tag)[node]; // 0.14.x
+    return if (std.meta.hasMethod(@TypeOf(tree), "nodeTag"))
+        tree.nodeTag(node)
+    else
+        tree.nodes.items(.tag)[node]; // 0.14.x
 }
 
 pub fn nodeMainToken(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) std.zig.Ast.TokenIndex {
-    if (std.meta.hasMethod(@TypeOf(tree), "nodeMainToken")) {
-        return tree.nodeMainToken(node);
-    }
-    return tree.nodes.items(.main_token)[node]; // 0.14.x
+    return if (std.meta.hasMethod(@TypeOf(tree), "nodeMainToken"))
+        tree.nodeMainToken(node)
+    else
+        tree.nodes.items(.main_token)[node]; // 0.14.x
 }
 
 pub fn nodeData(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) std.zig.Ast.Node.Data {
-    if (std.meta.hasMethod(@TypeOf(tree), "nodeData")) {
-        return tree.nodeData(node);
-    }
-    return tree.nodes.items(.data)[node]; // 0.14.x
+    return if (std.meta.hasMethod(@TypeOf(tree), "nodeData"))
+        tree.nodeData(node)
+    else
+        tree.nodes.items(.data)[node]; // 0.14.x
 }
 
 // TODO: Write unit tests for this
-/// Returns true if two non-root nodes are overlapping
+/// Returns true if two non-root nodes are overlapping.
+///
+/// This can be useful if you have a node and want to work out where it's
+/// contained (e.g., within a struct).
 pub fn isNodeOverlapping(
     tree: std.zig.Ast,
     a: std.zig.Ast.Node.Index,
@@ -134,6 +152,20 @@ pub fn isNodeOverlapping(
 
     return (span_a.start >= span_b.start and span_a.start <= span_b.end) or
         (span_b.start >= span_a.start and span_b.start <= span_a.end);
+}
+
+/// Returns true if the tree is of a file that's an implicit struct with fields
+/// and not namespace
+pub fn isRootImplicitStruct(tree: std.zig.Ast) bool {
+    return !isContainerNamespace(tree, tree.containerDeclRoot());
+}
+
+/// Returns true if the container is a namespace (i.e., no fields just declarations)
+pub fn isContainerNamespace(tree: std.zig.Ast, container_decl: std.zig.Ast.full.ContainerDecl) bool {
+    for (container_decl.ast.members) |member| {
+        if (nodeTag(tree, member).isContainerField()) return false;
+    }
+    return true;
 }
 
 const std = @import("std");
