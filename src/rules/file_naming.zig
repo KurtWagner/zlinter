@@ -38,7 +38,7 @@ fn run(
 
     const error_message: ?[]const u8, const severity: ?zlinter.LintProblemSeverity = msg: {
         const basename = std.fs.path.basename(doc.path);
-        if (zlinter.analyzer.isRootImplicitStruct(doc.handle.tree)) {
+        if (zlinter.shims.isRootImplicitStruct(doc.handle.tree)) {
             if (!config.file_struct.style.check(basename)) {
                 break :msg .{
                     try std.fmt.allocPrint(allocator, "File is struct so name should be {s}", .{config.file_struct.style.name()}),

@@ -1,3 +1,5 @@
+//! Utilities for interacting with filesystem
+
 /// Returns a list of zig source files that should be linted.
 ///
 /// If an explicit list of file paths was provided in the args, this will be
