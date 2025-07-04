@@ -15,6 +15,9 @@ pub const formatters = struct {
     pub const DefaultFormatter = @import("./formatters/DefaultFormatter.zig");
 };
 
+const OutputWriter = @import("OutputWriter.zig");
+pub var output: OutputWriter = .init();
+
 test {
     @import("std").testing.refAllDecls(@This());
 }
