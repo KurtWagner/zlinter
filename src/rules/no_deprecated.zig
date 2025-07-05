@@ -180,55 +180,32 @@ fn getSymbolEnumLiteral(
 ) error{OutOfMemory}!?zlinter.zls.Analyser.DeclWithHandle {
     std.debug.assert(zlinter.shims.nodeTag(doc.handle.tree, node) == .enum_literal);
 
-    const tree = doc.handle.tree;
-
-    var ancestors = std.PriorityQueue(
-        zlinter.shims.NodeIndexShim,
-        void,
-        zlinter.shims.NodeIndexShim.compare,
-    ).init(gpa, {});
+    var ancestors = std.ArrayList(std.zig.Ast.Node.Index).init(gpa);
     defer ancestors.deinit();
 
-    const node_shim = zlinter.shims.NodeIndexShim.init(node);
-    try ancestors.add(node_shim);
-
-    // Look back...
-    var current = zlinter.shims.NodeIndexShim.init(node_shim.index - 1);
-    while (current.index > 0) : (current.index -= 1) {
-        if (zlinter.shims.isNodeOverlapping(tree, current.toNodeIndex(), node)) {
-            try ancestors.add(current);
+    var current = node;
+    try ancestors.append(current);
+    while (doc.child_to_parent.get(current)) |parent| {
+        if (zlinter.shims.NodeIndexShim.init(parent).index == 0) break;
+        if (zlinter.shims.isNodeOverlapping(doc.handle.tree, current, parent)) {
+            try ancestors.append(parent);
+            current = parent;
         } else {
             break;
         }
-    }
-    // Look forward
-    current.index = node_shim.index + 1;
-    while (current.index < tree.nodes.len) : (current.index += 1) {
-        if (zlinter.shims.isNodeOverlapping(tree, current.toNodeIndex(), node)) {
-            try ancestors.add(current);
-        } else {
-            break;
-        }
-    }
-
-    // Bit of a pain as we need to flatten the shims
-    var flattened = std.ArrayList(std.zig.Ast.Node.Index).init(gpa);
-    defer flattened.deinit();
-    while (ancestors.removeOrNull()) |ancestor| {
-        try flattened.append(ancestor.toNodeIndex());
     }
 
     return switch (zlinter.version.zig) {
         .@"0.14" => doc.analyser.lookupSymbolFieldInit(
             doc.handle,
             name,
-            flattened.items[0..],
+            ancestors.items[0..],
         ),
         .@"0.15" => doc.analyser.lookupSymbolFieldInit(
             doc.handle,
             name,
-            flattened.items[0],
-            flattened.items[1..],
+            ancestors.items[0],
+            ancestors.items[1..],
         ),
     };
 }

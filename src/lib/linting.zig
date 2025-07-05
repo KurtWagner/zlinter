@@ -5,9 +5,11 @@ pub const LintDocument = struct {
     path: []const u8,
     handle: *zls.DocumentStore.Handle,
     analyser: *zls.Analyser,
+    child_to_parent: std.AutoHashMap(std.zig.Ast.Node.Index, std.zig.Ast.Node.Index),
 
     pub fn deinit(self: *LintDocument, gpa: std.mem.Allocator) void {
         self.analyser.deinit();
+        self.child_to_parent.deinit();
         gpa.destroy(self.analyser);
         gpa.free(self.path);
     }
@@ -379,10 +381,11 @@ pub const LintContext = struct {
         );
 
         const handle = self.document_store.getOrLoadHandle(uri) orelse return null;
-        const doc: LintDocument = .{
+        var doc: LintDocument = .{
             .path = try gpa.dupe(u8, path),
             .handle = handle,
             .analyser = try gpa.create(zls.Analyser),
+            .child_to_parent = .init(gpa),
         };
 
         doc.analyser.* = switch (version.zig) {
@@ -400,6 +403,28 @@ pub const LintContext = struct {
                 handle,
             ),
         };
+
+        const Context = struct {
+            parent: std.zig.Ast.Node.Index,
+            accumulator: *std.AutoHashMap(std.zig.Ast.Node.Index, std.zig.Ast.Node.Index),
+
+            pub fn append(context: @This(), tree: std.zig.Ast, node: std.zig.Ast.Node.Index) error{OutOfMemory}!void {
+                if (node == .root) return;
+
+                try context.accumulator.putNoClobber(node, context.parent);
+
+                try zls.ast.iterateChildren(tree, node, @This(){
+                    .parent = node,
+                    .accumulator = context.accumulator,
+                }, error{OutOfMemory}, append);
+            }
+        };
+
+        try zls.ast.iterateChildren(doc.handle.tree, .root, Context{
+            .accumulator = &doc.child_to_parent,
+            .parent = .root,
+        }, error{OutOfMemory}, Context.append);
+
         return doc;
     }
 };
