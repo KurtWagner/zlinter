@@ -140,7 +140,7 @@ pub fn main() !u8 {
     var maybe_slowest_files = if (args.verbose) SlowestItemQueue.init(gpa) else null;
     defer if (maybe_slowest_files) |*slowest_files| {
         defer slowest_files.deinit();
-        slowest_files.print("Files", printer, gpa);
+        slowest_files.unloadAndPrint("Files", printer);
     };
 
     var maybe_rule_elapsed_times = if (args.verbose)
@@ -159,7 +159,7 @@ pub fn main() !u8 {
                 .elapsed_ns = e.value_ptr.*,
             });
         }
-        item_timers.print("Rules", printer, gpa);
+        item_timers.unloadAndPrint("Rules", printer);
     };
 
     for (lint_files, 0..) |lint_file, i| {
@@ -571,7 +571,7 @@ const Timer = struct {
 /// Used to track the slowest rules and files in a priority queue in verbose mode.
 const SlowestItemQueue = struct {
     max: usize = 10,
-    queue: std.PriorityQueue(
+    queue: std.PriorityDequeue(
         Item,
         void,
         Item.compare,
@@ -583,10 +583,6 @@ const SlowestItemQueue = struct {
 
         pub fn compare(_: void, a: Item, b: Item) std.math.Order {
             return std.math.order(a.elapsed_ns, b.elapsed_ns);
-        }
-
-        pub fn lessThanFn(_: void, a: Item, b: Item) bool {
-            return a.elapsed_ns < b.elapsed_ns;
         }
     };
 
@@ -602,12 +598,12 @@ const SlowestItemQueue = struct {
     fn add(self: *SlowestItemQueue, item: Item) void {
         if (self.queue.add(item)) {
             if (self.queue.count() > self.max) {
-                _ = self.queue.remove();
+                _ = self.queue.removeMin();
             }
         } else |_| {}
     }
 
-    fn print(self: SlowestItemQueue, name: []const u8, printer: *zlinter.output.Printer, gpa: std.mem.Allocator) void {
+    fn unloadAndPrint(self: *SlowestItemQueue, name: []const u8, printer: *zlinter.output.Printer) void {
         if (self.queue.count() == 0) return;
 
         printer.printBanner(.verbose);
@@ -617,26 +613,16 @@ const SlowestItemQueue = struct {
         });
         printer.printBanner(.verbose);
 
-        const items = gpa.dupe(Item, self.queue.items) catch return;
-        defer gpa.free(items);
-
-        std.mem.sort(
-            Item,
-            items,
-            {},
-            Item.lessThanFn,
-        );
-
-        var i = items.len;
-        while (i > 0) : (i -= 1) {
-            const item = items[i - 1];
+        var i: usize = 0;
+        while (self.queue.removeMaxOrNull()) |item| {
             printer.println(.verbose, "  {d:02} -  {s}[{d}ms]{s} {s}", .{
-                items.len - i + 1,
+                i,
                 zlinter.ansi.get(&.{.bold}),
                 item.elapsed_ns / std.time.ns_per_ms,
                 zlinter.ansi.get(&.{.reset}),
                 item.name,
             });
+            i += 1;
         }
     }
 };
