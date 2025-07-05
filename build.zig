@@ -306,33 +306,31 @@ fn buildStep(
         .root_module = exe_module,
     });
 
-    const run_cmd = b.addRunArtifact(exe);
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
+    const zlinter_run = ZlinterRun.create(b, exe);
+
+    if (b.args) |args|
+        zlinter_run.addArgs(args);
 
     if (options.include_paths) |include_paths| {
         var it = include_paths.iterator();
-        while (it.next()) |path| {
-            run_cmd.addArgs(&.{ "--build-include", path.* });
-        }
+        while (it.next()) |path|
+            zlinter_run.addArgs(&.{ "--build-include", path.* });
     }
 
     if (options.exclude_paths) |exclude_paths| {
         var it = exclude_paths.iterator();
-        while (it.next()) |path| {
-            run_cmd.addArgs(&.{ "--build-exclude", path.* });
-        }
+        while (it.next()) |path|
+            zlinter_run.addArgs(&.{ "--build-exclude", path.* });
     }
 
-    run_cmd.addArgs(&.{ "--zig_exe", b.graph.zig_exe });
+    zlinter_run.addArgs(&.{ "--zig_exe", b.graph.zig_exe });
     if (b.graph.global_cache_root.path) |p|
-        run_cmd.addArgs(&.{ "--global_cache_root", p });
+        zlinter_run.addArgs(&.{ "--global_cache_root", p });
 
     if (b.graph.zig_lib_directory.path) |p|
-        run_cmd.addArgs(&.{ "--zig_lib_directory", p });
+        zlinter_run.addArgs(&.{ "--zig_lib_directory", p });
 
-    return &run_cmd.step;
+    return &zlinter_run.step;
 }
 
 fn checkNoNameCollision(comptime name: []const u8) []const u8 {
@@ -459,6 +457,160 @@ fn createRulesModule(
         .imports = rules_imports,
     });
 }
+
+const ZlinterRun = struct {
+    step: std.Build.Step,
+    argv: std.ArrayListUnmanaged(Arg),
+
+    const Arg = union(enum) {
+        artifact: *std.Build.Step.Compile,
+        bytes: []const u8,
+    };
+
+    pub fn create(owner: *std.Build, exe: *std.Build.Step.Compile) *ZlinterRun {
+        const arena = owner.allocator;
+
+        const self = arena.create(ZlinterRun) catch @panic("OOM");
+        self.* = .{
+            .step = std.Build.Step.init(.{
+                .id = .custom,
+                .name = "Run zlinter",
+                .owner = owner,
+                .makeFn = make,
+            }),
+            .argv = .empty,
+        };
+
+        self.argv.append(arena, .{ .artifact = exe }) catch @panic("OOM");
+
+        const bin_file = exe.getEmittedBin();
+        bin_file.addStepDependencies(&self.step);
+
+        return self;
+    }
+
+    pub fn addArgs(run: *ZlinterRun, args: []const []const u8) void {
+        const b = run.step.owner;
+        for (args) |arg|
+            run.argv.append(b.allocator, .{ .bytes = b.dupe(arg) }) catch @panic("OOM");
+    }
+
+    fn make(step: *std.Build.Step, options: std.Build.Step.MakeOptions) !void {
+        const run: *ZlinterRun = @alignCast(@fieldParentPtr("step", step));
+        const b = run.step.owner;
+        const arena = b.allocator;
+
+        const env_map = arena.create(std.process.EnvMap) catch @panic("OOM");
+        env_map.* = std.process.getEnvMap(arena) catch @panic("unhandled error");
+
+        var argv_list = std.ArrayList([]const u8).init(arena);
+        for (run.argv.items) |arg| {
+            switch (arg) {
+                .bytes => |bytes| {
+                    try argv_list.append(bytes);
+                },
+                .artifact => |artifact| {
+                    if (artifact.rootModuleTarget().os.tag == .windows) {
+                        // Windows doesn't have rpaths so add .dll search paths to PATH environment variable
+                        const compiles = artifact.getCompileDependencies(true);
+                        for (compiles) |compile| {
+                            if (compile.root_module.resolved_target.?.result.os.tag == .windows) continue;
+                            if (compile.isDynamicLibrary()) continue;
+
+                            const search_path = std.fs.path.dirname(compile.getEmittedBin().getPath2(b, &run.step)).?;
+                            const key = "PATH";
+                            if (env_map.get(key)) |prev_path| {
+                                env_map.put(key, b.fmt("{s}{c}{s}", .{
+                                    prev_path,
+                                    std.fs.path.delimiter,
+                                    search_path,
+                                })) catch @panic("OOM");
+                            } else {
+                                env_map.put(key, b.dupePath(search_path)) catch @panic("OOM");
+                            }
+                        }
+                    }
+                    const file_path = artifact.installed_path orelse artifact.generated_bin.?.path.?;
+                    try argv_list.append(b.dupe(file_path));
+                },
+            }
+        }
+
+        if (!std.process.can_spawn) {
+            return run.step.fail("Host cannot spawn zlinter:\n\t{s}", .{
+                std.Build.Step.allocPrintCmd(
+                    arena,
+                    b.build_root.path,
+                    argv_list.items,
+                ) catch @panic("OOM"),
+            });
+        }
+
+        if (b.verbose) {
+            std.debug.print("zlinter command:\n\t{s}\n", .{
+                std.Build.Step.allocPrintCmd(
+                    arena,
+                    b.build_root.path,
+                    argv_list.items,
+                ) catch @panic("OOM"),
+            });
+        }
+
+        var child = std.process.Child.init(argv_list.items, arena);
+        child.cwd = b.build_root.path;
+        child.cwd_dir = b.build_root.handle;
+        child.env_map = env_map;
+        child.progress_node = options.progress_node;
+        child.request_resource_usage_statistics = true;
+        child.stdout_behavior = .Inherit;
+        child.stderr_behavior = .Inherit;
+        child.stdin_behavior = .Ignore;
+
+        var timer = try std.time.Timer.start();
+
+        child.spawn() catch |err| {
+            return run.step.fail("Unable to spawn zlinter: {s}", .{@errorName(err)});
+        };
+        errdefer _ = child.kill() catch {};
+
+        const term = try child.wait();
+
+        step.result_duration_ns = timer.read();
+        step.result_peak_rss = child.resource_usage_statistics.getMaxRss() orelse 0;
+        step.test_results = .{};
+
+        switch (term) {
+            .Exited => |code| {
+                // These codes are defined in run_linter.zig
+                const success = 0;
+                const lint_error = 2;
+                const usage_error = 3;
+                if (code == lint_error) {
+                    return step.fail("zlinter detected issues", .{});
+                } else if (code == usage_error) {
+                    return step.fail("zlinter usage error", .{});
+                } else if (code != success) {
+                    return step.fail("zlinter command crashed:\n\t{s}", .{
+                        std.Build.Step.allocPrintCmd(
+                            arena,
+                            b.build_root.path,
+                            argv_list.items,
+                        ) catch @panic("OOM"),
+                    });
+                }
+            },
+            .Signal, .Stopped, .Unknown => {
+                return step.fail("zlinter was terminated unexpectedly:\n\t{s}", .{
+                    std.Build.Step.allocPrintCmd(
+                        arena,
+                        b.build_root.path,
+                        argv_list.items,
+                    ) catch @panic("OOM"),
+                });
+            },
+        }
+    }
+};
 
 const std = @import("std");
 const version = @import("./src/lib/version.zig");
