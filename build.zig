@@ -495,7 +495,7 @@ const ZlinterRun = struct {
             run.argv.append(b.allocator, .{ .bytes = b.dupe(arg) }) catch @panic("OOM");
     }
 
-    fn make(step: *std.Build.Step, options: std.Build.Step.MakeOptions) !void {
+    fn make(step: *std.Build.Step, _: std.Build.Step.MakeOptions) !void {
         const run: *ZlinterRun = @alignCast(@fieldParentPtr("step", step));
         const b = run.step.owner;
         const arena = b.allocator;
@@ -560,13 +560,18 @@ const ZlinterRun = struct {
         child.cwd = b.build_root.path;
         child.cwd_dir = b.build_root.handle;
         child.env_map = env_map;
-        child.progress_node = options.progress_node;
+        // As we're using stdout and stderr inherit we don't want to update
+        // parent of childs progress (i.e commented out as deliberately not set)
+        // child.progress_node = options.progress_node;
         child.request_resource_usage_statistics = true;
         child.stdout_behavior = .Inherit;
         child.stderr_behavior = .Inherit;
         child.stdin_behavior = .Ignore;
 
         var timer = try std.time.Timer.start();
+
+        std.debug.lockStdErr();
+        defer std.debug.unlockStdErr();
 
         child.spawn() catch |err| {
             return run.step.fail("Unable to spawn zlinter: {s}", .{@errorName(err)});
