@@ -461,7 +461,6 @@ fn createRulesModule(
 const ZlinterRun = struct {
     step: std.Build.Step,
     argv: std.ArrayListUnmanaged(Arg),
-    env_map: *std.process.EnvMap,
 
     const Arg = union(enum) {
         artifact: *std.Build.Step.Compile,
@@ -470,9 +469,6 @@ const ZlinterRun = struct {
 
     pub fn create(owner: *std.Build, exe: *std.Build.Step.Compile) *ZlinterRun {
         const arena = owner.allocator;
-
-        const env_map = arena.create(std.process.EnvMap) catch @panic("OOM");
-        env_map.* = std.process.getEnvMap(arena) catch @panic("unhandled error");
 
         const self = arena.create(ZlinterRun) catch @panic("OOM");
         self.* = .{
@@ -483,11 +479,9 @@ const ZlinterRun = struct {
                 .makeFn = make,
             }),
             .argv = .empty,
-            .env_map = env_map,
         };
 
-        self.argv.append(arena, .{ .artifact = exe }) catch
-            @panic("OOM");
+        self.argv.append(arena, .{ .artifact = exe }) catch @panic("OOM");
 
         const bin_file = exe.getEmittedBin();
         bin_file.addStepDependencies(&self.step);
@@ -495,13 +489,10 @@ const ZlinterRun = struct {
         return self;
     }
 
-    pub fn addArg(run: *ZlinterRun, arg: []const u8) void {
-        const b = run.step.owner;
-        run.argv.append(b.allocator, .{ .bytes = b.dupe(arg) }) catch @panic("OOM");
-    }
-
     pub fn addArgs(run: *ZlinterRun, args: []const []const u8) void {
-        for (args) |arg| run.addArg(arg);
+        const b = run.step.owner;
+        for (args) |arg|
+            run.argv.append(b.allocator, .{ .bytes = b.dupe(arg) }) catch @panic("OOM");
     }
 
     fn make(step: *std.Build.Step, options: std.Build.Step.MakeOptions) !void {
@@ -509,20 +500,18 @@ const ZlinterRun = struct {
         const b = run.step.owner;
         const arena = b.allocator;
 
+        const env_map = arena.create(std.process.EnvMap) catch @panic("OOM");
+        env_map.* = std.process.getEnvMap(arena) catch @panic("unhandled error");
+
         var argv_list = std.ArrayList([]const u8).init(arena);
-
-        var man = b.graph.cache.obtain();
-        defer man.deinit();
-
         for (run.argv.items) |arg| {
             switch (arg) {
                 .bytes => |bytes| {
                     try argv_list.append(bytes);
-                    man.hash.addBytes(bytes);
                 },
                 .artifact => |artifact| {
                     if (artifact.rootModuleTarget().os.tag == .windows) {
-                        // On Windows we don't have rpaths so we have to add .dll search paths to PATH
+                        // Windows doesn't have rpaths so add .dll search paths to PATH environment variable
                         const compiles = artifact.getCompileDependencies(true);
                         for (compiles) |compile| {
                             if (compile.root_module.resolved_target.?.result.os.tag == .windows) continue;
@@ -530,29 +519,25 @@ const ZlinterRun = struct {
 
                             const search_path = std.fs.path.dirname(compile.getEmittedBin().getPath2(b, &run.step)).?;
                             const key = "PATH";
-                            if (run.env_map.get(key)) |prev_path| {
-                                run.env_map.put(key, b.fmt("{s}{c}{s}", .{
+                            if (env_map.get(key)) |prev_path| {
+                                env_map.put(key, b.fmt("{s}{c}{s}", .{
                                     prev_path,
                                     std.fs.path.delimiter,
                                     search_path,
                                 })) catch @panic("OOM");
                             } else {
-                                run.env_map.put(key, b.dupePath(search_path)) catch @panic("OOM");
+                                env_map.put(key, b.dupePath(search_path)) catch @panic("OOM");
                             }
                         }
                     }
                     const file_path = artifact.installed_path orelse artifact.generated_bin.?.path.?;
                     try argv_list.append(b.dupe(file_path));
-                    _ = try man.addFile(file_path, null);
                 },
             }
         }
 
-        // Run command:
-        // --------------
-
         if (!std.process.can_spawn) {
-            return run.step.fail("Host cannot spawn Zlinter:\n\t{s}", .{
+            return run.step.fail("Host cannot spawn zlinter:\n\t{s}", .{
                 std.Build.Step.allocPrintCmd(
                     arena,
                     b.build_root.path,
@@ -560,8 +545,9 @@ const ZlinterRun = struct {
                 ) catch @panic("OOM"),
             });
         }
+
         if (b.verbose) {
-            std.debug.print("Run command:\n\t{s}\n", .{
+            std.debug.print("zlinter command:\n\t{s}\n", .{
                 std.Build.Step.allocPrintCmd(
                     arena,
                     b.build_root.path,
@@ -573,7 +559,7 @@ const ZlinterRun = struct {
         var child = std.process.Child.init(argv_list.items, arena);
         child.cwd = b.build_root.path;
         child.cwd_dir = b.build_root.handle;
-        child.env_map = run.env_map;
+        child.env_map = env_map;
         child.progress_node = options.progress_node;
         child.request_resource_usage_statistics = true;
         child.stdout_behavior = .Inherit;
@@ -599,8 +585,12 @@ const ZlinterRun = struct {
                 const success = 0;
                 const lint_error = 2;
                 const usage_error = 3;
-                if (code != success and code != lint_error and code != usage_error) {
-                    return step.fail("Zlinter command failed:\n\t{s}", .{
+                if (code == lint_error) {
+                    return step.fail("zlinter detected issues", .{});
+                } else if (code == usage_error) {
+                    return step.fail("zlinter usage error", .{});
+                } else if (code != success) {
+                    return step.fail("zlinter command crashed:\n\t{s}", .{
                         std.Build.Step.allocPrintCmd(
                             arena,
                             b.build_root.path,
@@ -610,7 +600,7 @@ const ZlinterRun = struct {
                 }
             },
             .Signal, .Stopped, .Unknown => {
-                return step.fail("Zlinter was terminated unexpectedly:\n\t{s}", .{
+                return step.fail("zlinter was terminated unexpectedly:\n\t{s}", .{
                     std.Build.Step.allocPrintCmd(
                         arena,
                         b.build_root.path,
