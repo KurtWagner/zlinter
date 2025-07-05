@@ -563,11 +563,22 @@ const ZlinterRun = struct {
         // --------------
 
         if (!std.process.can_spawn) {
-            // TODO: Print out command being run
-            return run.step.fail("Host cannot spawn Zlinter\n");
+            return run.step.fail("Host cannot spawn Zlinter:\n\t{s}", .{
+                std.Build.Step.allocPrintCmd(
+                    arena,
+                    b.build_root.path,
+                    argv_list.items,
+                ) catch @panic("OOM"),
+            });
         }
         if (b.verbose) {
-            // TODO: Print out command being run
+            std.debug.print("Run command:\n\t{s}\n", .{
+                std.Build.Step.allocPrintCmd(
+                    arena,
+                    b.build_root.path,
+                    argv_list.items,
+                ) catch @panic("OOM"),
+            });
         }
 
         var child = std.process.Child.init(argv_list.items, arena);
@@ -596,13 +607,28 @@ const ZlinterRun = struct {
 
         switch (term) {
             .Exited => |code| {
-                if (code != 0 and code != 2 and code != 3) {
-                    // TODO: Add more information with link to report bug?
-                    return step.fail("zlinter command failed", .{});
+                // These codes are defined in run_linter.zig
+                const success = 0;
+                const lint_error = 2;
+                const usage_error = 3;
+                if (code != success and code != lint_error and code != usage_error) {
+                    return step.fail("Zlinter command failed:\n\t{s}", .{
+                        std.Build.Step.allocPrintCmd(
+                            arena,
+                            b.build_root.path,
+                            argv_list.items,
+                        ) catch @panic("OOM"),
+                    });
                 }
             },
             .Signal, .Stopped, .Unknown => {
-                return step.fail("Zlinter was terminated unexpectedly", .{});
+                return step.fail("Zlinter was terminated unexpectedly:\n\t{s}", .{
+                    std.Build.Step.allocPrintCmd(
+                        arena,
+                        b.build_root.path,
+                        argv_list.items,
+                    ) catch @panic("OOM"),
+                });
             },
         }
     }
