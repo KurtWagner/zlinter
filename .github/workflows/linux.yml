@@ -6,13 +6,16 @@ jobs:
     runs-on: ubuntu-latest
     name: Test Linux
     timeout-minutes: 3
+    strategy:
+      matrix:
+        zig_version: ["0.14.0", "0.14.1"]
     steps:
       - name: "Checkout repo"
         uses: actions/checkout@v4
       - name: "Setup zig environment"
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.14.1
+          version: ${{ matrix.zig_version }}
       - name: "Run unit tests"
         run: zig build unit-test
       - name: "Run integration tests"
