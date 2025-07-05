@@ -307,39 +307,28 @@ fn buildStep(
     });
 
     const zlinter_run = ZlinterRun.create(b, exe);
-    const run_cmd = b.addRunArtifact(exe);
 
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
+    if (b.args) |args|
         zlinter_run.addArgs(args);
-    }
 
     if (options.include_paths) |include_paths| {
         var it = include_paths.iterator();
-        while (it.next()) |path| {
-            run_cmd.addArgs(&.{ "--build-include", path.* });
+        while (it.next()) |path|
             zlinter_run.addArgs(&.{ "--build-include", path.* });
-        }
     }
 
     if (options.exclude_paths) |exclude_paths| {
         var it = exclude_paths.iterator();
-        while (it.next()) |path| {
-            run_cmd.addArgs(&.{ "--build-exclude", path.* });
+        while (it.next()) |path|
             zlinter_run.addArgs(&.{ "--build-exclude", path.* });
-        }
     }
 
-    run_cmd.addArgs(&.{ "--zig_exe", b.graph.zig_exe });
-    if (b.graph.global_cache_root.path) |p| {
-        run_cmd.addArgs(&.{ "--global_cache_root", p });
+    zlinter_run.addArgs(&.{ "--zig_exe", b.graph.zig_exe });
+    if (b.graph.global_cache_root.path) |p|
         zlinter_run.addArgs(&.{ "--global_cache_root", p });
-    }
 
-    if (b.graph.zig_lib_directory.path) |p| {
-        run_cmd.addArgs(&.{ "--zig_lib_directory", p });
+    if (b.graph.zig_lib_directory.path) |p|
         zlinter_run.addArgs(&.{ "--zig_lib_directory", p });
-    }
 
     return &zlinter_run.step;
 }
@@ -599,7 +588,6 @@ const ZlinterRun = struct {
         errdefer _ = child.kill() catch {};
 
         const term = try child.wait();
-        // std.debug.print("Exit code: {d}\n", .{term.Exited});
 
         step.result_duration_ns = timer.read();
         step.result_peak_rss = child.resource_usage_statistics.getMaxRss() orelse 0;
