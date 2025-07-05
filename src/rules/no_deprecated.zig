@@ -214,7 +214,7 @@ fn getSymbolEnumLiteral(
     // Bit of a pain as we need to flatten the shims
     var flattened = std.ArrayList(std.zig.Ast.Node.Index).init(gpa);
     defer flattened.deinit();
-    for (ancestors.items) |ancestor| {
+    while (ancestors.removeOrNull()) |ancestor| {
         try flattened.append(ancestor.toNodeIndex());
     }
 
