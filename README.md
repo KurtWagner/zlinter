@@ -24,6 +24,7 @@ An extendable and customizable **Zig linter** that is integrated from source int
 * [Features](#features)
 * [Getting started](#getting-started)
 * [Configure](#configure)
+  * [Optimization](#configure-optimization)
   * [Paths](#configure-paths)
   * [Rules](#configure-rules)
   * [Disable with comments](#disable-with-comments)
@@ -122,6 +123,16 @@ hook it up to a build step, like `zig build lint`:
     ```
 
 ## Configure
+
+### Configure Optimization
+
+`zlinter.builder` accepts `.optimize` (defaults to `.Debug`). For example,
+
+```zig
+var builder = zlinter.builder(b, .{.optimize = .ReleaseFast });
+```
+
+If your project is large it may be worth setting optimize to `.ReleaseFast` - keep in mind the first run may be slower as it builds the the modules for the first time with the new optimisation.
 
 ### Configure paths
 
