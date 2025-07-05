@@ -308,8 +308,8 @@ fn buildStep(
 
     const zlinter_run = ZlinterRun.create(b, exe);
 
-    if (b.args) |args|
-        zlinter_run.addArgs(args);
+    if (b.args) |args| zlinter_run.addArgs(args);
+    if (b.verbose) zlinter_run.addArgs(&.{"--verbose"});
 
     if (options.include_paths) |include_paths| {
         var it = include_paths.iterator();
