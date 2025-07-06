@@ -1,15 +1,52 @@
 //! Linting stuff
 
+const NodeLineage = std.MultiArrayList(NodeFamily);
+
+pub const NodeFamily = struct {
+    /// Null if root
+    parent: ?std.zig.Ast.Node.Index = null,
+    children: ?[]const std.zig.Ast.Node.Index = null,
+};
+
+pub fn NodeLineageIterator(kind: enum { ancestors }) type {
+    return struct {
+        const Self = @This();
+
+        const EntryType = switch (kind) {
+            .ancestors => std.zig.Ast.Node.Index,
+        };
+
+        current: shims.NodeIndexShim,
+        lineage: *NodeLineage,
+
+        pub fn next(self: *Self) ?EntryType {
+            switch (kind) {
+                .ancestors => {
+                    if (self.current.isRoot()) return null;
+                    self.current.index -= 1;
+                    return self.lineage.items(.parent)[self.current.index];
+                },
+            }
+        }
+    };
+}
+
 /// A loaded and parsed zig file that is given to zig lint rules.
 pub const LintDocument = struct {
     path: []const u8,
     handle: *zls.DocumentStore.Handle,
     analyser: *zls.Analyser,
-    child_to_parent: std.AutoHashMap(std.zig.Ast.Node.Index, std.zig.Ast.Node.Index),
+    lineage: *NodeLineage,
 
     pub fn deinit(self: *LintDocument, gpa: std.mem.Allocator) void {
+        while (self.lineage.pop()) |family| {
+            if (family.children) |children| gpa.free(children);
+        }
+
+        self.lineage.deinit(gpa);
+        gpa.destroy(self.lineage);
+
         self.analyser.deinit();
-        self.child_to_parent.deinit();
         gpa.destroy(self.analyser);
         gpa.free(self.path);
     }
@@ -249,6 +286,18 @@ pub const LintDocument = struct {
         return null;
     }
 
+    /// Walks up starting at the given current node up its ansesters (e.g.,
+    /// parent, grandparent, etc) until it reaches the root node of the document.
+    pub fn nodeAncestorIterator(
+        self: LintDocument,
+        node: std.zig.Ast.Node.Index,
+    ) NodeLineageIterator(.ancestors) {
+        return .{
+            .current = shims.NodeIndexShim.init(node),
+            .lineage = self.lineage,
+        };
+    }
+
     /// For debugging purposes only, should never be left in
     pub fn dumpType(self: @This(), t: zls.Analyser.Type, indent_size: u32) !void {
         var buffer: [128]u8 = @splat(' ');
@@ -380,12 +429,15 @@ pub const LintContext = struct {
             },
         );
 
+        const lineage = try gpa.create(NodeLineage);
+        lineage.* = .empty;
+
         const handle = self.document_store.getOrLoadHandle(uri) orelse return null;
         var doc: LintDocument = .{
             .path = try gpa.dupe(u8, path),
             .handle = handle,
             .analyser = try gpa.create(zls.Analyser),
-            .child_to_parent = .init(gpa),
+            .lineage = lineage,
         };
 
         doc.analyser.* = switch (version.zig) {
@@ -404,27 +456,45 @@ pub const LintContext = struct {
             ),
         };
 
-        const Context = struct {
-            parent: std.zig.Ast.Node.Index,
-            accumulator: *std.AutoHashMap(std.zig.Ast.Node.Index, std.zig.Ast.Node.Index),
-
-            pub fn append(context: @This(), tree: std.zig.Ast, node: std.zig.Ast.Node.Index) error{OutOfMemory}!void {
-                if (node == .root) return;
-
-                try context.accumulator.putNoClobber(node, context.parent);
-
-                try zls.ast.iterateChildren(tree, node, @This(){
-                    .parent = node,
-                    .accumulator = context.accumulator,
-                }, error{OutOfMemory}, append);
+        {
+            try doc.lineage.resize(gpa, doc.handle.tree.nodes.len);
+            for (0..doc.handle.tree.nodes.len) |i| {
+                doc.lineage.set(i, .{});
             }
-        };
 
-        try zls.ast.iterateChildren(doc.handle.tree, .root, Context{
-            .accumulator = &doc.child_to_parent,
-            .parent = .root,
-        }, error{OutOfMemory}, Context.append);
+            const QueueItem = struct {
+                parent: ?shims.NodeIndexShim = null,
+                node: shims.NodeIndexShim,
+            };
 
+            var queue = std.ArrayList(QueueItem).init(gpa);
+            defer queue.deinit();
+
+            try queue.append(.{ .node = shims.NodeIndexShim.init(0) });
+
+            while (queue.pop()) |item| {
+                const children = try nodeChildrenAlloc(
+                    gpa,
+                    doc.handle.tree,
+                    item.node.toNodeIndex(),
+                );
+
+                doc.lineage.set(item.node.index, .{
+                    .parent = if (item.parent) |p|
+                        p.toNodeIndex()
+                    else
+                        null,
+                    .children = children,
+                });
+
+                for (children) |child| {
+                    try queue.append(.{
+                        .parent = item.node,
+                        .node = shims.NodeIndexShim.init(child),
+                    });
+                }
+            }
+        }
         return doc;
     }
 };
@@ -1281,6 +1351,37 @@ test "LintDocument.resolveTypeKind" {
             return e;
         };
     }
+}
+
+fn nodeChildrenAlloc(
+    gpa: std.mem.Allocator,
+    tree: std.zig.Ast,
+    node: std.zig.Ast.Node.Index,
+) error{OutOfMemory}![]std.zig.Ast.Node.Index {
+    const Context = struct {
+        gpa: std.mem.Allocator,
+        children: *std.ArrayListUnmanaged(std.zig.Ast.Node.Index),
+
+        fn callback(self: @This(), _: std.zig.Ast, child_node: std.zig.Ast.Node.Index) error{OutOfMemory}!void {
+            if (shims.NodeIndexShim.init(child_node).isRoot()) return;
+            try self.children.append(self.gpa, child_node);
+        }
+    };
+
+    var children: std.ArrayListUnmanaged(std.zig.Ast.Node.Index) = .empty;
+    defer children.deinit(gpa);
+
+    try zls.ast.iterateChildren(
+        tree,
+        node,
+        Context{
+            .gpa = gpa,
+            .children = &children,
+        },
+        error{OutOfMemory},
+        Context.callback,
+    );
+    return children.toOwnedSlice(gpa);
 }
 
 const std = @import("std");

@@ -12,6 +12,10 @@
 pub const NodeIndexShim = struct {
     index: u32,
 
+    pub inline fn isRoot(self: NodeIndexShim) bool {
+        return self.index == 0;
+    }
+
     /// Supports init from Index, u32, see initOptional for optionals in 0.15
     pub inline fn init(node: anytype) NodeIndexShim {
         return switch (@typeInfo(@TypeOf(node))) {

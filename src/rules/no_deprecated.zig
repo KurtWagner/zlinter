@@ -185,8 +185,10 @@ fn getSymbolEnumLiteral(
 
     var current = node;
     try ancestors.append(current);
-    while (doc.child_to_parent.get(current)) |parent| {
-        if (zlinter.shims.NodeIndexShim.init(parent).index == 0) break;
+
+    var it = doc.nodeAncestorIterator(current);
+    while (it.next()) |parent| {
+        if (zlinter.shims.NodeIndexShim.init(parent).isRoot()) break;
         if (zlinter.shims.isNodeOverlapping(doc.handle.tree, current, parent)) {
             try ancestors.append(parent);
             current = parent;
