@@ -18,13 +18,22 @@ pub fn NodeLineageIterator(kind: enum { ancestors }) type {
 
         current: shims.NodeIndexShim,
         lineage: *NodeLineage,
+        done: bool = false,
 
         pub fn next(self: *Self) ?EntryType {
+            if (self.done) return null;
             switch (kind) {
                 .ancestors => {
                     if (self.current.isRoot()) return null;
-                    self.current.index -= 1;
-                    return self.lineage.items(.parent)[self.current.index];
+
+                    const parent = self.lineage.items(.parent)[self.current.index];
+                    if (parent) |p| {
+                        self.current = shims.NodeIndexShim.init(p);
+                        return p;
+                    } else {
+                        self.done = true;
+                        return null;
+                    }
                 },
             }
         }
@@ -286,8 +295,10 @@ pub const LintDocument = struct {
         return null;
     }
 
-    /// Walks up starting at the given current node up its ansesters (e.g.,
-    /// parent, grandparent, etc) until it reaches the root node of the document.
+    /// Walks up from a current node up its ansesters (e.g., parent,
+    /// grandparent, etc) until it reaches the root node of the document.
+    ///
+    /// This will not include the given node, only its ancestors.
     pub fn nodeAncestorIterator(
         self: LintDocument,
         node: std.zig.Ast.Node.Index,
