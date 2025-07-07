@@ -4,6 +4,10 @@
 /// Config for no_undefined rule.
 pub const Config = struct {
     severity: zlinter.LintProblemSeverity = .warning,
+
+    /// Case-insenstive
+    skip_when_used_in_fn: []const []const u8 = &.{"deinit"},
+    skip_when_used_in_test: bool = true,
 };
 
 /// Builds and returns the no_undefined rule.
@@ -31,19 +35,45 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    var node: zlinter.shims.NodeIndexShim = .init(0);
-    while (node.index < tree.nodes.len) : (node.index += 1) {
-        if (zlinter.shims.nodeTag(tree, node.toNodeIndex()) != .identifier) continue;
+    const root: zlinter.shims.NodeIndexShim = .init(0);
+    var it = try doc.nodeLineageIterator(root, allocator);
+    defer it.deinit();
 
-        if (std.mem.eql(u8, tree.getNodeSource(node.toNodeIndex()), "undefined")) {
-            try lint_problems.append(allocator, .{
-                .rule_id = rule.rule_id,
-                .severity = config.severity,
-                .start = .startOfNode(tree, node.toNodeIndex()),
-                .end = .endOfNode(tree, node.toNodeIndex()),
-                .message = try allocator.dupe(u8, "Take care when using `undefined`"),
-            });
+    var fn_proto_buffer: [1]std.zig.Ast.Node.Index = undefined;
+
+    skip: while (try it.next()) |tuple| {
+        const node, const connections = tuple;
+
+        if (zlinter.shims.nodeTag(tree, node.toNodeIndex()) != .identifier) continue :skip;
+        if (!std.mem.eql(u8, tree.getNodeSource(node.toNodeIndex()), "undefined")) continue :skip;
+
+        var next_parent = connections.parent;
+        while (next_parent) |parent| {
+            // We expect any undefined with a test to simply be ignored as really we expect
+            // the test to fail if there's issues
+            if (config.skip_when_used_in_test and zlinter.shims.nodeTag(tree, parent) == .test_decl) continue :skip;
+
+            // If assigned undefined in a deinit, ignore as it's a common pattern
+            // assign undefined after freeing memory
+            if (config.skip_when_used_in_fn.len > 0) {
+                if (tree.fullFnProto(&fn_proto_buffer, parent)) |fn_proto| {
+                    if (fn_proto.name_token) |name_token| {
+                        for (config.skip_when_used_in_fn) |skip_fn_name| {
+                            if (std.ascii.endsWithIgnoreCase(tree.tokenSlice(name_token), skip_fn_name)) continue :skip;
+                        }
+                    }
+                }
+            }
+            next_parent = doc.lineage.items(.parent)[parent];
         }
+
+        try lint_problems.append(allocator, .{
+            .rule_id = rule.rule_id,
+            .severity = config.severity,
+            .start = .startOfNode(tree, node.toNodeIndex()),
+            .end = .endOfNode(tree, node.toNodeIndex()),
+            .message = try allocator.dupe(u8, "Take care when using `undefined`"),
+        });
     }
 
     return if (lint_problems.items.len > 0)

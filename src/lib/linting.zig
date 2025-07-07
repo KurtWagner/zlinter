@@ -1,45 +1,5 @@
 //! Linting stuff
 
-const NodeLineage = std.MultiArrayList(NodeFamily);
-
-pub const NodeFamily = struct {
-    /// Null if root
-    parent: ?std.zig.Ast.Node.Index = null,
-    children: ?[]const std.zig.Ast.Node.Index = null,
-};
-
-pub fn NodeLineageIterator(kind: enum { ancestors }) type {
-    return struct {
-        const Self = @This();
-
-        const EntryType = switch (kind) {
-            .ancestors => std.zig.Ast.Node.Index,
-        };
-
-        current: shims.NodeIndexShim,
-        lineage: *NodeLineage,
-        done: bool = false,
-
-        pub fn next(self: *Self) ?EntryType {
-            if (self.done) return null;
-            switch (kind) {
-                .ancestors => {
-                    if (self.current.isRoot()) return null;
-
-                    const parent = self.lineage.items(.parent)[self.current.index];
-                    if (parent) |p| {
-                        self.current = shims.NodeIndexShim.init(p);
-                        return p;
-                    } else {
-                        self.done = true;
-                        return null;
-                    }
-                },
-            }
-        }
-    };
-}
-
 /// A loaded and parsed zig file that is given to zig lint rules.
 pub const LintDocument = struct {
     path: []const u8,
@@ -48,8 +8,8 @@ pub const LintDocument = struct {
     lineage: *NodeLineage,
 
     pub fn deinit(self: *LintDocument, gpa: std.mem.Allocator) void {
-        while (self.lineage.pop()) |family| {
-            if (family.children) |children| gpa.free(children);
+        while (self.lineage.pop()) |connections| {
+            if (connections.children) |children| gpa.free(children);
         }
 
         self.lineage.deinit(gpa);
@@ -302,11 +262,25 @@ pub const LintDocument = struct {
     pub fn nodeAncestorIterator(
         self: LintDocument,
         node: std.zig.Ast.Node.Index,
-    ) NodeLineageIterator(.ancestors) {
+    ) NodeAncestorIterator {
         return .{
             .current = shims.NodeIndexShim.init(node),
             .lineage = self.lineage,
         };
+    }
+
+    pub fn nodeLineageIterator(
+        self: LintDocument,
+        node: shims.NodeIndexShim,
+        gpa: std.mem.Allocator,
+    ) error{OutOfMemory}!NodeLineageIterator {
+        var it = NodeLineageIterator{
+            .gpa = gpa,
+            .queue = .empty,
+            .lineage = self.lineage,
+        };
+        try it.queue.append(gpa, node);
+        return it;
     }
 
     /// For debugging purposes only, should never be left in
@@ -1394,6 +1368,60 @@ fn nodeChildrenAlloc(
     );
     return children.toOwnedSlice(gpa);
 }
+
+const NodeLineage = std.MultiArrayList(NodeConnections);
+
+pub const NodeConnections = struct {
+    /// Null if root
+    parent: ?std.zig.Ast.Node.Index = null,
+    children: ?[]const std.zig.Ast.Node.Index = null,
+};
+
+pub const NodeAncestorIterator = struct {
+    const Self = @This();
+
+    current: shims.NodeIndexShim,
+    lineage: *NodeLineage,
+    done: bool = false,
+
+    pub fn next(self: *Self) ?std.zig.Ast.Node.Index {
+        if (self.done or self.current.isRoot()) return null;
+
+        const parent = self.lineage.items(.parent)[self.current.index];
+        if (parent) |p| {
+            self.current = shims.NodeIndexShim.init(p);
+            return p;
+        } else {
+            self.done = true;
+            return null;
+        }
+    }
+};
+
+pub const NodeLineageIterator = struct {
+    const Self = @This();
+
+    queue: std.ArrayListUnmanaged(shims.NodeIndexShim) = .empty,
+    lineage: *NodeLineage,
+    gpa: std.mem.Allocator,
+
+    pub fn deinit(self: *NodeLineageIterator) void {
+        self.queue.deinit(self.gpa);
+        self.* = undefined;
+    }
+
+    // zlinter-disable-next-line - TODO fix bug with tuple naming!
+    pub fn next(self: *Self) error{OutOfMemory}!?struct { shims.NodeIndexShim, NodeConnections } {
+        if (self.queue.pop()) |node_shim| {
+            const connections = self.lineage.get(node_shim.index);
+            for (connections.children orelse &.{}) |child| {
+                try self.queue.append(self.gpa, .init(child));
+            }
+            return .{ node_shim, connections };
+        }
+        return null;
+    }
+};
 
 const std = @import("std");
 const builtin = @import("builtin");
