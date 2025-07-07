@@ -64,7 +64,7 @@ fn run(
                     }
                 }
             }
-            next_parent = doc.lineage.items(.parent)[zlinter.shims.NodeIndexShim.init(parent).toNodeIndex()];
+            next_parent = doc.lineage.items(.parent)[zlinter.shims.NodeIndexShim.init(parent).index];
         }
 
         try lint_problems.append(allocator, .{
