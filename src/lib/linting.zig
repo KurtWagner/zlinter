@@ -954,8 +954,7 @@ pub const LintProblemLocation = struct {
     }
 
     fn debugPrintWithIndent(self: @This(), writer: anytype, indent: usize) void {
-        var spaces: [80]u8 = undefined;
-        @memset(&spaces, ' ');
+        var spaces: [80]u8 = @splat(' ');
         const indent_str = spaces[0..indent];
 
         writer.print("{s}.{{\n", .{indent_str});
@@ -1016,8 +1015,7 @@ pub const LintProblemFix = struct {
     }
 
     fn debugPrintWithIndent(self: @This(), writer: anytype, indent: usize) void {
-        var spaces: [80]u8 = undefined;
-        @memset(&spaces, ' ');
+        var spaces: [80]u8 = @splat(' ');
         const indent_str = spaces[0..indent];
 
         writer.print("{s}.{{\n", .{indent_str});

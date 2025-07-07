@@ -27,3 +27,16 @@ test {
     this_is_a_test_so_who_cares = 0;
     _ = Struct{};
 }
+
+// These should all be ok as they equal or end with the default excluded
+// names "mem", "buffer", etc.
+var buffer: []u8 = undefined;
+var some_buff: []u8 = undefined;
+var some_buf: []u8 = undefined;
+var mem: []u8 = undefined;
+var my_mem: []u8 = undefined;
+var my_memory: []u8 = undefined;
+
+// These will be caught as they're const, even with the name
+const bad_memory: []u8 = undefined;
+const bad_buffer: []u8 = undefined;

@@ -1,3 +1,13 @@
+warning Take care when using `undefined` [test_cases/no_undefined/no_undefined.input.zig:42:26] no_undefined
+
+ 42 | const bad_buffer: []u8 = undefined;
+    |                          ^^^^^^^^^^
+
+warning Take care when using `undefined` [test_cases/no_undefined/no_undefined.input.zig:41:26] no_undefined
+
+ 41 | const bad_memory: []u8 = undefined;
+    |                          ^^^^^^^^^^
+
 warning Take care when using `undefined` [test_cases/no_undefined/no_undefined.input.zig:5:27] no_undefined
 
  5 |     std.fmt.log("{s}", .{ undefined, message });
@@ -13,4 +23,4 @@ warning Take care when using `undefined` [test_cases/no_undefined/no_undefined.i
  1 | var questionable: ?[123]u8 = undefined;
    |                              ^^^^^^^^^^
 
-x 3 warnings
+x 5 warnings
