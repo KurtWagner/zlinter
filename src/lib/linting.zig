@@ -348,8 +348,8 @@ pub const LintContext = struct {
             .gpa = gpa,
             .diagnostics_collection = .{ .allocator = gpa },
             .intern_pool = try .init(gpa),
-            .thread_pool = undefined, // set below.
-            .document_store = undefined, // set below.
+            .thread_pool = undefined, // zlinter-disable-current-line no_undefined - set below
+            .document_store = undefined, // zlinter-disable-current-line no_undefined - set below
         };
 
         if (!builtin.single_threaded) {

@@ -87,7 +87,6 @@ pub fn allocParse(
     allocator: std.mem.Allocator,
 ) error{ OutOfMemory, InvalidArgs }!Args {
     var index: usize = 0;
-    var arg: [:0]u8 = undefined;
 
     var lint_args = Args{};
 
@@ -138,7 +137,7 @@ pub fn allocParse(
         .parsing => {
             index += 1; // ignore first arg as this is the binary.
             if (index < args.len) {
-                arg = args[index];
+                const arg = args[index];
                 if (arg.len == 0)
                     continue :state .parsing
                 else if (std.mem.eql(u8, arg, "--fix")) {
@@ -292,7 +291,7 @@ pub fn allocParse(
             continue :state State.parsing;
         },
         .unknown_arg => {
-            try unknown_args.append(allocator, try allocator.dupe(u8, arg));
+            try unknown_args.append(allocator, try allocator.dupe(u8, args[index]));
             continue :state State.parsing;
         },
     }
@@ -690,10 +689,10 @@ const testing = struct {
     inline fn cliArgs(args: []const [:0]const u8) [][:0]u8 {
         assertTestOnly();
 
-        var casted: [args.len + 1][:0]u8 = undefined;
-        casted[0] = @constCast("lint-exe");
-        for (0..args.len) |i| casted[i + 1] = @constCast(args[i]);
-        return &casted;
+        var buffer: [args.len + 1][:0]u8 = undefined;
+        buffer[0] = @constCast("lint-exe");
+        for (0..args.len) |i| buffer[i + 1] = @constCast(args[i]);
+        return &buffer;
     }
 
     inline fn assertTestOnly() void {
