@@ -283,6 +283,16 @@ pub const LintDocument = struct {
         return it;
     }
 
+    pub fn getEnclosingBlock(self: LintDocument, node: shims.NodeIndexShim) ?shims.NodeIndexShim {
+        while (self.lineage.items(.parent)[node.index]) |parent| {
+            if (switch (shims.nodeTag(self.handle.tree, parent)) {
+                .block_two, .block_two_semicolon, .block, .block_semicolon => true,
+                else => false,
+            }) return parent;
+        }
+        return null;
+    }
+
     /// For debugging purposes only, should never be left in
     pub fn dumpType(self: @This(), t: zls.Analyser.Type, indent_size: u32) !void {
         var buffer: [128]u8 = @splat(' ');
