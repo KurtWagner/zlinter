@@ -5,9 +5,26 @@
 pub const Config = struct {
     severity: zlinter.LintProblemSeverity = .warning,
 
+    /// Skip if found in a function call:
     /// Case-insenstive
-    skip_when_used_in_fn: []const []const u8 = &.{"deinit"},
-    skip_when_used_in_test: bool = true,
+    exclude_in_fn: []const []const u8 = &.{"deinit"},
+
+    /// Skip if found within `test { ... }` block
+    exclude_in_test: bool = true,
+
+    /// Skips var declarations that name equals:
+    /// Case-insensitive, for `var` (not `const`)
+    exclude_var_decl_name_equals: []const []const u8 = &.{},
+
+    /// Skips var declarations that name ends in:
+    /// Case-insensitive, for `var` (not `const`)
+    exclude_var_decl_name_ends_with: []const []const u8 = &.{
+        "memory",
+        "mem",
+        "buffer",
+        "buf",
+        "buff",
+    },
 };
 
 /// Builds and returns the no_undefined rule.
@@ -47,18 +64,32 @@ fn run(
         if (zlinter.shims.nodeTag(tree, node.toNodeIndex()) != .identifier) continue :skip;
         if (!std.mem.eql(u8, tree.getNodeSource(node.toNodeIndex()), "undefined")) continue :skip;
 
+        if (doc.lineage.items(.parent)[node.index]) |parent| {
+            if (tree.fullVarDecl(parent)) |var_decl| {
+                if (tree.tokens.items(.tag)[var_decl.ast.mut_token] == .keyword_var) {
+                    const name = tree.tokenSlice(var_decl.ast.mut_token + 1);
+                    for (config.exclude_var_decl_name_equals) |var_name| {
+                        if (std.ascii.eqlIgnoreCase(name, var_name)) continue :skip;
+                    }
+                    for (config.exclude_var_decl_name_ends_with) |var_name| {
+                        if (std.ascii.endsWithIgnoreCase(name, var_name)) continue :skip;
+                    }
+                }
+            }
+        }
+
         var next_parent = connections.parent;
         while (next_parent) |parent| {
             // We expect any undefined with a test to simply be ignored as really we expect
             // the test to fail if there's issues
-            if (config.skip_when_used_in_test and zlinter.shims.nodeTag(tree, parent) == .test_decl) continue :skip;
+            if (config.exclude_in_test and zlinter.shims.nodeTag(tree, parent) == .test_decl) continue :skip;
 
             // If assigned undefined in a deinit, ignore as it's a common pattern
             // assign undefined after freeing memory
-            if (config.skip_when_used_in_fn.len > 0) {
+            if (config.exclude_in_fn.len > 0) {
                 if (tree.fullFnProto(&fn_proto_buffer, parent)) |fn_proto| {
                     if (fn_proto.name_token) |name_token| {
-                        for (config.skip_when_used_in_fn) |skip_fn_name| {
+                        for (config.exclude_in_fn) |skip_fn_name| {
                             if (std.ascii.endsWithIgnoreCase(tree.tokenSlice(name_token), skip_fn_name)) continue :skip;
                         }
                     }
