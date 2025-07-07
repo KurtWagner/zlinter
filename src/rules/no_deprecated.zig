@@ -49,6 +49,7 @@ fn run(
                 node.toNodeIndex(),
                 zlinter.shims.nodeMainToken(tree, node.toNodeIndex()),
                 &lint_problems,
+                config,
             ),
             .field_access => try handleFieldAccess(
                 rule,
@@ -61,6 +62,7 @@ fn run(
                     .@"0.15" => zlinter.shims.nodeData(tree, node.toNodeIndex()).node_and_token.@"1",
                 },
                 &lint_problems,
+                config,
             ),
             .identifier => try handleVarAccess(
                 rule,
@@ -70,6 +72,7 @@ fn run(
                 node.toNodeIndex(),
                 zlinter.shims.nodeMainToken(tree, node.toNodeIndex()),
                 &lint_problems,
+                config,
             ),
             else => continue,
         }
@@ -117,6 +120,7 @@ fn handleVarAccess(
     node_index: std.zig.Ast.Node.Index,
     identifier_token: std.zig.Ast.TokenIndex,
     lint_problems: *std.ArrayListUnmanaged(zlinter.LintProblem),
+    config: Config,
 ) !void {
     const handle = doc.handle;
     const analyser = doc.analyser;
@@ -137,7 +141,7 @@ fn handleVarAccess(
                 .end = getLintProblemLocationEnd(doc, node_index),
                 .message = try std.fmt.allocPrint(gpa, "Deprecated - {s}", .{message}),
                 .rule_id = rule.rule_id,
-                .severity = undefined, // Set in `run` before returning result
+                .severity = config.severity,
             });
         }
     }
@@ -151,6 +155,7 @@ fn handleEnumLiteral(
     node_index: std.zig.Ast.Node.Index,
     identifier_token: std.zig.Ast.TokenIndex,
     lint_problems: *std.ArrayListUnmanaged(zlinter.LintProblem),
+    config: Config,
 ) !void {
     const decl = try getSymbolEnumLiteral(
         doc,
@@ -166,7 +171,7 @@ fn handleEnumLiteral(
                 .end = getLintProblemLocationEnd(doc, node_index),
                 .message = try std.fmt.allocPrint(gpa, "Deprecated: {s}", .{message}),
                 .rule_id = rule.rule_id,
-                .severity = undefined, // Set in `run` before returning result
+                .severity = config.severity,
             });
         }
     }
@@ -220,6 +225,7 @@ fn handleFieldAccess(
     node_index: std.zig.Ast.Node.Index,
     identifier_token: std.zig.Ast.TokenIndex,
     lint_problems: *std.ArrayListUnmanaged(zlinter.LintProblem),
+    config: Config,
 ) !void {
     const handle = doc.handle;
     const analyser = doc.analyser;
@@ -251,7 +257,7 @@ fn handleFieldAccess(
                         .end = getLintProblemLocationEnd(doc, node_index),
                         .message = try std.fmt.allocPrint(gpa, "Deprecated: {s}", .{message}),
                         .rule_id = rule.rule_id,
-                        .severity = undefined, // Set in `run` before returning result
+                        .severity = config.severity,
                     });
                 }
             }
