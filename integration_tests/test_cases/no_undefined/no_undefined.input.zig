@@ -40,3 +40,16 @@ var my_memory: []u8 = undefined;
 // These will be caught as they're const, even with the name
 const bad_memory: []u8 = undefined;
 const bad_buffer: []u8 = undefined;
+
+// These are ok as we call init on it
+const LazyInitStruct = struct {
+    field: u32,
+
+    fn init(self: *@This()) void {
+        self.field = 1;
+    }
+};
+fn exampleLazyInit() void {
+    var this_is_ok: LazyInitStruct = undefined;
+    this_is_ok.init();
+}

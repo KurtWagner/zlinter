@@ -64,10 +64,14 @@ fn run(
         if (zlinter.shims.nodeTag(tree, node.toNodeIndex()) != .identifier) continue :skip;
         if (!std.mem.eql(u8, tree.getNodeSource(node.toNodeIndex()), "undefined")) continue :skip;
 
+        var decl_var_name: ?[]const u8 = null;
         if (doc.lineage.items(.parent)[node.index]) |parent| {
             if (tree.fullVarDecl(parent)) |var_decl| {
                 if (tree.tokens.items(.tag)[var_decl.ast.mut_token] == .keyword_var) {
-                    const name = tree.tokenSlice(var_decl.ast.mut_token + 1);
+                    const name_token = var_decl.ast.mut_token + 1;
+                    const name = tree.tokenSlice(name_token);
+                    decl_var_name = name;
+
                     for (config.exclude_var_decl_name_equals) |var_name| {
                         if (std.ascii.eqlIgnoreCase(name, var_name)) continue :skip;
                     }
@@ -95,6 +99,42 @@ fn run(
                     }
                 }
             }
+
+            // Look at lineage of containing block to see if "init" (or
+            // configured method) is called on the var declaration set to
+            // undefined. e.g., `this_was_undefined.init()`
+            if (decl_var_name) |var_name| {
+                if (switch (zlinter.shims.nodeTag(tree, parent)) {
+                    .block_two,
+                    .block_two_semicolon,
+                    .block,
+                    .block_semicolon,
+                    => true,
+                    else => false,
+                }) {
+                    var block_it = try doc.nodeLineageIterator(zlinter.shims.NodeIndexShim.init(parent), allocator);
+                    defer block_it.deinit();
+
+                    while (try block_it.next()) |block_tuple| {
+                        const block_node, _ = block_tuple;
+                        if (zlinter.shims.nodeTag(tree, block_node.toNodeIndex()) == .field_access) {
+                            const node_data = zlinter.shims.nodeData(tree, block_node.toNodeIndex());
+                            const lhs_node, const identifier_token = switch (zlinter.version.zig) {
+                                .@"0.14" => .{ node_data.lhs, node_data.rhs },
+                                .@"0.15" => .{ node_data.node_and_token.@"0", node_data.node_and_token.@"1" },
+                            };
+                            const lhs_source = tree.getNodeSource(lhs_node);
+                            if (std.mem.eql(u8, lhs_source, var_name)) {
+                                const identifier_name = tree.tokenSlice(identifier_token);
+                                if (std.mem.eql(u8, identifier_name, "init")) {
+                                    continue :skip;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             next_parent = doc.lineage.items(.parent)[zlinter.shims.NodeIndexShim.init(parent).index];
         }
 
