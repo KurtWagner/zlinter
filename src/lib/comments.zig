@@ -53,7 +53,7 @@ pub fn allocParseComments(source: [:0]const u8, allocator: std.mem.Allocator) er
     var index: usize = 0;
     var line: usize = 0;
 
-    var disable_token: []const u8 = undefined;
+    var disable_token: []const u8 = "";
     var disable_token_rule_start_index: usize = 0;
     var disable_token_line: usize = 0;
 
