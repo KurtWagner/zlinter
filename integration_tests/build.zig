@@ -62,6 +62,10 @@ pub fn build(b: *std.Build) !void {
         builder.addRule(.{ .builtin = .no_unused }, .{});
         builder.addRule(.{ .builtin = .no_undefined }, .{});
         builder.addRule(.{ .builtin = .max_positional_args }, .{});
+        builder.addRule(.{ .builtin = .no_literal_args }, .{
+            .detect_string_literal = .@"error",
+            .detect_char_literal = .@"error",
+        });
         builder.addRule(.{ .builtin = .switch_case_ordering }, .{});
         builder.addRule(.{ .builtin = .field_naming }, .{});
         builder.addRule(.{ .builtin = .declaration_naming }, .{});
