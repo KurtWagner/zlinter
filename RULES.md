@@ -288,6 +288,44 @@ as it does not control flow.
 
   * **Default:** `.warning`
 
+## `no_swallow_error`
+
+Disallow silently swallowing errors without proper handling or logging.
+
+For example, `catch {}` and `catch unreachable`
+
+**Config options:**
+
+* `detect_catch_unreachable`
+
+  * The severity of detecting `catch unreachable` or `catch { unreachable; } (off, warning, error).
+
+  * **Default:** `.warning`
+
+* `detect_empty_catch`
+
+  * The severity of detecting `catch {}` (off, warning, error).
+
+  * **Default:** `.warning`
+
+* `detect_empty_else`
+
+  * The severity of detecting `else |_| {}` (off, warning, error).
+
+  * **Default:** `.warning`
+
+* `detect_else_unreachable`
+
+  * The severity of detecting `else |_| unreachable` or `else |_| { unreachable; }` (off, warning, error).
+
+  * **Default:** `.warning`
+
+* `exclude_tests`
+
+  * Skip if found within `test { ... }` block.
+
+  * **Default:** `true`
+
 ## `no_undefined`
 
 Enforces no uses of `undefined`. There are some valid use case, in which
