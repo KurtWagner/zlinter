@@ -29,17 +29,18 @@ An extendable and customizable **Zig linter** that is integrated from source int
   * [Rules](#configure-rules)
   * [Disable with comments](#disable-with-comments)
   * [Command line args](#command-line-args)
-* [Rules](#rules)
-  * [Builtin rules](#builtin-rules)
-    * [no_deprecated](#no_deprecated)
-    * [no_unused](#no_unused)
-    * [no_orelse_unreachable](#no_orelse_unreachable)
-    * [function_naming](#function_naming)
-    * [declaration_naming](#declaration_naming)
-    * [field_naming](#field_naming)
-    * [file_naming](#file_naming)
-    * [switch_case_ordering](#switch_case_ordering)
   * [Custom rules](#custom-rules)
+* [Builtin rules](RULES.md)
+  * [no_deprecated](RULES.md#no_deprecated)
+  * [no_unused](RULES.md#no_unused)
+  * [no_orelse_unreachable](RULES.md#no_orelse_unreachable)
+  * [no_undefined](RULES.md#no_undefined)
+  * [no_hidden_allocations](RULES.md#no_hidden_allocations)
+  * [function_naming](RULES.md#function_naming)
+  * [declaration_naming](RULES.md#declaration_naming)
+  * [field_naming](RULES.md#field_naming)
+  * [file_naming](RULES.md#file_naming)
+  * [switch_case_ordering](RULES.md#switch_case_ordering)
 * [For contributors](#for-contributors)
   * [Contributions](#contributions)
   * [Run tests](#run-tests)
@@ -70,7 +71,7 @@ This may change, especially when `zig` is "stable" at `1.x`. If you have opinion
 ## Features
 
 * [x] [Integrates from source into your `build.zig`](#getting-started)
-* [x] [Builtin rules](#builtin-rules) (e.g., [`no_deprecated`](#no_deprecated) and [`field_naming`](#field_naming))
+* [x] [Builtin rules](RULES.md) (e.g., [`no_deprecated`](RULES.md#no_deprecated) and [`field_naming`](RULES.md#field_naming))
 * [x] [Custom / BYO rules](#custom-rules) (e.g., if your project has bespoke rules you need to follow)
 * [x] [Per rule configurability](#configure-rules) (e.g., deprecations as warnings)
 * [ ] Interchangeable result formatters (e.g., json, checkstyle)
@@ -203,133 +204,6 @@ zig build lint -- --include src/ android/ --exclude src/generated.zig --rule no_
 
 * Will resolve all zig files under `src/` and `android/` but will exclude linting `src/generated.zig`; and
 * Only rules `no_deprecated` and `no_unused` will be ran.
-
-## Rules
-
-### Builtin rules
-
-> [!NOTE]  
-> :wrench: **[Experimental]** The wrench indicates that some problems reported by this rule can be automatically fixed with
-> the `--fix` option. Please only use this option if you use source control. This
-> is also subject to change. For now it simply uses text based patches but
-> perhaps an AST or token based approach would be better. For now, it's best to
-> see this as experimental, and to apply caution appropriately.
-
-#### `no_deprecated`
-
-* [Source code](./src/rules/no_deprecated.zig)
-
-Enforces that there are no references to fields or functions that are
-documented as deprecated.
-
-For example,
-
-```zig
-/// Deprecated: Use `y` instead
-pub const x = 10;
-
-// ...
-pub const z = x + 10; // <---- Problem
-```
-
-##### When not to use
-
-If you're indefinitely targetting fixed versions of a dependency or zig then using deprecated items may not be a big deal. Although, it's still worth undertsanding why they're deprecated, as there may be risks associated with use.
-
-#### `function_naming`
-
-* [Source code](./src/rules/function_naming.zig)
-
-Enforces that functions have consistent naming. The default is that functions use `camelCase` unless they return a type, in which case they are `TitleCase`. This can be changed through the rules configuration.
-
-For example,
-
-```zig
-// Ok:
-fn goodFn() void {}
-fn GoodFn() type {}
-
-// Not ok:
-fn bad_fn() void {}
-fn BadFn() void {}
-```
-
-#### `declaration_naming`
-
-* [Source code](./src/rules/declaration_naming.zig)
-
-Enforces that declarations have consistent naming. Whether they're a `type` or callable may change the naming convention.
-
-For example, the defaults
-
-```zig
-const camelCaseFn = const * fn() void {};
-const TitleCaseType = u32;
-const snake_case_other: u32 = 10;
-```
-
-#### `field_naming`
-
-* [Source code](./src/rules/field_naming.zig)
-
-Enforces that fields in `struct {}`, `error {}`, `union {}`, `enum {}` and `opaque {}` containers have consistent naming.
-
-#### `file_naming`
-
-* [Source code](./src/rules/file_naming.zig)
-
-Enforces that file name containers and structs have consistent naming. The default is that namespaces are `snake_case` and root struct files are `TitleCase`.
-
-For example, the defaults:
-
-```zig
-//! MyStruct.zig
-name: [] const u8
-
-//! my_namespace.zig
-const MyStruct = struct {
-  name: [] const u8,
-};
-```
-
-#### `switch_case_ordering`
-
-Enforces a specific ordering for switch statement cases. For example,
-by default, it'll warn if `else` is not the last condition (similar to an `if-else-if-else` statement).
-
-#### `no_unused`
-
-* :wrench:
-* [Source code](./src/rules/no_unused.zig)
-
-Enforces that container declarations are used.
-
-For example,
-
-```zig
-// Ok:
-const used = @import("dep");
-
-pub fn ok() void {
-    used.ok();
-}
-
-
-// Not ok:
-const not_used = @import("dep");
-```
-
-#### `no_orelse_unreachable`
-
-Prefer `.?` over `orelse unreachable` as it offers comptime checks, where as, `orelse` controls flow and is runtime.
-
-```zig
-// prefer
-const a = b.?;
-
-// over
-const a = b orelse unreachable;
-```
 
 ### Custom rules
 
