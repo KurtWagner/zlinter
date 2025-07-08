@@ -2,6 +2,7 @@
 
 /// Config for no_deprecated rule.
 pub const Config = struct {
+    /// The severity of deprecations (off, warning, error).
     severity: zlinter.LintProblemSeverity = .warning,
 };
 

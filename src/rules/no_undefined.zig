@@ -3,21 +3,19 @@
 
 /// Config for no_undefined rule.
 pub const Config = struct {
+    /// The severity (off, warning, error).
     severity: zlinter.LintProblemSeverity = .warning,
 
-    /// Skip if found in a function call:
-    /// Case-insenstive
+    /// Skip if found in a function call (case-insenstive).
     exclude_in_fn: []const []const u8 = &.{"deinit"},
 
-    /// Skip if found within `test { ... }` block
+    /// Skip if found within `test { ... }` block.
     exclude_tests: bool = true,
 
-    /// Skips var declarations that name equals:
-    /// Case-insensitive, for `var` (not `const`)
+    /// Skips var declarations that name equals (case-insensitive, for `var`, not `const`).
     exclude_var_decl_name_equals: []const []const u8 = &.{},
 
-    /// Skips var declarations that name ends in:
-    /// Case-insensitive, for `var` (not `const`)
+    /// Skips var declarations that name ends in (case-insensitive, for `var`, not `const`).
     exclude_var_decl_name_ends_with: []const []const u8 = &.{
         "memory",
         "mem",

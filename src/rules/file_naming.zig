@@ -1,14 +1,15 @@
-//! Enforces naming conventions for files
+//! Enforces a consistent naming convention for files. For example, `TitleCase`
+//! for implicit structs and `snake_case` for namespaces.
 
 /// Config for file_naming rule.
 pub const Config = struct {
-    /// File is a namespace (i.e., does not have root container fields)
+    /// Style and severity for a file that is a namespace (i.e., does not have root container fields)
     file_namespace: zlinter.LintTextStyleWithSeverity = .{
         .style = .snake_case,
         .severity = .@"error",
     },
 
-    /// File is a struct (i.e., has root container fields)
+    /// Style and severity for a file that is a struct (i.e., has root container fields)
     file_struct: zlinter.LintTextStyleWithSeverity = .{
         .style = .title_case,
         .severity = .@"error",

@@ -380,3 +380,9 @@ zig build test
 ```shell
 zig build lint
 ```
+
+### Regenerate documentation
+
+```shell
+zig build docs
+```

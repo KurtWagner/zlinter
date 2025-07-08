@@ -2,6 +2,7 @@
 
 /// Config for no_unused rule.
 pub const Config = struct {
+    /// The severity for container declarations that are unused (off, warning, error).
     container_declaration: zlinter.LintProblemSeverity = .warning,
 };
 

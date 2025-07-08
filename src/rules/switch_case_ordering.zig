@@ -1,7 +1,8 @@
-//! Enforces an order of values in switch statements
+//! Enforces an order of values in `switch` statements.
 
 /// Config for switch_case_ordering rule.
 pub const Config = struct {
+    /// The severity for when `else` is not last in a `switch` (off, warning, error).
     else_is_last: zlinter.LintProblemSeverity = .warning,
 };
 

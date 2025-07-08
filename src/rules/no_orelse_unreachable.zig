@@ -3,6 +3,7 @@
 
 /// Config for no_orelse_unreachable rule.
 pub const Config = struct {
+    /// The severity (off, warning, error).
     severity: zlinter.LintProblemSeverity = .warning,
 };
 

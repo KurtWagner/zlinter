@@ -1,38 +1,39 @@
-//! Enforces that variable names that aren't types use snake_case
+//! Enforces that variable declaration names use consistent naming. For example,
+//! `snake_case` for non-types, `TitleCase` for types and `camelCase` for functions.
 
 /// Config for declaration_naming rule.
 pub const Config = struct {
-    /// Declarations with `const` mutability
+    /// Style and severity for declarations with `const` mutability.
     var_decl: zlinter.LintTextStyleWithSeverity = .{
         .style = .snake_case,
         .severity = .@"error",
     },
 
-    /// Declarations with `var` mutability
+    /// Style and severity for declarations with `var` mutability.
     const_decl: zlinter.LintTextStyleWithSeverity = .{
         .style = .snake_case,
         .severity = .@"error",
     },
 
-    /// Type declarations
+    /// Style and severity for type declarations.
     decl_that_is_type: zlinter.LintTextStyleWithSeverity = .{
         .style = .title_case,
         .severity = .@"error",
     },
 
-    /// Namespace declarations
+    /// Style and severity for namespace declarations.
     decl_that_is_namespace: zlinter.LintTextStyleWithSeverity = .{
         .style = .snake_case,
         .severity = .@"error",
     },
 
-    /// Non-type function declarations
+    /// Style and severity for non-type function declarations.
     decl_that_is_fn: zlinter.LintTextStyleWithSeverity = .{
         .style = .camel_case,
         .severity = .@"error",
     },
 
-    /// Type function declarations
+    /// Style and severity type function declarations.
     decl_that_is_type_fn: zlinter.LintTextStyleWithSeverity = .{
         .style = .title_case,
         .severity = .@"error",

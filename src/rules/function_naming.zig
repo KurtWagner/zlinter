@@ -1,38 +1,39 @@
-//! Enforces naming conventions for functions
+//! Enforces consistent naming of functions. For example, `TitleCase` for functions
+//! that return types and `camelCase` for others.
 
 /// Config for function_naming rule.
 pub const Config = struct {
-    /// Non-type functions
+    /// Style and severity for non-type functions
     function: zlinter.LintTextStyleWithSeverity = .{
         .style = .camel_case,
         .severity = .@"error",
     },
 
-    /// Type functions
+    /// Style and severity for type functions
     function_that_returns_type: zlinter.LintTextStyleWithSeverity = .{
         .style = .title_case,
         .severity = .@"error",
     },
 
-    /// Standard function arg
+    /// Style and severity for standard function arg
     function_arg: zlinter.LintTextStyleWithSeverity = .{
         .style = .snake_case,
         .severity = .@"error",
     },
 
-    /// Type function arg
+    /// Style and severity for type function arg
     function_arg_that_is_type: zlinter.LintTextStyleWithSeverity = .{
         .style = .title_case,
         .severity = .@"error",
     },
 
-    /// Non-type function function arg
+    /// Style and severity for non-type function function arg
     function_arg_that_is_fn: zlinter.LintTextStyleWithSeverity = .{
         .style = .camel_case,
         .severity = .@"error",
     },
 
-    /// Type function function arg
+    /// Style and severity for type function function arg
     function_arg_that_is_type_fn: zlinter.LintTextStyleWithSeverity = .{
         .style = .title_case,
         .severity = .@"error",

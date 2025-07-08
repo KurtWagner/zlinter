@@ -240,6 +240,45 @@ pub fn build(b: *std.Build) void {
             },
         );
     });
+
+    // ------------------------------------------------------------------------
+    // zig build docs
+    // ------------------------------------------------------------------------
+    const docs_cmd = b.step("docs", "Regenerate docs (should be run before every commit)");
+    docs_cmd.dependOn(step: {
+        const doc_build_run = b.addRunArtifact(b.addExecutable(.{
+            .name = "build_docs",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("build_docs.zig"),
+                .target = b.graph.host,
+                .optimize = .Debug,
+            }),
+        }));
+        var step = &doc_build_run.step;
+
+        var install_step = b.addInstallFileWithDir(
+            doc_build_run.addOutputFileArg("RULES.md"),
+            .{ .custom = "../" },
+            "RULES.md",
+        );
+        install_step.step.dependOn(step);
+
+        const rules_lazy_path = b.path("src/rules");
+        const rules_path = rules_lazy_path.getPath3(b, step);
+        _ = step.addDirectoryWatchInput(rules_lazy_path) catch @panic("OOM");
+
+        var rules_dir = rules_path.root_dir.handle.openDir(rules_path.subPathOrDot(), .{ .iterate = true }) catch @panic("unable to open rules/ directory");
+        defer rules_dir.close();
+        {
+            var it = rules_dir.walk(b.allocator) catch @panic("OOM");
+            while (it.next() catch @panic("OOM")) |entry| {
+                if (!std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+                doc_build_run.addFileArg(b.path(b.pathJoin(&.{ "src/rules", entry.path })));
+            }
+        }
+
+        break :step &install_step.step;
+    });
 }
 
 fn toZonString(val: anytype, allocator: std.mem.Allocator) []const u8 {
