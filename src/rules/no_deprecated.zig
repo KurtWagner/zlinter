@@ -1,4 +1,9 @@
 //! Enforces that references aren't deprecated (i.e., doc commented with `Deprecated: `)
+//!
+//! If you're indefinitely targetting fixed versions of a dependency or zig
+//! then using deprecated items may not be a big deal. Although, it's still
+//! worth undertsanding why they're deprecated, as there may be risks associated
+//! with use.
 
 /// Config for no_deprecated rule.
 pub const Config = struct {

@@ -7,18 +7,42 @@ Enforces that variable declaration names use consistent naming. For example,
 
 **Config options:**
 
-* `var_decl` - Style and severity for declarations with `const` mutability. 
-   * default: `.{ .style = .snake_case, .severity = .@"error", }`
-* `const_decl` - Style and severity for declarations with `var` mutability. 
-   * default: `.{ .style = .snake_case, .severity = .@"error", }`
-* `decl_that_is_type` - Style and severity for type declarations. 
-   * default: `.{ .style = .title_case, .severity = .@"error", }`
-* `decl_that_is_namespace` - Style and severity for namespace declarations. 
-   * default: `.{ .style = .snake_case, .severity = .@"error", }`
-* `decl_that_is_fn` - Style and severity for non-type function declarations. 
-   * default: `.{ .style = .camel_case, .severity = .@"error", }`
-* `decl_that_is_type_fn` - Style and severity type function declarations. 
-   * default: `.{ .style = .title_case, .severity = .@"error", }`
+* `var_decl`
+
+   * Style and severity for declarations with `const` mutability. 
+
+   * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
+
+* `const_decl`
+
+   * Style and severity for declarations with `var` mutability. 
+
+   * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
+
+* `decl_that_is_type`
+
+   * Style and severity for type declarations. 
+
+   * **Default:** `.{ .style = .title_case, .severity = .@"error", }`
+
+* `decl_that_is_namespace`
+
+   * Style and severity for namespace declarations. 
+
+   * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
+
+* `decl_that_is_fn`
+
+   * Style and severity for non-type function declarations. 
+
+   * **Default:** `.{ .style = .camel_case, .severity = .@"error", }`
+
+* `decl_that_is_type_fn`
+
+   * Style and severity type function declarations. 
+
+   * **Default:** `.{ .style = .title_case, .severity = .@"error", }`
+
 
 ## `field_naming`
 
@@ -27,22 +51,54 @@ example, `struct`, `enum`, `union`, `opaque` and `error`.
 
 **Config options:**
 
-* `error_field` - Style and severity for errors defined within an `error { ... }` container 
-   * default: `.{ .style = .title_case, .severity = .@"error", }`
-* `enum_field` - Style and severity for enum values defined within an `enum { ... }` container 
-   * default: `.{ .style = .snake_case, .severity = .@"error", }`
-* `struct_field` - Style and severity for struct fields defined within a `struct { ... }` container 
-   * default: `.{ .style = .snake_case, .severity = .@"error", }`
-* `struct_field_that_is_type` - Like `struct_field` but for fields with type `type` 
-   * default: `.{ .style = .title_case, .severity = .@"error", }`
-* `struct_field_that_is_namespace` - Like `struct_field` but for fields with a namespace type 
-   * default: `.{ .style = .snake_case, .severity = .@"error", }`
-* `struct_field_that_is_fn` - Like `struct_field` but for fields with a callable/function type 
-   * default: `.{ .style = .camel_case, .severity = .@"error", }`
-* `struct_field_that_is_type_fn` - Like `struct_field_that_is_fn` but the callable/function returns a `type` 
-   * default: `.{ .style = .title_case, .severity = .@"error", }`
-* `union_field` - Style and severity for union fields defined within a `union { ... }` block 
-   * default: `.{ .style = .snake_case, .severity = .@"error", }`
+* `error_field`
+
+   * Style and severity for errors defined within an `error { ... }` container 
+
+   * **Default:** `.{ .style = .title_case, .severity = .@"error", }`
+
+* `enum_field`
+
+   * Style and severity for enum values defined within an `enum { ... }` container 
+
+   * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
+
+* `struct_field`
+
+   * Style and severity for struct fields defined within a `struct { ... }` container 
+
+   * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
+
+* `struct_field_that_is_type`
+
+   * Like `struct_field` but for fields with type `type` 
+
+   * **Default:** `.{ .style = .title_case, .severity = .@"error", }`
+
+* `struct_field_that_is_namespace`
+
+   * Like `struct_field` but for fields with a namespace type 
+
+   * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
+
+* `struct_field_that_is_fn`
+
+   * Like `struct_field` but for fields with a callable/function type 
+
+   * **Default:** `.{ .style = .camel_case, .severity = .@"error", }`
+
+* `struct_field_that_is_type_fn`
+
+   * Like `struct_field_that_is_fn` but the callable/function returns a `type` 
+
+   * **Default:** `.{ .style = .title_case, .severity = .@"error", }`
+
+* `union_field`
+
+   * Style and severity for union fields defined within a `union { ... }` block 
+
+   * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
+
 
 ## `file_naming`
 
@@ -51,10 +107,18 @@ for implicit structs and `snake_case` for namespaces.
 
 **Config options:**
 
-* `file_namespace` - Style and severity for a file that is a namespace (i.e., does not have root container fields) 
-   * default: `.{ .style = .snake_case, .severity = .@"error", }`
-* `file_struct` - Style and severity for a file that is a struct (i.e., has root container fields) 
-   * default: `.{ .style = .title_case, .severity = .@"error", }`
+* `file_namespace`
+
+   * Style and severity for a file that is a namespace (i.e., does not have root container fields) 
+
+   * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
+
+* `file_struct`
+
+   * Style and severity for a file that is a struct (i.e., has root container fields) 
+
+   * **Default:** `.{ .style = .title_case, .severity = .@"error", }`
+
 
 ## `function_naming`
 
@@ -63,18 +127,42 @@ that return types and `camelCase` for others.
 
 **Config options:**
 
-* `function` - Style and severity for non-type functions 
-   * default: `.{ .style = .camel_case, .severity = .@"error", }`
-* `function_that_returns_type` - Style and severity for type functions 
-   * default: `.{ .style = .title_case, .severity = .@"error", }`
-* `function_arg` - Style and severity for standard function arg 
-   * default: `.{ .style = .snake_case, .severity = .@"error", }`
-* `function_arg_that_is_type` - Style and severity for type function arg 
-   * default: `.{ .style = .title_case, .severity = .@"error", }`
-* `function_arg_that_is_fn` - Style and severity for non-type function function arg 
-   * default: `.{ .style = .camel_case, .severity = .@"error", }`
-* `function_arg_that_is_type_fn` - Style and severity for type function function arg 
-   * default: `.{ .style = .title_case, .severity = .@"error", }`
+* `function`
+
+   * Style and severity for non-type functions 
+
+   * **Default:** `.{ .style = .camel_case, .severity = .@"error", }`
+
+* `function_that_returns_type`
+
+   * Style and severity for type functions 
+
+   * **Default:** `.{ .style = .title_case, .severity = .@"error", }`
+
+* `function_arg`
+
+   * Style and severity for standard function arg 
+
+   * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
+
+* `function_arg_that_is_type`
+
+   * Style and severity for type function arg 
+
+   * **Default:** `.{ .style = .title_case, .severity = .@"error", }`
+
+* `function_arg_that_is_fn`
+
+   * Style and severity for non-type function function arg 
+
+   * **Default:** `.{ .style = .camel_case, .severity = .@"error", }`
+
+* `function_arg_that_is_type_fn`
+
+   * Style and severity for type function function arg 
+
+   * **Default:** `.{ .style = .title_case, .severity = .@"error", }`
+
 
 ## `no_deprecated`
 
@@ -82,8 +170,12 @@ Enforces that references aren't deprecated (i.e., doc commented with `Deprecated
 
 **Config options:**
 
-* `severity` - The severity of deprecations (off, warning, error). 
-   * default: `.warning`
+* `severity`
+
+   * The severity of deprecations (off, warning, error). 
+
+   * **Default:** `.warning`
+
 
 ## `no_hidden_allocations`
 
@@ -94,12 +186,24 @@ The caller should decide where and when to allocate not the callee.
 
 **Config options:**
 
-* `severity` - The severity of hidden allocations (off, warning, error). 
-   * default: `.warning`
-* `detect_allocators` - What kinds of allocators to detect. 
-   * default: `&.{ .page_allocator, .c_allocator, .general_purpose_allocator, .debug_allocator, }`
-* `exclude_tests` - Skip if found within `test { ... }` block. 
-   * default: `true`
+* `severity`
+
+   * The severity of hidden allocations (off, warning, error). 
+
+   * **Default:** `.warning`
+
+* `detect_allocators`
+
+   * What kinds of allocators to detect. 
+
+   * **Default:** `&.{ .page_allocator, .c_allocator, .general_purpose_allocator, .debug_allocator, }`
+
+* `exclude_tests`
+
+   * Skip if found within `test { ... }` block. 
+
+   * **Default:** `true`
+
 
 ## `no_orelse_unreachable`
 
@@ -108,8 +212,12 @@ as it does not control flow.
 
 **Config options:**
 
-* `severity` - The severity (off, warning, error). 
-   * default: `.warning`
+* `severity`
+
+   * The severity (off, warning, error). 
+
+   * **Default:** `.warning`
+
 
 ## `no_undefined`
 
@@ -118,16 +226,36 @@ case uses should disable the line with an explanation.
 
 **Config options:**
 
-* `severity` - The severity (off, warning, error). 
-   * default: `.warning`
-* `exclude_in_fn` - Skip if found in a function call (case-insenstive). 
-   * default: `&.{"deinit"}`
-* `exclude_tests` - Skip if found within `test { ... }` block. 
-   * default: `true`
-* `exclude_var_decl_name_equals` - Skips var declarations that name equals (case-insensitive, for `var`, not `const`). 
-   * default: `&.{}`
-* `exclude_var_decl_name_ends_with` - Skips var declarations that name ends in (case-insensitive, for `var`, not `const`). 
-   * default: `&.{ "memory", "mem", "buffer", "buf", "buff", }`
+* `severity`
+
+   * The severity (off, warning, error). 
+
+   * **Default:** `.warning`
+
+* `exclude_in_fn`
+
+   * Skip if found in a function call (case-insenstive). 
+
+   * **Default:** `&.{"deinit"}`
+
+* `exclude_tests`
+
+   * Skip if found within `test { ... }` block. 
+
+   * **Default:** `true`
+
+* `exclude_var_decl_name_equals`
+
+   * Skips var declarations that name equals (case-insensitive, for `var`, not `const`). 
+
+   * **Default:** `&.{}`
+
+* `exclude_var_decl_name_ends_with`
+
+   * Skips var declarations that name ends in (case-insensitive, for `var`, not `const`). 
+
+   * **Default:** `&.{ "memory", "mem", "buffer", "buf", "buff", }`
+
 
 ## `no_unused`
 
@@ -135,8 +263,12 @@ Enforces that container declarations are referenced.
 
 **Config options:**
 
-* `container_declaration` - The severity for container declarations that are unused (off, warning, error). 
-   * default: `.warning`
+* `container_declaration`
+
+   * The severity for container declarations that are unused (off, warning, error). 
+
+   * **Default:** `.warning`
+
 
 ## `switch_case_ordering`
 
@@ -144,6 +276,10 @@ Enforces an order of values in `switch` statements.
 
 **Config options:**
 
-* `else_is_last` - The severity for when `else` is not last in a `switch` (off, warning, error). 
-   * default: `.warning`
+* `else_is_last`
+
+   * The severity for when `else` is not last in a `switch` (off, warning, error). 
+
+   * **Default:** `.warning`
+
 
