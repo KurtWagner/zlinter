@@ -18,7 +18,7 @@ jobs:
           version: ${{ matrix.zig_version }}
       - name: "Run unit tests"
         run: zig build unit-test
-      - name: "Run integration tests"
-        run: zig build integration-test
       - name: "Run linter"
         run: zig build lint
+      - name: "Run integration tests"
+        run: zig build integration-test

@@ -151,6 +151,9 @@ pub fn build(b: *std.Build) void {
             }).module("zls"),
         }},
     });
+    if (version.zig == .@"0.15" and target.result.os.tag == .windows) {
+        zlinter_lib_module.linkSystemLibrary("advapi32", .{});
+    }
 
     const zlinter_import = std.Build.Module.Import{
         .name = "zlinter",
@@ -351,6 +354,9 @@ fn buildStep(
         .optimize = options.optimize,
         .imports = &.{zlinter_import},
     });
+    // if (version.zig == .@"0.15" and options.target.result.os.tag == .windows) {
+    //     exe_module.linkSystemLibrary("advapi32", .{});
+    // }
 
     // --------------------------------------------------------------------
     // Generate dynamic rules and rules config

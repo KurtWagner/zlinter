@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - master-dev
       - 0.14.x
       - 0.14.x-dev
 jobs:
@@ -20,7 +21,7 @@ jobs:
           version: 0.14.1
       - name: "Run unit tests"
         run: zig build unit-test
-      - name: "Run integration tests"
-        run: zig build integration-test
       - name: "Run linter"
         run: zig build lint
+      - name: "Run integration tests"
+        run: zig build integration-test
