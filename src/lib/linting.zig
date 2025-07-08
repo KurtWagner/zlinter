@@ -605,7 +605,12 @@ pub const LintFileRenderer = struct {
                 fbs.buffer.len,
             )) {
                 const output = fbs.getWritten();
-                try lines.append(allocator, try allocator.dupe(u8, output));
+                const slice = if (output.len > 0 and output[output.len - 1] == '\r')
+                    output[0 .. output.len - 1]
+                else
+                    output[0..];
+
+                try lines.append(allocator, try allocator.dupe(u8, slice));
             } else |err| switch (err) {
                 error.EndOfStream => {
                     if (fbs.getWritten().len == 0) {
@@ -718,57 +723,59 @@ pub const LintFileRenderer = struct {
 };
 
 test "LintFileRenderer" {
-    const data = "123456789\n987654321\n";
-    var input = std.io.fixedBufferStream(data);
+    inline for (&.{ "\n", "\r\n" }) |newline| {
+        const data = "123456789" ++ newline ++ "987654321" ++ newline;
+        var input = std.io.fixedBufferStream(data);
 
-    var renderer = try LintFileRenderer.init(
-        std.testing.allocator,
-        input.reader(),
-    );
-    defer renderer.deinit(std.testing.allocator);
-
-    try std.testing.expectEqualDeep(&[3][]const u8{
-        "123456789",
-        "987654321",
-        "",
-    }, renderer.lines);
-
-    {
-        var output = std.ArrayListUnmanaged(u8).empty;
-        defer output.deinit(std.testing.allocator);
-
-        try renderer.render(
-            1,
-            3,
-            1,
-            5,
-            output.writer(std.testing.allocator),
+        var renderer = try LintFileRenderer.init(
+            std.testing.allocator,
+            input.reader(),
         );
+        defer renderer.deinit(std.testing.allocator);
 
-        try std.testing.expectEqualStrings(
-            \\ 2 | 987654321
-            \\   |    ^^^
-        , output.items);
-    }
+        try std.testing.expectEqualDeep(&[3][]const u8{
+            "123456789",
+            "987654321",
+            "",
+        }, renderer.lines);
 
-    {
-        var output = std.ArrayListUnmanaged(u8).empty;
-        defer output.deinit(std.testing.allocator);
+        {
+            var output = std.ArrayListUnmanaged(u8).empty;
+            defer output.deinit(std.testing.allocator);
 
-        try renderer.render(
-            0,
-            3,
-            1,
-            1,
-            output.writer(std.testing.allocator),
-        );
+            try renderer.render(
+                1,
+                3,
+                1,
+                5,
+                output.writer(std.testing.allocator),
+            );
 
-        try std.testing.expectEqualStrings(
-            \\ 1 | 123456789
-            \\   |    ^^^^^^
-            \\ 2 | 987654321
-            \\   | ^^
-        , output.items);
+            try std.testing.expectEqualStrings(
+                \\ 2 | 987654321
+                \\   |    ^^^
+            , output.items);
+        }
+
+        {
+            var output = std.ArrayListUnmanaged(u8).empty;
+            defer output.deinit(std.testing.allocator);
+
+            try renderer.render(
+                0,
+                3,
+                1,
+                1,
+                output.writer(std.testing.allocator),
+            );
+
+            try std.testing.expectEqualStrings(
+                \\ 1 | 123456789
+                \\   |    ^^^^^^
+                \\ 2 | 987654321
+                \\   | ^^
+            , output.items);
+        }
     }
 }
 
