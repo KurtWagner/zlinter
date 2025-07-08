@@ -65,8 +65,7 @@ pub fn build(b: *std.Build) !void {
         builder.addRule(.{ .builtin = .no_literal_args }, .{
             .detect_string_literal = .@"error",
             .detect_char_literal = .@"error",
-            // TODO: Fix this
-            // .exclude_fn_names = &.{"excludeFnName"},
+            .exclude_fn_names = &.{ "excludeFnName", "print" },
         });
         builder.addRule(.{ .builtin = .switch_case_ordering }, .{});
         builder.addRule(.{ .builtin = .field_naming }, .{});
