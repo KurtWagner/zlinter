@@ -710,4 +710,4 @@ const ZlinterRun = struct {
 };
 
 const std = @import("std");
-const version = @import("./src/lib/version.zig");
+pub const version = @import("./src/lib/version.zig");

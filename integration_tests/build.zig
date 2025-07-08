@@ -17,12 +17,16 @@ pub fn build(b: *std.Build) !void {
         if (item.kind != .file) continue;
         if (!std.mem.endsWith(u8, item.path, input_suffix)) continue;
 
+        const integration_test_module = b.createModule(.{
+            .root_source_file = b.path("src/integration_test.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        if (zlinter.version.zig == .@"0.15" and target.result.os.tag == .windows) {
+            integration_test_module.linkSystemLibrary("advapi32", .{});
+        }
         const run_integration_test = b.addRunArtifact(b.addTest(.{
-            .root_module = b.createModule(.{
-                .root_source_file = b.path("src/integration_test.zig"),
-                .target = target,
-                .optimize = optimize,
-            }),
+            .root_module = integration_test_module,
             .test_runner = .{
                 .path = b.path("src/test_runner.zig"),
                 .mode = .simple,
