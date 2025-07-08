@@ -354,9 +354,9 @@ fn buildStep(
         .optimize = options.optimize,
         .imports = &.{zlinter_import},
     });
-    // if (version.zig == .@"0.15" and options.target.result.os.tag == .windows) {
-    //     exe_module.linkSystemLibrary("advapi32", .{});
-    // }
+    if (version.zig == .@"0.15" and options.target.result.os.tag == .windows) {
+        exe_module.linkSystemLibrary("advapi32", .{});
+    }
 
     // --------------------------------------------------------------------
     // Generate dynamic rules and rules config
