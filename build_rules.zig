@@ -25,14 +25,9 @@ pub fn main() !void {
     );
     var buffer: [2048]u8 = undefined;
     {
-        var i: usize = 2;
-        while (i < args.len) : (i += 2) {
-            const arg = args[i];
-            const config = args[i + 1];
-            _ = config;
-
+        for (args[2..]) |rule_name| {
             try output_file.writeAll(
-                try std.fmt.bufPrint(&buffer, "@import(\"{s}\").buildRule(.{{}}),\n", .{arg}),
+                try std.fmt.bufPrint(&buffer, "@import(\"{s}\").buildRule(.{{}}),\n", .{rule_name}),
             );
         }
     }
@@ -45,13 +40,9 @@ pub fn main() !void {
     );
 
     {
-        var i: usize = 2;
-        while (i < args.len) : (i += 2) {
-            const arg = args[i];
-            const config = args[i + 1];
-
+        for (args[2..]) |rule_name| {
             try output_file.writeAll(
-                try std.fmt.bufPrint(&buffer, "pub const @\"{s}\": @import(\"{s}\").Config = {s};\n", .{ arg, arg, config }),
+                try std.fmt.bufPrint(&buffer, "pub const @\"{s}\": @import(\"{s}\").Config = @import(\"{s}.zon\");\n", .{ rule_name, rule_name, rule_name }),
             );
         }
     }

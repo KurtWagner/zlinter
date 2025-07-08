@@ -239,22 +239,24 @@ pub fn build(b: *std.Build) void {
                     .no_literal_args,
                     .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import },
                     .{
-                        // TODO: Fix this:
-                        // .exclude_fn_names = &.{
-                        //     "print",
-                        //     "alloc",
-                        //     "allocWithOptions",
-                        //     "allocWithOptionsRetAddr",
-                        //     "allocSentinel",
-                        //     "alignedAlloc",
-                        //     "allocAdvancedWithRetAddr",
-                        //     "resize",
-                        //     "realloc",
-                        //     "reallocAdvanced",
-                        //     "parseInt",
-                        //     "debugPrintWithIndent",
-                        //     "tokenLocation",
-                        // },
+                        .exclude_fn_names = &.{
+                            "print",
+                            "alloc",
+                            "allocWithOptions",
+                            "allocWithOptionsRetAddr",
+                            "allocSentinel",
+                            "alignedAlloc",
+                            "allocAdvancedWithRetAddr",
+                            "resize",
+                            "realloc",
+                            "reallocAdvanced",
+                            "parseInt",
+                            "debugPrintWithIndent",
+                            "tokenLocation",
+                            "expectEqual",
+                            "renderLine",
+                            "init",
+                        },
                     },
                 ),
             },
@@ -331,9 +333,9 @@ fn buildStep(
         exclude_paths: ?std.BufSet = null,
     },
 ) *std.Build.Step {
-    const zlinter_lib_module: *std.Build.Module, const exe_file: std.Build.LazyPath, const build_rules_exe_file: std.Build.LazyPath, _ = switch (options.zlinter) {
-        .dependency => |d| .{ d.module("zlinter"), d.path("src/exe/run_linter.zig"), d.path("build_rules.zig"), d.path("build_rules_config.zig") },
-        .module => |m| .{ m, b.path("src/exe/run_linter.zig"), b.path("build_rules.zig"), b.path("build_rules_config.zig") },
+    const zlinter_lib_module: *std.Build.Module, const exe_file: std.Build.LazyPath, const build_rules_exe_file: std.Build.LazyPath = switch (options.zlinter) {
+        .dependency => |d| .{ d.module("zlinter"), d.path("src/exe/run_linter.zig"), d.path("build_rules.zig") },
+        .module => |m| .{ m, b.path("src/exe/run_linter.zig"), b.path("build_rules.zig") },
     };
 
     const zlinter_import = std.Build.Module.Import{ .name = "zlinter", .module = zlinter_lib_module };
@@ -351,14 +353,10 @@ fn buildStep(
     // --------------------------------------------------------------------
     // Generate dynamic rules and rules config
     // --------------------------------------------------------------------
-    var rule_imports = std.ArrayListUnmanaged(std.Build.Module.Import).empty;
-    for (rules) |r| rule_imports.append(b.allocator, r.import) catch @panic("OOM");
-    defer rule_imports.deinit(b.allocator);
-
     const rules_module = createRulesModule(
         b,
         zlinter_import,
-        rule_imports.items,
+        rules,
         addBuildRulesStep(
             b,
             build_rules_exe_file,
@@ -496,11 +494,8 @@ fn addBuildRulesStep(
     }));
 
     const output = run.addOutputFileArg("rules.zig");
-
-    for (rules) |rule| {
+    for (rules) |rule|
         run.addArg(rule.import.name);
-        run.addArg(rule.zon_config_str);
-    }
 
     return output;
 }
@@ -508,23 +503,42 @@ fn addBuildRulesStep(
 fn createRulesModule(
     b: *std.Build,
     zlinter_import: std.Build.Module.Import,
-    rule_imports: []const std.Build.Module.Import,
+    rules: []const BuiltRule,
     build_rules_output: std.Build.LazyPath,
 ) *std.Build.Module {
+    var rule_imports = std.ArrayListUnmanaged(std.Build.Module.Import).empty;
+    for (rules) |r| rule_imports.append(b.allocator, r.import) catch @panic("OOM");
+    defer rule_imports.deinit(b.allocator);
+
     const rules_imports = std.mem.concat(
         b.allocator,
         std.Build.Module.Import,
         &.{
             &[1]std.Build.Module.Import{zlinter_import},
-            rule_imports,
+            rule_imports.toOwnedSlice(b.allocator) catch @panic("OOM"),
         },
     ) catch @panic("OOM");
     defer b.allocator.free(rules_imports);
 
-    return b.createModule(.{
+    const module = b.createModule(.{
         .root_source_file = build_rules_output,
         .imports = rules_imports,
     });
+
+    for (rules) |rule| {
+        const wf = b.addWriteFiles();
+        const import_name = b.fmt("{s}.zon", .{rule.import.name});
+        const path = wf.add(
+            import_name,
+            rule.zon_config_str,
+        );
+        module.addImport(
+            import_name,
+            b.createModule(.{ .root_source_file = path }),
+        );
+    }
+
+    return module;
 }
 
 const ZlinterRun = struct {
@@ -581,7 +595,8 @@ const ZlinterRun = struct {
                 .artifact => |artifact| {
                     if (artifact.rootModuleTarget().os.tag == .windows) {
                         // Windows doesn't have rpaths so add .dll search paths to PATH environment variable
-                        const compiles = artifact.getCompileDependencies(true);
+                        const chase_dynamics = true;
+                        const compiles = artifact.getCompileDependencies(chase_dynamics);
                         for (compiles) |compile| {
                             if (compile.root_module.resolved_target.?.result.os.tag == .windows) continue;
                             if (compile.isDynamicLibrary()) continue;

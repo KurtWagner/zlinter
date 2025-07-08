@@ -85,18 +85,24 @@ test "integration test rules" {
                     offset = end;
                 }
 
-                try expectFileContentsEquals(
+                expectFileContentsEquals(
                     std.fs.cwd(),
                     lint_stdout_expected_file.?,
                     mutable,
-                );
+                ) catch |e| {
+                    std.log.err("stderr: {s}", .{lint_output.stderr});
+                    return e;
+                };
             },
             else => {
-                try expectFileContentsEquals(
+                expectFileContentsEquals(
                     std.fs.cwd(),
                     lint_stdout_expected_file.?,
                     lint_output.stdout,
-                );
+                ) catch |e| {
+                    std.log.err("stderr: {s}", .{lint_output.stderr});
+                    return e;
+                };
             },
         }
     }
