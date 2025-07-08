@@ -1,0 +1,147 @@
+//! Generates a rules zig file at build time that can be built into the linter.
+
+pub fn main() !void {
+    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+    defer if (debug_allocator.deinit() == .leak) @panic("Memory leak");
+
+    const gpa = debug_allocator.allocator();
+
+    const args = try std.process.argsAlloc(gpa);
+    defer std.process.argsFree(gpa, args);
+
+    const output_file_path = args[1];
+    var output_file = std.fs.cwd().createFile(output_file_path, .{}) catch |err| {
+        fatal("Unable to open '{s}': {s}", .{ output_file_path, @errorName(err) });
+    };
+    defer output_file.close();
+
+    var writer = output_file.writer();
+
+    try writer.writeAll(
+        \\# zlinter rules
+        \\
+        \\
+    );
+
+    const file_names = try gpa.dupe([]const u8, args[2..]);
+    defer gpa.free(file_names);
+    std.mem.sort([]const u8, file_names, {}, stringLessThan);
+
+    for (file_names) |file_name| {
+        const basename = std.fs.path.basename(file_name);
+        const rule_name = basename[0 .. basename.len - ".zig".len];
+
+        try writer.writeAll("## `");
+        try writer.writeAll(rule_name);
+        try writer.writeAll("`\n\n");
+
+        var file = try std.fs.cwd().openFile(file_name, .{});
+        defer file.close();
+
+        var reader = file.reader();
+        const content = try reader.readAllAlloc(gpa, 10 * 1024 * 1024);
+        defer gpa.free(content);
+
+        try writeFileDocComments(content, writer);
+        try writer.writeByte('\n');
+
+        try writeFileRuleConfig(content, gpa, writer);
+        try writer.writeByte('\n');
+    }
+
+    return std.process.cleanExit();
+}
+
+fn stringLessThan(_: void, lhs: []const u8, rhs: []const u8) bool {
+    return std.ascii.orderIgnoreCase(lhs, rhs) == .lt;
+}
+
+fn fatal(comptime format: []const u8, args: anytype) noreturn {
+    std.debug.print(format, args);
+    std.process.exit(1);
+}
+
+fn writeFileDocComments(content: []const u8, writer: anytype) !void {
+    var lines = std.mem.splitScalar(u8, content, '\n');
+    while (lines.next()) |line| {
+        if (!std.mem.startsWith(u8, line, "//!")) return;
+
+        try writer.writeAll(std.mem.trim(u8, line["//!".len..], &std.ascii.whitespace));
+        try writer.writeByte('\n');
+    }
+}
+
+fn writeFileRuleConfig(content: []const u8, gpa: std.mem.Allocator, writer: anytype) !void {
+    const sentinel = try gpa.dupeZ(u8, content);
+    defer gpa.free(sentinel);
+
+    var tree = try std.zig.Ast.parse(gpa, sentinel, .zig);
+    defer tree.deinit(gpa);
+
+    try writer.writeAll("**Config options:**\n\n");
+
+    var config_written: bool = false;
+    var struct_buffer: [2]std.zig.Ast.Node.Index = undefined;
+    for (tree.rootDecls()) |decl| {
+        if (tree.fullVarDecl(decl)) |var_decl| {
+            const name = tree.tokenSlice(var_decl.ast.mut_token + 1);
+            if (!std.mem.eql(u8, name, "Config")) continue;
+
+            const struct_init = tree.fullContainerDecl(&struct_buffer, switch (zig_version) {
+                .@"0.14" => var_decl.ast.init_node,
+                .@"0.15" => var_decl.ast.init_node.unwrap().?,
+            }).?;
+
+            for (struct_init.ast.members) |field| {
+                const container_field = tree.fullContainerField(field) orelse continue;
+
+                try writer.writeAll("* `");
+                try writer.writeAll(tree.tokenSlice(container_field.ast.main_token));
+                try writer.writeAll("` - ");
+
+                var doc_comment = container_field.firstToken() - 1;
+                while (tree.tokens.items(.tag)[doc_comment] == .doc_comment) {
+                    try writer.writeAll(std.mem.trim(u8, tree.tokenSlice(doc_comment)["///".len..], &std.ascii.whitespace));
+                    try writer.writeByte(' ');
+                    if (doc_comment > 0) {
+                        doc_comment -= 1;
+                    } else break;
+                }
+
+                const maybe_default: ?[]const u8 = switch (zig_version) {
+                    .@"0.14" => if (container_field.ast.value_expr != 0) tree.getNodeSource(container_field.ast.value_expr) else null,
+                    .@"0.15" => if (container_field.ast.value_expr.unwrap()) |default_node| tree.getNodeSource(default_node) else null,
+                };
+
+                if (maybe_default) |default| {
+                    try writer.writeAll("\n   * default: `");
+                    try writeWithoutDuplicateWhiteSpace(default, writer);
+                    try writer.writeByte('`');
+                }
+
+                try writer.writeByte('\n');
+
+                config_written = true;
+            }
+        }
+    }
+    if (!config_written) @panic("Config missing");
+}
+
+fn writeWithoutDuplicateWhiteSpace(content: []const u8, writer: anytype) !void {
+    var prev_whitespace: bool = false;
+    for (content) |c| {
+        const is_whitespace = std.ascii.isWhitespace(c);
+
+        if (!is_whitespace) {
+            try writer.writeByte(c);
+            prev_whitespace = false;
+        } else if (!prev_whitespace) {
+            try writer.writeByte(' ');
+            prev_whitespace = true;
+        }
+    }
+}
+
+const std = @import("std");
+const zig_version = @import("src/lib/version.zig").zig;

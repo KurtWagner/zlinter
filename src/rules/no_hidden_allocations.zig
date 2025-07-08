@@ -19,9 +19,10 @@ pub const AllocatorKind = struct {
 
 /// Config for no_hidden_allocations rule.
 pub const Config = struct {
+    /// The severity of hidden allocations (off, warning, error).
     severity: zlinter.LintProblemSeverity = .warning,
 
-    /// Which allocators to detect?
+    /// What kinds of allocators to detect.
     detect_allocators: []const AllocatorKind = &.{
         .page_allocator,
         .c_allocator,
@@ -29,7 +30,7 @@ pub const Config = struct {
         .debug_allocator,
     },
 
-    /// Skip if found within `test { ... }` block
+    /// Skip if found within `test { ... }` block.
     exclude_tests: bool = true,
 
     // TODO: Should we check for returned slices/pointers without a deinit contract?

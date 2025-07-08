@@ -1,21 +1,21 @@
-//! Enforces naming convention for fields in containers: struct, enum, union, opaque and error.
-//! Types of fields and their rules are configurable. See `Config` below.
+//! Enforces a consistent naming convention for fields in containers. For
+//! example, `struct`, `enum`, `union`, `opaque` and `error`.
 
 /// Config for field_naming rule.
 pub const Config = struct {
-    /// Errors defined within an `error { ... }` container
+    /// Style and severity for errors defined within an `error { ... }` container
     error_field: zlinter.LintTextStyleWithSeverity = .{
         .style = .title_case,
         .severity = .@"error",
     },
 
-    /// Enum values defined within an `enum { ... }` container
+    /// Style and severity for enum values defined within an `enum { ... }` container
     enum_field: zlinter.LintTextStyleWithSeverity = .{
         .style = .snake_case,
         .severity = .@"error",
     },
 
-    /// Struct fields defined within a `struct { ... }` container
+    /// Style and severity for struct fields defined within a `struct { ... }` container
     struct_field: zlinter.LintTextStyleWithSeverity = .{
         .style = .snake_case,
         .severity = .@"error",
@@ -45,7 +45,7 @@ pub const Config = struct {
         .severity = .@"error",
     },
 
-    /// Union fields defined within a `union { ... }` block
+    /// Style and severity for union fields defined within a `union { ... }` block
     union_field: zlinter.LintTextStyleWithSeverity = .{
         .style = .snake_case,
         .severity = .@"error",
