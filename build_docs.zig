@@ -99,7 +99,7 @@ fn writeFileRuleConfig(content: []const u8, gpa: std.mem.Allocator, writer: anyt
                 try writer.writeAll(tree.tokenSlice(container_field.ast.main_token));
                 try writer.writeAll("`");
 
-                try writer.writeAll("\n\n   * ");
+                try writer.writeAll("\n\n  * ");
                 var doc_comment = container_field.firstToken() - 1;
                 while (tree.tokens.items(.tag)[doc_comment] == .doc_comment) {
                     try writer.writeAll(std.mem.trim(u8, tree.tokenSlice(doc_comment)["///".len..], &std.ascii.whitespace));
@@ -115,7 +115,7 @@ fn writeFileRuleConfig(content: []const u8, gpa: std.mem.Allocator, writer: anyt
                 };
 
                 if (maybe_default) |default| {
-                    try writer.writeAll("\n\n   * **Default:** `");
+                    try writer.writeAll("\n\n  * **Default:** `");
                     try writeWithoutDuplicateWhiteSpace(default, writer);
                     try writer.writeByte('`');
                 }
