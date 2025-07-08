@@ -41,7 +41,7 @@ fn run(
     var arena_buffer = std.heap.FixedBufferAllocator.init(&arena_mem);
     const arena = arena_buffer.allocator();
 
-    var node: zlinter.shims.NodeIndexShim = .init(0);
+    var node: zlinter.shims.NodeIndexShim = .root;
     while (node.index < handle.tree.nodes.len) : (node.index += 1) {
         defer arena_buffer.reset();
 

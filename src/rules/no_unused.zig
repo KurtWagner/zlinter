@@ -38,7 +38,7 @@ fn run(
     var container_references = map: {
         var map = std.StringHashMapUnmanaged(void).empty;
 
-        var node: zlinter.shims.NodeIndexShim = .init(0);
+        var node: zlinter.shims.NodeIndexShim = .root;
         while (node.index < tree.nodes.len) : (node.index += 1) {
             switch (zlinter.shims.nodeTag(tree, node.toNodeIndex())) {
                 .identifier => try map.put(allocator, tree.tokenSlice(zlinter.shims.nodeMainToken(tree, node.toNodeIndex())), {}),

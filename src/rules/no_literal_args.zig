@@ -18,6 +18,25 @@ pub const Config = struct {
 
     /// The severity of detecting bool literals (off, warning, error).
     detect_bool_literal: zlinter.LintProblemSeverity = .warning,
+
+    /// Skip if found within `test { ... }` block.
+    exclude_tests: bool = true,
+
+    /// Skip if the literal argument is to a function with given name (case-sensitive).
+    exclude_fn_names: []const []const u8 = &.{
+        "print",
+        "alloc",
+        "allocWithOptions",
+        "allocWithOptionsRetAddr",
+        "allocSentinel",
+        "alignedAlloc",
+        "allocAdvancedWithRetAddr",
+        "resize",
+        "realloc",
+        "reallocAdvanced",
+        "parseInt",
+        "IntFittingRange",
+    },
 };
 
 /// Builds and returns the no_literal_args rule.
@@ -48,8 +67,13 @@ fn run(
     const tree = doc.handle.tree;
     var call_buffer: [1]std.zig.Ast.Node.Index = undefined;
 
-    var node: zlinter.shims.NodeIndexShim = .init(1);
-    while (node.index < tree.nodes.len) : (node.index += 1) {
+    const root: zlinter.shims.NodeIndexShim = .root;
+    var it = try doc.nodeLineageIterator(root, allocator);
+    defer it.deinit();
+
+    skip: while (try it.next()) |tuple| {
+        const node, const connections = tuple;
+
         const call = tree.fullCall(&call_buffer, node.toNodeIndex()) orelse continue;
 
         for (call.ast.params) |param_node| {
@@ -71,6 +95,21 @@ fn run(
                 },
                 else => null,
             } orelse continue;
+
+            // if configured, skip if a parent is a test block
+            if (config.exclude_tests) {
+                var next_parent = connections.parent;
+                while (next_parent) |parent| {
+                    if (zlinter.shims.nodeTag(tree, parent) == .test_decl) continue :skip;
+
+                    next_parent = doc.lineage.items(.parent)[zlinter.shims.NodeIndexShim.init(parent).index];
+                }
+            }
+
+            const fn_name = tree.tokenSlice(tree.lastToken(call.ast.fn_expr));
+            for (config.exclude_fn_names) |exclude_fn_name| {
+                if (std.mem.eql(u8, exclude_fn_name, fn_name)) continue :skip;
+            }
 
             switch (kind) {
                 .bool => if (config.detect_bool_literal != .off)
