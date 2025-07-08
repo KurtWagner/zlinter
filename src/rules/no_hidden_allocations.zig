@@ -69,7 +69,7 @@ fn run(
     // 2. Resolve the type of the LHS of the field to determine if its a detected type
     // 3. Profit
 
-    const root: zlinter.shims.NodeIndexShim = .init(0);
+    const root: zlinter.shims.NodeIndexShim = .root;
     var it = try doc.nodeLineageIterator(root, allocator);
     defer it.deinit();
 

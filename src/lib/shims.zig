@@ -12,6 +12,8 @@
 pub const NodeIndexShim = struct {
     index: u32,
 
+    pub const root: NodeIndexShim = .{ .index = 0 };
+
     pub inline fn isRoot(self: NodeIndexShim) bool {
         return self.index == 0;
     }

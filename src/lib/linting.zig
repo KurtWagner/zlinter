@@ -214,7 +214,7 @@ pub const LintDocument = struct {
                                 .@"0.15" => .{ container.scope_handle.toNode(), container.scope_handle.handle.tree },
                             };
 
-                            if (shims.NodeIndexShim.init(container_node).index != 0) {
+                            if (!shims.NodeIndexShim.init(container_node).isRoot()) {
                                 switch (shims.nodeTag(container_tree, container_node)) {
                                     .error_set_decl => break :result true,
                                     else => {},
@@ -465,7 +465,7 @@ pub const LintContext = struct {
             var queue = std.ArrayList(QueueItem).init(gpa);
             defer queue.deinit();
 
-            try queue.append(.{ .node = shims.NodeIndexShim.init(0) });
+            try queue.append(.{ .node = shims.NodeIndexShim.root });
 
             while (queue.pop()) |item| {
                 const children = try nodeChildrenAlloc(

@@ -263,6 +263,18 @@ These magic literals don’t explain what they mean. Consider using named consta
 
   * **Default:** `.warning`
 
+* `exclude_tests`
+
+  * Skip if found within `test { ... }` block.
+
+  * **Default:** `true`
+
+* `exclude_fn_names`
+
+  * Skip if the literal argument is to a function with given name (case-sensitive).
+
+  * **Default:** `&.{ "print", "alloc", "allocWithOptions", "allocWithOptionsRetAddr", "allocSentinel", "alignedAlloc", "allocAdvancedWithRetAddr", "resize", "realloc", "reallocAdvanced", "parseInt", "IntFittingRange", }`
+
 ## `no_orelse_unreachable`
 
 Enforces use of `.?` over `orelse unreachable` as `.?` offers comptime checks

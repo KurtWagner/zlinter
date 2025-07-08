@@ -32,7 +32,7 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    var node: zlinter.shims.NodeIndexShim = .init(0);
+    var node: zlinter.shims.NodeIndexShim = .root;
     while (node.index < tree.nodes.len) : (node.index += 1) {
         if (zlinter.shims.nodeTag(tree, node.toNodeIndex()) != .@"orelse") continue;
 

@@ -66,7 +66,8 @@ pub fn main() !void {
 
 fn fatal(comptime format: []const u8, args: anytype) noreturn {
     std.debug.print(format, args);
-    std.process.exit(1);
+    const exit_code_failure = 1;
+    std.process.exit(exit_code_failure);
 }
 
 const std = @import("std");

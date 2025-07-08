@@ -11,6 +11,16 @@ pub fn main() void {
     method(age, height, is_alive, initial, name);
 }
 
+// Ok: as within test and configured to exclude tests
+test {
+    method(1, 0.5, false, 'a', "Jack");
+}
+
+// Ok: build.zig has configured to exclude fn names excludeFnName
+// fn excludeFnName() void {
+//     method(1, 0.5, false, 'a', "Jack");
+// }
+
 fn method(age: u32, height: f32, is_alive: bool, initial: u8, name: []const u8) void {
     std.debug.print("{d} {d} {} {c} {s}", .{ age, height, is_alive, initial, name });
 }

@@ -23,10 +23,5 @@ error Avoid string literal arguments as they're ambiguous. [test_cases/no_litera
  3 |     method(1, 0.5, false, 'a', "Jack");
    |                                ^^^^^^^
 
-error Avoid string literal arguments as they're ambiguous. [test_cases/no_literal_args/no_literal_args.input.zig:15:21] no_literal_args
-
- 15 |     std.debug.print("{d} {d} {} {c} {s}", .{ age, height, is_alive, initial, name });
-    |                     ^^^^^^^^^^^^^^^^^^^^^
-
-x 3 errors
+x 2 errors
 x 3 warnings
