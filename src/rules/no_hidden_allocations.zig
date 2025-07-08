@@ -29,8 +29,8 @@ pub const Config = struct {
         .debug_allocator,
     },
 
-    // TODO: Implement:
-    // exclude_tests: bool = true,
+    /// Skip if found within `test { ... }` block
+    exclude_tests: bool = true,
 
     // TODO: Should we check for returned slices/pointers without a deinit contract?
     // check_returned_owned_memory: bool = true,
@@ -74,9 +74,18 @@ fn run(
 
     skip: while (try it.next()) |tuple| {
         const node, const connections = tuple;
-        _ = connections;
 
         if (zlinter.shims.nodeTag(tree, node.toNodeIndex()) != .field_access) continue :skip;
+
+        // if configured, skip if a parent is a test block
+        if (config.exclude_tests) {
+            var next_parent = connections.parent;
+            while (next_parent) |parent| {
+                if (zlinter.shims.nodeTag(tree, parent) == .test_decl) continue :skip;
+
+                next_parent = doc.lineage.items(.parent)[zlinter.shims.NodeIndexShim.init(parent).index];
+            }
+        }
 
         // unwrap field access lhs and identifier (e.g., lhs.identifier)
         const node_data = zlinter.shims.nodeData(tree, node.toNodeIndex());
@@ -135,16 +144,15 @@ fn run(
             is_problem = true;
             break;
         }
+        if (!is_problem) continue :skip;
 
-        if (is_problem) {
-            try lint_problems.append(allocator, .{
-                .rule_id = rule.rule_id,
-                .severity = config.severity,
-                .start = .startOfNode(tree, node.toNodeIndex()),
-                .end = .endOfNode(tree, node.toNodeIndex()),
-                .message = try allocator.dupe(u8, "Avoid hidden heap memory management. Instead pass in an Allocator so that the caller knows where memory is being allocated."),
-            });
-        }
+        try lint_problems.append(allocator, .{
+            .rule_id = rule.rule_id,
+            .severity = config.severity,
+            .start = .startOfNode(tree, node.toNodeIndex()),
+            .end = .endOfNode(tree, node.toNodeIndex()),
+            .message = try allocator.dupe(u8, "Avoid hidden heap memory management. Instead pass in an Allocator so that the caller knows where memory is being allocated."),
+        });
     }
 
     return if (lint_problems.items.len > 0)

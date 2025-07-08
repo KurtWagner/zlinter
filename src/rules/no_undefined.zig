@@ -10,7 +10,7 @@ pub const Config = struct {
     exclude_in_fn: []const []const u8 = &.{"deinit"},
 
     /// Skip if found within `test { ... }` block
-    exclude_in_test: bool = true,
+    exclude_tests: bool = true,
 
     /// Skips var declarations that name equals:
     /// Case-insensitive, for `var` (not `const`)
@@ -86,7 +86,7 @@ fn run(
         while (next_parent) |parent| {
             // We expect any undefined with a test to simply be ignored as really we expect
             // the test to fail if there's issues
-            if (config.exclude_in_test and zlinter.shims.nodeTag(tree, parent) == .test_decl) continue :skip;
+            if (config.exclude_tests and zlinter.shims.nodeTag(tree, parent) == .test_decl) continue :skip;
 
             // If assigned undefined in a deinit, ignore as it's a common pattern
             // assign undefined after freeing memory
