@@ -1,0 +1,39 @@
+warning Avoid swallowing error with else unreachable [test_cases/no_swallow_error/no_swallow_error.input.zig:21:5] no_swallow_error
+
+ 21 |     if (takeYourChances(1)) {} else |_| {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 22 |         unreachable;
+    | ^^^^^^^^^^^^^^^^^^^^
+ 23 |     }
+    | ^^^^^^
+
+warning Avoid swallowing error with else unreachable [test_cases/no_swallow_error/no_swallow_error.input.zig:20:5] no_swallow_error
+
+ 20 |     if (takeYourChances(1)) {} else |_| unreachable;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Avoid swallowing error with empty else [test_cases/no_swallow_error/no_swallow_error.input.zig:19:5] no_swallow_error
+
+ 19 |     if (takeYourChances(1)) {} else |_| {}
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Avoid swallowing error with catch unreachable [test_cases/no_swallow_error/no_swallow_error.input.zig:16:5] no_swallow_error
+
+ 16 |     takeYourChances(2) catch {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 17 |         unreachable;
+    | ^^^^^^^^^^^^^^^^^^^^
+ 18 |     };
+    | ^^^^^^
+
+warning Avoid swallowing error with catch unreachable [test_cases/no_swallow_error/no_swallow_error.input.zig:15:5] no_swallow_error
+
+ 15 |     takeYourChances(2) catch unreachable;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Avoid swallowing error with empty catch [test_cases/no_swallow_error/no_swallow_error.input.zig:14:5] no_swallow_error
+
+ 14 |     takeYourChances(0) catch {};
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+x 6 warnings
