@@ -20,6 +20,19 @@ fn doesNotHaveHiddenAllocatons(allocator: std.mem.Allocator) !void {
     defer allocator.free(bad_b);
 }
 
+// These should all be ignored as in test block
+test {
+    const bad_a = try std.heap.c_allocator.create(u32);
+    defer std.heap.c_allocator.destroy(bad_a);
+
+    const bad_b = try heap.page_allocator.alloc(u8, 2);
+    defer heap.page_allocator.free(bad_b);
+
+    var debug_allocator = DebugAllocator.init();
+    const bad_c = try debug_allocator.create(u32);
+    defer debug_allocator.destroy(bad_c);
+}
+
 const DebugAllocator = heap.DebugAllocator(.{});
 const heap = std.heap;
 const std = @import("std");
