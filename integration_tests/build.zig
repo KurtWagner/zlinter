@@ -61,6 +61,7 @@ pub fn build(b: *std.Build) !void {
         var builder = zlinter.builder(b, .{ .target = target, .optimize = optimize });
         builder.addRule(.{ .builtin = .no_unused }, .{});
         builder.addRule(.{ .builtin = .no_undefined }, .{});
+        builder.addRule(.{ .builtin = .max_positional_args }, .{});
         builder.addRule(.{ .builtin = .switch_case_ordering }, .{});
         builder.addRule(.{ .builtin = .field_naming }, .{});
         builder.addRule(.{ .builtin = .declaration_naming }, .{});
