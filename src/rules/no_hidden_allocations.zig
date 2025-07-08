@@ -29,21 +29,14 @@ pub const Config = struct {
         .debug_allocator,
     },
 
-    /// Should we warn about hidden container allocations?
-    // detect_containers: bool = true,
+    // TODO: Implement:
+    // exclude_tests: bool = true,
 
-    /// Allow a list of files or functions that are exempt — e.g., test utilities.
-    // allow: []const []const u8 = &.{
-    //     "test/",
-    //     "examples/",
-    //     "fn temporaryScratch()",
-    // },
-
-    /// Should we check for returned slices/pointers without a deinit contract?
+    // TODO: Should we check for returned slices/pointers without a deinit contract?
     // check_returned_owned_memory: bool = true,
 
-    /// Should we flag global allocators? (e.g., using a global GPA without explicit passing)
-    detect_global_allocator_use: bool = true,
+    // TODO: Should we flag global allocators?
+    // detect_global_allocator_use: bool = true,
 };
 
 /// Builds and returns the no_hidden_allocations rule.
