@@ -41,6 +41,7 @@ An extendable and customizable **Zig linter** that is integrated from source int
   * [field_naming](RULES.md#field_naming)
   * [file_naming](RULES.md#file_naming)
   * [switch_case_ordering](RULES.md#switch_case_ordering)
+  * [max_positional_args](RULES.md#max_positional_args)
 * [For contributors](#for-contributors)
   * [Contributions](#contributions)
   * [Run tests](#run-tests)
@@ -101,6 +102,7 @@ hook it up to a build step, like `zig build lint`:
     // ...
     const lint_cmd = b.step("lint", "Lint source code.");
     lint_cmd.dependOn(step: {
+        // Swap in and out whatever rules you see fit from RULES.md
         var builder = zlinter.builder(b, .{});
         builder.addRule(.{ .builtin = .field_naming }, .{});
         builder.addRule(.{ .builtin = .declaration_naming }, .{});
@@ -110,6 +112,7 @@ hook it up to a build step, like `zig build lint`:
         builder.addRule(.{ .builtin = .no_unused }, .{});
         builder.addRule(.{ .builtin = .no_deprecated }, .{});
         builder.addRule(.{ .builtin = .no_orelse_unreachable }, .{});
+        builder.addRule(.{ .builtin = .max_positional_args }, .{});
         break :step builder.build();
     });
     ```

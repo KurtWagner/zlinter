@@ -164,9 +164,40 @@ that return types and `camelCase` for others.
    * **Default:** `.{ .style = .title_case, .severity = .@"error", }`
 
 
+## `max_positional_args`
+
+Enforces that a function does not define too many positional arguments.
+
+Keeping positional argument lists short improves readability and encourages
+concise designs.
+
+If the function is doing too many things, consider splitting it up
+into smaller more focused functions. Alternatively, accept a struct with
+appropriate defaults.
+
+**Config options:**
+
+* `severity`
+
+   * The severity (off, warning, error). 
+
+   * **Default:** `.warning`
+
+* `max`
+
+   * The max number of positional arguments. Functions with more than this many arguments will fail the rule. 
+
+   * **Default:** `5`
+
+
 ## `no_deprecated`
 
 Enforces that references aren't deprecated (i.e., doc commented with `Deprecated: `)
+
+If you're indefinitely targetting fixed versions of a dependency or zig
+then using deprecated items may not be a big deal. Although, it's still
+worth undertsanding why they're deprecated, as there may be risks associated
+with use.
 
 **Config options:**
 
