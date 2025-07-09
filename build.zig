@@ -203,7 +203,14 @@ pub fn build(b: *std.Build) void {
     const merge_coverage = std.Build.Step.Run.create(b, "Unit test coverage");
     merge_coverage.rename_step_with_output_arg = false;
     merge_coverage.addArgs(&.{ kcov_bin, "--merge" });
-    merge_coverage.addArg(b.pathJoin(&.{ b.install_path, "coverage" }));
+    const merged_coverage_output = merge_coverage.addOutputDirectoryArg("merged/");
+
+    const install_coverage = b.addInstallDirectory(.{
+        .source_dir = merged_coverage_output,
+        .install_dir = .{ .custom = "coverage" },
+        .install_subdir = "",
+    });
+    install_coverage.step.dependOn(&merge_coverage.step);
 
     const run_integration_tests = b.addSystemCommand(&.{ "zig", "build", "test" });
     run_integration_tests.setCwd(b.path("./integration_tests"));
@@ -216,10 +223,10 @@ pub fn build(b: *std.Build) void {
         const cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
         cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only" });
         cover_run.addPrefixedDirectoryArg("--include-pattern=", b.path("src"));
-        merge_coverage.addFileArg(cover_run.addOutputFileArg("unit_test_coverage"));
+        merge_coverage.addDirectoryArg(cover_run.addOutputDirectoryArg("unit_test_coverage"));
         cover_run.addArtifactArg(unit_tests_exe);
 
-        unit_test_step.dependOn(&merge_coverage.step);
+        unit_test_step.dependOn(&install_coverage.step);
     } else {
         unit_test_step.dependOn(&run_unit_tests.step);
     }
@@ -241,10 +248,10 @@ pub fn build(b: *std.Build) void {
                 const cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
                 cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only" });
                 cover_run.addPrefixedDirectoryArg("--include-pattern=", b.path("src"));
-                merge_coverage.addFileArg(cover_run.addOutputFileArg(field.name ++ "_unit_test_coverage"));
+                merge_coverage.addDirectoryArg(cover_run.addOutputDirectoryArg(field.name ++ "_unit_test_coverage"));
                 cover_run.addArtifactArg(test_rule_exe);
 
-                unit_test_step.dependOn(&merge_coverage.step);
+                unit_test_step.dependOn(&install_coverage.step);
             } else {
                 unit_test_step.dependOn(&test_rule_exe.step);
             }
