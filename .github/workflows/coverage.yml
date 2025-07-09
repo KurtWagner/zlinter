@@ -9,7 +9,8 @@ on:
 jobs:
   coverage:
     if: github.repository_owner == 'KurtWagner'
-    runs-on: ubuntu-latest
+    # Can't use 24 - see https://github.com/SimonKagstrom/kcov/issues/473
+    runs-on: ubuntu-22.04
     name: Test coverage
     timeout-minutes: 3
     steps:
@@ -33,4 +34,3 @@ jobs:
 
       - name: "Upload coverage"
         uses: coverallsapp/github-action@v2
-
