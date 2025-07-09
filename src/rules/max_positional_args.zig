@@ -103,7 +103,7 @@ test "max_positional_args" {
     );
 
     // TODO: This looks like a bug - should include a1 name in param:
-    inline for (&.{"u32, a2:u32, a3:u32, a4:u32, a5:u32, a6:u32"}, 0..) |slice, i| {
+    inline for (&.{"u32, a2:u32, a3:u32, a4:u32, a5:u32, a6:u32)"}, 0..) |slice, i| {
         try std.testing.expectEqualStrings(slice, result.problems[i].sliceSource(source));
     }
 

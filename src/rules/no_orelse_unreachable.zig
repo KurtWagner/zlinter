@@ -88,7 +88,7 @@ test "no_orelse_unreachable" {
         zlinter.testing.paths.posix("path/to/my_file.zig"),
     );
 
-    inline for (&.{"b orelse unreachable"}, 0..) |slice, i| {
+    inline for (&.{"b orelse unreachable;"}, 0..) |slice, i| {
         try std.testing.expectEqualStrings(slice, result.problems[i].sliceSource(source));
     }
 
