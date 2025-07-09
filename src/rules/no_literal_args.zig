@@ -7,17 +7,17 @@
 /// Config for no_literal_args rule.
 pub const Config = struct {
     /// The severity of detecting char literals (off, warning, error).
-    detect_char_literal: zlinter.LintProblemSeverity = .off,
+    detect_char_literal: zlinter.rules.LintProblemSeverity = .off,
 
     // TODO: Perhaps this should be smart enough to ignore "fmt" param names? It's off by default for now anyway.
     /// The severity of detecting string literals (off, warning, error).
-    detect_string_literal: zlinter.LintProblemSeverity = .off,
+    detect_string_literal: zlinter.rules.LintProblemSeverity = .off,
 
     /// The severity of detecting number literals (off, warning, error).
-    detect_number_literal: zlinter.LintProblemSeverity = .warning,
+    detect_number_literal: zlinter.rules.LintProblemSeverity = .warning,
 
     /// The severity of detecting bool literals (off, warning, error).
-    detect_bool_literal: zlinter.LintProblemSeverity = .warning,
+    detect_bool_literal: zlinter.rules.LintProblemSeverity = .warning,
 
     /// Skip if found within `test { ... }` block.
     exclude_tests: bool = true,
@@ -40,10 +40,10 @@ pub const Config = struct {
 };
 
 /// Builds and returns the no_literal_args rule.
-pub fn buildRule(options: zlinter.LintRuleOptions) zlinter.LintRule {
+pub fn buildRule(options: zlinter.rules.LintRuleOptions) zlinter.rules.LintRule {
     _ = options;
 
-    return zlinter.LintRule{
+    return zlinter.rules.LintRule{
         .rule_id = @tagName(.no_literal_args),
         .run = &run,
     };
@@ -53,15 +53,15 @@ const LiteralKind = enum { bool, string, number, char };
 
 /// Runs the no_literal_args rule.
 fn run(
-    rule: zlinter.LintRule,
-    _: zlinter.LintContext,
-    doc: zlinter.LintDocument,
+    rule: zlinter.rules.LintRule,
+    _: zlinter.session.LintContext,
+    doc: zlinter.session.LintDocument,
     allocator: std.mem.Allocator,
-    options: zlinter.LintOptions,
-) error{OutOfMemory}!?zlinter.LintResult {
+    options: zlinter.session.LintOptions,
+) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
-    var lint_problems = std.ArrayListUnmanaged(zlinter.LintProblem).empty;
+    var lint_problems = std.ArrayListUnmanaged(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(allocator);
 
     const tree = doc.handle.tree;
@@ -149,7 +149,7 @@ fn run(
     }
 
     return if (lint_problems.items.len > 0)
-        try zlinter.LintResult.init(
+        try zlinter.results.LintResult.init(
             allocator,
             doc.path,
             try lint_problems.toOwnedSlice(allocator),

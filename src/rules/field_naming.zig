@@ -4,59 +4,59 @@
 /// Config for field_naming rule.
 pub const Config = struct {
     /// Style and severity for errors defined within an `error { ... }` container
-    error_field: zlinter.LintTextStyleWithSeverity = .{
+    error_field: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .title_case,
         .severity = .@"error",
     },
 
     /// Style and severity for enum values defined within an `enum { ... }` container
-    enum_field: zlinter.LintTextStyleWithSeverity = .{
+    enum_field: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .snake_case,
         .severity = .@"error",
     },
 
     /// Style and severity for struct fields defined within a `struct { ... }` container
-    struct_field: zlinter.LintTextStyleWithSeverity = .{
+    struct_field: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .snake_case,
         .severity = .@"error",
     },
 
     /// Like `struct_field` but for fields with type `type`
-    struct_field_that_is_type: zlinter.LintTextStyleWithSeverity = .{
+    struct_field_that_is_type: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .title_case,
         .severity = .@"error",
     },
 
     /// Like `struct_field` but for fields with a namespace type
-    struct_field_that_is_namespace: zlinter.LintTextStyleWithSeverity = .{
+    struct_field_that_is_namespace: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .snake_case,
         .severity = .@"error",
     },
 
     /// Like `struct_field` but for fields with a callable/function type
-    struct_field_that_is_fn: zlinter.LintTextStyleWithSeverity = .{
+    struct_field_that_is_fn: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .camel_case,
         .severity = .@"error",
     },
 
     /// Like `struct_field_that_is_fn` but the callable/function returns a `type`
-    struct_field_that_is_type_fn: zlinter.LintTextStyleWithSeverity = .{
+    struct_field_that_is_type_fn: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .title_case,
         .severity = .@"error",
     },
 
     /// Style and severity for union fields defined within a `union { ... }` block
-    union_field: zlinter.LintTextStyleWithSeverity = .{
+    union_field: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .snake_case,
         .severity = .@"error",
     },
 };
 
 /// Builds and returns the field_naming rule.
-pub fn buildRule(options: zlinter.LintRuleOptions) zlinter.LintRule {
+pub fn buildRule(options: zlinter.rules.LintRuleOptions) zlinter.rules.LintRule {
     _ = options;
 
-    return zlinter.LintRule{
+    return zlinter.rules.LintRule{
         .rule_id = @tagName(.field_naming),
         .run = &run,
     };
@@ -64,15 +64,15 @@ pub fn buildRule(options: zlinter.LintRuleOptions) zlinter.LintRule {
 
 /// Runs the field_naming rule.
 fn run(
-    rule: zlinter.LintRule,
-    _: zlinter.LintContext,
-    doc: zlinter.LintDocument,
+    rule: zlinter.rules.LintRule,
+    _: zlinter.session.LintContext,
+    doc: zlinter.session.LintDocument,
     allocator: std.mem.Allocator,
-    options: zlinter.LintOptions,
-) error{OutOfMemory}!?zlinter.LintResult {
+    options: zlinter.session.LintOptions,
+) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
-    var lint_problems = std.ArrayListUnmanaged(zlinter.LintProblem).empty;
+    var lint_problems = std.ArrayListUnmanaged(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(allocator);
 
     const tree = doc.handle.tree;
@@ -86,7 +86,7 @@ fn run(
             for (container_decl.ast.members) |member| {
                 if (tree.fullContainerField(member)) |container_field| {
                     const type_kind = try doc.resolveTypeKind(.{ .container_field = container_field });
-                    const style_with_severity: zlinter.LintTextStyleWithSeverity, const container_name: []const u8 = tuple: {
+                    const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const container_name: []const u8 = tuple: {
                         break :tuple switch (container_tag) {
                             .keyword_struct => if (type_kind) |kind|
                                 switch (kind) {
@@ -146,7 +146,7 @@ fn run(
     }
 
     return if (lint_problems.items.len > 0)
-        try zlinter.LintResult.init(
+        try zlinter.results.LintResult.init(
             allocator,
             doc.path,
             try lint_problems.toOwnedSlice(allocator),
@@ -175,7 +175,7 @@ test "run - implicit struct (root struct)" {
         zlinter.testing.paths.posix("path/to/file.zig"),
     );
 
-    try zlinter.testing.expectProblemsEqual(&[_]zlinter.LintProblem{
+    try zlinter.testing.expectProblemsEqual(&[_]zlinter.results.LintProblem{
         .{
             .rule_id = "field_naming",
             .severity = .@"error",
@@ -225,7 +225,7 @@ test "run - union container" {
     var result = (try zlinter.testing.runRule(rule, zlinter.testing.paths.posix("path/to/file.zig"), source)).?;
     defer result.deinit(std.testing.allocator);
 
-    try zlinter.testing.expectProblemsEqual(&[_]zlinter.LintProblem{
+    try zlinter.testing.expectProblemsEqual(&[_]zlinter.results.LintProblem{
         .{
             .rule_id = "field_naming",
             .severity = .@"error",
@@ -275,7 +275,7 @@ test "run - error container" {
     var result = (try zlinter.testing.runRule(rule, zlinter.testing.paths.posix("path/to/file.zig"), source)).?;
     defer result.deinit(std.testing.allocator);
 
-    try zlinter.testing.expectProblemsEqual(&[_]zlinter.LintProblem{
+    try zlinter.testing.expectProblemsEqual(&[_]zlinter.results.LintProblem{
         .{
             .rule_id = "field_naming",
             .severity = .@"error",

@@ -4,47 +4,47 @@
 /// Config for declaration_naming rule.
 pub const Config = struct {
     /// Style and severity for declarations with `const` mutability.
-    var_decl: zlinter.LintTextStyleWithSeverity = .{
+    var_decl: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .snake_case,
         .severity = .@"error",
     },
 
     /// Style and severity for declarations with `var` mutability.
-    const_decl: zlinter.LintTextStyleWithSeverity = .{
+    const_decl: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .snake_case,
         .severity = .@"error",
     },
 
     /// Style and severity for type declarations.
-    decl_that_is_type: zlinter.LintTextStyleWithSeverity = .{
+    decl_that_is_type: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .title_case,
         .severity = .@"error",
     },
 
     /// Style and severity for namespace declarations.
-    decl_that_is_namespace: zlinter.LintTextStyleWithSeverity = .{
+    decl_that_is_namespace: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .snake_case,
         .severity = .@"error",
     },
 
     /// Style and severity for non-type function declarations.
-    decl_that_is_fn: zlinter.LintTextStyleWithSeverity = .{
+    decl_that_is_fn: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .camel_case,
         .severity = .@"error",
     },
 
     /// Style and severity type function declarations.
-    decl_that_is_type_fn: zlinter.LintTextStyleWithSeverity = .{
+    decl_that_is_type_fn: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .title_case,
         .severity = .@"error",
     },
 };
 
 /// Builds and returns the declaration_naming rule.
-pub fn buildRule(options: zlinter.LintRuleOptions) zlinter.LintRule {
+pub fn buildRule(options: zlinter.rules.LintRuleOptions) zlinter.rules.LintRule {
     _ = options;
 
-    return zlinter.LintRule{
+    return zlinter.rules.LintRule{
         .rule_id = @tagName(.declaration_naming),
         .run = &run,
     };
@@ -52,15 +52,15 @@ pub fn buildRule(options: zlinter.LintRuleOptions) zlinter.LintRule {
 
 /// Runs the declaration_naming rule.
 fn run(
-    rule: zlinter.LintRule,
-    _: zlinter.LintContext,
-    doc: zlinter.LintDocument,
+    rule: zlinter.rules.LintRule,
+    _: zlinter.session.LintContext,
+    doc: zlinter.session.LintDocument,
     allocator: std.mem.Allocator,
-    options: zlinter.LintOptions,
-) error{OutOfMemory}!?zlinter.LintResult {
+    options: zlinter.session.LintOptions,
+) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
-    var lint_problems = std.ArrayListUnmanaged(zlinter.LintProblem).empty;
+    var lint_problems = std.ArrayListUnmanaged(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(allocator);
 
     const tree = doc.handle.tree;
@@ -72,7 +72,7 @@ fn run(
                 const name_token = var_decl.ast.mut_token + 1;
                 const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
 
-                const style_with_severity: zlinter.LintTextStyleWithSeverity, const var_desc: []const u8 =
+                const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const var_desc: []const u8 =
                     switch (type_kind) {
                         .fn_returns_type => .{ config.decl_that_is_type_fn, "Type function" },
                         .@"fn" => .{ config.decl_that_is_fn, "Function" },
@@ -105,7 +105,7 @@ fn run(
     }
 
     return if (lint_problems.items.len > 0)
-        try zlinter.LintResult.init(
+        try zlinter.results.LintResult.init(
             allocator,
             doc.path,
             try lint_problems.toOwnedSlice(allocator),
@@ -144,7 +144,7 @@ test "declaration_naming" {
     try std.testing.expectStringEndsWith(result.file_path, zlinter.testing.paths.posix("path/to/file.zig"));
 
     try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.LintProblem{
+        &[_]zlinter.results.LintProblem{
             .{
                 .rule_id = "declaration_naming",
                 .severity = .@"error",

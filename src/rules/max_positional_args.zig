@@ -10,17 +10,17 @@
 /// Config for max_positional_args rule.
 pub const Config = struct {
     /// The severity (off, warning, error).
-    severity: zlinter.LintProblemSeverity = .warning,
+    severity: zlinter.rules.LintProblemSeverity = .warning,
 
     /// The max number of positional arguments. Functions with more than this many arguments will fail the rule.
     max: u8 = 5,
 };
 
 /// Builds and returns the max_positional_args rule.
-pub fn buildRule(options: zlinter.LintRuleOptions) zlinter.LintRule {
+pub fn buildRule(options: zlinter.rules.LintRuleOptions) zlinter.rules.LintRule {
     _ = options;
 
-    return zlinter.LintRule{
+    return zlinter.rules.LintRule{
         .rule_id = @tagName(.max_positional_args),
         .run = &run,
     };
@@ -28,15 +28,15 @@ pub fn buildRule(options: zlinter.LintRuleOptions) zlinter.LintRule {
 
 /// Runs the max_positional_args rule.
 fn run(
-    rule: zlinter.LintRule,
-    _: zlinter.LintContext,
-    doc: zlinter.LintDocument,
+    rule: zlinter.rules.LintRule,
+    _: zlinter.session.LintContext,
+    doc: zlinter.session.LintDocument,
     allocator: std.mem.Allocator,
-    options: zlinter.LintOptions,
-) error{OutOfMemory}!?zlinter.LintResult {
+    options: zlinter.session.LintOptions,
+) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
-    var lint_problems = std.ArrayListUnmanaged(zlinter.LintProblem).empty;
+    var lint_problems = std.ArrayListUnmanaged(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(allocator);
 
     const tree = doc.handle.tree;
@@ -57,7 +57,7 @@ fn run(
     }
 
     return if (lint_problems.items.len > 0)
-        try zlinter.LintResult.init(
+        try zlinter.results.LintResult.init(
             allocator,
             doc.path,
             try lint_problems.toOwnedSlice(allocator),

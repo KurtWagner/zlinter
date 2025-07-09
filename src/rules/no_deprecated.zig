@@ -8,14 +8,14 @@
 /// Config for no_deprecated rule.
 pub const Config = struct {
     /// The severity of deprecations (off, warning, error).
-    severity: zlinter.LintProblemSeverity = .warning,
+    severity: zlinter.rules.LintProblemSeverity = .warning,
 };
 
 /// Builds and returns the no_deprecated rule.
-pub fn buildRule(options: zlinter.LintRuleOptions) zlinter.LintRule {
+pub fn buildRule(options: zlinter.rules.LintRuleOptions) zlinter.rules.LintRule {
     _ = options;
 
-    return zlinter.LintRule{
+    return zlinter.rules.LintRule{
         .rule_id = @tagName(.no_deprecated),
         .run = &run,
     };
@@ -23,15 +23,15 @@ pub fn buildRule(options: zlinter.LintRuleOptions) zlinter.LintRule {
 
 /// Runs the no_deprecated rule.
 fn run(
-    rule: zlinter.LintRule,
-    _: zlinter.LintContext,
-    doc: zlinter.LintDocument,
+    rule: zlinter.rules.LintRule,
+    _: zlinter.session.LintContext,
+    doc: zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
-    options: zlinter.LintOptions,
-) error{OutOfMemory}!?zlinter.LintResult {
+    options: zlinter.session.LintOptions,
+) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
-    var lint_problems = std.ArrayListUnmanaged(zlinter.LintProblem).empty;
+    var lint_problems = std.ArrayListUnmanaged(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
     const handle = doc.handle;
@@ -89,7 +89,7 @@ fn run(
     }
 
     return if (lint_problems.items.len > 0)
-        try zlinter.LintResult.init(
+        try zlinter.results.LintResult.init(
             gpa,
             doc.path,
             try lint_problems.toOwnedSlice(gpa),
@@ -98,7 +98,7 @@ fn run(
         null;
 }
 
-fn getLintProblemLocationStart(doc: zlinter.LintDocument, node_index: std.zig.Ast.Node.Index) zlinter.LintProblemLocation {
+fn getLintProblemLocationStart(doc: zlinter.session.LintDocument, node_index: std.zig.Ast.Node.Index) zlinter.results.LintProblemLocation {
     const first_token = doc.handle.tree.firstToken(node_index);
     const first_token_loc = doc.handle.tree.tokenLocation(0, first_token);
     return .{
@@ -108,7 +108,7 @@ fn getLintProblemLocationStart(doc: zlinter.LintDocument, node_index: std.zig.As
     };
 }
 
-fn getLintProblemLocationEnd(doc: zlinter.LintDocument, node_index: std.zig.Ast.Node.Index) zlinter.LintProblemLocation {
+fn getLintProblemLocationEnd(doc: zlinter.session.LintDocument, node_index: std.zig.Ast.Node.Index) zlinter.results.LintProblemLocation {
     const last_token = doc.handle.tree.lastToken(node_index);
     const last_token_loc = doc.handle.tree.tokenLocation(0, last_token);
     return .{
@@ -119,13 +119,13 @@ fn getLintProblemLocationEnd(doc: zlinter.LintDocument, node_index: std.zig.Ast.
 }
 
 fn handleVarAccess(
-    rule: zlinter.LintRule,
+    rule: zlinter.rules.LintRule,
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
-    doc: zlinter.LintDocument,
+    doc: zlinter.session.LintDocument,
     node_index: std.zig.Ast.Node.Index,
     identifier_token: std.zig.Ast.TokenIndex,
-    lint_problems: *std.ArrayListUnmanaged(zlinter.LintProblem),
+    lint_problems: *std.ArrayListUnmanaged(zlinter.results.LintProblem),
     config: Config,
 ) !void {
     const handle = doc.handle;
@@ -154,13 +154,13 @@ fn handleVarAccess(
 }
 
 fn handleEnumLiteral(
-    rule: zlinter.LintRule,
+    rule: zlinter.rules.LintRule,
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
-    doc: zlinter.LintDocument,
+    doc: zlinter.session.LintDocument,
     node_index: std.zig.Ast.Node.Index,
     identifier_token: std.zig.Ast.TokenIndex,
-    lint_problems: *std.ArrayListUnmanaged(zlinter.LintProblem),
+    lint_problems: *std.ArrayListUnmanaged(zlinter.results.LintProblem),
     config: Config,
 ) !void {
     const decl = try getSymbolEnumLiteral(
@@ -184,7 +184,7 @@ fn handleEnumLiteral(
 }
 
 fn getSymbolEnumLiteral(
-    doc: zlinter.LintDocument,
+    doc: zlinter.session.LintDocument,
     node: std.zig.Ast.Node.Index,
     name: []const u8,
     gpa: std.mem.Allocator,
@@ -224,13 +224,13 @@ fn getSymbolEnumLiteral(
 }
 
 fn handleFieldAccess(
-    rule: zlinter.LintRule,
+    rule: zlinter.rules.LintRule,
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
-    doc: zlinter.LintDocument,
+    doc: zlinter.session.LintDocument,
     node_index: std.zig.Ast.Node.Index,
     identifier_token: std.zig.Ast.TokenIndex,
-    lint_problems: *std.ArrayListUnmanaged(zlinter.LintProblem),
+    lint_problems: *std.ArrayListUnmanaged(zlinter.results.LintProblem),
     config: Config,
 ) !void {
     const handle = doc.handle;

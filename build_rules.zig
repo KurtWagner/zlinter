@@ -20,7 +20,7 @@ pub fn main() !void {
     try output_file.writeAll(
         \\const zlinter = @import("zlinter");
         \\
-        \\pub const rules = [_]zlinter.LintRule{
+        \\pub const rules = [_]zlinter.rules.LintRule{
         \\
     );
     var buffer: [2048]u8 = undefined;
