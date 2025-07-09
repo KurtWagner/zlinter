@@ -1,0 +1,26 @@
+name: coverage
+run-name: Coverage
+on:
+  push:
+    branches:
+      - master
+      - 0.14.x
+      - 0.14.x-dev
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    name: Test coverage
+    timeout-minutes: 3
+    steps:
+      - name: "Checkout repo"
+        uses: actions/checkout@v4
+      - name: "Setup zig environment"
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.14.1
+      - name: "Run unit tests with coverage"
+        run: zig build unit-test -Dcoverage=true
+      - name: "Upload coverage"
+        uses: coverallsapp/github-action@v2
+        with:
+          files: 

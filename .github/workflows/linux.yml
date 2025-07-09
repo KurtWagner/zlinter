@@ -1,6 +1,10 @@
 name: linux
 run-name: Linux Tests
-on: push
+on:
+  push:
+    branches:
+      - master
+      - 0.14.x
 jobs:
   test:
     runs-on: ubuntu-latest
