@@ -1,7 +1,10 @@
 pub usingnamespace @import("linting.zig");
 
+// TODO: Alphabetical this
 pub const comments = @import("comments.zig");
 pub const files = @import("files.zig");
+pub const ast = @import("ast.zig");
+pub const rendering = @import("rendering.zig");
 pub const ansi = @import("ansi.zig");
 pub const zls = @import("zls");
 pub const Args = @import("Args.zig");

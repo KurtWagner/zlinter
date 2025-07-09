@@ -5,7 +5,7 @@ pub const LintDocument = struct {
     path: []const u8,
     handle: *zls.DocumentStore.Handle,
     analyser: *zls.Analyser,
-    lineage: *NodeLineage,
+    lineage: *ast.NodeLineage,
 
     pub fn deinit(self: *LintDocument, gpa: std.mem.Allocator) void {
         while (self.lineage.pop()) |connections| {
@@ -262,7 +262,7 @@ pub const LintDocument = struct {
     pub fn nodeAncestorIterator(
         self: LintDocument,
         node: std.zig.Ast.Node.Index,
-    ) NodeAncestorIterator {
+    ) ast.NodeAncestorIterator {
         return .{
             .current = shims.NodeIndexShim.init(node),
             .lineage = self.lineage,
@@ -273,8 +273,8 @@ pub const LintDocument = struct {
         self: LintDocument,
         node: shims.NodeIndexShim,
         gpa: std.mem.Allocator,
-    ) error{OutOfMemory}!NodeLineageIterator {
-        var it = NodeLineageIterator{
+    ) error{OutOfMemory}!ast.NodeLineageIterator {
+        var it = ast.NodeLineageIterator{
             .gpa = gpa,
             .queue = .empty,
             .lineage = self.lineage,
@@ -424,7 +424,7 @@ pub const LintContext = struct {
             },
         );
 
-        const lineage = try gpa.create(NodeLineage);
+        const lineage = try gpa.create(ast.NodeLineage);
         lineage.* = .empty;
 
         const handle = self.document_store.getOrLoadHandle(uri) orelse return null;
@@ -468,7 +468,7 @@ pub const LintContext = struct {
             try queue.append(.{ .node = shims.NodeIndexShim.root });
 
             while (queue.pop()) |item| {
-                const children = try nodeChildrenAlloc(
+                const children = try ast.nodeChildrenAlloc(
                     gpa,
                     doc.handle.tree,
                     item.node.toNodeIndex(),
@@ -531,200 +531,6 @@ pub const LintFile = struct {
         allocator.free(self.pathname);
     }
 };
-
-pub const LintFileRenderer = struct {
-    const Self = @This();
-
-    lines: [][]const u8,
-
-    pub fn init(allocator: std.mem.Allocator, stream: anytype) !Self {
-        var lines = std.ArrayListUnmanaged([]const u8).empty;
-        defer lines.deinit(allocator);
-
-        const max_line_bytes = 64 * 1024;
-        var buf: [max_line_bytes]u8 = undefined;
-        var fbs = std.io.fixedBufferStream(&buf);
-        while (true) {
-            fbs.reset();
-            if (stream.streamUntilDelimiter(
-                fbs.writer(),
-                '\n',
-                fbs.buffer.len,
-            )) {
-                const output = fbs.getWritten();
-                const slice = if (output.len > 0 and output[output.len - 1] == '\r')
-                    output[0 .. output.len - 1]
-                else
-                    output[0..];
-
-                try lines.append(allocator, try allocator.dupe(u8, slice));
-            } else |err| switch (err) {
-                error.EndOfStream => {
-                    if (fbs.getWritten().len == 0) {
-                        try lines.append(allocator, try allocator.dupe(u8, ""));
-                    }
-                    break;
-                },
-                else => |e| return e,
-            }
-        }
-
-        return .{ .lines = try lines.toOwnedSlice(allocator) };
-    }
-
-    /// Renders a given line with a span highlighted with "^" below the line.
-    /// The column values are inclusive of "^". e.g., start 0 and end 1 will
-    /// put "^" under column 0 and 1. The output will not include a trailing
-    /// newline.
-    pub fn render(
-        self: Self,
-        start_line: usize,
-        start_column: usize,
-        end_line: usize,
-        end_column: usize,
-        writer: anytype,
-    ) !void {
-        for (start_line..end_line + 1) |line_index| {
-            const is_start = start_line == line_index;
-            const is_end = end_line == line_index;
-            const is_middle = !is_start and !is_end;
-
-            if (is_middle) {
-                try self.renderLine(
-                    line_index,
-                    0,
-                    if (self.lines[line_index].len == 0) 0 else self.lines[line_index].len - 1,
-                    writer,
-                );
-            } else if (is_start and is_end) {
-                try self.renderLine(
-                    line_index,
-                    start_column,
-                    end_column,
-                    writer,
-                );
-            } else if (is_start) {
-                try self.renderLine(
-                    line_index,
-                    start_column,
-                    if (self.lines[line_index].len == 0) 0 else self.lines[line_index].len - 1,
-                    writer,
-                );
-            } else if (is_end) {
-                try self.renderLine(
-                    line_index,
-                    0,
-                    end_column,
-                    writer,
-                );
-            } else {
-                @panic("No possible");
-            }
-
-            if (!is_end) {
-                try writer.writeByte('\n');
-            }
-        }
-    }
-
-    fn renderLine(
-        self: Self,
-        line: usize,
-        column: usize,
-        end_column: usize,
-        writer: anytype,
-    ) !void {
-        const lhs_format = " {d} ";
-        const line_lhs_max_width = comptime std.fmt.comptimePrint(lhs_format, .{std.math.maxInt(@TypeOf(line))}).len;
-        var lhs_buffer: [line_lhs_max_width]u8 = undefined;
-        const lhs = std.fmt.bufPrint(&lhs_buffer, lhs_format, .{line + 1}) catch unreachable;
-
-        // LHS of code
-        try writer.writeAll(ansi.get(&.{.cyan}));
-        try writer.writeAll(lhs);
-        try writer.writeAll("| ");
-        try writer.writeAll(ansi.get(&.{.reset}));
-
-        // Actual code
-        try writer.writeAll(self.lines[line]);
-        try writer.writeByte('\n');
-
-        // LHS of arrows to impacted area
-        lhs_buffer = @splat(' ');
-        try writer.writeAll(ansi.get(&.{.gray}));
-        try writer.writeAll(lhs_buffer[0..lhs.len]);
-        try writer.writeAll("| ");
-        try writer.writeAll(ansi.get(&.{.reset}));
-
-        // Actual arrows
-        for (0..column) |_| try writer.writeByte(' ');
-        try writer.writeAll(ansi.get(&.{.bold}));
-        for (column..end_column + 1) |_| try writer.writeByte('^');
-        try writer.writeAll(ansi.get(&.{.reset}));
-    }
-
-    pub fn deinit(self: Self, allocator: std.mem.Allocator) void {
-        for (self.lines) |line| allocator.free(line);
-        allocator.free(self.lines);
-    }
-};
-
-test "LintFileRenderer" {
-    inline for (&.{ "\n", "\r\n" }) |newline| {
-        const data = "123456789" ++ newline ++ "987654321" ++ newline;
-        var input = std.io.fixedBufferStream(data);
-
-        var renderer = try LintFileRenderer.init(
-            std.testing.allocator,
-            input.reader(),
-        );
-        defer renderer.deinit(std.testing.allocator);
-
-        try std.testing.expectEqualDeep(&[3][]const u8{
-            "123456789",
-            "987654321",
-            "",
-        }, renderer.lines);
-
-        {
-            var output = std.ArrayListUnmanaged(u8).empty;
-            defer output.deinit(std.testing.allocator);
-
-            try renderer.render(
-                1,
-                3,
-                1,
-                5,
-                output.writer(std.testing.allocator),
-            );
-
-            try std.testing.expectEqualStrings(
-                \\ 2 | 987654321
-                \\   |    ^^^
-            , output.items);
-        }
-
-        {
-            var output = std.ArrayListUnmanaged(u8).empty;
-            defer output.deinit(std.testing.allocator);
-
-            try renderer.render(
-                0,
-                3,
-                1,
-                1,
-                output.writer(std.testing.allocator),
-            );
-
-            try std.testing.expectEqualStrings(
-                \\ 1 | 123456789
-                \\   |    ^^^^^^
-                \\ 2 | 987654321
-                \\   | ^^
-            , output.items);
-        }
-    }
-}
 
 pub const LintTextStyleWithSeverity = struct {
     style: LintTextStyle,
@@ -1300,91 +1106,6 @@ test "LintDocument.resolveTypeKind" {
     }
 }
 
-fn nodeChildrenAlloc(
-    gpa: std.mem.Allocator,
-    tree: std.zig.Ast,
-    node: std.zig.Ast.Node.Index,
-) error{OutOfMemory}![]std.zig.Ast.Node.Index {
-    const Context = struct {
-        gpa: std.mem.Allocator,
-        children: *std.ArrayListUnmanaged(std.zig.Ast.Node.Index),
-
-        fn callback(self: @This(), _: std.zig.Ast, child_node: std.zig.Ast.Node.Index) error{OutOfMemory}!void {
-            if (shims.NodeIndexShim.init(child_node).isRoot()) return;
-            try self.children.append(self.gpa, child_node);
-        }
-    };
-
-    var children: std.ArrayListUnmanaged(std.zig.Ast.Node.Index) = .empty;
-    defer children.deinit(gpa);
-
-    try zls.ast.iterateChildren(
-        tree,
-        node,
-        Context{
-            .gpa = gpa,
-            .children = &children,
-        },
-        error{OutOfMemory},
-        Context.callback,
-    );
-    return children.toOwnedSlice(gpa);
-}
-
-const NodeLineage = std.MultiArrayList(NodeConnections);
-
-pub const NodeConnections = struct {
-    /// Null if root
-    parent: ?std.zig.Ast.Node.Index = null,
-    children: ?[]const std.zig.Ast.Node.Index = null,
-};
-
-pub const NodeAncestorIterator = struct {
-    const Self = @This();
-
-    current: shims.NodeIndexShim,
-    lineage: *NodeLineage,
-    done: bool = false,
-
-    pub fn next(self: *Self) ?std.zig.Ast.Node.Index {
-        if (self.done or self.current.isRoot()) return null;
-
-        const parent = self.lineage.items(.parent)[self.current.index];
-        if (parent) |p| {
-            self.current = shims.NodeIndexShim.init(p);
-            return p;
-        } else {
-            self.done = true;
-            return null;
-        }
-    }
-};
-
-pub const NodeLineageIterator = struct {
-    const Self = @This();
-
-    queue: std.ArrayListUnmanaged(shims.NodeIndexShim) = .empty,
-    lineage: *NodeLineage,
-    gpa: std.mem.Allocator,
-
-    pub fn deinit(self: *NodeLineageIterator) void {
-        self.queue.deinit(self.gpa);
-        self.* = undefined;
-    }
-
-    // zlinter-disable-next-line - TODO fix bug with tuple naming!
-    pub fn next(self: *Self) error{OutOfMemory}!?struct { shims.NodeIndexShim, NodeConnections } {
-        if (self.queue.pop()) |node_shim| {
-            const connections = self.lineage.get(node_shim.index);
-            for (connections.children orelse &.{}) |child| {
-                try self.queue.append(self.gpa, .init(child));
-            }
-            return .{ node_shim, connections };
-        }
-        return null;
-    }
-};
-
 const std = @import("std");
 const builtin = @import("builtin");
 const zls = @import("zls");
@@ -1393,3 +1114,4 @@ const version = @import("version.zig");
 const ansi = @import("ansi.zig");
 const shims = @import("shims.zig");
 const testing = @import("testing.zig");
+const ast = @import("ast.zig");

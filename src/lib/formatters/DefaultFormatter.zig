@@ -14,7 +14,7 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: any
 
     for (input.results) |file_result| {
         var file = input.dir.openFile(file_result.file_path, .{ .mode = .read_only }) catch return error.WriteFailure;
-        const file_renderer = zlinter.LintFileRenderer.init(input.arena, file.reader()) catch return error.WriteFailure;
+        const file_renderer = zlinter.rendering.LintFileRenderer.init(input.arena, file.reader()) catch return error.WriteFailure;
 
         for (file_result.problems) |problem| {
             if (problem.disabled_by_comment) {
