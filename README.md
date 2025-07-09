@@ -2,18 +2,17 @@
 
 # Zlinter - Linter for Zig
 
-> [!IMPORTANT]
-> **2025-07-03:** `zlinter` is new (aka unstable) so it may
+> **2025-07-03:** `zlinter` is **new**.  
+> - Expect breaking changes between commits.  
+> - Some features may not work as documented.  
 >
-> 1. make breaking changes between commits while it finds its footing; and
-> 2. not work completely as documented or expected
->
-> Please don't hesitate to help improve `zlinter` by reporting issues and contributing improvements.
+> Please report issues and contribute fixes!
 
 [![linux](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml/badge.svg?branch=master)](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml)
 [![windows](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml/badge.svg?branch=master)](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml)
 
 An extendable and customizable **Zig linter** that is integrated from source into your `build.zig`.
+
 
 ![Screenshot](./screenshot.png)
 
@@ -22,15 +21,15 @@ An extendable and customizable **Zig linter** that is integrated from source int
 * [Background](#background)
 * [Versioning](#versioning)
 * [Features](#features)
-* [Getting started](#getting-started)
-* [Configure](#configure)
-  * [Optimization](#configure-optimization)
+* [Getting Started](#getting-started)
+* [Configuration](#configuration)
   * [Paths](#configure-paths)
   * [Rules](#configure-rules)
-  * [Disable with comments](#disable-with-comments)
-  * [Command line args](#command-line-args)
-  * [Custom rules](#custom-rules)
-* [Builtin rules](RULES.md)
+  * [Disable with Comments](#disable-with-comments)
+  * [Command-Line Arguments](#command-line-arguments)
+  * [Custom Rules](#custom-rules)
+  * [Optimization](#configure-optimization)
+* [Built-in Rules](RULES.md)
   * [declaration_naming](RULES.md#declaration_naming)
   * [field_naming](RULES.md#field_naming)
   * [file_naming](RULES.md#file_naming)
@@ -44,10 +43,11 @@ An extendable and customizable **Zig linter** that is integrated from source int
   * [no_undefined](RULES.md#no_undefined)
   * [no_unused](RULES.md#no_unused)
   * [switch_case_ordering](RULES.md#switch_case_ordering)
-* [For contributors](#for-contributors)
-  * [Contributions](#contributions)
+* [Contributing](#contributing)
+  * [How to Contribute](#contributions)
   * [Run tests](#run-tests)
   * [Run on self](#run-lint-on-self)
+
 
 ## Background
 
@@ -77,6 +77,7 @@ This may change, especially when `zig` is "stable" at `1.x`. If you have opinion
 * [x] [Builtin rules](RULES.md) (e.g., [`no_deprecated`](RULES.md#no_deprecated) and [`field_naming`](RULES.md#field_naming))
 * [x] [Custom / BYO rules](#custom-rules) (e.g., if your project has bespoke rules you need to follow)
 * [x] [Per rule configurability](#configure-rules) (e.g., deprecations as warnings)
+* [x] Auto-fix with `--fix` capability (e.g., `no_unused` can remove unused container declarations)
 * [ ] Interchangeable result formatters (e.g., json, checkstyle)
 
 ## Getting started
@@ -128,17 +129,7 @@ hook it up to a build step, like `zig build lint`:
     zig build lint -- src/ file.zig
     ```
 
-## Configure
-
-### Configure Optimization
-
-`zlinter.builder` accepts `.optimize` (defaults to `.Debug`). For example,
-
-```zig
-var builder = zlinter.builder(b, .{.optimize = .ReleaseFast });
-```
-
-If your project is large it may be worth setting optimize to `.ReleaseFast` - keep in mind the first run may be slower as it builds the the modules for the first time with the new optimisation.
+## Configuration
 
 ### Configure paths
 
@@ -191,15 +182,16 @@ Disable all rules or an explicit set of rules for the current source code line. 
 const a = this.is.deprecated(); // zlinter-disable-current-line
 ```
 
-### Command line args
+### Command-Line Arguments
 
 ```shell
-zig build lint -- [--include <path> ...] [--exclude <path> ...] [--filter <path> ...] [--rule <name> ...]
+zig build lint -- [--include <path> ...] [--exclude <path> ...] [--filter <path> ...] [--rule <name> ...] [--fix]
 ```
 
 * `--include` run the linter on these path ignoring the includes and excludes defined in the `build.zig` forcing these paths to be resolved and linted (if they exist).
 * `--exclude` exclude these paths from linting. This argument will be used in conjunction with the excludes defined in the `build.zig` unless used with `--include`.
 * `--filter` used to filter the run to a specific set of already resolved paths. Unlike `--include` this leaves the includes and excludes defined in the `build.zig` as is.
+* `--fix` used to automatically fix some issues (e.g., removal of unused container declarations) - **Only use this feature if you use source control as it can result loss of code!**
 
 For example
 
@@ -225,7 +217,17 @@ builder.addRule(b, .{
 
 Alternatively, take a look at <https://github.com/KurtWagner/zlinter-custom-rule-example>, which is a minimal custom rule example with accompanying zig project.
 
-## For contributors
+### Configure Optimization
+
+`zlinter.builder` accepts `.optimize` (defaults to `.Debug`). For example,
+
+```zig
+var builder = zlinter.builder(b, .{.optimize = .ReleaseFast });
+```
+
+If your project is large it may be worth setting optimize to `.ReleaseFast` - keep in mind the first run may be slower as it builds the the modules for the first time with the new optimisation.
+
+## Contributing
 
 ### Contributions
 
