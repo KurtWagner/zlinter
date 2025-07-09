@@ -235,8 +235,9 @@ If your project is large it may be worth setting optimize to `.ReleaseFast` - ke
 
 Contributions and new rules or formatters are very welcome.
 
-* Rules are per project configurable so I don't see any problems if new opinionated ones are added (assuming they're not completely bespoke); perhaps one day there will be a "default" or "recommend" configuration.
-* I'm not a zig expert so I'm 100% to learning through pull requests that improve the health of the project.
+Rules are per project configurable so I don't see any problems if new opinionated ones are added (assuming they're not completely bespoke).
+
+If you notice breaking changes in `zig` that will not be picked up by a `Deprecated:` comment then consider contributing to the `no_deprecated.zig` rule, with a specific check for the change. For example, `zig` removed `usingnamespace` in `0.15` so `no_deprecated.zig` will explicitly check and report the usage of `usingnamespace` keyword in `0.14` runs.
 
 ### Run tests
 
