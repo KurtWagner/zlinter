@@ -29,7 +29,7 @@ pub const LintDisableComment = struct {
 /// comments.
 ///
 /// Comments must be freed using `comment.deinit()` and `allocator.free(comments)`
-pub fn allocParseComments(source: [:0]const u8, allocator: std.mem.Allocator) error{OutOfMemory}![]LintDisableComment {
+pub fn allocParse(source: [:0]const u8, allocator: std.mem.Allocator) error{OutOfMemory}![]LintDisableComment {
     const State = enum {
         parsing,
         slash,
@@ -189,9 +189,9 @@ pub fn allocParseComments(source: [:0]const u8, allocator: std.mem.Allocator) er
     return disable_comments.toOwnedSlice(allocator);
 }
 
-test "allocParseComments - zlinter-disable-current-line" {
+test "allocParse - zlinter-disable-current-line" {
     inline for (&.{ "\n", "\r\n" }) |newline| {
-        const comments = try allocParseComments(
+        const comments = try allocParse(
             "var line_0 = 0;" ++ newline ++
                 "var line_1 = 0; // zlinter-disable-current-line" ++ newline ++
                 "var line_2 = 0; // \t zlinter-disable-current-line  rule_a \t  rule_b " ++ newline ++
@@ -223,9 +223,9 @@ test "allocParseComments - zlinter-disable-current-line" {
     }
 }
 
-test "allocParseComments - zlinter-disable-next-line" {
+test "allocParse - zlinter-disable-next-line" {
     inline for (&.{ "\n", "\r\n" }) |newline| {
-        const comments = try allocParseComments(
+        const comments = try allocParse(
             "var line_0 = 0;" ++ newline ++
                 "// zlinter-disable-next-line" ++ newline ++
                 "var line_2 = 0;" ++ newline ++

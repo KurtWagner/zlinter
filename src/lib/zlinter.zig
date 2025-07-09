@@ -1,7 +1,7 @@
-pub usingnamespace @import("comments.zig");
 pub usingnamespace @import("linting.zig");
-pub usingnamespace @import("files.zig");
 
+pub const comments = @import("comments.zig");
+pub const files = @import("files.zig");
 pub const ansi = @import("ansi.zig");
 pub const zls = @import("zls");
 pub const Args = @import("Args.zig");

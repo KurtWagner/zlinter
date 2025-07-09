@@ -91,7 +91,7 @@ pub fn main() !u8 {
     var dir = try std.fs.cwd().openDir("./", .{ .iterate = true });
     defer dir.close();
 
-    const lint_files = try zlinter.allocLintFiles(
+    const lint_files = try zlinter.files.allocLintFiles(
         dir,
         // `--include` argument supersedes build defined includes and excludes
         args.include_paths orelse args.build_include_paths orelse null,
@@ -233,7 +233,7 @@ pub fn main() !u8 {
         }
         if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "  - Process syntax errors: {d}ms", .{ms});
 
-        const disable_comments = try zlinter.allocParseComments(ast.source, gpa);
+        const disable_comments = try zlinter.comments.allocParse(ast.source, gpa);
         defer {
             for (disable_comments) |*dc| dc.deinit(gpa);
             gpa.free(disable_comments);
@@ -464,7 +464,7 @@ fn allocAstErrorMsg(
 ///
 /// Returns true if a lint error should be skipped / ignored due to a comment
 /// in the source code.
-fn shouldSkip(disable_comments: []zlinter.LintDisableComment, err: zlinter.LintProblem) bool {
+fn shouldSkip(disable_comments: []zlinter.comments.LintDisableComment, err: zlinter.LintProblem) bool {
     for (disable_comments) |comment| {
         if (comment.line_start <= err.start.line and err.start.line <= comment.line_end) {
             // When there's no explicity rules set, we disable for all rules.
@@ -490,7 +490,7 @@ fn buildExcludesIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Arg
     const exclude_lint_paths: ?[]zlinter.LintFile = exclude: {
         if (args.exclude_paths) |p| {
             std.debug.assert(p.len > 0);
-            break :exclude try zlinter.allocLintFiles(dir, p, gpa);
+            break :exclude try zlinter.files.allocLintFiles(dir, p, gpa);
         } else break :exclude null;
     };
     defer {
@@ -506,7 +506,7 @@ fn buildExcludesIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Arg
 
         if (args.build_exclude_paths) |p| {
             std.debug.assert(p.len > 0);
-            break :exclude try zlinter.allocLintFiles(dir, p, gpa);
+            break :exclude try zlinter.files.allocLintFiles(dir, p, gpa);
         } else break :exclude null;
     };
     defer {
@@ -536,7 +536,7 @@ fn buildFilterIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Args)
     const filter_paths: []zlinter.LintFile = exclude: {
         if (args.filter_paths) |p| {
             std.debug.assert(p.len > 0);
-            break :exclude try zlinter.allocLintFiles(dir, p, gpa);
+            break :exclude try zlinter.files.allocLintFiles(dir, p, gpa);
         } else return null;
     };
     defer {
