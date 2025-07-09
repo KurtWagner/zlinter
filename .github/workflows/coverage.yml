@@ -5,7 +5,7 @@ on:
     branches:
       - master
       - 0.14.x
-      - 0.14.x-dev
+  pull_request:
 jobs:
   coverage:
     if: github.repository_owner == 'KurtWagner'

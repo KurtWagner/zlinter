@@ -4,8 +4,8 @@ on:
   push:
     branches:
       - master
-      - master-dev
       - 0.14.x
+  pull_request:
 jobs:
   test:
     runs-on: windows-latest
