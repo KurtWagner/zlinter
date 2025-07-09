@@ -8,23 +8,29 @@ on:
       - 0.14.x-dev
 jobs:
   coverage:
+    if: github.repository_owner == 'KurtWagner'
     runs-on: ubuntu-latest
     name: Test coverage
     timeout-minutes: 3
     steps:
       - name: "Checkout repo"
         uses: actions/checkout@v4
+
       - name: "Setup zig environment"
         uses: mlugg/setup-zig@v2
         with:
           version: 0.14.1
-      - name: "Install kcov"
+      
+      - run: zig env
+
+      - name: Install kcov
         run: |
-          sudo apt-get update
-          sudo apt-get install -y kcov
+          wget https://github.com/SimonKagstrom/kcov/releases/download/v42/kcov-amd64.tar.gz
+          sudo tar xf kcov-amd64.tar.gz -C /
+
       - name: "Run unit tests with coverage"
         run: zig build unit-test -Dcoverage=true
+
       - name: "Upload coverage"
         uses: coverallsapp/github-action@v2
-        with:
-          files: 
+
