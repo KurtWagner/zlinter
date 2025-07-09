@@ -71,7 +71,7 @@ fn walkDirectory(
 
     while (try walker.next()) |item| {
         if (item.kind != .file) continue;
-        if (!try zlinter.isLintableFilePath(item.path)) continue;
+        if (!try isLintableFilePath(item.path)) continue;
 
         const resolved = try std.fs.path.resolve(
             allocator,
@@ -91,6 +91,59 @@ fn walkDirectory(
                 {},
             );
         }
+    }
+}
+
+fn isLintableFilePath(file_path: []const u8) !bool {
+    // TODO: Should we support gitignore parsing?
+    const extension = ".zig";
+
+    const basename = std.fs.path.basename(file_path);
+    if (basename.len <= extension.len) return false;
+    if (!std.mem.endsWith(u8, basename, extension)) return false;
+
+    var components = try std.fs.path.componentIterator(file_path);
+    while (components.next()) |component| {
+        if (std.mem.eql(u8, component.name, ".zig-cache")) return false;
+        if (std.mem.eql(u8, component.name, "zig-out")) return false;
+    }
+
+    return true;
+}
+
+test "isLintableFilePath" {
+    // Good:
+    inline for (&.{
+        "a.zig",
+        "file.zig",
+        "some/path/file.zig",
+        "./some/path/file.zig",
+    }) |file_path| {
+        try std.testing.expect(try isLintableFilePath(testing.paths.posix(file_path)));
+    }
+
+    // Bad extensions:
+    inline for (&.{
+        ".zig",
+        "file.zi",
+        "file.z",
+        "file.",
+        "zig",
+        "src/.zig",
+        "src/zig",
+    }) |file_path| {
+        try std.testing.expect(!try isLintableFilePath(testing.paths.posix(file_path)));
+    }
+
+    // Bad parent directory
+    inline for (&.{
+        "zig-out/file.zig",
+        "./zig-out/file.zig",
+        ".zig-cache/file.zig",
+        "./parent/.zig-cache/file.zig",
+        "/other/parent/.zig-cache/file.zig",
+    }) |file_path| {
+        try std.testing.expect(!try isLintableFilePath(testing.paths.posix(file_path)));
     }
 }
 
