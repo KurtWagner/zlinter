@@ -137,6 +137,7 @@ const StepBuilder = struct {
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const coverage = b.option(bool, "coverage", "Generate a coverage report with kcov") orelse false;
 
     const zlinter_lib_module = b.addModule("zlinter", .{
         .root_source_file = b.path("src/lib/zlinter.zig"),
@@ -160,9 +161,8 @@ pub fn build(b: *std.Build) void {
         .module = zlinter_lib_module,
     };
 
-    const run_unit_tests = b.addRunArtifact(b.addTest(
-        .{ .root_module = zlinter_lib_module },
-    ));
+    const unit_tests_exe = b.addTest(.{ .root_module = zlinter_lib_module });
+    const run_unit_tests = b.addRunArtifact(unit_tests_exe);
 
     // --------------------------------------------------------------------
     // Generate dynamic rules list and configs
@@ -199,18 +199,61 @@ pub fn build(b: *std.Build) void {
     // ------------------------------------------------------------------------
     // zig build test
     // ------------------------------------------------------------------------
+    const kcov_bin = b.findProgram(&.{"kcov"}, &.{}) catch "kcov";
+    const merge_coverage = std.Build.Step.Run.create(b, "Unit test coverage");
+    merge_coverage.rename_step_with_output_arg = false;
+    merge_coverage.addArgs(&.{ kcov_bin, "--merge" });
+    merge_coverage.addArg(b.pathJoin(&.{ b.install_path, "coverage" }));
+
     const run_integration_tests = b.addSystemCommand(&.{ "zig", "build", "test" });
     run_integration_tests.setCwd(b.path("./integration_tests"));
-
-    const unit_test_step = b.step("unit-test", "Run unit tests");
-    unit_test_step.dependOn(&run_unit_tests.step);
 
     const integration_test_step = b.step("integration-test", "Run integration tests");
     integration_test_step.dependOn(&run_integration_tests.step);
 
+    const unit_test_step = b.step("unit-test", "Run unit tests");
+    if (coverage) {
+        const cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
+        cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only" });
+        cover_run.addPrefixedDirectoryArg("--include-pattern=", b.path("src"));
+        merge_coverage.addFileArg(cover_run.addOutputFileArg("unit_test_coverage"));
+        cover_run.addArtifactArg(unit_tests_exe);
+
+        unit_test_step.dependOn(&merge_coverage.step);
+    } else {
+        unit_test_step.dependOn(&run_unit_tests.step);
+    }
+
+    {
+        inline for (std.meta.fields(BuiltinLintRule)) |field| {
+            var test_rule_exe = b.addTest(.{
+                // Setting name breaks coverage as it looks in the wrong spot.
+                // .name = field.name ++ " unit test",
+                .root_module = buildBuiltinRule(
+                    b,
+                    @enumFromInt(field.value),
+                    .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import },
+                    .{},
+                ).import.module,
+            });
+
+            if (coverage) {
+                const cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
+                cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only" });
+                cover_run.addPrefixedDirectoryArg("--include-pattern=", b.path("src"));
+                merge_coverage.addFileArg(cover_run.addOutputFileArg(field.name ++ "_unit_test_coverage"));
+                cover_run.addArtifactArg(test_rule_exe);
+
+                unit_test_step.dependOn(&merge_coverage.step);
+            } else {
+                unit_test_step.dependOn(&test_rule_exe.step);
+            }
+        }
+    }
+
     const test_step = b.step("test", "Run all tests");
-    test_step.dependOn(&run_unit_tests.step);
-    test_step.dependOn(&run_integration_tests.step);
+    test_step.dependOn(unit_test_step);
+    test_step.dependOn(integration_test_step);
 
     // ------------------------------------------------------------------------
     // zig build lint
