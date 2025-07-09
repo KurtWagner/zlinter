@@ -1,0 +1,36 @@
+name: coverage
+run-name: Coverage
+on:
+  push:
+    branches:
+      - master
+      - 0.14.x
+  pull_request:
+jobs:
+  coverage:
+    if: github.repository_owner == 'KurtWagner'
+    # Can't use 24 - see https://github.com/SimonKagstrom/kcov/issues/473
+    runs-on: ubuntu-22.04
+    name: Test coverage
+    timeout-minutes: 3
+    steps:
+      - name: "Checkout repo"
+        uses: actions/checkout@v4
+
+      - name: "Setup zig environment"
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.14.1
+      
+      - run: zig env
+
+      - name: Install kcov
+        run: |
+          wget https://github.com/SimonKagstrom/kcov/releases/download/v42/kcov-amd64.tar.gz
+          sudo tar xf kcov-amd64.tar.gz -C /
+
+      - name: "Run unit tests with coverage"
+        run: zig build unit-test -Dcoverage=true
+
+      - name: "Upload coverage"
+        uses: coverallsapp/github-action@v2
