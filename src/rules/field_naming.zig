@@ -180,12 +180,12 @@ test "run - implicit struct (root struct)" {
             .rule_id = "field_naming",
             .severity = .@"error",
             .start = .{
-                .offset = 27,
+                .byte_offset = 27,
                 .line = 2,
                 .column = 0,
             },
             .end = .{
-                .offset = 40,
+                .byte_offset = 40,
                 .line = 2,
                 .column = 6,
             },
@@ -195,12 +195,12 @@ test "run - implicit struct (root struct)" {
             .rule_id = "field_naming",
             .severity = .@"error",
             .start = .{
-                .offset = 41,
+                .byte_offset = 41,
                 .line = 3,
                 .column = 0,
             },
             .end = .{
-                .offset = 54,
+                .byte_offset = 54,
                 .line = 3,
                 .column = 6,
             },
@@ -230,12 +230,12 @@ test "run - union container" {
             .rule_id = "field_naming",
             .severity = .@"error",
             .start = .{
-                .offset = 47,
+                .byte_offset = 47,
                 .line = 3,
                 .column = 1,
             },
             .end = .{
-                .offset = 61,
+                .byte_offset = 61,
                 .line = 3,
                 .column = 7,
             },
@@ -245,12 +245,12 @@ test "run - union container" {
             .rule_id = "field_naming",
             .severity = .@"error",
             .start = .{
-                .offset = 62,
+                .byte_offset = 62,
                 .line = 4,
                 .column = 1,
             },
             .end = .{
-                .offset = 75,
+                .byte_offset = 75,
                 .line = 4,
                 .column = 7,
             },
@@ -280,12 +280,12 @@ test "run - error container" {
             .rule_id = "field_naming",
             .severity = .@"error",
             .start = .{
-                .offset = 47,
+                .byte_offset = 47,
                 .line = 4,
                 .column = 1,
             },
             .end = .{
-                .offset = 55,
+                .byte_offset = 55,
                 .line = 4,
                 .column = 7,
             },
@@ -295,12 +295,12 @@ test "run - error container" {
             .rule_id = "field_naming",
             .severity = .@"error",
             .start = .{
-                .offset = 36,
+                .byte_offset = 36,
                 .line = 3,
                 .column = 1,
             },
             .end = .{
-                .offset = 46,
+                .byte_offset = 46,
                 .line = 3,
                 .column = 8,
             },

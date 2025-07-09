@@ -30,14 +30,14 @@ pub const LintResult = struct {
 
 pub const LintProblemLocation = struct {
     /// Location in entire source
-    offset: usize,
+    byte_offset: usize,
     /// Line number in source (index zero)
     line: usize,
     /// Column on line in source (index zero)
     column: usize,
 
     pub const zero: LintProblemLocation = .{
-        .offset = 0,
+        .byte_offset = 0,
         .line = 0,
         .column = 0,
     };
@@ -45,7 +45,7 @@ pub const LintProblemLocation = struct {
     pub fn startOfNode(tree: std.zig.Ast, index: std.zig.Ast.Node.Index) LintProblemLocation {
         const first_token_loc = tree.tokenLocation(0, tree.firstToken(index));
         return .{
-            .offset = first_token_loc.line_start,
+            .byte_offset = first_token_loc.line_start + first_token_loc.column,
             .line = first_token_loc.line,
             .column = first_token_loc.column,
         };
@@ -54,17 +54,18 @@ pub const LintProblemLocation = struct {
     pub fn endOfNode(tree: std.zig.Ast, index: std.zig.Ast.Node.Index) LintProblemLocation {
         const last_token = tree.lastToken(index);
         const last_token_loc = tree.tokenLocation(0, last_token);
+        const column = last_token_loc.column + tree.tokenSlice(last_token).len;
         return .{
-            .offset = last_token_loc.line_end,
+            .byte_offset = last_token_loc.line_start + column,
             .line = last_token_loc.line,
-            .column = last_token_loc.column + tree.tokenSlice(last_token).len,
+            .column = column,
         };
     }
 
     pub fn startOfToken(tree: std.zig.Ast, index: std.zig.Ast.TokenIndex) LintProblemLocation {
         const loc = tree.tokenLocation(0, index);
         return .{
-            .offset = loc.line_start,
+            .byte_offset = loc.line_start,
             .line = loc.line,
             .column = loc.column,
         };
@@ -73,7 +74,7 @@ pub const LintProblemLocation = struct {
     pub fn endOfToken(tree: std.zig.Ast, index: std.zig.Ast.TokenIndex) LintProblemLocation {
         const loc = tree.tokenLocation(0, index);
         return .{
-            .offset = loc.line_end,
+            .byte_offset = loc.line_end,
             .line = loc.line,
             .column = loc.column + tree.tokenSlice(index).len - 1,
         };
@@ -88,7 +89,7 @@ pub const LintProblemLocation = struct {
         const indent_str = spaces[0..indent];
 
         writer.print("{s}.{{\n", .{indent_str});
-        writer.print("{s}  .offset = {d},\n", .{ indent_str, self.offset });
+        writer.print("{s}  .byte_offset = {d},\n", .{ indent_str, self.byte_offset });
         writer.print("{s}  .line = {d},\n", .{ indent_str, self.line });
         writer.print("{s}  .column = {d},\n", .{ indent_str, self.column });
         writer.print("{s}}},\n", .{indent_str});
@@ -108,7 +109,7 @@ pub const LintProblem = struct {
     fix: ?LintProblemFix = null,
 
     pub fn sliceSource(self: Self, source: [:0]const u8) []const u8 {
-        return source[self.start.offset..self.end.offset];
+        return source[self.start.byte_offset..self.end.byte_offset];
     }
 
     pub fn debugPrint(self: Self, writer: anytype) void {

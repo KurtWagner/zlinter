@@ -159,5 +159,55 @@ test {
     std.testing.refAllDecls(@This());
 }
 
+test "no_literal_args" {
+    const rule = buildRule(.{});
+    const source: [:0]const u8 =
+        \\pub fn main() void {
+        \\  var buffer:[10]u8 = undefined; // ok
+        \\  var not_ok: u32 = undefined;
+        \\}
+        \\
+        \\test {
+        \\  var ok: u32 = undefined; // ok as in test
+        \\}
+    ;
+    var result = (try zlinter.testing.runRule(
+        rule,
+        zlinter.testing.paths.posix("path/to/my_file.zig"),
+        source,
+    )).?;
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectStringEndsWith(
+        result.file_path,
+        zlinter.testing.paths.posix("path/to/my_file.zig"),
+    );
+
+    inline for (&.{"undefined"}, 0..) |slice, i| {
+        try std.testing.expectEqualStrings(slice, result.problems[i].sliceSource(source));
+    }
+
+    try zlinter.testing.expectProblemsEqual(
+        &[_]zlinter.results.LintProblem{
+            .{
+                .rule_id = "no_undefined",
+                .severity = .warning,
+                .start = .{
+                    .byte_offset = 80,
+                    .line = 2,
+                    .column = 20,
+                },
+                .end = .{
+                    .byte_offset = 89,
+                    .line = 2,
+                    .column = 29,
+                },
+                .message = "Take care when using `undefined`",
+            },
+        },
+        result.problems,
+    );
+}
+
 const std = @import("std");
 const zlinter = @import("zlinter");

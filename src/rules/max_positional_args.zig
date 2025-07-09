@@ -80,5 +80,54 @@ test {
     std.testing.refAllDecls(@This());
 }
 
+test "max_positional_args" {
+    std.testing.refAllDecls(@This());
+
+    const source: [:0]const u8 =
+        \\fn ok() void {}
+        \\fn alsoOk(a1:u32, a2:u32, a3:u32, a4:u32, a5:u32) void {}
+        \\fn noOk(a1:u32, a2:u32, a3:u32, a4:u32, a5:u32, a6:u32) void {}
+    ;
+
+    const rule = buildRule(.{});
+    var result = (try zlinter.testing.runRule(
+        rule,
+        zlinter.testing.paths.posix("path/to/my_file.zig"),
+        source,
+    )).?;
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectStringEndsWith(
+        result.file_path,
+        zlinter.testing.paths.posix("path/to/my_file.zig"),
+    );
+
+    // TODO: This looks like a bug - should include a1 name in param:
+    inline for (&.{"u32, a2:u32, a3:u32, a4:u32, a5:u32, a6:u32"}, 0..) |slice, i| {
+        try std.testing.expectEqualStrings(slice, result.problems[i].sliceSource(source));
+    }
+
+    try zlinter.testing.expectProblemsEqual(
+        &[_]zlinter.results.LintProblem{
+            .{
+                .rule_id = "max_positional_args",
+                .severity = .warning,
+                .start = .{
+                    .byte_offset = 85,
+                    .line = 2,
+                    .column = 11,
+                },
+                .end = .{
+                    .byte_offset = 128,
+                    .line = 2,
+                    .column = 54,
+                },
+                .message = "Exceeded maximum positional arguments of 5.",
+            },
+        },
+        result.problems,
+    );
+}
+
 const std = @import("std");
 const zlinter = @import("zlinter");

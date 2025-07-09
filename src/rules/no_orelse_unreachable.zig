@@ -1,6 +1,8 @@
 //! Enforces use of `.?` over `orelse unreachable` as `.?` offers comptime checks
 //! as it does not control flow.
 
+// TODO: Should this catch `const g = h orelse { unreachable; };`
+
 /// Config for no_orelse_unreachable rule.
 pub const Config = struct {
     /// The severity (off, warning, error).
@@ -65,6 +67,53 @@ fn run(
 
 test {
     std.testing.refAllDecls(@This());
+}
+
+test "no_orelse_unreachable" {
+    const rule = buildRule(.{});
+    const source: [:0]const u8 =
+        \\const a = b orelse unreachable;
+        \\const c = d.?;
+        \\const e = f orelse 1;
+    ;
+    var result = (try zlinter.testing.runRule(
+        rule,
+        zlinter.testing.paths.posix("path/to/my_file.zig"),
+        source,
+    )).?;
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectStringEndsWith(
+        result.file_path,
+        zlinter.testing.paths.posix("path/to/my_file.zig"),
+    );
+
+    inline for (&.{"b orelse unreachable"}, 0..) |slice, i| {
+        try std.testing.expectEqualStrings(slice, result.problems[i].sliceSource(source));
+    }
+
+    try zlinter.testing.expectProblemsEqual(
+        &[_]zlinter.results.LintProblem{
+            .{
+                .rule_id = "no_orelse_unreachable",
+                .severity = .warning,
+                .start = .{
+                    .byte_offset = 10,
+                    .line = 0,
+                    .column = 10,
+                },
+                .end = .{
+                    .byte_offset = 30,
+                    .line = 0,
+                    .column = 30,
+                },
+                .message = "Prefer `.?` over `orelse unreachable`",
+                .disabled_by_comment = false,
+                .fix = null,
+            },
+        },
+        result.problems,
+    );
 }
 
 const std = @import("std");
