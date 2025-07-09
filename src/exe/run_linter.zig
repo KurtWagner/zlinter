@@ -217,12 +217,12 @@ pub fn main() !u8 {
                         .rule_id = "syntax_error",
                         .severity = .@"error",
                         .start = .{
-                            .offset = position.line_start,
+                            .byte_offset = position.line_start + position.column,
                             .line = position.line,
                             .column = position.column,
                         },
                         .end = .{
-                            .offset = position.line_end,
+                            .byte_offset = position.line_start + position.column + ast.tokenSlice(err.token).len - 1,
                             .line = position.line,
                             .column = position.column + ast.tokenSlice(err.token).len - 1,
                         },

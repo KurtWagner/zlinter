@@ -162,5 +162,105 @@ test {
     std.testing.refAllDecls(@This());
 }
 
+test "no_literal_args" {
+    const rule = buildRule(.{});
+    const source: [:0]const u8 =
+        \\pub fn main() void {
+        \\  const num = 10;
+        \\  const flag = false;
+        \\  call(true, 0, num, 0.5, flag, false);
+        \\}
+    ;
+    var result = (try zlinter.testing.runRule(
+        rule,
+        zlinter.testing.paths.posix("path/to/my_file.zig"),
+        source,
+    )).?;
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectStringEndsWith(
+        result.file_path,
+        zlinter.testing.paths.posix("path/to/my_file.zig"),
+    );
+
+    inline for (&.{ "true", "0", "0.5", "false" }, 0..) |slice, i| {
+        try std.testing.expectEqualStrings(slice, result.problems[i].sliceSource(source));
+    }
+
+    try zlinter.testing.expectProblemsEqual(
+        &[_]zlinter.results.LintProblem{
+            .{
+                .rule_id = "no_literal_args",
+                .severity = .warning,
+                .start = .{
+                    .byte_offset = 68,
+                    .line = 3,
+                    .column = 7,
+                },
+                .end = .{
+                    .byte_offset = 72,
+                    .line = 3,
+                    .column = 11,
+                },
+                .message = "Avoid bool literal arguments as they're ambiguous.",
+                .disabled_by_comment = false,
+                .fix = null,
+            },
+            .{
+                .rule_id = "no_literal_args",
+                .severity = .warning,
+                .start = .{
+                    .byte_offset = 74,
+                    .line = 3,
+                    .column = 13,
+                },
+                .end = .{
+                    .byte_offset = 75,
+                    .line = 3,
+                    .column = 14,
+                },
+                .message = "Avoid number literal arguments as they're ambiguous.",
+                .disabled_by_comment = false,
+                .fix = null,
+            },
+            .{
+                .rule_id = "no_literal_args",
+                .severity = .warning,
+                .start = .{
+                    .byte_offset = 82,
+                    .line = 3,
+                    .column = 21,
+                },
+                .end = .{
+                    .byte_offset = 85,
+                    .line = 3,
+                    .column = 24,
+                },
+                .message = "Avoid number literal arguments as they're ambiguous.",
+                .disabled_by_comment = false,
+                .fix = null,
+            },
+            .{
+                .rule_id = "no_literal_args",
+                .severity = .warning,
+                .start = .{
+                    .byte_offset = 93,
+                    .line = 3,
+                    .column = 32,
+                },
+                .end = .{
+                    .byte_offset = 98,
+                    .line = 3,
+                    .column = 37,
+                },
+                .message = "Avoid bool literal arguments as they're ambiguous.",
+                .disabled_by_comment = false,
+                .fix = null,
+            },
+        },
+        result.problems,
+    );
+}
+
 const std = @import("std");
 const zlinter = @import("zlinter");

@@ -209,12 +209,12 @@ test "no_unused" {
                 .rule_id = "no_unused",
                 .severity = .warning,
                 .start = .{
-                    .offset = 1,
+                    .byte_offset = 1,
                     .line = 1,
                     .column = 0,
                 },
                 .end = .{
-                    .offset = 24,
+                    .byte_offset = 24,
                     .line = 1,
                     .column = 22,
                 },
@@ -229,12 +229,12 @@ test "no_unused" {
                 .rule_id = "no_unused",
                 .severity = .warning,
                 .start = .{
-                    .offset = 53,
+                    .byte_offset = 53,
                     .line = 3,
                     .column = 0,
                 },
                 .end = .{
-                    .offset = 85,
+                    .byte_offset = 85,
                     .line = 5,
                     .column = 1,
                 },
@@ -249,12 +249,12 @@ test "no_unused" {
                 .rule_id = "no_unused",
                 .severity = .warning,
                 .start = .{
-                    .offset = 107,
+                    .byte_offset = 107,
                     .line = 8,
                     .column = 0,
                 },
                 .end = .{
-                    .offset = 142,
+                    .byte_offset = 142,
                     .line = 10,
                     .column = 0,
                 },

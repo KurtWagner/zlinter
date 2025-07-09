@@ -219,12 +219,12 @@ test "run" {
             .rule_id = "function_naming",
             .severity = .@"error",
             .start = .{
-                .offset = 1,
+                .byte_offset = 1,
                 .line = 1,
                 .column = 3,
             },
             .end = .{
-                .offset = 22,
+                .byte_offset = 22,
                 .line = 1,
                 .column = 10,
             },
@@ -234,12 +234,12 @@ test "run" {
             .rule_id = "function_naming",
             .severity = .@"error",
             .start = .{
-                .offset = 103,
+                .byte_offset = 103,
                 .line = 5,
                 .column = 3,
             },
             .end = .{
-                .offset = 123,
+                .byte_offset = 123,
                 .line = 5,
                 .column = 9,
             },
@@ -249,12 +249,12 @@ test "run" {
             .rule_id = "function_naming",
             .severity = .@"error",
             .start = .{
-                .offset = 125,
+                .byte_offset = 125,
                 .line = 7,
                 .column = 10,
             },
             .end = .{
-                .offset = 158,
+                .byte_offset = 158,
                 .line = 7,
                 .column = 24,
             },
@@ -264,12 +264,12 @@ test "run" {
             .rule_id = "function_naming",
             .severity = .@"error",
             .start = .{
-                .offset = 189,
+                .byte_offset = 189,
                 .line = 10,
                 .column = 8,
             },
             .end = .{
-                .offset = 253,
+                .byte_offset = 253,
                 .line = 10,
                 .column = 10,
             },
@@ -279,12 +279,12 @@ test "run" {
             .rule_id = "function_naming",
             .severity = .@"error",
             .start = .{
-                .offset = 189,
+                .byte_offset = 189,
                 .line = 10,
                 .column = 18,
             },
             .end = .{
-                .offset = 253,
+                .byte_offset = 253,
                 .line = 10,
                 .column = 18,
             },
@@ -294,12 +294,12 @@ test "run" {
             .rule_id = "function_naming",
             .severity = .@"error",
             .start = .{
-                .offset = 189,
+                .byte_offset = 189,
                 .line = 10,
                 .column = 27,
             },
             .end = .{
-                .offset = 253,
+                .byte_offset = 253,
                 .line = 10,
                 .column = 33,
             },
@@ -309,12 +309,12 @@ test "run" {
             .rule_id = "function_naming",
             .severity = .@"error",
             .start = .{
-                .offset = 189,
+                .byte_offset = 189,
                 .line = 10,
                 .column = 47,
             },
             .end = .{
-                .offset = 253,
+                .byte_offset = 253,
                 .line = 10,
                 .column = 47,
             },

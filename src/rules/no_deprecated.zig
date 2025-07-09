@@ -102,7 +102,7 @@ fn getLintProblemLocationStart(doc: zlinter.session.LintDocument, node_index: st
     const first_token = doc.handle.tree.firstToken(node_index);
     const first_token_loc = doc.handle.tree.tokenLocation(0, first_token);
     return .{
-        .offset = first_token_loc.line_start,
+        .byte_offset = first_token_loc.line_start,
         .line = first_token_loc.line,
         .column = first_token_loc.column,
     };
@@ -112,7 +112,7 @@ fn getLintProblemLocationEnd(doc: zlinter.session.LintDocument, node_index: std.
     const last_token = doc.handle.tree.lastToken(node_index);
     const last_token_loc = doc.handle.tree.tokenLocation(0, last_token);
     return .{
-        .offset = last_token_loc.line_start,
+        .byte_offset = last_token_loc.line_start,
         .line = last_token_loc.line,
         .column = last_token_loc.column + doc.handle.tree.tokenSlice(last_token).len - 1,
     };

@@ -146,12 +146,12 @@ test "expects snake_case with TitleCase" {
                 .rule_id = "file_naming",
                 .severity = .@"error",
                 .start = .{
-                    .offset = 0,
+                    .byte_offset = 0,
                     .line = 0,
                     .column = 0,
                 },
                 .end = .{
-                    .offset = 0,
+                    .byte_offset = 0,
                     .line = 0,
                     .column = 0,
                 },
@@ -183,12 +183,12 @@ test "expects snake_case with camelCase" {
                 .rule_id = "file_naming",
                 .severity = .@"error",
                 .start = .{
-                    .offset = 0,
+                    .byte_offset = 0,
                     .line = 0,
                     .column = 0,
                 },
                 .end = .{
-                    .offset = 0,
+                    .byte_offset = 0,
                     .line = 0,
                     .column = 0,
                 },
@@ -220,12 +220,12 @@ test "expects TitleCase with snake_case" {
                 .rule_id = "file_naming",
                 .severity = .@"error",
                 .start = .{
-                    .offset = 0,
+                    .byte_offset = 0,
                     .line = 0,
                     .column = 0,
                 },
                 .end = .{
-                    .offset = 0,
+                    .byte_offset = 0,
                     .line = 0,
                     .column = 0,
                 },
@@ -257,12 +257,12 @@ test "expects TitleCase with under_score" {
                 .rule_id = "file_naming",
                 .severity = .@"error",
                 .start = .{
-                    .offset = 0,
+                    .byte_offset = 0,
                     .line = 0,
                     .column = 0,
                 },
                 .end = .{
-                    .offset = 0,
+                    .byte_offset = 0,
                     .line = 0,
                     .column = 0,
                 },

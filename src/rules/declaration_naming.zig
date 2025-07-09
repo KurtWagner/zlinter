@@ -149,12 +149,12 @@ test "declaration_naming" {
                 .rule_id = "declaration_naming",
                 .severity = .@"error",
                 .start = .{
-                    .offset = 32,
+                    .byte_offset = 32,
                     .line = 2,
                     .column = 6,
                 },
                 .end = .{
-                    .offset = 57,
+                    .byte_offset = 57,
                     .line = 2,
                     .column = 14,
                 },
@@ -164,12 +164,12 @@ test "declaration_naming" {
                 .rule_id = "declaration_naming",
                 .severity = .@"error",
                 .start = .{
-                    .offset = 58,
+                    .byte_offset = 58,
                     .line = 3,
                     .column = 4,
                 },
                 .end = .{
-                    .offset = 81,
+                    .byte_offset = 81,
                     .line = 3,
                     .column = 12,
                 },
@@ -179,12 +179,12 @@ test "declaration_naming" {
                 .rule_id = "declaration_naming",
                 .severity = .@"error",
                 .start = .{
-                    .offset = 100,
+                    .byte_offset = 100,
                     .line = 5,
                     .column = 6,
                 },
                 .end = .{
-                    .offset = 116,
+                    .byte_offset = 116,
                     .line = 5,
                     .column = 8,
                 },
@@ -194,12 +194,12 @@ test "declaration_naming" {
                 .rule_id = "declaration_naming",
                 .severity = .@"error",
                 .start = .{
-                    .offset = 117,
+                    .byte_offset = 117,
                     .line = 6,
                     .column = 6,
                 },
                 .end = .{
-                    .offset = 148,
+                    .byte_offset = 148,
                     .line = 6,
                     .column = 17,
                 },
@@ -209,12 +209,12 @@ test "declaration_naming" {
                 .rule_id = "declaration_naming",
                 .severity = .@"error",
                 .start = .{
-                    .offset = 269,
+                    .byte_offset = 269,
                     .line = 12,
                     .column = 6,
                 },
                 .end = .{
-                    .offset = 309,
+                    .byte_offset = 309,
                     .line = 12,
                     .column = 16,
                 },
@@ -224,12 +224,12 @@ test "declaration_naming" {
                 .rule_id = "declaration_naming",
                 .severity = .@"error",
                 .start = .{
-                    .offset = 310,
+                    .byte_offset = 310,
                     .line = 13,
                     .column = 6,
                 },
                 .end = .{
-                    .offset = 356,
+                    .byte_offset = 356,
                     .line = 13,
                     .column = 14,
                 },
