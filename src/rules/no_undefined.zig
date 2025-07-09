@@ -4,7 +4,7 @@
 /// Config for no_undefined rule.
 pub const Config = struct {
     /// The severity (off, warning, error).
-    severity: zlinter.LintProblemSeverity = .warning,
+    severity: zlinter.rules.LintProblemSeverity = .warning,
 
     /// Skip if found in a function call (case-insenstive).
     exclude_in_fn: []const []const u8 = &.{"deinit"},
@@ -26,10 +26,10 @@ pub const Config = struct {
 };
 
 /// Builds and returns the no_undefined rule.
-pub fn buildRule(options: zlinter.LintRuleOptions) zlinter.LintRule {
+pub fn buildRule(options: zlinter.rules.LintRuleOptions) zlinter.rules.LintRule {
     _ = options;
 
-    return zlinter.LintRule{
+    return zlinter.rules.LintRule{
         .rule_id = @tagName(.no_undefined),
         .run = &run,
     };
@@ -37,15 +37,15 @@ pub fn buildRule(options: zlinter.LintRuleOptions) zlinter.LintRule {
 
 /// Runs the no_undefined rule.
 fn run(
-    rule: zlinter.LintRule,
-    _: zlinter.LintContext,
-    doc: zlinter.LintDocument,
+    rule: zlinter.rules.LintRule,
+    _: zlinter.session.LintContext,
+    doc: zlinter.session.LintDocument,
     allocator: std.mem.Allocator,
-    options: zlinter.LintOptions,
-) error{OutOfMemory}!?zlinter.LintResult {
+    options: zlinter.session.LintOptions,
+) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
-    var lint_problems = std.ArrayListUnmanaged(zlinter.LintProblem).empty;
+    var lint_problems = std.ArrayListUnmanaged(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(allocator);
 
     const tree = doc.handle.tree;
@@ -146,7 +146,7 @@ fn run(
     }
 
     return if (lint_problems.items.len > 0)
-        try zlinter.LintResult.init(
+        try zlinter.results.LintResult.init(
             allocator,
             doc.path,
             try lint_problems.toOwnedSlice(allocator),

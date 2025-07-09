@@ -157,8 +157,8 @@ inline fn assertTestOnly() void {
 
 const builtin = @import("builtin");
 const std = @import("std");
-const LintContext = @import("linting.zig").LintContext;
-const LintDocument = @import("linting.zig").LintDocument;
-const LintRule = @import("linting.zig").LintRule;
-const LintProblem = @import("linting.zig").LintProblem;
-const LintResult = @import("linting.zig").LintResult;
+const LintContext = @import("session.zig").LintContext;
+const LintDocument = @import("session.zig").LintDocument;
+const LintRule = @import("rules.zig").LintRule;
+const LintProblem = @import("results.zig").LintProblem;
+const LintResult = @import("results.zig").LintResult;

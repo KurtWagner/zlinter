@@ -5,44 +5,42 @@
 /// Config for no_swallow_error rule.
 pub const Config = struct {
     /// The severity of detecting `catch unreachable` or `catch { unreachable; } (off, warning, error).
-    detect_catch_unreachable: zlinter.LintProblemSeverity = .warning,
+    detect_catch_unreachable: zlinter.rules.LintProblemSeverity = .warning,
 
     /// The severity of detecting `catch {}` (off, warning, error).
-    detect_empty_catch: zlinter.LintProblemSeverity = .warning,
+    detect_empty_catch: zlinter.rules.LintProblemSeverity = .warning,
 
     /// The severity of detecting `else |_| {}` (off, warning, error).
-    detect_empty_else: zlinter.LintProblemSeverity = .warning,
+    detect_empty_else: zlinter.rules.LintProblemSeverity = .warning,
 
     /// The severity of detecting `else |_| unreachable` or `else |_| { unreachable; }` (off, warning, error).
-    detect_else_unreachable: zlinter.LintProblemSeverity = .warning,
+    detect_else_unreachable: zlinter.rules.LintProblemSeverity = .warning,
 
     /// Skip if found within `test { ... }` block.
     exclude_tests: bool = true,
 };
 
 /// Builds and returns the no_swallow_error rule.
-pub fn buildRule(options: zlinter.LintRuleOptions) zlinter.LintRule {
+pub fn buildRule(options: zlinter.rules.LintRuleOptions) zlinter.rules.LintRule {
     _ = options;
 
-    return zlinter.LintRule{
+    return zlinter.rules.LintRule{
         .rule_id = @tagName(.no_swallow_error),
         .run = &run,
     };
 }
 
-const LiteralKind = enum { bool, string, number, char };
-
 /// Runs the no_swallow_error rule.
 fn run(
-    rule: zlinter.LintRule,
-    _: zlinter.LintContext,
-    doc: zlinter.LintDocument,
+    rule: zlinter.rules.LintRule,
+    _: zlinter.session.LintContext,
+    doc: zlinter.session.LintDocument,
     allocator: std.mem.Allocator,
-    options: zlinter.LintOptions,
-) error{OutOfMemory}!?zlinter.LintResult {
+    options: zlinter.session.LintOptions,
+) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
-    var lint_problems = std.ArrayListUnmanaged(zlinter.LintProblem).empty;
+    var lint_problems = std.ArrayListUnmanaged(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(allocator);
 
     const tree = doc.handle.tree;
@@ -55,7 +53,7 @@ fn run(
         const node, const connections = tuple;
 
         const maybe_problem: ?struct {
-            severity: zlinter.LintProblemSeverity,
+            severity: zlinter.rules.LintProblemSeverity,
             message: []const u8,
         } = problem: {
             switch (zlinter.shims.nodeTag(tree, node.toNodeIndex())) {
@@ -139,7 +137,7 @@ fn run(
     }
 
     return if (lint_problems.items.len > 0)
-        try zlinter.LintResult.init(
+        try zlinter.results.LintResult.init(
             allocator,
             doc.path,
             try lint_problems.toOwnedSlice(allocator),

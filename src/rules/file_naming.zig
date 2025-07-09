@@ -4,23 +4,23 @@
 /// Config for file_naming rule.
 pub const Config = struct {
     /// Style and severity for a file that is a namespace (i.e., does not have root container fields)
-    file_namespace: zlinter.LintTextStyleWithSeverity = .{
+    file_namespace: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .snake_case,
         .severity = .@"error",
     },
 
     /// Style and severity for a file that is a struct (i.e., has root container fields)
-    file_struct: zlinter.LintTextStyleWithSeverity = .{
+    file_struct: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .title_case,
         .severity = .@"error",
     },
 };
 
 /// Builds and returns the file_naming rule.
-pub fn buildRule(options: zlinter.LintRuleOptions) zlinter.LintRule {
+pub fn buildRule(options: zlinter.rules.LintRuleOptions) zlinter.rules.LintRule {
     _ = options;
 
-    return zlinter.LintRule{
+    return zlinter.rules.LintRule{
         .rule_id = @tagName(.file_naming),
         .run = &run,
     };
@@ -28,16 +28,16 @@ pub fn buildRule(options: zlinter.LintRuleOptions) zlinter.LintRule {
 
 /// Runs the file_naming rule.
 fn run(
-    rule: zlinter.LintRule,
-    ctx: zlinter.LintContext,
-    doc: zlinter.LintDocument,
+    rule: zlinter.rules.LintRule,
+    ctx: zlinter.session.LintContext,
+    doc: zlinter.session.LintDocument,
     allocator: std.mem.Allocator,
-    options: zlinter.LintOptions,
-) error{OutOfMemory}!?zlinter.LintResult {
+    options: zlinter.session.LintOptions,
+) error{OutOfMemory}!?zlinter.results.LintResult {
     _ = ctx;
     const config = options.getConfig(Config);
 
-    const error_message: ?[]const u8, const severity: ?zlinter.LintProblemSeverity = msg: {
+    const error_message: ?[]const u8, const severity: ?zlinter.rules.LintProblemSeverity = msg: {
         const basename = std.fs.path.basename(doc.path);
         if (zlinter.shims.isRootImplicitStruct(doc.handle.tree)) {
             if (!config.file_struct.style.check(basename)) {
@@ -56,7 +56,7 @@ fn run(
     };
 
     if (error_message) |message| {
-        var lint_problems = try allocator.alloc(zlinter.LintProblem, 1);
+        var lint_problems = try allocator.alloc(zlinter.results.LintProblem, 1);
         lint_problems[0] = .{
             .severity = severity.?,
             .rule_id = rule.rule_id,
@@ -64,7 +64,7 @@ fn run(
             .end = .zero,
             .message = message,
         };
-        return try zlinter.LintResult.init(
+        return try zlinter.results.LintResult.init(
             allocator,
             doc.path,
             lint_problems,
@@ -141,7 +141,7 @@ test "expects snake_case with TitleCase" {
     );
 
     try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.LintProblem{
+        &[_]zlinter.results.LintProblem{
             .{
                 .rule_id = "file_naming",
                 .severity = .@"error",
@@ -178,7 +178,7 @@ test "expects snake_case with camelCase" {
     );
 
     try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.LintProblem{
+        &[_]zlinter.results.LintProblem{
             .{
                 .rule_id = "file_naming",
                 .severity = .@"error",
@@ -215,7 +215,7 @@ test "expects TitleCase with snake_case" {
     );
 
     try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.LintProblem{
+        &[_]zlinter.results.LintProblem{
             .{
                 .rule_id = "file_naming",
                 .severity = .@"error",
@@ -252,7 +252,7 @@ test "expects TitleCase with under_score" {
     );
 
     try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.LintProblem{
+        &[_]zlinter.results.LintProblem{
             .{
                 .rule_id = "file_naming",
                 .severity = .@"error",

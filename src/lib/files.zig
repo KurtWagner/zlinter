@@ -1,10 +1,25 @@
 //! Utilities for interacting with filesystem
 
+/// Location of a source file to lint
+pub const LintFile = struct {
+    /// Path to the file relative to the execution of the linter. This memory
+    /// is owned and free'd in `deinit`.
+    pathname: []const u8,
+
+    /// Whether or not the path was resolved but subsequently excluded by
+    /// an exclude path argument. If this is true, the file should NOT be linted
+    excluded: bool = false,
+
+    pub fn deinit(self: *LintFile, allocator: std.mem.Allocator) void {
+        allocator.free(self.pathname);
+    }
+};
+
 /// Returns a list of zig source files that should be linted.
 ///
 /// If an explicit list of file paths was provided in the args, this will be
 /// used, otherwise it'll walk relative to working path.
-pub fn allocLintFiles(dir: std.fs.Dir, maybe_files: ?[]const []const u8, gpa: std.mem.Allocator) ![]zlinter.LintFile {
+pub fn allocLintFiles(dir: std.fs.Dir, maybe_files: ?[]const []const u8, gpa: std.mem.Allocator) ![]zlinter.files.LintFile {
     var file_paths = std.StringHashMapUnmanaged(void).empty;
     defer file_paths.deinit(gpa);
 
@@ -47,7 +62,7 @@ pub fn allocLintFiles(dir: std.fs.Dir, maybe_files: ?[]const []const u8, gpa: st
         );
     }
 
-    var lint_files = std.ArrayListUnmanaged(zlinter.LintFile).empty;
+    var lint_files = std.ArrayListUnmanaged(zlinter.files.LintFile).empty;
     defer lint_files.deinit(gpa);
 
     var it = file_paths.keyIterator();

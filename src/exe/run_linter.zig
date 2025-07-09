@@ -57,8 +57,8 @@ pub fn main() !u8 {
     // Technically a chicken and egg problem as you can't rely on verbose stdout
     // while parsing args, so this would probably be better as a build option
     // but for now this should be fine and keeps args together at runtime...
-    zlinter.output.process_printer.verbose = args.verbose;
-    var printer = zlinter.output.process_printer;
+    zlinter.rendering.process_printer.verbose = args.verbose;
+    var printer = zlinter.rendering.process_printer;
 
     if (args.unknown_args) |unknown_args| {
         for (unknown_args) |arg|
@@ -68,7 +68,7 @@ pub fn main() !u8 {
 
     // Key is file path and value are errors for the file.
     var file_lint_problems = std.StringArrayHashMap(
-        []zlinter.LintResult,
+        []zlinter.results.LintResult,
     ).init(gpa);
     defer {
         var it = file_lint_problems.iterator();
@@ -118,7 +118,7 @@ pub fn main() !u8 {
 
     if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "Resolving {d} files took: {d}ms", .{ lint_files.len, ms });
 
-    var ctx: zlinter.LintContext = undefined;
+    var ctx: zlinter.session.LintContext = undefined;
     try ctx.init(.{
         .zig_exe_path = args.zig_exe,
         .zig_lib_path = args.zig_lib_directory,
@@ -199,7 +199,7 @@ pub fn main() !u8 {
         printer.println(.verbose, "    - {d} nodes", .{doc.handle.tree.nodes.len});
         printer.println(.verbose, "    - {d} tokens", .{doc.handle.tree.tokens.len});
 
-        var results = std.ArrayListUnmanaged(zlinter.LintResult).empty;
+        var results = std.ArrayListUnmanaged(zlinter.results.LintResult).empty;
         defer results.deinit(gpa);
 
         const ast = doc.handle.tree;
@@ -211,9 +211,9 @@ pub fn main() !u8 {
 
             try results.append(
                 gpa,
-                zlinter.LintResult{
+                zlinter.results.LintResult{
                     .file_path = try gpa.dupe(u8, lint_file.pathname),
-                    .problems = try gpa.dupe(zlinter.LintProblem, &[1]zlinter.LintProblem{.{
+                    .problems = try gpa.dupe(zlinter.results.LintProblem, &[1]zlinter.results.LintProblem{.{
                         .rule_id = "syntax_error",
                         .severity = .@"error",
                         .start = .{
@@ -314,7 +314,7 @@ pub fn main() !u8 {
 
         var it = file_lint_problems.iterator();
         while (it.next()) |entry| {
-            var lint_fixes = std.ArrayListUnmanaged(zlinter.LintProblemFix).empty;
+            var lint_fixes = std.ArrayListUnmanaged(zlinter.results.LintProblemFix).empty;
             defer lint_fixes.deinit(gpa);
 
             const results = entry.value_ptr.*;
@@ -334,7 +334,7 @@ pub fn main() !u8 {
             // Sort by range start and then remove overlaps to avoid conflicting
             // changes. This is needed as we do text based fixes.
             std.mem.sort(
-                zlinter.LintProblemFix,
+                zlinter.results.LintProblemFix,
                 lint_fixes.items,
                 {},
                 cmpFix,
@@ -354,7 +354,7 @@ pub fn main() !u8 {
 
             var file_fixes: usize = 0;
             var content_index: usize = 0;
-            var previous_fix: ?zlinter.LintProblemFix = null;
+            var previous_fix: ?zlinter.results.LintProblemFix = null;
             for (lint_fixes.items) |fix| {
                 if (previous_fix) |p| {
                     if (fix.start <= p.end) {
@@ -409,7 +409,7 @@ pub fn main() !u8 {
         defer arena.deinit();
         const arena_allocator = arena.allocator();
 
-        var flattened = std.ArrayListUnmanaged(zlinter.LintResult).empty;
+        var flattened = std.ArrayListUnmanaged(zlinter.results.LintResult).empty;
         for (file_lint_problems.values()) |results| {
             try flattened.appendSlice(arena_allocator, results);
         }
@@ -438,7 +438,7 @@ pub fn main() !u8 {
     }
 }
 
-fn cmpFix(context: void, a: zlinter.LintProblemFix, b: zlinter.LintProblemFix) bool {
+fn cmpFix(context: void, a: zlinter.results.LintProblemFix, b: zlinter.results.LintProblemFix) bool {
     return std.sort.asc(@TypeOf(a.start))(context, a.start, b.start);
 }
 
@@ -464,7 +464,7 @@ fn allocAstErrorMsg(
 ///
 /// Returns true if a lint error should be skipped / ignored due to a comment
 /// in the source code.
-fn shouldSkip(disable_comments: []zlinter.comments.LintDisableComment, err: zlinter.LintProblem) bool {
+fn shouldSkip(disable_comments: []zlinter.comments.LintDisableComment, err: zlinter.results.LintProblem) bool {
     for (disable_comments) |comment| {
         if (comment.line_start <= err.start.line and err.start.line <= comment.line_end) {
             // When there's no explicity rules set, we disable for all rules.
@@ -487,7 +487,7 @@ fn shouldSkip(disable_comments: []zlinter.comments.LintDisableComment, err: zlin
 fn buildExcludesIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Args) !?std.BufSet {
     if (args.exclude_paths == null and args.build_exclude_paths == null) return null;
 
-    const exclude_lint_paths: ?[]zlinter.LintFile = exclude: {
+    const exclude_lint_paths: ?[]zlinter.files.LintFile = exclude: {
         if (args.exclude_paths) |p| {
             std.debug.assert(p.len > 0);
             break :exclude try zlinter.files.allocLintFiles(dir, p, gpa);
@@ -500,7 +500,7 @@ fn buildExcludesIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Arg
         }
     }
 
-    const build_exclude_lint_paths: ?[]zlinter.LintFile = exclude: {
+    const build_exclude_lint_paths: ?[]zlinter.files.LintFile = exclude: {
         // `--include` argument supersedes build defined includes and excludes
         if (args.include_paths != null) break :exclude null;
 
@@ -533,7 +533,7 @@ fn buildExcludesIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Arg
 // TODO: Could do with being moved to lib and having tests written for it
 /// Returns an index of files to only include if filter configuration is found in args
 fn buildFilterIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Args) !?std.BufSet {
-    const filter_paths: []zlinter.LintFile = exclude: {
+    const filter_paths: []zlinter.files.LintFile = exclude: {
         if (args.filter_paths) |p| {
             std.debug.assert(p.len > 0);
             break :exclude try zlinter.files.allocLintFiles(dir, p, gpa);
@@ -603,7 +603,7 @@ const SlowestItemQueue = struct {
         } else |_| {}
     }
 
-    fn unloadAndPrint(self: *SlowestItemQueue, name: []const u8, printer: *zlinter.output.Printer) void {
+    fn unloadAndPrint(self: *SlowestItemQueue, name: []const u8, printer: *zlinter.rendering.Printer) void {
         if (self.queue.count() == 0) return;
 
         printer.printBanner(.verbose);

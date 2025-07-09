@@ -1,0 +1,129 @@
+/// A linter rule with a unique id and a run method.
+pub const LintRule = struct {
+    rule_id: []const u8,
+    run: *const fn (
+        self: LintRule,
+        ctx: session.LintContext,
+        doc: session.LintDocument,
+        allocator: std.mem.Allocator,
+        options: session.LintOptions,
+    ) error{OutOfMemory}!?results.LintResult,
+};
+
+/// Rules the modify the execution of rules.
+pub const LintRuleOptions = struct {}; // zlinter-disable-current-line
+
+pub const LintTextStyleWithSeverity = struct {
+    style: LintTextStyle,
+    severity: LintProblemSeverity,
+
+    pub const off = LintTextStyleWithSeverity{
+        .style = .off,
+        .severity = .off,
+    };
+};
+
+pub const LintTextStyle = enum {
+    /// No style check - can be any style
+    off,
+    /// e.g., TitleCase
+    title_case,
+    /// e.g., snake_case
+    snake_case,
+    /// e.g., camelCase
+    camel_case,
+    /// e.g., MACRO_CASE (aka "upper snake case")
+    macro_case,
+
+    /// A basic check if the content is not (obviously) breaking the style convention
+    ///
+    /// This is imperfect as it doesn't actually check if word boundaries are
+    /// correct but good enough for most cases.
+    pub inline fn check(self: LintTextStyle, content: []const u8) bool {
+        std.debug.assert(content.len > 0);
+
+        return switch (self) {
+            .off => true,
+            .snake_case => !strings.containsUpper(content),
+            .title_case => strings.isCapitalized(content) and !strings.containsUnderscore(content),
+            .camel_case => !strings.isCapitalized(content) and !strings.containsUnderscore(content),
+            .macro_case => !strings.containsLower(content),
+        };
+    }
+
+    test "check" {
+        // Off:
+        inline for (&.{ "snake_case", "camelCase", "TitleCase", "a", "A" }) |content| {
+            try std.testing.expect(LintTextStyle.off.check(content));
+        }
+
+        // Snake case:
+        inline for (&.{ "snake_case", "a", "a_b_c" }) |content| {
+            try std.testing.expect(LintTextStyle.snake_case.check(content));
+        }
+
+        // Title case:
+        inline for (&.{ "TitleCase", "A", "AB" }) |content| {
+            try std.testing.expect(LintTextStyle.title_case.check(content));
+        }
+
+        // Camel case:
+        inline for (&.{ "camelCase", "a", "aB" }) |content| {
+            try std.testing.expect(LintTextStyle.camel_case.check(content));
+        }
+
+        // Macro case:
+        inline for (&.{ "MACRO_CASE", "A", "1", "1B" }) |content| {
+            try std.testing.expect(LintTextStyle.macro_case.check(content));
+        }
+    }
+
+    pub inline fn name(self: LintTextStyle) []const u8 {
+        return switch (self) {
+            .off => @panic("Style is off so we should never call this method when off"),
+            .snake_case => "snake_case",
+            .title_case => "TitleCase",
+            .camel_case => "camelCase",
+            .macro_case => "MACRO_CASE",
+        };
+    }
+};
+
+pub const LintProblemSeverity = enum {
+    /// Exit zero
+    off,
+    /// Exit zero with warning
+    warning,
+    /// Exit non-zero
+    @"error",
+
+    pub inline fn name(
+        self: LintProblemSeverity,
+        buffer: *[32]u8,
+        options: struct { ansi: bool = false },
+    ) []const u8 {
+        const prefix = if (options.ansi)
+            switch (self) {
+                .off => unreachable,
+                .warning => ansi.get(&.{ .bold, .yellow }),
+                .@"error" => ansi.get(&.{ .bold, .red }),
+            }
+        else
+            "";
+
+        const suffix = if (options.ansi) ansi.get(&.{.reset}) else "";
+
+        return switch (self) {
+            .off => unreachable,
+            .warning => std.fmt.bufPrint(buffer, "{s}warning{s}", .{ prefix, suffix }) catch unreachable,
+            .@"error" => std.fmt.bufPrint(buffer, "{s}error{s}", .{ prefix, suffix }) catch unreachable,
+        };
+    }
+};
+
+const std = @import("std");
+const strings = @import("strings.zig");
+const ansi = @import("ansi.zig");
+const testing = @import("testing.zig");
+const results = @import("results.zig");
+const session = @import("session.zig");

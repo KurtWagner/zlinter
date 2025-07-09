@@ -171,7 +171,7 @@ pub fn allocParse(
         .zig_exe_arg => {
             index += 1;
             if (index == args.len) {
-                output.process_printer.println(.err, "--zig_exe missing path", .{});
+                rendering.process_printer.println(.err, "--zig_exe missing path", .{});
                 return error.InvalidArgs;
             }
             lint_args.zig_exe = try allocator.dupe(u8, args[index]);
@@ -180,7 +180,7 @@ pub fn allocParse(
         .zig_lib_directory_arg => {
             index += 1;
             if (index == args.len) {
-                output.process_printer.println(.err, "--zig_lib_directory missing path", .{});
+                rendering.process_printer.println(.err, "--zig_lib_directory missing path", .{});
                 return error.InvalidArgs;
             }
             lint_args.zig_lib_directory = try allocator.dupe(u8, args[index]);
@@ -189,7 +189,7 @@ pub fn allocParse(
         .global_cache_root_arg => {
             index += 1;
             if (index == args.len) {
-                output.process_printer.println(.err, "--global_cache_root missing path", .{});
+                rendering.process_printer.println(.err, "--global_cache_root missing path", .{});
                 return error.InvalidArgs;
             }
             lint_args.global_cache_root = try allocator.dupe(u8, args[index]);
@@ -198,7 +198,7 @@ pub fn allocParse(
         .rule_arg => {
             index += 1;
             if (index == args.len) {
-                output.process_printer.println(.err, "--rule missing rule name", .{});
+                rendering.process_printer.println(.err, "--rule missing rule name", .{});
                 return error.InvalidArgs;
             }
 
@@ -209,7 +209,7 @@ pub fn allocParse(
                 break :exists false;
             };
             if (!rule_exists) {
-                output.process_printer.println(.err, "rule '{s}' not found", .{args[index]});
+                rendering.process_printer.println(.err, "rule '{s}' not found", .{args[index]});
                 return error.InvalidArgs;
             }
 
@@ -219,7 +219,7 @@ pub fn allocParse(
         .include_path_arg => {
             index += 1;
             if (index == args.len) {
-                output.process_printer.println(.err, "--include arg missing paths", .{});
+                rendering.process_printer.println(.err, "--include arg missing paths", .{});
                 return error.InvalidArgs;
             }
             try include_paths.append(allocator, try allocator.dupe(u8, args[index]));
@@ -228,7 +228,7 @@ pub fn allocParse(
         .exclude_path_arg => {
             index += 1;
             if (index == args.len) {
-                output.process_printer.println(.err, "--exclude arg missing paths", .{});
+                rendering.process_printer.println(.err, "--exclude arg missing paths", .{});
                 return error.InvalidArgs;
             }
             try exclude_paths.append(allocator, try allocator.dupe(u8, args[index]));
@@ -237,7 +237,7 @@ pub fn allocParse(
         .build_exclude_path_arg => {
             index += 1;
             if (index == args.len) {
-                output.process_printer.println(.err, "--build-exclude arg missing paths", .{});
+                rendering.process_printer.println(.err, "--build-exclude arg missing paths", .{});
                 return error.InvalidArgs;
             }
             try build_exclude_paths.append(allocator, try allocator.dupe(u8, args[index]));
@@ -246,7 +246,7 @@ pub fn allocParse(
         .build_include_path_arg => {
             index += 1;
             if (index == args.len) {
-                output.process_printer.println(.err, "--build-include arg missing paths", .{});
+                rendering.process_printer.println(.err, "--build-include arg missing paths", .{});
                 return error.InvalidArgs;
             }
             try build_include_paths.append(allocator, try allocator.dupe(u8, args[index]));
@@ -255,7 +255,7 @@ pub fn allocParse(
         .filter_path_arg => {
             index += 1;
             if (index == args.len) {
-                output.process_printer.println(.err, "--filter arg missing paths", .{});
+                rendering.process_printer.println(.err, "--filter arg missing paths", .{});
                 return error.InvalidArgs;
             }
             try filter_paths.append(allocator, try allocator.dupe(u8, args[index]));
@@ -264,7 +264,7 @@ pub fn allocParse(
         .format_arg => {
             index += 1;
             if (index == args.len) {
-                output.process_printer.println(.err, "--format missing value", .{});
+                rendering.process_printer.println(.err, "--format missing value", .{});
                 return error.InvalidArgs;
             }
             inline for (std.meta.fields(@FieldType(Args, "format"))) |field| {
@@ -273,7 +273,7 @@ pub fn allocParse(
                     continue :state State.parsing;
                 }
             }
-            output.process_printer.println(.err, "--format only supports: {s}", .{comptime formats: {
+            rendering.process_printer.println(.err, "--format only supports: {s}", .{comptime formats: {
                 var formats: []u8 = "";
                 for (std.meta.fieldNames(@FieldType(Args, "format"))) |name| {
                     formats = @constCast(formats ++ name ++ " ");
@@ -627,7 +627,7 @@ test "allocParse with rule arg" {
 }
 
 test "allocParse with invalid rule arg" {
-    var stderr_sink = try output.process_printer.attachFakeStderrSink(std.testing.allocator);
+    var stderr_sink = try rendering.process_printer.attachFakeStderrSink(std.testing.allocator);
     defer stderr_sink.deinit();
 
     try std.testing.expectError(error.InvalidArgs, allocParse(
@@ -702,5 +702,5 @@ const testing = struct {
 
 const std = @import("std");
 const builtin = @import("builtin");
-const LintRule = @import("./linting.zig").LintRule;
-const output = @import("./output.zig");
+const LintRule = @import("./rules.zig").LintRule;
+const rendering = @import("./rendering.zig");

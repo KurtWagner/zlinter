@@ -1,7 +1,7 @@
 const Formatter = @This();
 
 pub const FormatInput = struct {
-    results: []zlinter.LintResult,
+    results: []zlinter.results.LintResult,
     /// The directory the linter ran relative to.
     dir: std.fs.Dir,
     /// Arena allocator that is cleared after calling format.
