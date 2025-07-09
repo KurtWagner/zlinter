@@ -80,53 +80,58 @@ fn run(
                 &lint_problems,
                 config,
             ),
-            // -----------------------------------------------------------------
-            // 0.15 breaking changes - Add explicit breaking changes here:
-            // -----------------------------------------------------------------
-            .@"usingnamespace" => try lint_problems.append(gpa, .{
-                .start = .startOfToken(tree, zlinter.shims.nodeMainToken(tree, node.toNodeIndex())),
-                .end = .endOfToken(tree, zlinter.shims.nodeMainToken(tree, node.toNodeIndex())),
-                .message = try std.fmt.allocPrint(gpa, "Deprecated - `usingnamespace` keyword is removed in 0.15", .{}),
-                .rule_id = rule.rule_id,
-                .severity = config.severity,
-            }),
-            // I don't think await and async were in used in the compiler
-            // but for completeness lets include as they were in the AST:
-            .@"await" => try lint_problems.append(gpa, .{
-                .start = .startOfNode(tree, node.toNodeIndex()),
-                .end = .endOfNode(tree, node.toNodeIndex()),
-                .message = try std.fmt.allocPrint(gpa, "Deprecated - `await` keyword is removed in 0.15", .{}),
-                .rule_id = rule.rule_id,
-                .severity = config.severity,
-            }),
-            .async_call_one,
-            .async_call_one_comma,
-            .async_call_comma,
-            .async_call,
-            => try lint_problems.append(gpa, .{
-                .start = .startOfNode(tree, node.toNodeIndex()),
-                .end = .endOfNode(tree, node.toNodeIndex()),
-                .message = try std.fmt.allocPrint(gpa, "Deprecated - `async` keyword is removed in 0.15", .{}),
-                .rule_id = rule.rule_id,
-                .severity = config.severity,
-            }),
-            .builtin_call_two,
-            .builtin_call_two_comma,
-            .builtin_call,
-            .builtin_call_comma,
-            => {
-                const main_token = zlinter.shims.nodeMainToken(tree, node.toNodeIndex());
-                if (std.mem.eql(u8, tree.tokenSlice(main_token), "@frameSize")) {
-                    try lint_problems.append(gpa, .{
-                        .start = .startOfNode(tree, node.toNodeIndex()),
-                        .end = .endOfNode(tree, node.toNodeIndex()),
-                        .message = try std.fmt.allocPrint(gpa, "Deprecated - @frameSize builtin is removed in 0.15", .{}),
-                        .rule_id = rule.rule_id,
-                        .severity = config.severity,
-                    });
-                }
-            },
-            else => continue,
+            else => {},
+        }
+        if (zlinter.version.zig == .@"0.14") {
+            switch (tag) {
+                // -----------------------------------------------------------------
+                // 0.15 breaking changes - Add explicit breaking changes here:
+                // -----------------------------------------------------------------
+                .@"usingnamespace" => try lint_problems.append(gpa, .{
+                    .start = .startOfToken(tree, zlinter.shims.nodeMainToken(tree, node.toNodeIndex())),
+                    .end = .endOfToken(tree, zlinter.shims.nodeMainToken(tree, node.toNodeIndex())),
+                    .message = try std.fmt.allocPrint(gpa, "Deprecated - `usingnamespace` keyword is removed in 0.15", .{}),
+                    .rule_id = rule.rule_id,
+                    .severity = config.severity,
+                }),
+                // I don't think await and async were in used in the compiler
+                // but for completeness lets include as they were in the AST:
+                .@"await" => try lint_problems.append(gpa, .{
+                    .start = .startOfNode(tree, node.toNodeIndex()),
+                    .end = .endOfNode(tree, node.toNodeIndex()),
+                    .message = try std.fmt.allocPrint(gpa, "Deprecated - `await` keyword is removed in 0.15", .{}),
+                    .rule_id = rule.rule_id,
+                    .severity = config.severity,
+                }),
+                .async_call_one,
+                .async_call_one_comma,
+                .async_call_comma,
+                .async_call,
+                => try lint_problems.append(gpa, .{
+                    .start = .startOfNode(tree, node.toNodeIndex()),
+                    .end = .endOfNode(tree, node.toNodeIndex()),
+                    .message = try std.fmt.allocPrint(gpa, "Deprecated - `async` keyword is removed in 0.15", .{}),
+                    .rule_id = rule.rule_id,
+                    .severity = config.severity,
+                }),
+                .builtin_call_two,
+                .builtin_call_two_comma,
+                .builtin_call,
+                .builtin_call_comma,
+                => {
+                    const main_token = zlinter.shims.nodeMainToken(tree, node.toNodeIndex());
+                    if (std.mem.eql(u8, tree.tokenSlice(main_token), "@frameSize")) {
+                        try lint_problems.append(gpa, .{
+                            .start = .startOfNode(tree, node.toNodeIndex()),
+                            .end = .endOfNode(tree, node.toNodeIndex()),
+                            .message = try std.fmt.allocPrint(gpa, "Deprecated - @frameSize builtin is removed in 0.15", .{}),
+                            .rule_id = rule.rule_id,
+                            .severity = config.severity,
+                        });
+                    }
+                },
+                else => {},
+            }
         }
     }
 
@@ -365,8 +370,12 @@ test getDeprecationFromDoc {
     try std.testing.expectEqual(null, getDeprecationFromDoc(" "));
 }
 
-test "no_deprecated - explicit 0.15.x breaking changes" {
+test {
     std.testing.refAllDecls(@This());
+}
+
+test "no_deprecated - explicit 0.15.x breaking changes" {
+    if (zlinter.version.zig != .@"0.14") return error.SkipZigTest;
 
     const source: [:0]const u8 =
         \\
