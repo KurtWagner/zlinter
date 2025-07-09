@@ -18,6 +18,8 @@ jobs:
         uses: mlugg/setup-zig@v2
         with:
           version: 0.14.1
+      - name: "Install kcov"
+        run: sudo apt-get install kcov
       - name: "Run unit tests with coverage"
         run: zig build unit-test -Dcoverage=true
       - name: "Upload coverage"
