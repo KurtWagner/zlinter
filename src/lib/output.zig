@@ -1,3 +1,5 @@
+// TODO: Move this to rendering.zig
+
 var printer_singleton: Printer = .{ .verbose = false };
 /// Singleton printer for use for the lifetime of the process
 pub var process_printer = &printer_singleton;
