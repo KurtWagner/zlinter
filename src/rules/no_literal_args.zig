@@ -183,7 +183,7 @@ test "no_literal_args" {
         zlinter.testing.paths.posix("path/to/my_file.zig"),
     );
 
-    inline for (&.{ "true", "0", "0.5", "false" }, 0..) |slice, i| {
+    inline for (&.{ "true,", "0,", "0.5,", "false)" }, 0..) |slice, i| {
         try std.testing.expectEqualStrings(slice, result.problems[i].sliceSource(source));
     }
 

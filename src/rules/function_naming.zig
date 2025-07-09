@@ -219,12 +219,12 @@ test "run" {
             .rule_id = "function_naming",
             .severity = .@"error",
             .start = .{
-                .byte_offset = 1,
+                .byte_offset = 4,
                 .line = 1,
                 .column = 3,
             },
             .end = .{
-                .byte_offset = 22,
+                .byte_offset = 11,
                 .line = 1,
                 .column = 10,
             },
@@ -234,12 +234,12 @@ test "run" {
             .rule_id = "function_naming",
             .severity = .@"error",
             .start = .{
-                .byte_offset = 103,
+                .byte_offset = 106,
                 .line = 5,
                 .column = 3,
             },
             .end = .{
-                .byte_offset = 123,
+                .byte_offset = 112,
                 .line = 5,
                 .column = 9,
             },
@@ -249,12 +249,12 @@ test "run" {
             .rule_id = "function_naming",
             .severity = .@"error",
             .start = .{
-                .byte_offset = 125,
+                .byte_offset = 135,
                 .line = 7,
                 .column = 10,
             },
             .end = .{
-                .byte_offset = 158,
+                .byte_offset = 149,
                 .line = 7,
                 .column = 24,
             },
@@ -264,12 +264,12 @@ test "run" {
             .rule_id = "function_naming",
             .severity = .@"error",
             .start = .{
-                .byte_offset = 189,
+                .byte_offset = 197,
                 .line = 10,
                 .column = 8,
             },
             .end = .{
-                .byte_offset = 253,
+                .byte_offset = 199,
                 .line = 10,
                 .column = 10,
             },
@@ -279,12 +279,12 @@ test "run" {
             .rule_id = "function_naming",
             .severity = .@"error",
             .start = .{
-                .byte_offset = 189,
+                .byte_offset = 207,
                 .line = 10,
                 .column = 18,
             },
             .end = .{
-                .byte_offset = 253,
+                .byte_offset = 207,
                 .line = 10,
                 .column = 18,
             },
@@ -294,12 +294,12 @@ test "run" {
             .rule_id = "function_naming",
             .severity = .@"error",
             .start = .{
-                .byte_offset = 189,
+                .byte_offset = 216,
                 .line = 10,
                 .column = 27,
             },
             .end = .{
-                .byte_offset = 253,
+                .byte_offset = 222,
                 .line = 10,
                 .column = 33,
             },
@@ -309,12 +309,12 @@ test "run" {
             .rule_id = "function_naming",
             .severity = .@"error",
             .start = .{
-                .byte_offset = 189,
+                .byte_offset = 236,
                 .line = 10,
                 .column = 47,
             },
             .end = .{
-                .byte_offset = 253,
+                .byte_offset = 236,
                 .line = 10,
                 .column = 47,
             },
@@ -322,7 +322,7 @@ test "run" {
         },
     }, result.problems);
 
-    try std.testing.expectEqualStrings("fn not_good() void {}", result.problems[0].sliceSource(source));
+    try std.testing.expectEqualStrings("not_good", result.problems[0].sliceSource(source));
 }
 
 const std = @import("std");

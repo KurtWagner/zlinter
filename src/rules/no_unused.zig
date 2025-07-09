@@ -214,11 +214,12 @@ test "no_unused" {
                     .column = 0,
                 },
                 .end = .{
-                    .byte_offset = 24,
+                    .byte_offset = 23,
                     .line = 1,
                     .column = 22,
                 },
                 .message = "Unused declaration",
+                .disabled_by_comment = false,
                 .fix = .{
                     .start = 1,
                     .end = 25,
@@ -234,11 +235,12 @@ test "no_unused" {
                     .column = 0,
                 },
                 .end = .{
-                    .byte_offset = 85,
+                    .byte_offset = 84,
                     .line = 5,
                     .column = 1,
                 },
                 .message = "Unused declaration",
+                .disabled_by_comment = false,
                 .fix = .{
                     .start = 53,
                     .end = 86,
@@ -254,11 +256,12 @@ test "no_unused" {
                     .column = 0,
                 },
                 .end = .{
-                    .byte_offset = 142,
+                    .byte_offset = 141,
                     .line = 10,
                     .column = 0,
                 },
                 .message = "Unused declaration",
+                .disabled_by_comment = false,
                 .fix = .{
                     .start = 107,
                     .end = 142,

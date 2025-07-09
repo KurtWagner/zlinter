@@ -29,7 +29,7 @@ pub const LintResult = struct {
 };
 
 pub const LintProblemLocation = struct {
-    /// Location in entire source
+    /// Location in entire source (inclusive)
     byte_offset: usize,
     /// Line number in source (index zero)
     line: usize,
@@ -51,6 +51,29 @@ pub const LintProblemLocation = struct {
         };
     }
 
+    test startOfNode {
+        var ast = try std.zig.Ast.parse(std.testing.allocator,
+            \\pub const a = 1;
+            \\pub const b = 2;
+        , .zig);
+        defer ast.deinit(std.testing.allocator);
+
+        const a_decl = ast.rootDecls()[0];
+        const b_decl = ast.rootDecls()[1];
+
+        try std.testing.expectEqualDeep(LintProblemLocation{
+            .byte_offset = 0,
+            .line = 0,
+            .column = 0,
+        }, LintProblemLocation.startOfNode(ast, a_decl));
+
+        try std.testing.expectEqualDeep(LintProblemLocation{
+            .byte_offset = 17,
+            .line = 1,
+            .column = 0,
+        }, LintProblemLocation.startOfNode(ast, b_decl));
+    }
+
     pub fn endOfNode(tree: std.zig.Ast, index: std.zig.Ast.Node.Index) LintProblemLocation {
         const last_token = tree.lastToken(index);
         const last_token_loc = tree.tokenLocation(0, last_token);
@@ -62,22 +85,118 @@ pub const LintProblemLocation = struct {
         };
     }
 
+    test endOfNode {
+        var ast = try std.zig.Ast.parse(std.testing.allocator,
+            \\pub const a = 1;
+            \\pub const b = 2;
+        , .zig);
+        defer ast.deinit(std.testing.allocator);
+
+        const a_decl = ast.rootDecls()[0];
+        const b_decl = ast.rootDecls()[1];
+
+        try std.testing.expectEqualDeep(LintProblemLocation{
+            .byte_offset = 15,
+            .line = 0,
+            .column = 15,
+        }, LintProblemLocation.endOfNode(ast, a_decl));
+
+        try std.testing.expectEqualDeep(LintProblemLocation{
+            .byte_offset = 32,
+            .line = 1,
+            .column = 15,
+        }, LintProblemLocation.endOfNode(ast, b_decl));
+    }
+
     pub fn startOfToken(tree: std.zig.Ast, index: std.zig.Ast.TokenIndex) LintProblemLocation {
         const loc = tree.tokenLocation(0, index);
         return .{
-            .byte_offset = loc.line_start,
+            .byte_offset = loc.line_start + loc.column,
             .line = loc.line,
             .column = loc.column,
         };
     }
 
+    test startOfToken {
+        var ast = try std.zig.Ast.parse(std.testing.allocator,
+            \\pub const a = 1;
+            \\pub const b = 2;
+        , .zig);
+        defer ast.deinit(std.testing.allocator);
+
+        // `pub` on line 1
+        try std.testing.expectEqualDeep(LintProblemLocation{
+            .byte_offset = 0,
+            .line = 0,
+            .column = 0,
+        }, LintProblemLocation.startOfToken(ast, 0));
+
+        // `const` on line 1
+        try std.testing.expectEqualDeep(LintProblemLocation{
+            .byte_offset = 4,
+            .line = 0,
+            .column = 4,
+        }, LintProblemLocation.startOfToken(ast, 1));
+
+        // `pub` on line 2
+        try std.testing.expectEqualDeep(LintProblemLocation{
+            .byte_offset = 17,
+            .line = 1,
+            .column = 0,
+        }, LintProblemLocation.startOfToken(ast, 6));
+
+        // `const` on line 2
+        try std.testing.expectEqualDeep(LintProblemLocation{
+            .byte_offset = 21,
+            .line = 1,
+            .column = 4,
+        }, LintProblemLocation.startOfToken(ast, 7));
+    }
+
     pub fn endOfToken(tree: std.zig.Ast, index: std.zig.Ast.TokenIndex) LintProblemLocation {
         const loc = tree.tokenLocation(0, index);
+        const column = loc.column + tree.tokenSlice(index).len - 1;
         return .{
-            .byte_offset = loc.line_end,
+            .byte_offset = loc.line_start + column,
             .line = loc.line,
-            .column = loc.column + tree.tokenSlice(index).len - 1,
+            .column = column,
         };
+    }
+
+    test endOfToken {
+        var ast = try std.zig.Ast.parse(std.testing.allocator,
+            \\pub const a = 1;
+            \\pub const b = 2;
+        , .zig);
+        defer ast.deinit(std.testing.allocator);
+
+        // `pub` on line 1
+        try std.testing.expectEqualDeep(LintProblemLocation{
+            .byte_offset = 2,
+            .line = 0,
+            .column = 2,
+        }, LintProblemLocation.endOfToken(ast, 0));
+
+        // `const` on line 1
+        try std.testing.expectEqualDeep(LintProblemLocation{
+            .byte_offset = 8,
+            .line = 0,
+            .column = 8,
+        }, LintProblemLocation.endOfToken(ast, 1));
+
+        // `pub` on line 2
+        try std.testing.expectEqualDeep(LintProblemLocation{
+            .byte_offset = 19,
+            .line = 1,
+            .column = 2,
+        }, LintProblemLocation.endOfToken(ast, 6));
+
+        // `const` on line 2
+        try std.testing.expectEqualDeep(LintProblemLocation{
+            .byte_offset = 25,
+            .line = 1,
+            .column = 8,
+        }, LintProblemLocation.endOfToken(ast, 7));
     }
 
     pub fn debugPrint(self: @This(), writer: anytype) void {
@@ -109,7 +228,7 @@ pub const LintProblem = struct {
     fix: ?LintProblemFix = null,
 
     pub fn sliceSource(self: Self, source: [:0]const u8) []const u8 {
-        return source[self.start.byte_offset..self.end.byte_offset];
+        return source[self.start.byte_offset .. self.end.byte_offset + 1];
     }
 
     pub fn debugPrint(self: Self, writer: anytype) void {

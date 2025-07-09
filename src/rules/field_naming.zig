@@ -185,7 +185,7 @@ test "run - implicit struct (root struct)" {
                 .column = 0,
             },
             .end = .{
-                .byte_offset = 40,
+                .byte_offset = 33,
                 .line = 2,
                 .column = 6,
             },
@@ -200,7 +200,7 @@ test "run - implicit struct (root struct)" {
                 .column = 0,
             },
             .end = .{
-                .byte_offset = 54,
+                .byte_offset = 47,
                 .line = 3,
                 .column = 6,
             },
@@ -208,8 +208,8 @@ test "run - implicit struct (root struct)" {
         },
     }, result.problems);
 
-    try std.testing.expectEqualStrings("Notgood: u32,", result.problems[0].sliceSource(source));
-    try std.testing.expectEqualStrings("notGood: u32,", result.problems[1].sliceSource(source));
+    try std.testing.expectEqualStrings("Notgood", result.problems[0].sliceSource(source));
+    try std.testing.expectEqualStrings("notGood", result.problems[1].sliceSource(source));
 }
 
 test "run - union container" {
@@ -230,12 +230,12 @@ test "run - union container" {
             .rule_id = "field_naming",
             .severity = .@"error",
             .start = .{
-                .byte_offset = 47,
+                .byte_offset = 48,
                 .line = 3,
                 .column = 1,
             },
             .end = .{
-                .byte_offset = 61,
+                .byte_offset = 54,
                 .line = 3,
                 .column = 7,
             },
@@ -245,12 +245,12 @@ test "run - union container" {
             .rule_id = "field_naming",
             .severity = .@"error",
             .start = .{
-                .byte_offset = 62,
+                .byte_offset = 63,
                 .line = 4,
                 .column = 1,
             },
             .end = .{
-                .byte_offset = 75,
+                .byte_offset = 69,
                 .line = 4,
                 .column = 7,
             },
@@ -258,8 +258,8 @@ test "run - union container" {
         },
     }, result.problems);
 
-    try std.testing.expectEqualStrings(" notGood: i32,", result.problems[0].sliceSource(source));
-    try std.testing.expectEqualStrings(" NotGood: i16", result.problems[1].sliceSource(source));
+    try std.testing.expectEqualStrings("notGood", result.problems[0].sliceSource(source));
+    try std.testing.expectEqualStrings("NotGood", result.problems[1].sliceSource(source));
 }
 
 test "run - error container" {
@@ -280,12 +280,12 @@ test "run - error container" {
             .rule_id = "field_naming",
             .severity = .@"error",
             .start = .{
-                .byte_offset = 47,
+                .byte_offset = 48,
                 .line = 4,
                 .column = 1,
             },
             .end = .{
-                .byte_offset = 55,
+                .byte_offset = 54,
                 .line = 4,
                 .column = 7,
             },
@@ -295,12 +295,12 @@ test "run - error container" {
             .rule_id = "field_naming",
             .severity = .@"error",
             .start = .{
-                .byte_offset = 36,
+                .byte_offset = 37,
                 .line = 3,
                 .column = 1,
             },
             .end = .{
-                .byte_offset = 46,
+                .byte_offset = 44,
                 .line = 3,
                 .column = 8,
             },
@@ -308,8 +308,8 @@ test "run - error container" {
         },
     }, result.problems);
 
-    try std.testing.expectEqualStrings(" notGood", result.problems[0].sliceSource(source));
-    try std.testing.expectEqualStrings(" not_good,", result.problems[1].sliceSource(source));
+    try std.testing.expectEqualStrings("notGood", result.problems[0].sliceSource(source));
+    try std.testing.expectEqualStrings("not_good", result.problems[1].sliceSource(source));
 }
 
 const std = @import("std");

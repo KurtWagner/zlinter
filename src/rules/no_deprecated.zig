@@ -401,12 +401,12 @@ test "no_deprecated - explicit 0.15.x breaking changes" {
                 .rule_id = "no_deprecated",
                 .severity = .warning,
                 .start = .{
-                    .byte_offset = 1,
+                    .byte_offset = 5,
                     .line = 1,
                     .column = 4,
                 },
                 .end = .{
-                    .byte_offset = 41,
+                    .byte_offset = 18,
                     .line = 1,
                     .column = 17,
                 },
