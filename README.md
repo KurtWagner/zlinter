@@ -10,6 +10,7 @@
 
 [![linux](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml/badge.svg?branch=0.14.x)](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml)
 [![windows](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml/badge.svg?branch=0.14.x)](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml)
+[![Coverage Status](https://coveralls.io/repos/github/KurtWagner/zlinter/badge.svg?branch=0.14.x)](https://coveralls.io/github/KurtWagner/zlinter?branch=0.14.x)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 An extendable and customizable **Zig linter** that is integrated from source into your `build.zig`.
