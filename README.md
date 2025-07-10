@@ -45,6 +45,7 @@ An extendable and customizable **Zig linter** that is integrated from source int
   - [no_hidden_allocations](RULES.md#no_hidden_allocations)
   - [no_literal_args](RULES.md#no_literal_args)
   - [no_orelse_unreachable](RULES.md#no_orelse_unreachable)
+  - [no_panic](RULES.md#no_panic)
   - [no_swallow_error](RULES.md#no_swallow_error)
   - [no_undefined](RULES.md#no_undefined)
   - [no_unused](RULES.md#no_unused)

@@ -56,6 +56,13 @@ fn stringLessThan(_: void, lhs: []const u8, rhs: []const u8) bool {
     return std.ascii.orderIgnoreCase(lhs, rhs) == .lt;
 }
 
+fn trimCommentLine(source: []const u8) []const u8 {
+    if (source.len == 0) return source;
+
+    const start: usize = if (std.ascii.isWhitespace(source[0])) 1 else 0;
+    return std.mem.trimRight(u8, source[start..], &std.ascii.whitespace);
+}
+
 fn fatal(comptime format: []const u8, args: anytype) noreturn {
     std.debug.print(format, args);
     const exit_code_failure = 1;
@@ -67,7 +74,7 @@ fn writeFileDocComments(content: []const u8, writer: anytype) !void {
     while (lines.next()) |line| {
         if (!std.mem.startsWith(u8, line, "//!")) return;
 
-        try writer.writeAll(std.mem.trim(u8, line["//!".len..], &std.ascii.whitespace));
+        try writer.writeAll(trimCommentLine(line["//!".len..]));
         try writer.writeByte('\n');
     }
 }
@@ -103,7 +110,7 @@ fn writeFileRuleConfig(content: []const u8, gpa: std.mem.Allocator, writer: anyt
                 try writer.writeAll("\n\n  * ");
                 var doc_comment = container_field.firstToken() - 1;
                 while (tree.tokens.items(.tag)[doc_comment] == .doc_comment) {
-                    try writer.writeAll(std.mem.trim(u8, tree.tokenSlice(doc_comment)["///".len..], &std.ascii.whitespace));
+                    try writer.writeAll(trimCommentLine(tree.tokenSlice(doc_comment)["///".len..]));
                     try writer.writeByte(' ');
                     if (doc_comment > 0) {
                         doc_comment -= 1;

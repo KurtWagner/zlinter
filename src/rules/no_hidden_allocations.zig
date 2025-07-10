@@ -65,10 +65,6 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    // 1. Find field access that looks like allocation (e.g., .alloc, .create)
-    // 2. Resolve the type of the LHS of the field to determine if its a detected type
-    // 3. Profit
-
     const root: zlinter.shims.NodeIndexShim = .root;
     var it = try doc.nodeLineageIterator(root, allocator);
     defer it.deinit();

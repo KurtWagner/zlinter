@@ -288,6 +288,58 @@ as it does not control flow.
 
   * **Default:** `.warning`
 
+## `no_panic`
+
+Enforces that there are no uses of `@panic`.
+
+`@panic` forcibly stops the program at runtime — it should be a last resort.
+
+Panics can be replaced with:
+
+* Proper error handling (error types and try / catch)
+* Precondition checks (std.debug.assert) that fail only in debug mode
+* Compile-time checks (comptime) when possible
+
+Panics may be useful during early development, but leaving them in shipped code leads to:
+
+* Abrupt crashes that break user trust
+* Hard-to-debug failures in production
+* Missed opportunities for graceful recovery
+
+By default this will not flag `@panic` found in `test` blocks.
+
+**Good:**
+
+```zig
+pub fn divide(x: i32, y: i32) i32 {
+  if (y == 0) @panic("Divide by zero!");
+  return x / y;
+}
+```
+
+**Bad:**
+
+```zig
+pub fn divide(x: i32, y: i32) !i32 {
+  if (y == 0) return error.DivideByZero;
+  return x / y;
+}
+```
+
+**Config options:**
+
+* `severity`
+
+  * The severity of using `@panic` (off, warning, error).
+
+  * **Default:** `.warning`
+
+* `exclude_tests`
+
+  * Skip if found within `test { ... }` block.
+
+  * **Default:** `true`
+
 ## `no_swallow_error`
 
 Disallow silently swallowing errors without proper handling or logging.
