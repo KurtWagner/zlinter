@@ -131,7 +131,7 @@ hook it up to a build step, like `zig build lint`:
     zig build lint
 
     // OR be specific with paths
-    zig build lint -- src/ file.zig
+    zig build lint -- --include src/ file.zig
     ```
 
 ## Configuration
