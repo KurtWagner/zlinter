@@ -70,7 +70,7 @@ fn run(
                 &lint_problems,
                 config,
             ),
-            .identifier => try handleVarAccess(
+            .identifier => try handleIdentifierAccess(
                 rule,
                 gpa,
                 arena,
@@ -169,7 +169,7 @@ fn getLintProblemLocationEnd(doc: zlinter.session.LintDocument, node_index: std.
     };
 }
 
-fn handleVarAccess(
+fn handleIdentifierAccess(
     rule: zlinter.rules.LintRule,
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
@@ -185,13 +185,38 @@ fn handleVarAccess(
 
     const source_index = handle.tree.tokens.items(.start)[identifier_token];
 
-    const decl = (try analyser.lookupSymbolGlobal(
+    const decl_with_handle = (try analyser.lookupSymbolGlobal(
         handle,
         tree.tokenSlice(identifier_token),
         source_index,
     )) orelse return;
 
-    if (try decl.docComments(arena)) |comment| {
+    // Check whether the identifier is itself the declaration, in which case
+    // we should skip as its not the usage but the declaration of it and we
+    // dont want to list the declaration as deprecated only its usages
+    out: {
+        if (std.mem.eql(u8, decl_with_handle.handle.uri, handle.uri)) {
+            switch (decl_with_handle.decl) {
+                .ast_node => |decl_node| {
+                    const decl_identifier_token = switch (zlinter.shims.nodeTag(decl_with_handle.handle.tree, decl_node)) {
+                        .container_field_init,
+                        .container_field_align,
+                        .container_field,
+                        => zlinter.shims.nodeMainToken(decl_with_handle.handle.tree, decl_node),
+                        else => break :out,
+                    };
+                    if (decl_identifier_token == identifier_token) return;
+                },
+                .error_token => |err_token| {
+                    if (err_token == identifier_token) return;
+                },
+                // TODO: We can probably skip more types but for now the above will do
+                else => {},
+            }
+        }
+    }
+
+    if (try decl_with_handle.docComments(arena)) |comment| {
         if (getDeprecationFromDoc(comment)) |message| {
             try lint_problems.append(gpa, .{
                 .start = getLintProblemLocationStart(doc, node_index),
@@ -214,14 +239,14 @@ fn handleEnumLiteral(
     lint_problems: *std.ArrayListUnmanaged(zlinter.results.LintProblem),
     config: Config,
 ) !void {
-    const decl = try getSymbolEnumLiteral(
+    const decl_with_handle = try getSymbolEnumLiteral(
         doc,
         node_index,
         doc.handle.tree.tokenSlice(identifier_token),
         gpa,
     ) orelse return;
 
-    if (try decl.docComments(arena)) |doc_comment| {
+    if (try decl_with_handle.docComments(arena)) |doc_comment| {
         if (getDeprecationFromDoc(doc_comment)) |message| {
             try lint_problems.append(gpa, .{
                 .start = getLintProblemLocationStart(doc, node_index),
@@ -372,6 +397,54 @@ test getDeprecationFromDoc {
 
 test {
     std.testing.refAllDecls(@This());
+}
+
+test "no_deprecated - regression test for #36" {
+    const source: [:0]const u8 =
+        \\const convention: namespace.CallingConvention = .Stdcall;
+        \\
+        \\const namespace = struct {
+        \\  const CallingConvention = enum {
+        \\    /// Deprecated: Don't use
+        \\    Stdcall,
+        \\    std_call,
+        \\  };
+        \\};
+    ;
+
+    const rule = buildRule(.{});
+    var result = (try zlinter.testing.runRule(
+        rule,
+        zlinter.testing.paths.posix("path/to/regression_36.zig"),
+        source,
+    )).?;
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectStringEndsWith(
+        result.file_path,
+        zlinter.testing.paths.posix("path/to/regression_36.zig"),
+    );
+
+    try zlinter.testing.expectProblemsEqual(
+        &[_]zlinter.results.LintProblem{
+            .{
+                .rule_id = "no_deprecated",
+                .severity = .warning,
+                .start = .{
+                    .byte_offset = 0,
+                    .line = 0,
+                    .column = 48,
+                },
+                .end = .{
+                    .byte_offset = 0,
+                    .line = 0,
+                    .column = 55,
+                },
+                .message = "Deprecated: Don't use",
+            },
+        },
+        result.problems,
+    );
 }
 
 test "no_deprecated - explicit 0.15.x breaking changes" {

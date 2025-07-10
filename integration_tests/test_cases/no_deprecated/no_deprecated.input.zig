@@ -3,7 +3,7 @@ const convention: namespace.CallingConvention = .Stdcall;
 const namespace = struct {
     const CallingConvention = enum {
         /// Deprecated: Don't use
-        Stdcall, // <-- TODO: fix this bug, this shouldn't be caught - #36
+        Stdcall,
         std_call,
     };
 };

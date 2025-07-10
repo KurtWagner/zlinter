@@ -3,11 +3,6 @@ warning Deprecated: Don't use [test_cases/no_deprecated/no_deprecated.input.zig:
  1 | const convention: namespace.CallingConvention = .Stdcall;
    |                                                 ^^^^^^^^
 
-warning Deprecated - Don't use [test_cases/no_deprecated/no_deprecated.input.zig:6:9] no_deprecated
-
- 6 |         Stdcall, // <-- TODO: fix this bug, this shouldn't be caught - #36
-   |         ^^^^^^^
-
 warning Deprecated: - please no more [test_cases/no_deprecated/no_deprecated.input.zig:25:41] no_deprecated
 
  25 |     state: test_case_references.State = .really_deprecated,
@@ -78,4 +73,4 @@ warning Deprecated: Don't call this [test_cases/no_deprecated/no_deprecated.inpu
  57 |     std.log.err("Hello {s}", .{test_case_references.doNotCallDeprecated()});
     |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-x 16 warnings
+x 15 warnings
