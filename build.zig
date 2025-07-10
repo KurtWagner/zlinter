@@ -19,6 +19,7 @@ pub const BuiltinLintRule = enum {
     max_positional_args,
     no_literal_args,
     no_swallow_error,
+    no_panic,
 };
 
 const BuildRuleSource = union(enum) {
@@ -288,6 +289,7 @@ pub fn build(b: *std.Build) void {
                 buildBuiltinRule(b, .no_undefined, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .no_hidden_allocations, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .no_swallow_error, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+                buildBuiltinRule(b, .no_panic, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .max_positional_args, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(
                     b,

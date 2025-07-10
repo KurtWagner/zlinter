@@ -64,6 +64,7 @@ pub fn build(b: *std.Build) !void {
     lint_cmd.dependOn(step: {
         var builder = zlinter.builder(b, .{ .target = target, .optimize = optimize });
         builder.addRule(.{ .builtin = .no_unused }, .{});
+        builder.addRule(.{ .builtin = .no_panic }, .{});
         builder.addRule(.{ .builtin = .no_undefined }, .{});
         builder.addRule(.{ .builtin = .max_positional_args }, .{});
         builder.addRule(.{ .builtin = .no_literal_args }, .{

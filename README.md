@@ -14,6 +14,7 @@ An extendable and customizable **Zig linter** that is integrated from source int
 
 > [!NOTE]
 > **2025-07-03:** `zlinter` is **new**.  
+>
 > - Expect breaking changes between commits.  
 > - Some features may not work as documented.  
 >
@@ -23,36 +24,36 @@ An extendable and customizable **Zig linter** that is integrated from source int
 
 ## Table of contents
 
-* [Background](#background)
-* [Versioning](#versioning)
-* [Features](#features)
-* [Getting Started](#getting-started)
-* [Configuration](#configuration)
-  * [Paths](#configure-paths)
-  * [Rules](#configure-rules)
-  * [Disable with Comments](#disable-with-comments)
-  * [Command-Line Arguments](#command-line-arguments)
-  * [Custom Rules](#custom-rules)
-  * [Optimization](#configure-optimization)
-* [Built-in Rules](RULES.md)
-  * [declaration_naming](RULES.md#declaration_naming)
-  * [field_naming](RULES.md#field_naming)
-  * [file_naming](RULES.md#file_naming)
-  * [function_naming](RULES.md#function_naming)
-  * [max_positional_args](RULES.md#max_positional_args)
-  * [no_deprecated](RULES.md#no_deprecated)
-  * [no_hidden_allocations](RULES.md#no_hidden_allocations)
-  * [no_literal_args](RULES.md#no_literal_args)
-  * [no_orelse_unreachable](RULES.md#no_orelse_unreachable)
-  * [no_swallow_error](RULES.md#no_swallow_error)
-  * [no_undefined](RULES.md#no_undefined)
-  * [no_unused](RULES.md#no_unused)
-  * [switch_case_ordering](RULES.md#switch_case_ordering)
-* [Contributing](#contributing)
-  * [How to Contribute](#contributions)
-  * [Run tests](#run-tests)
-  * [Run on self](#run-lint-on-self)
-
+- [Background](#background)
+- [Versioning](#versioning)
+- [Features](#features)
+- [Getting Started](#getting-started)
+- [Configuration](#configuration)
+  - [Paths](#configure-paths)
+  - [Rules](#configure-rules)
+  - [Disable with Comments](#disable-with-comments)
+  - [Command-Line Arguments](#command-line-arguments)
+  - [Custom Rules](#custom-rules)
+  - [Optimization](#configure-optimization)
+- [Built-in Rules](RULES.md)
+  - [declaration_naming](RULES.md#declaration_naming)
+  - [field_naming](RULES.md#field_naming)
+  - [file_naming](RULES.md#file_naming)
+  - [function_naming](RULES.md#function_naming)
+  - [max_positional_args](RULES.md#max_positional_args)
+  - [no_deprecated](RULES.md#no_deprecated)
+  - [no_hidden_allocations](RULES.md#no_hidden_allocations)
+  - [no_literal_args](RULES.md#no_literal_args)
+  - [no_orelse_unreachable](RULES.md#no_orelse_unreachable)
+  - [no_panic](RULES.md#no_panic)
+  - [no_swallow_error](RULES.md#no_swallow_error)
+  - [no_undefined](RULES.md#no_undefined)
+  - [no_unused](RULES.md#no_unused)
+  - [switch_case_ordering](RULES.md#switch_case_ordering)
+- [Contributing](#contributing)
+  - [How to Contribute](#contributions)
+  - [Run tests](#run-tests)
+  - [Run on self](#run-lint-on-self)
 
 ## Background
 
@@ -70,20 +71,20 @@ It uses [`zls`](https://github.com/zigtools/zls) (an awesome project, go check i
 
 `zlinter` will:
 
-* follow the same semantic versioning as `zig`;
-* use branch `master` for `zig` `master` releases; and
-* use branch `0.14.x` for `zig` `0.14.x` releases.
+- follow the same semantic versioning as `zig`;
+- use branch `master` for `zig` `master` releases; and
+- use branch `0.14.x` for `zig` `0.14.x` releases.
 
 This may change, especially when `zig` is "stable" at `1.x`. If you have opinions on this, feel free to comment on [#20](https://github.com/KurtWagner/zlinter/issues/20).
 
 ## Features
 
-* [x] [Integrates from source into your `build.zig`](#getting-started)
-* [x] [Builtin rules](RULES.md) (e.g., [`no_deprecated`](RULES.md#no_deprecated) and [`field_naming`](RULES.md#field_naming))
-* [x] [Custom / BYO rules](#custom-rules) (e.g., if your project has bespoke rules you need to follow)
-* [x] [Per rule configurability](#configure-rules) (e.g., deprecations as warnings)
-* [x] Auto-fix with `--fix` capability (e.g., `no_unused` can remove unused container declarations)
-* [ ] Interchangeable result formatters (e.g., json, checkstyle)
+- [x] [Integrates from source into your `build.zig`](#getting-started)
+- [x] [Builtin rules](RULES.md) (e.g., [`no_deprecated`](RULES.md#no_deprecated) and [`field_naming`](RULES.md#field_naming))
+- [x] [Custom / BYO rules](#custom-rules) (e.g., if your project has bespoke rules you need to follow)
+- [x] [Per rule configurability](#configure-rules) (e.g., deprecations as warnings)
+- [x] Auto-fix with `--fix` capability (e.g., `no_unused` can remove unused container declarations)
+- [ ] Interchangeable result formatters (e.g., json, checkstyle)
 
 ## Getting started
 
@@ -193,10 +194,10 @@ const a = this.is.deprecated(); // zlinter-disable-current-line
 zig build lint -- [--include <path> ...] [--exclude <path> ...] [--filter <path> ...] [--rule <name> ...] [--fix]
 ```
 
-* `--include` run the linter on these path ignoring the includes and excludes defined in the `build.zig` forcing these paths to be resolved and linted (if they exist).
-* `--exclude` exclude these paths from linting. This argument will be used in conjunction with the excludes defined in the `build.zig` unless used with `--include`.
-* `--filter` used to filter the run to a specific set of already resolved paths. Unlike `--include` this leaves the includes and excludes defined in the `build.zig` as is.
-* `--fix` used to automatically fix some issues (e.g., removal of unused container declarations) - **Only use this feature if you use source control as it can result loss of code!**
+- `--include` run the linter on these path ignoring the includes and excludes defined in the `build.zig` forcing these paths to be resolved and linted (if they exist).
+- `--exclude` exclude these paths from linting. This argument will be used in conjunction with the excludes defined in the `build.zig` unless used with `--include`.
+- `--filter` used to filter the run to a specific set of already resolved paths. Unlike `--include` this leaves the includes and excludes defined in the `build.zig` as is.
+- `--fix` used to automatically fix some issues (e.g., removal of unused container declarations) - **Only use this feature if you use source control as it can result loss of code!**
 
 For example
 
@@ -204,8 +205,8 @@ For example
 zig build lint -- --include src/ android/ --exclude src/generated.zig --rule no_deprecated no_unused
 ```
 
-* Will resolve all zig files under `src/` and `android/` but will exclude linting `src/generated.zig`; and
-* Only rules `no_deprecated` and `no_unused` will be ran.
+- Will resolve all zig files under `src/` and `android/` but will exclude linting `src/generated.zig`; and
+- Only rules `no_deprecated` and `no_unused` will be ran.
 
 ### Custom rules
 
