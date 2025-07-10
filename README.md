@@ -2,12 +2,6 @@
 
 # Zlinter - Linter for Zig
 
-> **2025-07-03:** `zlinter` is **new**.  
-> - Expect breaking changes between commits.  
-> - Some features may not work as documented.  
->
-> Please report issues and contribute fixes!
-
 [![linux](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml/badge.svg?branch=0.14.x)](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml)
 [![windows](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml/badge.svg?branch=0.14.x)](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml)
 [![Coverage Status](https://coveralls.io/repos/github/KurtWagner/zlinter/badge.svg?branch=0.14.x)](https://coveralls.io/github/KurtWagner/zlinter?branch=0.14.x)
@@ -15,6 +9,15 @@
 
 An extendable and customizable **Zig linter** that is integrated from source into your `build.zig`.
 
+> [!TIP]
+> While Zig is `0.x.x`,  **`no_deprecated`** is important - it will do best effort to **report the usage of deprecated and removed zig features**.
+
+> [!NOTE]
+> **2025-07-03:** `zlinter` is **new**.  
+> - Expect breaking changes between commits.  
+> - Some features may not work as documented.  
+>
+> Please report issues and contribute fixes!
 
 ![Screenshot](./screenshot.png)
 
