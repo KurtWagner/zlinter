@@ -1,6 +1,9 @@
-<img align="left" width="64" height="64" src="icon_128.png" alt="Zlinter icon">
 
-# Zlinter - Linter for Zig
+<div>
+  <img align=left width="40" height="40" src="icon_128.png" alt="Zlinter icon">
+  <h1>Zlinter - Linter for Zig</h1>
+</div>
+
 
 [![linux](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml/badge.svg?branch=master)](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml)
 [![windows](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml/badge.svg?branch=master)](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml)
