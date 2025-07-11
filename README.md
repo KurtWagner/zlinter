@@ -12,6 +12,8 @@
 
 An extendable and customizable **Zig linter** that is integrated from source into your `build.zig`.
 
+A **linter** is a tool that automatically checks source code for style issues, bugs, or patterns that may lead to errors, helping developers write cleaner and more reliable code.
+
 > [!TIP]
 > While Zig is `0.x.x`,  **`no_deprecated`** is important - it will do best effort to **report the usage of deprecated and removed zig features**.
 
