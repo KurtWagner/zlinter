@@ -13,8 +13,14 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: any
     var total_disabled_by_comment: usize = 0;
 
     for (input.results) |file_result| {
-        var file = input.dir.openFile(file_result.file_path, .{ .mode = .read_only }) catch return error.WriteFailure;
-        const file_renderer = zlinter.rendering.LintFileRenderer.init(input.arena, file.reader()) catch return error.WriteFailure;
+        var file = input.dir.openFile(
+            file_result.file_path,
+            .{ .mode = .read_only },
+        ) catch |e| return logAndReturnWriteFailure("Open file", e);
+        const file_renderer = zlinter.rendering.LintFileRenderer.init(
+            input.arena,
+            file.reader(),
+        ) catch |e| return logAndReturnWriteFailure("Render", e);
 
         for (file_result.problems) |problem| {
             if (problem.disabled_by_comment) {
@@ -45,15 +51,15 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: any
                 zlinter.ansi.get(&.{.gray}),
                 problem.rule_id,
                 zlinter.ansi.get(&.{.reset}),
-            }) catch return error.WriteFailure;
+            }) catch |e| return logAndReturnWriteFailure("Problem title", e);
             file_renderer.render(
                 problem.start.line,
                 problem.start.column,
                 problem.end.line,
                 problem.end.column,
                 writer,
-            ) catch return error.WriteFailure;
-            writer.writeAll("\n\n") catch return error.WriteFailure;
+            ) catch |e| return logAndReturnWriteFailure("Problem lint", e);
+            writer.writeAll("\n\n") catch |e| return logAndReturnWriteFailure("Newline", e);
         }
     }
 
@@ -62,7 +68,7 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: any
             zlinter.ansi.get(&.{ .red, .bold }),
             error_count,
             zlinter.ansi.get(&.{.reset}),
-        }) catch return error.WriteFailure;
+        }) catch |e| return logAndReturnWriteFailure("Errors", e);
     }
 
     if (warning_count > 0) {
@@ -70,7 +76,7 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: any
             zlinter.ansi.get(&.{ .yellow, .bold }),
             warning_count,
             zlinter.ansi.get(&.{.reset}),
-        }) catch return error.WriteFailure;
+        }) catch |e| return logAndReturnWriteFailure("Warnings", e);
     }
 
     if (total_disabled_by_comment > 0) {
@@ -81,7 +87,7 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: any
                 total_disabled_by_comment,
                 zlinter.ansi.get(&.{.reset}),
             },
-        ) catch return error.WriteFailure;
+        ) catch |e| return logAndReturnWriteFailure("Skipped", e);
     }
 
     if (warning_count == 0 and error_count == 0) {
@@ -91,9 +97,15 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: any
                 zlinter.ansi.get(&.{ .bold, .green }),
                 zlinter.ansi.get(&.{.reset}),
             },
-        ) catch return error.WriteFailure;
+        ) catch |e| return logAndReturnWriteFailure("Summary", e);
     }
+}
+
+fn logAndReturnWriteFailure(comptime suffix: []const u8, err: anyerror) error{WriteFailure} {
+    std.log.err(suffix ++ " failed to write: {s}", .{@errorName(err)});
+    return error.WriteFailure;
 }
 
 const Formatter = @import("./Formatter.zig");
 const zlinter = @import("../zlinter.zig");
+const std = @import("std");
