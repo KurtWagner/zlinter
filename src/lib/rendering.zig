@@ -9,7 +9,7 @@ pub const LintFileRenderer = struct {
         var lines = std.ArrayListUnmanaged([]const u8).empty;
         defer lines.deinit(allocator);
 
-        const max_line_bytes = 64 * 1024;
+        const max_line_bytes = 1024 * 1024;
         var buf: [max_line_bytes]u8 = undefined;
         var fbs = std.io.fixedBufferStream(&buf);
         while (true) {
