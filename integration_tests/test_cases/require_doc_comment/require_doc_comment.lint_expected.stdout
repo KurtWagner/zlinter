@@ -1,0 +1,11 @@
+warning Public function is missing a doc comment [test_cases/require_doc_comment/require_doc_comment.input.zig:5:1] require_doc_comment
+
+ 5 | pub fn getName() []const u8 {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Public declaration is missing a doc comment [test_cases/require_doc_comment/require_doc_comment.input.zig:1:1] require_doc_comment
+
+ 1 | pub const name = "jack";
+   | ^^^^^^^^^^^^^^
+
+x 2 warnings
