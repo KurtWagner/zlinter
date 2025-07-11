@@ -80,6 +80,7 @@ test "no_orelse_unreachable" {
         rule,
         zlinter.testing.paths.posix("path/to/my_file.zig"),
         source,
+        .{},
     )).?;
     defer result.deinit(std.testing.allocator);
 

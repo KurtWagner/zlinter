@@ -119,7 +119,9 @@ test "declaration_naming" {
 
     const rule = buildRule(.{});
 
-    var result = (try zlinter.testing.runRule(rule, zlinter.testing.paths.posix("path/to/file.zig"),
+    var result = (try zlinter.testing.runRule(
+        rule,
+        zlinter.testing.paths.posix("path/to/file.zig"),
         \\
         \\pub const hit_points: f32 = 1;
         \\const HitPoints: f32 = 1;
@@ -138,6 +140,8 @@ test "declaration_naming" {
         \\fn TypeFunc() type {
         \\   return u32;
         \\}
+    ,
+        .{},
     )).?;
     defer result.deinit(std.testing.allocator);
 

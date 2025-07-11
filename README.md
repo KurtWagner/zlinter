@@ -43,6 +43,7 @@ An extendable and customizable **Zig linter** that is integrated from source int
   - [max_positional_args](RULES.md#max_positional_args)
   - [no_deprecated](RULES.md#no_deprecated)
   - [no_hidden_allocations](RULES.md#no_hidden_allocations)
+  - [no_inferred_error_unions](RULES.md#no_inferred_error_unions)
   - [no_literal_args](RULES.md#no_literal_args)
   - [no_orelse_unreachable](RULES.md#no_orelse_unreachable)
   - [no_panic](RULES.md#no_panic)

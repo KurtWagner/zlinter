@@ -94,6 +94,7 @@ test "max_positional_args" {
         rule,
         zlinter.testing.paths.posix("path/to/my_file.zig"),
         source,
+        .{},
     )).?;
     defer result.deinit(std.testing.allocator);
 

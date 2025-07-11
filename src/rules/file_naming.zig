@@ -88,6 +88,7 @@ test "good cases" {
             rule,
             zlinter.testing.paths.posix("path/to/my_file.zig"),
             "pub const hit_points: f32 = 1;",
+            .{},
         );
         defer {
             if (result) |*r| r.deinit(std.testing.allocator);
@@ -98,6 +99,7 @@ test "good cases" {
             rule,
             zlinter.testing.paths.posix("path/to/file.zig"),
             "pub const hit_points: f32 = 1;",
+            .{},
         );
         defer {
             if (result) |*r| r.deinit(std.testing.allocator);
@@ -108,6 +110,7 @@ test "good cases" {
             rule,
             zlinter.testing.paths.posix("path/to/File.zig"),
             "hit_points: f32,",
+            .{},
         );
         defer {
             if (result) |*r| r.deinit(std.testing.allocator);
@@ -118,6 +121,7 @@ test "good cases" {
             rule,
             zlinter.testing.paths.posix("path/to/MyFile.zig"),
             "hit_points: f32,",
+            .{},
         );
         defer {
             if (result) |*r| r.deinit(std.testing.allocator);
@@ -132,6 +136,7 @@ test "expects snake_case with TitleCase" {
         rule,
         zlinter.testing.paths.posix("path/to/File.zig"),
         "pub const hit_points: f32 = 1;",
+        .{},
     )).?;
     defer result.deinit(std.testing.allocator);
 
@@ -169,6 +174,7 @@ test "expects snake_case with camelCase" {
         rule,
         zlinter.testing.paths.posix("path/to/myFile.zig"),
         "pub const hit_points: f32 = 1;",
+        .{},
     )).?;
     defer result.deinit(std.testing.allocator);
 
@@ -206,6 +212,7 @@ test "expects TitleCase with snake_case" {
         rule,
         zlinter.testing.paths.posix("path/to/myFile.zig"),
         "hit_points: f32,",
+        .{},
     )).?;
     defer result.deinit(std.testing.allocator);
 
@@ -243,6 +250,7 @@ test "expects TitleCase with under_score" {
         rule,
         zlinter.testing.paths.posix("path/to/my_file.zig"),
         "hit_points: f32,",
+        .{},
     )).?;
     defer result.deinit(std.testing.allocator);
 

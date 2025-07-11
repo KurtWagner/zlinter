@@ -76,7 +76,7 @@ pub fn expectContainsExactlyStrings(expected: []const []const u8, actual: []cons
 }
 
 /// Builds and runs a rule with fake file name and content (test only)
-pub fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8) !?LintResult {
+pub fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8, options: LintOptions) !?LintResult {
     assertTestOnly();
 
     var ctx: LintContext = undefined;
@@ -112,7 +112,7 @@ pub fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8) !?
         ctx,
         doc,
         std.testing.allocator,
-        .{},
+        options,
     );
 }
 
@@ -162,3 +162,4 @@ const LintDocument = @import("session.zig").LintDocument;
 const LintRule = @import("rules.zig").LintRule;
 const LintProblem = @import("results.zig").LintProblem;
 const LintResult = @import("results.zig").LintResult;
+const LintOptions = @import("session.zig").LintOptions;

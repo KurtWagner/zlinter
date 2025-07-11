@@ -135,7 +135,8 @@ test "no_panic" {
         \\test {
         \\  @panic("test not implemented");
         \\}
-        ,
+    ,
+        .{},
     )).?;
     defer result.deinit(std.testing.allocator);
 
