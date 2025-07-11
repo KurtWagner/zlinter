@@ -50,6 +50,7 @@ An extendable and customizable **Zig linter** that is integrated from source int
   - [no_swallow_error](RULES.md#no_swallow_error)
   - [no_undefined](RULES.md#no_undefined)
   - [no_unused](RULES.md#no_unused)
+  - [require_doc_comment](RULES.md#require_doc_comment)
   - [switch_case_ordering](RULES.md#switch_case_ordering)
 - [Contributing](#contributing)
   - [How to Contribute](#contributions)

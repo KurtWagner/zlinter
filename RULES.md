@@ -463,6 +463,34 @@ Enforces that container declarations are referenced.
 
   * **Default:** `.warning`
 
+## `require_doc_comment`
+
+Require doc comments for all public functions, types, and constants.
+
+Unless you're maintaining an open API used by other projects this rule is more than
+likely unnecessary, and in some cases, can encourage avoidable noise on
+otherwise simple APIs.
+
+**Config options:**
+
+* `public_severity`
+
+  * The severity when missing doc comments on public declarations (off, warning, error).
+
+  * **Default:** `.warning`
+
+* `private_severity`
+
+  * The severity when missing doc comments on private declarations (off, warning, error).
+
+  * **Default:** `.off`
+
+* `file_severity`
+
+  * The severity when missing doc comments on top of the file (off, warning, error).
+
+  * **Default:** `.off`
+
 ## `switch_case_ordering`
 
 Enforces an order of values in `switch` statements.
