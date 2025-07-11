@@ -233,11 +233,9 @@ pub fn main() !u8 {
         }
         if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "  - Process syntax errors: {d}ms", .{ms});
 
-        const disable_comments = try zlinter.comments.allocParse(ast.source, gpa);
-        defer {
-            for (disable_comments) |*dc| dc.deinit(gpa);
-            gpa.free(disable_comments);
-        }
+        var comments = try zlinter.comments.allocParse(ast.source, gpa);
+        defer comments.deinit(gpa);
+
         if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "  - Parsing doc comments: {d}ms", .{ms});
 
         var rule_filter_map = map: {
@@ -277,7 +275,7 @@ pub fn main() !u8 {
 
             if (rule_result) |result| {
                 for (result.problems) |*err| {
-                    err.disabled_by_comment = shouldSkip(disable_comments, err.*);
+                    err.disabled_by_comment = shouldSkip(comments.disable_comments, err.*);
                 }
                 try results.append(gpa, result);
             }
