@@ -83,6 +83,7 @@ pub fn build(b: *std.Build) !void {
         });
         builder.addRule(.{ .builtin = .file_naming }, .{});
         builder.addRule(.{ .builtin = .no_deprecated }, .{});
+        builder.addRule(.{ .builtin = .no_inferred_error_unions }, .{});
         builder.addRule(.{ .builtin = .no_hidden_allocations }, .{});
         builder.addRule(.{ .builtin = .no_swallow_error }, .{});
         builder.addRule(.{ .builtin = .no_orelse_unreachable }, .{});

@@ -417,6 +417,7 @@ test "no_deprecated - regression test for #36" {
         rule,
         zlinter.testing.paths.posix("path/to/regression_36.zig"),
         source,
+        .{},
     )).?;
     defer result.deinit(std.testing.allocator);
 
@@ -469,6 +470,7 @@ test "no_deprecated - explicit 0.15.x breaking changes" {
         rule,
         zlinter.testing.paths.posix("path/to/removed_features.zig"),
         source,
+        .{},
     )).?;
     defer result.deinit(std.testing.allocator);
 

@@ -167,7 +167,12 @@ test "run - implicit struct (root struct)" {
         \\Notgood: u32,
         \\notGood: u32,
     ;
-    var result = (try zlinter.testing.runRule(rule, zlinter.testing.paths.posix("path/to/file.zig"), source)).?;
+    var result = (try zlinter.testing.runRule(
+        rule,
+        zlinter.testing.paths.posix("path/to/file.zig"),
+        source,
+        .{},
+    )).?;
     defer result.deinit(std.testing.allocator);
 
     try std.testing.expectStringEndsWith(
@@ -222,7 +227,12 @@ test "run - union container" {
         \\ NotGood: i16
         \\};
     ;
-    var result = (try zlinter.testing.runRule(rule, zlinter.testing.paths.posix("path/to/file.zig"), source)).?;
+    var result = (try zlinter.testing.runRule(
+        rule,
+        zlinter.testing.paths.posix("path/to/file.zig"),
+        source,
+        .{},
+    )).?;
     defer result.deinit(std.testing.allocator);
 
     try zlinter.testing.expectProblemsEqual(&[_]zlinter.results.LintProblem{
@@ -272,7 +282,12 @@ test "run - error container" {
         \\ notGood
         \\};
     ;
-    var result = (try zlinter.testing.runRule(rule, zlinter.testing.paths.posix("path/to/file.zig"), source)).?;
+    var result = (try zlinter.testing.runRule(
+        rule,
+        zlinter.testing.paths.posix("path/to/file.zig"),
+        source,
+        .{},
+    )).?;
     defer result.deinit(std.testing.allocator);
 
     try zlinter.testing.expectProblemsEqual(&[_]zlinter.results.LintProblem{

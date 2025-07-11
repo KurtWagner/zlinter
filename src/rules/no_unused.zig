@@ -194,7 +194,8 @@ test "no_unused" {
         \\fn unusedFn() void {
         \\   usedFn();
         \\}
-        ,
+    ,
+        .{},
     )).?;
     defer result.deinit(std.testing.allocator);
 
