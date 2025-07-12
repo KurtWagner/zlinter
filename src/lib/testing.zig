@@ -38,6 +38,8 @@ pub const paths = struct {
     pub fn posix(comptime posix_path: []const u8) []const u8 {
         assertTestOnly();
 
+        @setEvalBranchQuota(10000);
+
         comptime var result: []const u8 = "";
         inline for (0..posix_path.len) |i| {
             result = result ++ std.fmt.comptimePrint("{c}", .{switch (posix_path[i]) {
@@ -69,7 +71,14 @@ pub fn expectContainsExactlyStrings(expected: []const []const u8, actual: []cons
 
     for (0..copy_expected.len) |i| {
         std.testing.expectEqualStrings(copy_expected[i], copy_actual[i]) catch |e| {
-            std.log.err("Expected {s} to contain {s}", .{ copy_actual, copy_expected });
+            std.log.err("Expected: &.{{", .{});
+            for (copy_expected) |str| std.log.err("  \"{s}\"", .{str});
+            std.log.err("}};", .{});
+
+            std.log.err("Actual: &.{{", .{});
+            for (copy_actual) |str| std.log.err("  \"{s}\"", .{str});
+            std.log.err("}};", .{});
+
             return e;
         };
     }
@@ -102,7 +111,7 @@ pub fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8, op
     std.testing.expectEqual(ast.errors.len, 0) catch |err| {
         std.debug.print("Failed to parse AST:\n", .{});
         for (ast.errors) |ast_err| {
-            try ast.renderError(ast_err, std.io.getStdErr().writer());
+            try ast.renderError(ast_err, std.fs.File.stderr().deprecatedWriter());
         }
         return err;
     };
