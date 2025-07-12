@@ -19,7 +19,7 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: any
         ) catch |e| return logAndReturnWriteFailure("Open file", e);
         const file_renderer = zlinter.rendering.LintFileRenderer.init(
             input.arena,
-            file.reader(),
+            file.deprecatedReader(),
         ) catch |e| return logAndReturnWriteFailure("Render", e);
 
         for (file_result.problems) |problem| {

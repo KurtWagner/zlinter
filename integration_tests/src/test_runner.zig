@@ -18,7 +18,7 @@ pub fn main() !void {
     const rule_name = args[1];
     const test_name = args[2];
 
-    const out = std.io.getStdOut().writer();
+    const out = std.fs.File.stdout().deprecatedWriter();
 
     const output_fmt = ansi_gray ++
         "[Integration test]" ++

@@ -242,7 +242,7 @@ pub const LintProblem = struct {
         self.end.debugPrintWithIndent(writer, 4);
 
         writer.print("  .message = \"{s}\",\n", .{self.message});
-        writer.print("  .disabled_by_comment = {?},\n", .{self.disabled_by_comment});
+        writer.print("  .disabled_by_comment = {},\n", .{self.disabled_by_comment});
 
         if (self.fix) |fix| {
             writer.print("  .fix =\n", .{});

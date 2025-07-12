@@ -305,7 +305,7 @@ pub fn main() !u8 {
     // Print out results:
     // ------------------------------------------------------------------------
 
-    const output_writer = std.io.getStdOut().writer();
+    const output_writer = std.fs.File.stdout().deprecatedWriter();
     if (args.fix) {
         var total_fixes: usize = 0;
         var total_disabled_by_comment: usize = 0;
@@ -344,7 +344,7 @@ pub fn main() !u8 {
             });
             defer file.close();
 
-            const file_content = try file.reader().readAllAlloc(gpa, max_file_size_bytes);
+            const file_content = try file.deprecatedReader().readAllAlloc(gpa, max_file_size_bytes);
             defer gpa.free(file_content);
 
             var output_slices = std.ArrayListUnmanaged([]const u8).empty;
@@ -386,7 +386,7 @@ pub fn main() !u8 {
                 });
                 defer new_file.close();
 
-                var writer = new_file.writer();
+                var writer = new_file.deprecatedWriter();
                 for (output_slices.items) |output_slice| {
                     try writer.writeAll(output_slice);
                 }

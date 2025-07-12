@@ -222,11 +222,11 @@ pub const Printer = struct {
     pub fn print(self: Printer, kind: Kind, comptime fmt: []const u8, args: anytype) void {
         var writer: Writer = switch (kind) {
             .verbose => if (self.verbose)
-                self.stdout orelse .{ .context = .{ .file = std.io.getStdOut() } }
+                self.stdout orelse .{ .context = .{ .file = std.fs.File.stdout() } }
             else
                 return,
-            .err => self.stderr orelse .{ .context = .{ .file = std.io.getStdErr() } },
-            .out => self.stdout orelse .{ .context = .{ .file = std.io.getStdOut() } },
+            .err => self.stderr orelse .{ .context = .{ .file = std.fs.File.stderr() } },
+            .out => self.stdout orelse .{ .context = .{ .file = std.fs.File.stdout() } },
         };
 
         return writer.print(fmt, args) catch |e| {
