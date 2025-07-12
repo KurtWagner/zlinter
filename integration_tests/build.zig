@@ -75,6 +75,7 @@ pub fn build(b: *std.Build) !void {
         });
         builder.addRule(.{ .builtin = .switch_case_ordering }, .{});
         builder.addRule(.{ .builtin = .field_naming }, .{});
+        builder.addRule(.{ .builtin = .field_ordering }, .{});
         builder.addRule(.{ .builtin = .declaration_naming }, .{});
         builder.addRule(.{ .builtin = .function_naming }, .{
             .function_that_returns_type = .{

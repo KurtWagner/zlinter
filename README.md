@@ -4,7 +4,6 @@
   <h1>Zlinter - Linter for Zig</h1>
 </div>
 
-
 [![linux](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml/badge.svg?branch=0.14.x)](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml)
 [![windows](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml/badge.svg?branch=0.14.x)](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml)
 [![Coverage Status](https://coveralls.io/repos/github/KurtWagner/zlinter/badge.svg?branch=0.14.x)](https://coveralls.io/github/KurtWagner/zlinter?branch=0.14.x)
@@ -42,6 +41,7 @@ A **linter** is a tool that automatically checks source code for style issues, b
   - [Optimization](#configure-optimization)
 - [Built-in Rules](RULES.md)
   - [declaration_naming](RULES.md#declaration_naming)
+  - [field_ordering](RULES.md#field_ordering)
   - [field_naming](RULES.md#field_naming)
   - [file_naming](RULES.md#file_naming)
   - [function_naming](RULES.md#function_naming)
