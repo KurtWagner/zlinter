@@ -121,23 +121,35 @@ fn run(
         if (maybe_first_problem_index) |first_problem_index| {
             const last_problem_index = maybe_last_problem_index.?;
 
-            const actual_start, const actual_end = nodeSpanIncludingComments(
-                tree,
-                actual_order.items[first_problem_index],
-                actual_order.items[last_problem_index],
-            );
+            const actual_start, const actual_end =
+                nodeSpanIncludingComments(
+                    tree,
+                    actual_order.items[first_problem_index],
+                    actual_order.items[last_problem_index],
+                    .{
+                        .consume_trailing_comma = true,
+                    },
+                );
 
             var expected_source = std.ArrayList(u8).init(allocator);
             defer expected_source.deinit();
 
-            for (expected_order.items[first_problem_index .. last_problem_index + 1]) |expected_node| {
+            const last_node = expected_order.items[expected_order.items.len - 1];
+            for (expected_order.items[first_problem_index .. last_problem_index + 1]) |current_node| {
+                const is_last_field = current_node == last_node;
+
                 const expected_start, const expected_end = nodeSpanIncludingComments(
                     tree,
-                    expected_node,
-                    expected_node,
+                    current_node,
+                    current_node,
+                    .{},
                 );
+                const is_multiline = expected_start.line < expected_end.line;
 
                 try expected_source.appendSlice(tree.source[expected_start.byte_offset .. expected_end.byte_offset + 1]);
+                if (!is_last_field or is_multiline) {
+                    try expected_source.append(',');
+                }
             }
 
             try lint_problems.append(allocator, .{
@@ -172,6 +184,7 @@ fn nodeSpanIncludingComments(
     tree: std.zig.Ast,
     first_node: std.zig.Ast.Node.Index,
     last_node: std.zig.Ast.Node.Index,
+    options: struct { consume_trailing_comma: bool = false },
 ) struct {
     zlinter.results.LintProblemLocation,
     zlinter.results.LintProblemLocation,
@@ -185,7 +198,7 @@ fn nodeSpanIncludingComments(
     };
 
     var last_token = tree.lastToken(last_node);
-    if (tree.tokens.items(.tag)[last_token + 1] == .comma) last_token += 1;
+    if (options.consume_trailing_comma and tree.tokens.items(.tag)[last_token + 1] == .comma) last_token += 1;
     const end: zlinter.results.LintProblemLocation = .endOfToken(tree, last_token);
 
     return .{ start, end };
