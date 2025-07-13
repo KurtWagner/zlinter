@@ -65,46 +65,16 @@ test "integration test rules" {
 
         // TODO: Update to expect certain exit codes based on input
         // try std.testing.expect(lint_output.term.Exited == 0);
-        // try std.testing.expectEqualStrings("", fix_output.stderr);
+        // try expectEqualStringsNormalized("", fix_output.stderr);
 
-        switch (builtin.os.tag) {
-            .windows, .uefi => {
-                // Convert output into something that looks more like the posix
-                // based expected output so that the tests can run on windows.
-                var mutable = try allocator.dupe(u8, lint_output.stdout);
-                defer allocator.free(mutable);
-
-                // Replace "\" in file paths to "/"
-                var offset: usize = 0;
-                while (std.mem.indexOfPosLinear(u8, mutable, offset, "test_cases" ++ std.fs.path.sep_str)) |start| {
-                    const end = std.mem.indexOfPosLinear(u8, mutable, start, ".zig").?;
-
-                    for (start..end) |i| {
-                        mutable[i] = if (std.fs.path.isSep(mutable[i])) std.fs.path.sep_posix else mutable[i];
-                    }
-                    offset = end;
-                }
-
-                expectFileContentsEquals(
-                    std.fs.cwd(),
-                    lint_stdout_expected_file.?,
-                    mutable,
-                ) catch |e| {
-                    std.log.err("stderr: {s}", .{lint_output.stderr});
-                    return e;
-                };
-            },
-            else => {
-                expectFileContentsEquals(
-                    std.fs.cwd(),
-                    lint_stdout_expected_file.?,
-                    lint_output.stdout,
-                ) catch |e| {
-                    std.log.err("stderr: {s}", .{lint_output.stderr});
-                    return e;
-                };
-            },
-        }
+        expectFileContentsEquals(
+            std.fs.cwd(),
+            lint_stdout_expected_file.?,
+            lint_output.stdout,
+        ) catch |e| {
+            std.log.err("stderr: {s}", .{lint_output.stderr});
+            return e;
+        };
     }
 
     // --------------------------------------------------------------------
@@ -138,6 +108,8 @@ test "integration test rules" {
                 "build",
                 "lint",
                 "--",
+                "--rule",
+                rule_name,
                 "--fix",
                 "--include",
                 temp_path,
@@ -149,29 +121,32 @@ test "integration test rules" {
         // Expect all integration fix tests to be successful so exit 0 with
         // no stderr. Maybe one day we will add cases where it fails
         try std.testing.expect(fix_output.term.Exited == 0);
-        try std.testing.expectEqualStrings("", fix_output.stderr);
+        try expectEqualStringsNormalized("", fix_output.stderr);
 
-        try expectFileContentsEquals(
+        expectFileContentsEquals(
             std.fs.cwd(),
             fix_stdout_expected_file.?,
             fix_output.stdout,
-        );
+        ) catch |e| {
+            std.log.err("stderr: {s}", .{fix_output.stderr});
+            return e;
+        };
 
         const actual = try std.fs.cwd().readFileAlloc(
             allocator,
             temp_path,
             max_file_size_bytes,
         );
-
         defer allocator.free(actual);
 
-        try expectFileContentsEquals(
+        expectFileContentsEquals(
             std.fs.cwd(),
             fix_zig_expected_file.?,
             actual,
-        );
-
-        try std.testing.expectEqualStrings("", fix_output.stderr);
+        ) catch |e| {
+            std.log.err("stderr: {s}", .{fix_output.stderr});
+            return e;
+        };
     }
 }
 
@@ -207,6 +182,16 @@ fn expectFileContentsEquals(dir: std.fs.Dir, file_path: []const u8, actual: []co
     };
 }
 
+fn expectEqualStringsNormalized(expected: []const u8, actual: []const u8) !void {
+    const normalized_expected = try normalizeNewLinesAlloc(expected, std.testing.allocator);
+    defer std.testing.allocator.free(normalized_expected);
+
+    const normalized_actual = try normalizeNewLinesAlloc(actual, std.testing.allocator);
+    defer std.testing.allocator.free(normalized_actual);
+
+    try std.testing.expectEqualStrings(normalized_expected, normalized_actual);
+}
+
 fn normalizeNewLinesAlloc(input: []const u8, allocator: std.mem.Allocator) ![]const u8 {
     var result = std.ArrayList(u8).init(allocator);
     defer result.deinit();
@@ -215,7 +200,10 @@ fn normalizeNewLinesAlloc(input: []const u8, allocator: std.mem.Allocator) ![]co
     for (input) |c| {
         switch (c) {
             '\r' => {}, // i.e., 0x0d
-            else => try result.append(c),
+            // This assumes that '\' is never in output, which is currently true
+            // If this ever changes we will need something more sophisticated
+            // to identify strings that look like paths
+            else => try result.append(if (std.fs.path.isSep(c)) std.fs.path.sep_posix else c),
         }
     }
 
