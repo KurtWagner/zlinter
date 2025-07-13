@@ -215,7 +215,7 @@ pub fn build(b: *std.Build) void {
     });
     install_coverage.step.dependOn(&merge_coverage.step);
 
-    const run_integration_tests = b.addSystemCommand(&.{ "zig", "build", "test" });
+    const run_integration_tests = b.addSystemCommand(&.{ b.graph.zig_exe, "build", "test" });
     run_integration_tests.setCwd(b.path("./integration_tests"));
 
     const integration_test_step = b.step("integration-test", "Run integration tests");
