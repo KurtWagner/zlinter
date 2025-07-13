@@ -102,7 +102,7 @@ example, `struct`, `enum`, `union`, `opaque` and `error`.
 
 Enforce a consistent, predictable order for fields in structs, enums, and unions.
 
-`no_unused` supports auto fixes with the `--fix` flag. It may take multiple runs with `--fix` to fix all places.
+`field_ordering` supports auto fixes with the `--fix` flag. It may take multiple runs with `--fix` to fix all places.
 
 **Auto fixing is an experimental feature so only use it if you use source control - always back up your code first!**
 
@@ -110,7 +110,7 @@ Enforce a consistent, predictable order for fields in structs, enums, and unions
 
 * `union_field_order`
 
-  * the same order for enums. tagged unions (e.g., `union(MyEnum)`) then you will also need to set Order and severity for union fields. If you're setting this and use
+  * Order and severity for union fields. If you're setting this and use tagged unions (e.g., `union(MyEnum)`) then you will also need to set the same order for enums.
 
   * **Default:** `.{ .order = .alphabetical_ascending, .severity = .warning, }`
 
@@ -122,7 +122,7 @@ Enforce a consistent, predictable order for fields in structs, enums, and unions
 
 * `enum_field_order`
 
-  * the same order for unions. tagged unions (e.g., `union(MyEnum)`) then you will also need to set Order and severity for enum fields. If you're setting this and use
+  * Order and severity for enum fields. If you're setting this and use tagged unions (e.g., `union(MyEnum)`) then you will also need to set the same order for unions.
 
   * **Default:** `.{ .order = .alphabetical_ascending, .severity = .warning, }`
 
