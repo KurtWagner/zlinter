@@ -27,6 +27,7 @@ const MyEnum = enum {
 const MyUnion = union {
     my_union_a: struct {
         /// Nested fields
+        c: f32,
         d: u32,
         a: u32,
     },

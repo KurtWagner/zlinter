@@ -1,12 +1,26 @@
 //! Enforce a consistent, predictable order for fields in structs, enums, and unions.
 
 /// Config for field_ordering rule.
-pub const Config = struct {};
+pub const Config = struct {
+    /// Order and severity for union fields
+    union_field_order: zlinter.rules.LintTextOrderWithSeverity = .{
+        .order = .alphabetical_ascending,
+        .severity = .warning,
+    },
+
+    /// Order and severity for struct fields
+    struct_field_order: zlinter.rules.LintTextOrderWithSeverity = .off,
+
+    /// Order and severity for enum fields
+    enum_field_order: zlinter.rules.LintTextOrderWithSeverity = .{
+        .order = .alphabetical_ascending,
+        .severity = .warning,
+    },
+};
 
 /// Builds and returns the field_ordering rule.
 pub fn buildRule(options: zlinter.rules.LintRuleOptions) zlinter.rules.LintRule {
     _ = options;
-
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.field_ordering),
         .run = &run,
@@ -22,7 +36,6 @@ fn run(
     options: zlinter.session.LintOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
-    _ = config;
 
     var lint_problems = std.ArrayListUnmanaged(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(allocator);
@@ -38,10 +51,24 @@ fn run(
     skip: while (try it.next()) |tuple| {
         const node, const connections = tuple;
 
-        if (tree.fullContainerDecl(
-            &container_decl_buffer,
-            node.toNodeIndex(),
-        ) == null) continue :skip;
+        const order_with_severity: zlinter.rules.LintTextOrderWithSeverity, const container_kind_name: []const u8 = kind: {
+            if (tree.fullContainerDecl(
+                &container_decl_buffer,
+                node.toNodeIndex(),
+            )) |_| {
+                break :kind switch (tree.tokens.items(.tag)[zlinter.shims.nodeMainToken(tree, node.toNodeIndex())]) {
+                    .keyword_union => .{ config.union_field_order, "Union" },
+                    .keyword_struct => .{ config.struct_field_order, "Struct" },
+                    .keyword_enum => .{ config.enum_field_order, "Enum" },
+                    else => null,
+                };
+            }
+            break :kind null;
+        } orelse continue :skip;
+
+        if (order_with_severity.order == .off or order_with_severity.severity == .off) {
+            continue :skip;
+        }
 
         var actual_order = std.ArrayList(std.zig.Ast.Node.Index).init(allocator);
         defer actual_order.deinit();
@@ -51,9 +78,9 @@ fn run(
 
         var sorted_queue = std.PriorityQueue(
             Field,
-            void,
+            struct { zlinter.rules.LintTextOrder },
             Field.cmp,
-        ).init(allocator, {});
+        ).init(allocator, .{order_with_severity.order});
         defer sorted_queue.deinit();
 
         var seen_field: bool = false;
@@ -119,15 +146,12 @@ fn run(
                 .severity = .warning,
                 .start = actual_start,
                 .end = actual_end,
-                .message = try allocator.dupe(u8, "Fields should be in alphabetical order"),
+                .message = try std.fmt.allocPrint(allocator, "{s} fields should be in alphabetical order", .{container_kind_name}),
                 .fix = .{
                     .start = actual_start.byte_offset,
                     .end = actual_end.byte_offset + 1, // + 1 as fix is exclusive
                     .text = try expected_source.toOwnedSlice(),
                 },
-                // TODO: Add auto fix section to readme
-                // TODO: Add auto fix section to rule that support it
-                // TODO: Call out auto fixing in readme more clearly as a core feature
             });
         }
     }
@@ -177,8 +201,9 @@ const Field = struct {
     name: []const u8,
     node: std.zig.Ast.Node.Index,
 
-    fn cmp(_: void, lhs: Field, rhs: Field) std.math.Order {
-        return std.ascii.orderIgnoreCase(lhs.name, rhs.name);
+    fn cmp(context: struct { zlinter.rules.LintTextOrder }, lhs: Field, rhs: Field) std.math.Order {
+        const order = context.@"0";
+        return order.cmp(lhs.name, rhs.name);
     }
 };
 

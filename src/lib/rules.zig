@@ -13,6 +13,84 @@ pub const LintRule = struct {
 /// Rules the modify the execution of rules.
 pub const LintRuleOptions = struct {}; // zlinter-disable-current-line
 
+pub const LintTextOrder = enum {
+    /// Any order
+    off,
+
+    /// Alphabetical order
+    alphabetical_ascending,
+
+    /// Reverse alphabetical / descending alphabetical / Z-A order,
+    alphabetical_descending,
+
+    pub inline fn name(self: LintTextOrder) []const u8 {
+        return switch (self) {
+            .off => @panic("Style is off so we should never call this method when off"),
+            .alphabetical_ascending => "alphabetical",
+            .alphabetical_descending => "reverse alphabetical",
+        };
+    }
+
+    test name {
+        try std.testing.expectEqualStrings("alphatical", LintTextOrder.alphabetical_ascending);
+        try std.testing.expectEqualStrings("reverse alphatical", LintTextOrder.alphabetical_descending);
+    }
+
+    pub inline fn cmp(self: LintTextOrder, lhs: []const u8, rhs: []const u8) std.math.Order {
+        return switch (self) {
+            .off => @panic("Style is off so we should never call this method when off"),
+            .alphabetical_ascending => cmpAlphabeticalAscending(lhs, rhs),
+            .alphabetical_descending => cmpAlphabeticalDescending(lhs, rhs),
+        };
+    }
+
+    test cmp {
+        try std.testing.expectEqual(
+            std.math.Order.eq,
+            LintTextOrder.alphabetical_ascending.cmp("a", "a"),
+        );
+        try std.testing.expectEqual(
+            std.math.Order.lt,
+            LintTextOrder.alphabetical_ascending.cmp("ab", "ac"),
+        );
+        try std.testing.expectEqual(
+            std.math.Order.gt,
+            LintTextOrder.alphabetical_ascending.cmp("ac", "ab"),
+        );
+
+        try std.testing.expectEqual(
+            std.math.Order.eq,
+            LintTextOrder.alphabetical_descending.cmp("a", "a"),
+        );
+        try std.testing.expectEqual(
+            std.math.Order.gt,
+            LintTextOrder.alphabetical_descending.cmp("ab", "ac"),
+        );
+        try std.testing.expectEqual(
+            std.math.Order.lt,
+            LintTextOrder.alphabetical_descending.cmp("ac", "ab"),
+        );
+    }
+
+    inline fn cmpAlphabeticalAscending(lhs: []const u8, rhs: []const u8) std.math.Order {
+        return std.ascii.orderIgnoreCase(lhs, rhs);
+    }
+
+    inline fn cmpAlphabeticalDescending(lhs: []const u8, rhs: []const u8) std.math.Order {
+        return cmpAlphabeticalAscending(lhs, rhs).invert();
+    }
+};
+
+pub const LintTextOrderWithSeverity = struct {
+    order: LintTextOrder,
+    severity: LintProblemSeverity,
+
+    pub const off = LintTextOrderWithSeverity{
+        .order = .off,
+        .severity = .off,
+    };
+};
+
 pub const LintTextStyleWithSeverity = struct {
     style: LintTextStyle,
     severity: LintProblemSeverity,

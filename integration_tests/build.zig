@@ -75,7 +75,20 @@ pub fn build(b: *std.Build) !void {
         });
         builder.addRule(.{ .builtin = .switch_case_ordering }, .{});
         builder.addRule(.{ .builtin = .field_naming }, .{});
-        builder.addRule(.{ .builtin = .field_ordering }, .{});
+        builder.addRule(.{ .builtin = .field_ordering }, .{
+            .struct_field_order = .{
+                .order = .alphabetical_descending,
+                .severity = .@"error",
+            },
+            .enum_field_order = .{
+                .order = .alphabetical_ascending,
+                .severity = .warning,
+            },
+            .union_field_order = .{
+                .order = .alphabetical_ascending,
+                .severity = .@"error",
+            },
+        });
         builder.addRule(.{ .builtin = .declaration_naming }, .{});
         builder.addRule(.{ .builtin = .function_naming }, .{
             .function_that_returns_type = .{
