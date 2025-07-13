@@ -67,44 +67,14 @@ test "integration test rules" {
         // try std.testing.expect(lint_output.term.Exited == 0);
         // try std.testing.expectEqualStrings("", fix_output.stderr);
 
-        switch (builtin.os.tag) {
-            .windows, .uefi => {
-                // Convert output into something that looks more like the posix
-                // based expected output so that the tests can run on windows.
-                var mutable = try allocator.dupe(u8, lint_output.stdout);
-                defer allocator.free(mutable);
-
-                // Replace "\" in file paths to "/"
-                var offset: usize = 0;
-                while (std.mem.indexOfPosLinear(u8, mutable, offset, "test_cases" ++ std.fs.path.sep_str)) |start| {
-                    const end = std.mem.indexOfPosLinear(u8, mutable, start, ".zig").?;
-
-                    for (start..end) |i| {
-                        mutable[i] = if (std.fs.path.isSep(mutable[i])) std.fs.path.sep_posix else mutable[i];
-                    }
-                    offset = end;
-                }
-
-                expectFileContentsEquals(
-                    std.fs.cwd(),
-                    lint_stdout_expected_file.?,
-                    mutable,
-                ) catch |e| {
-                    std.log.err("stderr: {s}", .{lint_output.stderr});
-                    return e;
-                };
-            },
-            else => {
-                expectFileContentsEquals(
-                    std.fs.cwd(),
-                    lint_stdout_expected_file.?,
-                    lint_output.stdout,
-                ) catch |e| {
-                    std.log.err("stderr: {s}", .{lint_output.stderr});
-                    return e;
-                };
-            },
-        }
+        expectFileContentsEqualsNormalised(
+            std.fs.cwd(),
+            lint_stdout_expected_file.?,
+            lint_output.stdout,
+        ) catch |e| {
+            std.log.err("stderr: {s}", .{lint_output.stderr});
+            return e;
+        };
     }
 
     // --------------------------------------------------------------------
@@ -153,11 +123,14 @@ test "integration test rules" {
         try std.testing.expect(fix_output.term.Exited == 0);
         try std.testing.expectEqualStrings("", fix_output.stderr);
 
-        try expectFileContentsEquals(
+        expectFileContentsEqualsNormalised(
             std.fs.cwd(),
             fix_stdout_expected_file.?,
             fix_output.stdout,
-        );
+        ) catch |e| {
+            std.log.err("stderr: {s}", .{fix_output.stderr});
+            return e;
+        };
 
         const actual = try std.fs.cwd().readFileAlloc(
             allocator,
@@ -166,13 +139,52 @@ test "integration test rules" {
         );
         defer allocator.free(actual);
 
-        try expectFileContentsEquals(
+        expectFileContentsEqualsNormalised(
             std.fs.cwd(),
             fix_zig_expected_file.?,
             actual,
-        );
+        ) catch |e| {
+            std.log.err("stderr: {s}", .{fix_output.stderr});
+            return e;
+        };
 
         try std.testing.expectEqualStrings("", fix_output.stderr);
+    }
+}
+
+/// Normalizes newlines for \r\n to \n systems
+fn expectFileContentsEqualsNormalised(dir: std.fs.Dir, file_path: []const u8, actual: []const u8) !void {
+    switch (builtin.os.tag) {
+        .windows, .uefi => {
+            // Convert output into something that looks more like the posix
+            // based expected output so that the tests can run on windows.
+            var mutable = try std.testing.allocator.dupe(u8, actual);
+            defer std.testing.allocator.free(mutable);
+
+            // Replace "\" in file paths to "/"
+            var offset: usize = 0;
+            while (std.mem.indexOfPosLinear(u8, mutable, offset, "test_cases" ++ std.fs.path.sep_str)) |start| {
+                const end = std.mem.indexOfPosLinear(u8, mutable, start, ".zig").?;
+
+                for (start..end) |i| {
+                    mutable[i] = if (std.fs.path.isSep(mutable[i])) std.fs.path.sep_posix else mutable[i];
+                }
+                offset = end;
+            }
+
+            try expectFileContentsEquals(
+                dir,
+                file_path,
+                mutable,
+            );
+        },
+        else => {
+            try expectFileContentsEquals(
+                dir,
+                file_path,
+                actual,
+            );
+        },
     }
 }
 
