@@ -1,8 +1,14 @@
 //! Enforce a consistent, predictable order for fields in structs, enums, and unions.
+//!
+//! `no_unused` supports auto fixes with the `--fix` flag. It may take multiple runs with `--fix` to fix all places.
+//!
+//! **Auto fixing is an experimental feature so only use it if you use source control - always back up your code first!**
 
 /// Config for field_ordering rule.
 pub const Config = struct {
-    /// Order and severity for union fields
+    /// Order and severity for union fields. If you're setting this and use
+    /// tagged unions (e.g., `union(MyEnum)`) then you will also need to set
+    /// the same order for enums.
     union_field_order: zlinter.rules.LintTextOrderWithSeverity = .{
         .order = .alphabetical_ascending,
         .severity = .warning,
@@ -11,7 +17,9 @@ pub const Config = struct {
     /// Order and severity for struct fields
     struct_field_order: zlinter.rules.LintTextOrderWithSeverity = .off,
 
-    /// Order and severity for enum fields
+    /// Order and severity for enum fields. If you're setting this and use
+    /// tagged unions (e.g., `union(MyEnum)`) then you will also need to set
+    /// the same order for unions.
     enum_field_order: zlinter.rules.LintTextOrderWithSeverity = .{
         .order = .alphabetical_ascending,
         .severity = .warning,

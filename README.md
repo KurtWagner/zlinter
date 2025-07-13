@@ -30,15 +30,9 @@ A **linter** is a tool that automatically checks source code for style issues, b
 
 - [Background](#background)
 - [Versioning](#versioning)
-- [Features](#features)
 - [Getting Started](#getting-started)
-- [Configuration](#configuration)
-  - [Paths](#configure-paths)
-  - [Rules](#configure-rules)
-  - [Disable with Comments](#disable-with-comments)
-  - [Command-Line Arguments](#command-line-arguments)
-  - [Custom Rules](#custom-rules)
-  - [Optimization](#configure-optimization)
+- [Autofix](#autofix)
+- [Custom Rules](#custom-rules)
 - [Built-in Rules](RULES.md)
   - [declaration_naming](RULES.md#declaration_naming)
   - [field_ordering](RULES.md#field_ordering)
@@ -57,6 +51,12 @@ A **linter** is a tool that automatically checks source code for style issues, b
   - [no_unused](RULES.md#no_unused)
   - [require_doc_comment](RULES.md#require_doc_comment)
   - [switch_case_ordering](RULES.md#switch_case_ordering)
+- [Configuration](#configuration)
+  - [Paths](#configure-paths)
+  - [Rules](#configure-rules)
+  - [Disable with Comments](#disable-with-comments)
+  - [Command-Line Arguments](#command-line-arguments)
+  - [Optimization](#configure-optimization)
 - [Contributing](#contributing)
   - [How to Contribute](#contributions)
   - [Run tests](#run-tests)
@@ -83,15 +83,6 @@ It uses [`zls`](https://github.com/zigtools/zls) (an awesome project, go check i
 - use branch `0.14.x` for `zig` `0.14.x` releases.
 
 This may change, especially when `zig` is "stable" at `1.x`. If you have opinions on this, feel free to comment on [#20](https://github.com/KurtWagner/zlinter/issues/20).
-
-## Features
-
-- [x] [Integrates from source into your `build.zig`](#getting-started)
-- [x] [Builtin rules](RULES.md) (e.g., [`no_deprecated`](RULES.md#no_deprecated) and [`field_naming`](RULES.md#field_naming))
-- [x] [Custom / BYO rules](#custom-rules) (e.g., if your project has bespoke rules you need to follow)
-- [x] [Per rule configurability](#configure-rules) (e.g., deprecations as warnings)
-- [x] Auto-fix with `--fix` capability (e.g., `no_unused` can remove unused container declarations)
-- [ ] Interchangeable result formatters (e.g., json, checkstyle)
 
 ## Getting started
 
@@ -141,6 +132,40 @@ hook it up to a build step, like `zig build lint`:
     // OR be specific with paths
     zig build lint -- --include src/ file.zig
     ```
+
+## Autofix
+
+Some linter rules support auto fixing some problems.
+
+> [!IMPORTANT]
+> **Auto fixing** is an **experimental feature** so only use it if you use source control - **always back up your code first!**
+
+For example, to auto fix unused declarations and field ordering issues, assuming your project has these rules configured:
+
+```shell
+# First ensure you're working branch is clean (or back up your code!)
+$ git status
+
+# Then run the fix command (you may need to run this multiple times)
+$ zig build lint -- --rule field_ordering --rule no_unused --fix
+```
+
+It can sometimes require a multiple runs to completely resolve all fixable issues. i.e., run with `--fix` until it reports 0 fixes applied.
+
+## Custom rules
+
+Bespoke rules can be added to your project. For example, maybe you really don't like cats, and refuse to let any `cats` exist in any identifier. See example rule [`no_cats`](./integration_tests/src/no_cats.zig), which is then integrated like builtin rules in your `build.zig`:
+
+```zig
+builder.addRule(b, .{ 
+  .custom = .{
+    .name = "no_cats",
+    .path = "src/no_cats.zig",
+  },
+}, .{});
+```
+
+Alternatively, take a look at <https://github.com/KurtWagner/zlinter-custom-rule-example>, which is a minimal custom rule example with accompanying zig project.
 
 ## Configuration
 
@@ -214,21 +239,6 @@ zig build lint -- --include src/ android/ --exclude src/generated.zig --rule no_
 
 - Will resolve all zig files under `src/` and `android/` but will exclude linting `src/generated.zig`; and
 - Only rules `no_deprecated` and `no_unused` will be ran.
-
-### Custom rules
-
-Bespoke rules can be added to your project. For example, maybe you really don't like cats, and refuse to let any `cats` exist in any identifier. See example rule [`no_cats`](./integration_tests/src/no_cats.zig), which is then integrated like builtin rules in your `build.zig`:
-
-```zig
-builder.addRule(b, .{ 
-  .custom = .{
-    .name = "no_cats",
-    .path = "src/no_cats.zig",
-  },
-}, .{});
-```
-
-Alternatively, take a look at <https://github.com/KurtWagner/zlinter-custom-rule-example>, which is a minimal custom rule example with accompanying zig project.
 
 ### Configure Optimization
 

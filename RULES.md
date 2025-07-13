@@ -98,6 +98,34 @@ example, `struct`, `enum`, `union`, `opaque` and `error`.
 
   * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
 
+## `field_ordering`
+
+Enforce a consistent, predictable order for fields in structs, enums, and unions.
+
+`no_unused` supports auto fixes with the `--fix` flag. It may take multiple runs with `--fix` to fix all places.
+
+**Auto fixing is an experimental feature so only use it if you use source control - always back up your code first!**
+
+**Config options:**
+
+* `union_field_order`
+
+  * the same order for enums. tagged unions (e.g., `union(MyEnum)`) then you will also need to set Order and severity for union fields. If you're setting this and use
+
+  * **Default:** `.{ .order = .alphabetical_ascending, .severity = .warning, }`
+
+* `struct_field_order`
+
+  * Order and severity for struct fields
+
+  * **Default:** `.off`
+
+* `enum_field_order`
+
+  * the same order for unions. tagged unions (e.g., `union(MyEnum)`) then you will also need to set Order and severity for enum fields. If you're setting this and use
+
+  * **Default:** `.{ .order = .alphabetical_ascending, .severity = .warning, }`
+
 ## `file_naming`
 
 Enforces a consistent naming convention for files. For example, `TitleCase`
@@ -454,6 +482,10 @@ case uses should disable the line with an explanation.
 ## `no_unused`
 
 Enforces that container declarations are referenced.
+
+`no_unused` supports auto fixes with the `--fix` flag. It may take multiple runs with `--fix` to fix all places.
+
+**Auto fixing is an experimental feature so only use it if you use source control - always back up your code first!**
 
 **Config options:**
 
