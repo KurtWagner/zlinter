@@ -32,6 +32,7 @@ pub fn build(b: *std.Build) !void {
                 .mode = .simple,
             },
         }));
+        run_integration_test.addArg(b.graph.zig_exe);
 
         // Format: <rule_name>/<test_name>.input.zig
         const rule_name = item.path[0 .. std.mem.indexOfScalar(u8, item.path, std.fs.path.sep) orelse {
