@@ -141,6 +141,7 @@ fn run(
         null;
 }
 
+// TODO: This needs unit tests
 fn nodeSpanIncludingComments(
     tree: std.zig.Ast,
     first_node: std.zig.Ast.Node.Index,
@@ -150,7 +151,12 @@ fn nodeSpanIncludingComments(
     zlinter.results.LintProblemLocation,
 } {
     const first_token = firstTokenIncludingComments(tree, first_node);
-    const start: zlinter.results.LintProblemLocation = .startOfToken(tree, first_token);
+    const prev_end: zlinter.results.LintProblemLocation = .endOfToken(tree, first_token - 1);
+    const start: zlinter.results.LintProblemLocation = .{
+        .byte_offset = prev_end.byte_offset + 1,
+        .line = if (tree.source[prev_end.byte_offset] == '\n') prev_end.line + 1 else prev_end.line,
+        .column = if (tree.source[prev_end.byte_offset] == '\n') 0 else prev_end.column + 1,
+    };
 
     const last_token = tree.lastToken(last_node);
     const end: zlinter.results.LintProblemLocation = .endOfToken(tree, last_token);
