@@ -24,7 +24,7 @@ pub const NodeIndexShim = struct {
             .@"enum" => .{
                 .index = @intFromEnum(
                     if (std.meta.hasFn(@TypeOf(node), "unwrap"))
-                        node.unwrap() orelse .root
+                        @compileError("OptionalIndex should use initOptional as zero does not mean root but emptiness in 0.14")
                     else
                         node,
                 ),
