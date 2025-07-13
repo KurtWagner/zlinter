@@ -13,10 +13,13 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, args);
 
     // First arg is executable
-    // Second arg is rule name
-    // Third arg is test name
-    const rule_name = args[1];
-    const test_name = args[2];
+    // Second arg is zig bin path
+    // Third arg is rule name
+    // Forth arg is test name
+    const zig_bin = args[1];
+    _ = zig_bin;
+    const rule_name = args[2];
+    const test_name = args[3];
 
     const out = std.fs.File.stdout().deprecatedWriter();
 
