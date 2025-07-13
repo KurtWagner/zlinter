@@ -39,6 +39,9 @@ const MyUnion = union {
     my_union_c: f32,
 };
 
+const EnumOfOneLine = enum { A, C, D };
+const UnionOfOneLine = union { A: f32, C: u32, D: i32 };
+
 // TODO: Support errors in field ordering?
 const MyError = error{
     error_d,

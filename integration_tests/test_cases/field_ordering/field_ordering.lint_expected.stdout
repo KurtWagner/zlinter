@@ -1,3 +1,13 @@
+warning Union fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:43:31] field_ordering
+
+ 43 | const UnionOfOneLine = union { C: u32, A: f32, D: i32 };
+    |                               ^^^^^^^^^^^^^^^^
+
+warning Enum fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:42:29] field_ordering
+
+ 42 | const EnumOfOneLine = enum { C, A, D };
+    |                             ^^^^^^
+
 warning Union fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:33:7] field_ordering
 
  33 |     },
@@ -64,4 +74,4 @@ warning Struct fields should be in alphabetical order [test_cases/field_ordering
  13 |     field_c: u32,
     | ^^^^^^^^^^^^^^^^^
 
-x 4 warnings
+x 6 warnings
