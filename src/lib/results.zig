@@ -20,8 +20,8 @@ pub const LintResult = struct {
     }
 
     pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
-        for (self.problems) |err| {
-            allocator.free(err.message);
+        for (self.problems) |*err| {
+            err.deinit(allocator);
         }
         allocator.free(self.problems);
         allocator.free(self.file_path);
@@ -227,6 +227,13 @@ pub const LintProblem = struct {
     disabled_by_comment: bool = false,
     fix: ?LintProblemFix = null,
 
+    pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
+        allocator.free(self.message);
+        if (self.fix) |*fix| fix.deinit(allocator);
+
+        self.* = undefined;
+    }
+
     pub fn sliceSource(self: Self, source: [:0]const u8) []const u8 {
         return source[self.start.byte_offset .. self.end.byte_offset + 1];
     }
@@ -262,8 +269,13 @@ pub const LintProblemFix = struct {
     /// End exclusive byte offset in document.
     end: usize,
 
-    /// Text to write between start and end.
+    /// Text to write between start and end (owned and freed by deinit)
     text: []const u8,
+
+    pub fn deinit(self: *LintProblemFix, allocator: std.mem.Allocator) void {
+        allocator.free(self.text);
+        self.* = undefined;
+    }
 
     pub fn debugPrint(self: @This(), writer: anytype) void {
         self.debugPrintWithIndent(writer, 0);

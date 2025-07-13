@@ -43,15 +43,18 @@ fn run(
             node.toNodeIndex(),
         ) == null) continue :skip;
 
-        var insertion_order = std.ArrayList(std.zig.Ast.Node.Index).init(allocator);
-        defer insertion_order.deinit();
+        var actual_order = std.ArrayList(std.zig.Ast.Node.Index).init(allocator);
+        defer actual_order.deinit();
 
-        var sorted_order = std.PriorityQueue(
+        var expected_order = std.ArrayList(std.zig.Ast.Node.Index).init(allocator);
+        defer expected_order.deinit();
+
+        var sorted_queue = std.PriorityQueue(
             Field,
             void,
             Field.cmp,
         ).init(allocator, {});
-        defer sorted_order.deinit();
+        defer sorted_queue.deinit();
 
         var seen_field: bool = false;
         children: for (connections.children orelse &.{}) |container_child| {
@@ -69,8 +72,8 @@ fn run(
                 else => if (seen_field) break :children else continue :children,
             };
 
-            try insertion_order.append(container_child);
-            try sorted_order.add(.{
+            try actual_order.append(container_child);
+            try sorted_queue.add(.{
                 .name = tree.tokenSlice(name_token),
                 .node = container_child,
             });
@@ -80,8 +83,9 @@ fn run(
         var i: usize = 0;
         var maybe_first_problem_index: ?usize = null; // Inclusive
         var maybe_last_problem_index: ?usize = null; // Inclusive
-        while (sorted_order.removeOrNull()) |field| : (i += 1) {
-            if (field.node != insertion_order.items[i]) {
+        while (sorted_queue.removeOrNull()) |field| : (i += 1) {
+            try expected_order.append(field.node);
+            if (field.node != actual_order.items[i]) {
                 maybe_first_problem_index = maybe_first_problem_index orelse i;
                 maybe_last_problem_index = i;
             }
@@ -90,23 +94,39 @@ fn run(
         if (maybe_first_problem_index) |first_problem_index| {
             const last_problem_index = maybe_last_problem_index.?;
 
-            const first_token = firstTokenIncludingComments(tree, insertion_order.items[first_problem_index]);
-            const start: zlinter.results.LintProblemLocation = .startOfToken(tree, first_token);
+            const actual_start, const actual_end = nodeSpanIncludingComments(
+                tree,
+                actual_order.items[first_problem_index],
+                actual_order.items[last_problem_index],
+            );
 
-            const last_token = tree.lastToken(insertion_order.items[last_problem_index]);
-            const end: zlinter.results.LintProblemLocation = .endOfToken(tree, last_token);
+            var expected_source = std.ArrayList(u8).init(allocator);
+            defer expected_source.deinit();
+
+            for (expected_order.items[first_problem_index .. last_problem_index + 1]) |expected_node| {
+                const expected_start, const expected_end = nodeSpanIncludingComments(
+                    tree,
+                    expected_node,
+                    expected_node,
+                );
+
+                try expected_source.appendSlice(tree.source[expected_start.byte_offset .. expected_end.byte_offset + 1]);
+            }
 
             try lint_problems.append(allocator, .{
                 .rule_id = rule.rule_id,
                 .severity = .warning,
-                .start = start,
-                .end = end,
+                .start = actual_start,
+                .end = actual_end,
                 .message = try allocator.dupe(u8, "Fields should be in alphabetical order"),
                 .fix = .{
-                    .start = start.byte_offset,
-                    .end = end.byte_offset + 1, // + 1 as fix is exclusive
-                    .text = "hello",
+                    .start = actual_start.byte_offset,
+                    .end = actual_end.byte_offset + 1, // + 1 as fix is exclusive
+                    .text = try expected_source.toOwnedSlice(),
                 },
+                // TODO: Add auto fix section to readme
+                // TODO: Add auto fix section to rule that support it
+                // TODO: Call out auto fixing in readme more clearly as a core feature
             });
         }
     }
@@ -119,6 +139,23 @@ fn run(
         )
     else
         null;
+}
+
+fn nodeSpanIncludingComments(
+    tree: std.zig.Ast,
+    first_node: std.zig.Ast.Node.Index,
+    last_node: std.zig.Ast.Node.Index,
+) struct {
+    zlinter.results.LintProblemLocation,
+    zlinter.results.LintProblemLocation,
+} {
+    const first_token = firstTokenIncludingComments(tree, first_node);
+    const start: zlinter.results.LintProblemLocation = .startOfToken(tree, first_token);
+
+    const last_token = tree.lastToken(last_node);
+    const end: zlinter.results.LintProblemLocation = .endOfToken(tree, last_token);
+
+    return .{ start, end };
 }
 
 fn firstTokenIncludingComments(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) std.zig.Ast.TokenIndex {
