@@ -39,8 +39,10 @@ const MyUnion = union {
     my_union_c: f32,
 };
 
+// Example with no trailing comma for an item that is moved to start
 const EnumOfOneLine = enum { A, C, D };
-const UnionOfOneLine = union { A: f32, C: u32, D: i32 };
+const UnionOfOneLine = union { A: i32, C: u32, D: f32 };
+const StructOfOnLine = struct { b: u32, a: u32 };
 
 // Example where fixes overlap so aren't included - needs multiple fix calls
 const MixedStruct = struct {

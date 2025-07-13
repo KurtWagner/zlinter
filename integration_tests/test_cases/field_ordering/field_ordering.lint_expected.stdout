@@ -1,35 +1,40 @@
-warning Struct fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:56:16] field_ordering
+warning Struct fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:58:16] field_ordering
 
- 56 |     c: struct { x: u32, y: u32, w: u32, h: u32 },
+ 58 |     c: struct { x: u32, y: u32, w: u32, h: u32 },
     |                ^^^^^^^^^^^^^^^^
 
-warning Struct fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:46:29] field_ordering
+warning Struct fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:48:29] field_ordering
 
- 46 | const MixedStruct = struct {
+ 48 | const MixedStruct = struct {
     |                             
- 47 |     a: []const u8,
+ 49 |     a: []const u8,
     | ^^^^^^^^^^^^^^^^^^
- 48 |     c: struct { x: u32, y: u32, w: u32, h: u32 },
+ 50 |     c: struct { x: u32, y: u32, w: u32, h: u32 },
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
- 49 |     b: struct { w: u32, h: u32 },
+ 51 |     b: struct { w: u32, h: u32 },
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
- 50 |     d: u32,
+ 52 |     d: u32,
     | ^^^^^^^^^^^
 
-warning Struct fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:48:16] field_ordering
+warning Struct fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:50:16] field_ordering
 
- 48 |     c: struct { x: u32, y: u32, w: u32, h: u32 },
+ 50 |     c: struct { x: u32, y: u32, w: u32, h: u32 },
     |                ^^^^^^^^^^^^^^^^
 
-warning Union fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:43:31] field_ordering
+warning Struct fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:45:32] field_ordering
 
- 43 | const UnionOfOneLine = union { C: u32, A: f32, D: i32 };
-    |                               ^^^^^^^^^^^^^^^^
+ 45 | const StructOfOnLine = struct { a: u32, b: u32 };
+    |                                ^^^^^^^^^^^^^^^
 
-warning Enum fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:42:29] field_ordering
+warning Union fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:44:31] field_ordering
 
- 42 | const EnumOfOneLine = enum { C, A, D };
-    |                             ^^^^^^
+ 44 | const UnionOfOneLine = union { D: f32, C: u32, A: i32 };
+    |                               ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Enum fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:43:29] field_ordering
+
+ 43 | const EnumOfOneLine = enum { D, C, A };
+    |                             ^^^^^^^^
 
 warning Union fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:33:7] field_ordering
 
@@ -97,4 +102,4 @@ warning Struct fields should be in alphabetical order [test_cases/field_ordering
  13 |     field_c: u32,
     | ^^^^^^^^^^^^^^^^^
 
-x 9 warnings
+x 10 warnings
