@@ -7,6 +7,7 @@ const zls_version: []const u8 = switch (version.zig) {
 
 pub const BuiltinLintRule = enum {
     field_naming,
+    field_ordering,
     declaration_naming,
     function_naming,
     file_naming,
@@ -281,6 +282,7 @@ pub fn build(b: *std.Build) void {
             b,
             &.{
                 buildBuiltinRule(b, .field_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+                buildBuiltinRule(b, .field_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .declaration_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .function_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .file_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
