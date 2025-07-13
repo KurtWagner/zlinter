@@ -4,8 +4,8 @@ warning Union fields should be in alphabetical order [test_cases/field_ordering/
     |       
  34 | 
     | ^
- 35 |     /// With doc comments
-    | ^^^^^^^^^^^^^^^^^^^^^^^^^
+ 35 |     /// my_union_c - With doc comments
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  36 |     /// on multiple lines
     | ^^^^^^^^^^^^^^^^^^^^^^^^^
  37 |     my_union_c: f32,
@@ -19,8 +19,8 @@ warning Struct fields should be in alphabetical order [test_cases/field_ordering
 
  28 |     my_union_a: struct {
     |                         
- 29 |         /// Nested fields
-    | ^^^^^^^^^^^^^^^^^^^^^^^^^
+ 29 |         /// c - Nested fields
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  30 |         c: f32,
     | ^^^^^^^^^^^^^^^
  31 |         d: u32,
@@ -30,14 +30,14 @@ warning Enum fields should be in alphabetical order [test_cases/field_ordering/f
 
  18 | const MyEnum = enum {
     |                      
- 19 |     /// Comment on single line
-    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 19 |     /// my_enum_d - Comment on single line
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  20 |     my_enum_d,
     | ^^^^^^^^^^^^^^
  21 |     my_enum_a,
     | ^^^^^^^^^^^^^^
- 22 |     /// Multiline line
-    | ^^^^^^^^^^^^^^^^^^^^^^
+ 22 |     /// my_enum_c - Multiline line
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  23 |     /// comment for enum c
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^
  24 |     my_enum_c,
@@ -49,8 +49,8 @@ warning Struct fields should be in alphabetical order [test_cases/field_ordering
    |                      
  6 | 
    | ^
- 7 |     /// Field with comment
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 7 |     /// field_a - Field with comment
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  8 |     /// across multiple
    | ^^^^^^^^^^^^^^^^^^^^^^^
  9 |     /// lines
@@ -59,8 +59,8 @@ warning Struct fields should be in alphabetical order [test_cases/field_ordering
     | ^^^^^^^^^^^^^^^^^
  11 | 
     | ^
- 12 |     /// Field with single line comment
-    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 12 |     /// field_c - field with single line comment
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  13 |     field_c: u32,
     | ^^^^^^^^^^^^^^^^
 

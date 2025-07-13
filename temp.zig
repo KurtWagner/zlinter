@@ -4,45 +4,47 @@ const MyStruct = struct {
 
     field_d: u32 = 0,
 
-    /// Field with comment
+    /// field_a - Field with comment
     /// across multiple
     /// lines
     field_a: u32,
 
-    /// Field with single line comment
+    /// field_c - field with single line comment
     field_c: u32,
 
     fn ok() void {}
 };
 
 const MyEnum = enum {
-    /// Comment on single line
+    /// my_enum_d - Comment on single line
     my_enum_d,
     my_enum_a,
-    /// Multiline line
+    /// my_enum_c - Multiline line
     /// comment for enum c
     my_enum_c,
 };
 
 const MyUnion = union {
     my_union_a: struct {
-        /// Nested fields
+        /// c - Nested fields
+        c: f32,
         d: u32,
         a: u32,
     },
 
-    /// With doc comments
+    /// my_union_c - With doc comments
     /// on multiple lines
     my_union_c: f32,
 
     my_union_b: u32,
 };
 
+// TODO: Support errors in field ordering?
 const MyError = error{
     error_d,
-    /// Single line
+    /// error_a - Single line
     error_a,
-    /// Multi
+    /// error_c - Multi
     /// line
     error_c,
 };
