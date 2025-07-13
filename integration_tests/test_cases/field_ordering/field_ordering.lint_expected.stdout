@@ -1,3 +1,26 @@
+warning Struct fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:56:16] field_ordering
+
+ 56 |     c: struct { x: u32, y: u32, w: u32, h: u32 },
+    |                ^^^^^^^^^^^^^^^^
+
+warning Struct fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:46:29] field_ordering
+
+ 46 | const MixedStruct = struct {
+    |                             
+ 47 |     a: []const u8,
+    | ^^^^^^^^^^^^^^^^^^
+ 48 |     c: struct { x: u32, y: u32, w: u32, h: u32 },
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 49 |     b: struct { w: u32, h: u32 },
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 50 |     d: u32,
+    | ^^^^^^^^^^^
+
+warning Struct fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:48:16] field_ordering
+
+ 48 |     c: struct { x: u32, y: u32, w: u32, h: u32 },
+    |                ^^^^^^^^^^^^^^^^
+
 warning Union fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:43:31] field_ordering
 
  43 | const UnionOfOneLine = union { C: u32, A: f32, D: i32 };
@@ -74,4 +97,4 @@ warning Struct fields should be in alphabetical order [test_cases/field_ordering
  13 |     field_c: u32,
     | ^^^^^^^^^^^^^^^^^
 
-x 6 warnings
+x 9 warnings

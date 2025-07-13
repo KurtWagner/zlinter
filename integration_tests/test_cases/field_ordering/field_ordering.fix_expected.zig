@@ -42,6 +42,22 @@ const MyUnion = union {
 const EnumOfOneLine = enum { A, C, D };
 const UnionOfOneLine = union { A: f32, C: u32, D: i32 };
 
+// Example where fixes overlap so aren't included - needs multiple fix calls
+const MixedStruct = struct {
+    d: u32,
+    c: struct { x: u32, y: u32, w: u32, h: u32 },
+    b: struct { w: u32, h: u32 },
+    a: []const u8,
+};
+
+// Example where only nested has ordering problem
+const NestedStruct = struct {
+    d: u32,
+    c: struct { y: u32, x: u32, w: u32, h: u32 },
+    b: struct { w: u32, h: u32 },
+    a: []const u8,
+};
+
 // TODO: Support errors in field ordering?
 const MyError = error{
     error_d,
