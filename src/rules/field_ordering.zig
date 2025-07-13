@@ -111,6 +111,7 @@ fn run(
                 );
 
                 try expected_source.appendSlice(tree.source[expected_start.byte_offset .. expected_end.byte_offset + 1]);
+                try expected_source.append(','); // Fields comma delimited.
             }
 
             try lint_problems.append(allocator, .{
@@ -142,6 +143,8 @@ fn run(
 }
 
 // TODO: This needs unit tests
+/// Span between two nodes (or the same node) including comments and leading
+/// whitespace like newlines.
 fn nodeSpanIncludingComments(
     tree: std.zig.Ast,
     first_node: std.zig.Ast.Node.Index,
