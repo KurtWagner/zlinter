@@ -256,8 +256,13 @@ pub const LintProblem = struct {
 };
 
 pub const LintProblemFix = struct {
+    /// Start inclusive byte offset in document.
     start: usize,
+
+    /// End exclusive byte offset in document.
     end: usize,
+
+    /// Text to write between start and end.
     text: []const u8,
 
     pub fn debugPrint(self: @This(), writer: anytype) void {

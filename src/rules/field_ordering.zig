@@ -22,13 +22,12 @@ fn run(
     options: zlinter.session.LintOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+    _ = config;
+
     var lint_problems = std.ArrayListUnmanaged(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(allocator);
 
     const tree = doc.handle.tree;
-
-    _ = rule;
-    _ = config;
 
     const root: zlinter.shims.NodeIndexShim = .root;
     var it = try doc.nodeLineageIterator(root, allocator);
@@ -55,52 +54,61 @@ fn run(
         defer sorted_order.deinit();
 
         var seen_field: bool = false;
-        for (connections.children orelse &.{}) |container_child| {
+        children: for (connections.children orelse &.{}) |container_child| {
             // Declarations cannot appear between fields so once we see a field
             // simply read until we see something else to identify the chunk of
             // fields in source:
-            switch (zlinter.shims.nodeTag(tree, container_child)) {
+            const name_token = token: switch (zlinter.shims.nodeTag(tree, container_child)) {
                 .container_field_init,
                 .container_field_align,
                 .container_field,
-                => seen_field = true,
-                else => if (seen_field) break else continue,
-            }
-
-            // Include any preceding doc comments in the captured range
-            const first_token = token: {
-                var token = tree.firstToken(container_child);
-                while (tree.tokens.items(.tag)[token - 1] == .doc_comment) token -= 1;
-                break :token token;
+                => {
+                    seen_field = true;
+                    break :token zlinter.shims.nodeMainToken(tree, container_child);
+                },
+                else => if (seen_field) break :children else continue :children,
             };
-            const start = tree.tokenLocation(0, first_token);
-
-            const last_token = tree.lastToken(container_child);
-            const last = tree.tokenLocation(0, last_token);
-            const last_token_value = tree.tokenSlice(last_token);
 
             try insertion_order.append(container_child);
             try sorted_order.add(.{
-                .start = .startOfToken(tree, first_token),
-                .end = .endOfToken(tree, last_token),
-                .name = "ok",
+                .name = tree.tokenSlice(name_token),
                 .node = container_child,
-            });
-
-            std.debug.print("{s}: \n'''\n{s}\n'''\n\n", .{
-                @tagName(zlinter.shims.nodeTag(tree, container_child)),
-                tree.source[start.line_start + start.column .. last.line_start + last.column + last_token_value.len + 1],
             });
         }
 
+        // Find the first and last field that are out of order (if any)
         var i: usize = 0;
+        var maybe_first_problem_index: ?usize = null; // Inclusive
+        var maybe_last_problem_index: ?usize = null; // Inclusive
         while (sorted_order.removeOrNull()) |field| : (i += 1) {
             if (field.node != insertion_order.items[i]) {
-                std.debug.print("!!!Wrong oerder\n", .{});
+                maybe_first_problem_index = maybe_first_problem_index orelse i;
+                maybe_last_problem_index = i;
             }
         }
 
-        std.debug.print("\n----------\n\n", .{});
+        if (maybe_first_problem_index) |first_problem_index| {
+            const last_problem_index = maybe_last_problem_index.?;
+
+            const first_token = firstTokenIncludingComments(tree, insertion_order.items[first_problem_index]);
+            const start: zlinter.results.LintProblemLocation = .startOfToken(tree, first_token);
+
+            const last_token = tree.lastToken(insertion_order.items[last_problem_index]);
+            const end: zlinter.results.LintProblemLocation = .endOfToken(tree, last_token);
+
+            try lint_problems.append(allocator, .{
+                .rule_id = rule.rule_id,
+                .severity = .warning,
+                .start = start,
+                .end = end,
+                .message = try allocator.dupe(u8, "Fields should be in alphabetical order"),
+                .fix = .{
+                    .start = start.byte_offset,
+                    .end = end.byte_offset + 1, // + 1 as fix is exclusive
+                    .text = "hello",
+                },
+            });
+        }
     }
 
     return if (lint_problems.items.len > 0)
@@ -113,9 +121,13 @@ fn run(
         null;
 }
 
+fn firstTokenIncludingComments(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) std.zig.Ast.TokenIndex {
+    var token = tree.firstToken(node);
+    while (tree.tokens.items(.tag)[token - 1] == .doc_comment) token -= 1;
+    return token;
+}
+
 const Field = struct {
-    start: zlinter.results.LintProblemLocation,
-    end: zlinter.results.LintProblemLocation,
     name: []const u8,
     node: std.zig.Ast.Node.Index,
 

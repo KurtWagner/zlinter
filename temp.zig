@@ -24,8 +24,6 @@ const MyEnum = enum {
 };
 
 const MyUnion = union {
-    my_union_b: u32,
-
     my_union_a: struct {
         field: u32,
     },
@@ -33,6 +31,8 @@ const MyUnion = union {
     /// With doc comments
     /// on mjltiple lines
     my_union_c: f32,
+
+    my_union_b: u32,
 };
 
 const MyError = error{
