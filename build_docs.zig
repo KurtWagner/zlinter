@@ -108,13 +108,15 @@ fn writeFileRuleConfig(content: []const u8, gpa: std.mem.Allocator, writer: anyt
                 try writer.writeAll("`");
 
                 try writer.writeAll("\n\n  * ");
-                var doc_comment = container_field.firstToken() - 1;
-                while (tree.tokens.items(.tag)[doc_comment] == .doc_comment) {
-                    try writer.writeAll(trimCommentLine(tree.tokenSlice(doc_comment)["///".len..]));
+                const end = container_field.firstToken();
+                var start = end;
+                while (tree.tokens.items(.tag)[start - 1] == .doc_comment) {
+                    if (start == 0) break;
+                    start -= 1;
+                }
+                while (start < end) : (start += 1) {
+                    try writer.writeAll(trimCommentLine(tree.tokenSlice(start)["///".len..]));
                     try writer.writeByte(' ');
-                    if (doc_comment > 0) {
-                        doc_comment -= 1;
-                    } else break;
                 }
 
                 const maybe_default: ?[]const u8 = switch (zig_version) {
