@@ -138,7 +138,6 @@ fn run(
                 );
 
                 try expected_source.appendSlice(tree.source[expected_start.byte_offset .. expected_end.byte_offset + 1]);
-                try expected_source.append(','); // Fields comma delimited.
             }
 
             try lint_problems.append(allocator, .{
@@ -185,7 +184,8 @@ fn nodeSpanIncludingComments(
         .column = if (tree.source[prev_end.byte_offset] == '\n') 0 else prev_end.column + 1,
     };
 
-    const last_token = tree.lastToken(last_node);
+    var last_token = tree.lastToken(last_node);
+    if (tree.tokens.items(.tag)[last_token + 1] == .comma) last_token += 1;
     const end: zlinter.results.LintProblemLocation = .endOfToken(tree, last_token);
 
     return .{ start, end };

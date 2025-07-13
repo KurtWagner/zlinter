@@ -13,7 +13,7 @@ warning Union fields should be in alphabetical order [test_cases/field_ordering/
  38 | 
     | ^
  39 |     my_union_b: u32,
-    | ^^^^^^^^^^^^^^^^^^^
+    | ^^^^^^^^^^^^^^^^^^^^
 
 warning Struct fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:28:25] field_ordering
 
@@ -24,7 +24,7 @@ warning Struct fields should be in alphabetical order [test_cases/field_ordering
  30 |         c: f32,
     | ^^^^^^^^^^^^^^^
  31 |         d: u32,
-    | ^^^^^^^^^^^^^^
+    | ^^^^^^^^^^^^^^^
 
 warning Enum fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:18:22] field_ordering
 
@@ -41,7 +41,7 @@ warning Enum fields should be in alphabetical order [test_cases/field_ordering/f
  23 |     /// comment for enum c
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^
  24 |     my_enum_c,
-    | ^^^^^^^^^^^^^
+    | ^^^^^^^^^^^^^^
 
 warning Struct fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:5:22] field_ordering
 
@@ -62,6 +62,6 @@ warning Struct fields should be in alphabetical order [test_cases/field_ordering
  12 |     /// field_c - field with single line comment
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  13 |     field_c: u32,
-    | ^^^^^^^^^^^^^^^^
+    | ^^^^^^^^^^^^^^^^^
 
 x 4 warnings

@@ -138,6 +138,8 @@ test "integration test rules" {
                 "build",
                 "lint",
                 "--",
+                "--rule",
+                rule_name,
                 "--fix",
                 "--include",
                 temp_path,
@@ -162,7 +164,6 @@ test "integration test rules" {
             temp_path,
             max_file_size_bytes,
         );
-
         defer allocator.free(actual);
 
         try expectFileContentsEquals(
