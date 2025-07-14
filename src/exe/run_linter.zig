@@ -238,7 +238,6 @@ pub fn main() !u8 {
 
         for (comments.comments) |comment| {
             switch (comment.kind) {
-                .standard => {},
                 .todo => |todo| {
                     std.debug.print("TODO: '{s}'\n", .{
                         ast.source[comments.tokens[todo.first_content].first_byte .. comments.tokens[todo.last_content].first_byte + comments.tokens[todo.last_content].len],

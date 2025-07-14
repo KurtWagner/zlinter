@@ -21,7 +21,9 @@ pub const Comment = struct {
     first_token: Token.Index,
     /// Inclusive
     last_token: Token.Index,
-    kind: union(enum) {
+    kind: Kind,
+
+    const Kind = union(enum) {
         /// Represents a comment that disables some lint rules within a line range
         /// of a given source file.
         disable: struct {
@@ -40,20 +42,17 @@ pub const Comment = struct {
             } = null,
         },
 
-        // TODO: Implement this.
-        standard: void,
-
-        /// Represents an empty `TODO:` comment in the source tree
+        /// Represents an empty `// TODO:` comment in the source tree
         todo_empty: void,
 
-        /// Represents a `TODO:` comment in the source tree
+        /// Represents a `// TODO: <content>` comment in the source tree
         todo: struct {
             /// Inclusive
             first_content: Token.Index,
             /// Inclusive
             last_content: Token.Index,
         },
-    },
+    };
 };
 
 const Token = struct {
@@ -93,239 +92,235 @@ const Token = struct {
         }
     };
 
+    const keywords = std.StaticStringMap(Tag).initComptime(.{
+        .{ "zlinter-disable-next-line", .disable_lint_next_line },
+        .{ "zlinter-disable-current-line", .disable_lint_current_line },
+        .{ "todo", .todo },
+        .{ "TODO", .todo },
+        .{ "Todo", .todo },
+    });
+
     inline fn getSlice(self: Token, source: []const u8) []const u8 {
         return source[self.first_byte .. self.first_byte + self.len];
     }
 };
 
-pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory}!DocumentComments {
-    var comments = std.ArrayList(Comment).init(gpa);
-    defer comments.deinit();
+const Tokenizer = struct {
+    /// Current byte offset in source
+    i: usize = 0,
 
+    /// Current line number (increments when seeing a new line)
+    line_number: u32 = 0,
+};
+
+fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory}![]const Token {
     var tokens = std.ArrayList(Token).init(gpa);
     defer tokens.deinit();
 
-    {
-        const State = enum {
-            parsing,
-            consume_comment,
-            consume_newline,
-            consume_forward_slash,
-        };
+    const State = enum {
+        parsing,
+        consume_comment,
+        consume_newline,
+        consume_forward_slash,
+    };
 
-        const Tokenizer = struct {
-            /// Current byte offset in source
-            i: usize = 0,
-
-            /// Current line number (increments when seeing a new line)
-            line_number: u32 = 0,
-        };
-        var t = Tokenizer{};
-
-        state: switch (State.parsing) {
-            .parsing => switch (source[t.i]) {
-                0 => {},
-                '\n' => continue :state .consume_newline,
-                '/' => continue :state .consume_forward_slash,
-                else => {
-                    t.i += 1;
-                    continue :state .parsing;
-                },
-            },
-            .consume_forward_slash => switch (source[t.i + 1]) {
-                '/' => continue :state .consume_comment,
-                else => {
-                    t.i += 1;
-                    continue :state .parsing;
-                },
-            },
-            .consume_newline => {
+    var t = Tokenizer{};
+    state: switch (State.parsing) {
+        .parsing => switch (source[t.i]) {
+            0 => {},
+            '\n' => continue :state .consume_newline,
+            '/' => continue :state .consume_forward_slash,
+            else => {
                 t.i += 1;
-                t.line_number += 1;
                 continue :state .parsing;
             },
-            .consume_comment => {
-                std.debug.assert(source[t.i] == '/' and source[t.i + 1] == '/');
+        },
+        .consume_forward_slash => switch (source[t.i + 1]) {
+            '/' => continue :state .consume_comment,
+            else => {
+                t.i += 1;
+                continue :state .parsing;
+            },
+        },
+        .consume_newline => {
+            t.i += 1;
+            t.line_number += 1;
+            continue :state .parsing;
+        },
+        .consume_comment => {
+            std.debug.assert(source[t.i] == '/' and source[t.i + 1] == '/');
 
-                const tag: Token.Tag, const len: usize = switch (source[t.i + 2]) {
-                    '/' => .{ .doc_comment, 3 },
-                    '!' => .{ .file_comment, 3 },
-                    else => .{ .source_comment, 2 },
+            var start = t.i;
+            const tag: Token.Tag, const len: usize = switch (source[t.i + 2]) {
+                '/' => .{ .doc_comment, "///".len },
+                '!' => .{ .file_comment, "//!".len },
+                else => .{ .source_comment, "//".len },
+            };
+            t.i += len;
+            try tokens.append(.{
+                .tag = tag,
+                .first_byte = start,
+                .len = len,
+                .line_number = t.line_number,
+            });
+
+            start = t.i;
+            while (true) switch (source[t.i]) {
+                ':', '\t', ' ', '\n', '\r', 0 => |c| {
+                    if (start < t.i) {
+                        const token_slice = source[start..t.i];
+                        try tokens.append(.{
+                            .tag = Token.keywords.get(token_slice) orelse .word,
+                            .first_byte = start,
+                            .len = t.i - start,
+                            .line_number = t.line_number,
+                        });
+                    }
+
+                    switch (c) {
+                        0 => break,
+                        '\n' => continue :state .consume_newline,
+                        ':' => try tokens.append(.{
+                            .tag = .delimiter,
+                            .first_byte = t.i,
+                            .len = 1,
+                            .line_number = t.line_number,
+                        }),
+                        ' ', '\t', '\r' => {},
+                        else => unreachable,
+                    }
+                    t.i += 1;
+                    start = t.i;
+                },
+                else => t.i += 1,
+            };
+        },
+    }
+    return tokens.toOwnedSlice();
+}
+
+const Parser = struct {
+    tokens: []const Token,
+    i: Token.Index = 0,
+
+    fn peek(self: *@This()) ?Token.Index {
+        if (self.i >= self.tokens.len) return null;
+        return self.i;
+    }
+
+    fn next(self: *@This()) ?Token.Index {
+        const token = self.peek() orelse return null;
+        self.i += 1;
+        return token;
+    }
+
+    fn skip(self: *@This()) void {
+        _ = self.next();
+    }
+};
+
+pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory}!DocumentComments {
+    const tokens = try allocTokenize(source, gpa);
+
+    var comments = std.ArrayList(Comment).init(gpa);
+    defer comments.deinit();
+
+    var p = Parser{ .tokens = tokens };
+    tokens: while (p.next()) |token| {
+        if (!p.tokens[token].tag.isComment()) continue :tokens;
+
+        const first_token = p.next() orelse break :tokens;
+        const maybe_kind: ?Comment.Kind = kind: switch (p.tokens[first_token].tag) {
+            .disable_lint_current_line,
+            .disable_lint_next_line,
+            => {
+                var maybe_first_rule_token: ?Token.Index = null;
+                var maybe_last_rule_token: ?Token.Index = null;
+
+                while (p.peek()) |next| {
+                    switch (p.tokens[next].tag) {
+                        .word => {
+                            const slice = p.tokens[next].getSlice(source);
+                            if (std.mem.eql(u8, slice, "-")) break;
+
+                            if (maybe_first_rule_token == null) {
+                                maybe_first_rule_token = next;
+                            }
+                            maybe_last_rule_token = next;
+                        },
+                        .delimiter => {
+                            // TODO: Add more source information here:
+                            const slice = p.tokens[next].getSlice(source);
+                            std.log.warn("Unexpected delimitor '{s}'. Expected a rule name", .{slice});
+                        },
+                        else => break,
+                    }
+                    p.skip();
+                }
+
+                const line = switch (p.tokens[first_token].tag) {
+                    .disable_lint_current_line => p.tokens[first_token].line_number,
+                    .disable_lint_next_line => p.tokens[first_token].line_number + 1,
+                    else => unreachable,
+                };
+                break :kind .{
+                    .disable = .{
+                        .line_start = line,
+                        .line_end = line,
+                        .rule_ids = if (maybe_first_rule_token) |first_rule_token| .{
+                            .first = first_rule_token,
+                            .last = maybe_last_rule_token.?,
+                        } else null,
+                    },
+                };
+            },
+            .todo => {
+                while (p.peek()) |peek| {
+                    if (p.tokens[peek].tag != .delimiter) break;
+                    p.skip();
+                }
+                const first_content_token_index = p.i;
+
+                const maybe_last_token = token: {
+                    var maybe_last_token: ?Token.Index = null;
+                    while (p.peek()) |next| {
+                        if (p.tokens[next].tag.isComment()) {
+                            break :token maybe_last_token;
+                        } else {
+                            maybe_last_token = p.i;
+                            p.skip();
+                        }
+                    }
+                    break :token maybe_last_token;
                 };
 
-                var start = t.i;
-                t.i += len;
-                try tokens.append(.{
-                    .tag = tag,
-                    .first_byte = start,
-                    .len = len,
-                    .line_number = t.line_number,
-                });
-
-                start = t.i;
-                while (true) {
-                    switch (source[t.i]) {
-                        ':', '\t', ' ', 0, '\n' => |c| {
-                            if (start < t.i) {
-                                const token_slice = source[start..t.i];
-                                try tokens.append(.{
-                                    .tag = if (std.ascii.eqlIgnoreCase(token_slice, "zlinter-disable-next-line"))
-                                        .disable_lint_next_line
-                                    else if (std.ascii.eqlIgnoreCase(token_slice, "zlinter-disable-current-line"))
-                                        .disable_lint_current_line
-                                    else if (std.ascii.eqlIgnoreCase(token_slice, "TODO") or std.ascii.eqlIgnoreCase(token_slice, "TODO-"))
-                                        .todo
-                                    else
-                                        .word,
-                                    .first_byte = start,
-                                    .len = t.i - start,
-                                    .line_number = t.line_number,
-                                });
-                            }
-
-                            switch (c) {
-                                0, '\n' => break,
-                                ':' => try tokens.append(.{
-                                    .tag = .delimiter,
-                                    .first_byte = t.i,
-                                    .len = 1,
-                                    .line_number = t.line_number,
-                                }),
-                                else => {},
-                            }
-                            t.i += 1;
-                            start = t.i;
-                        },
-                        else => t.i += 1,
-                    }
-                }
-                if (source[t.i] == '\n') continue :state .consume_newline;
+                break :kind if (maybe_last_token) |last_token_index|
+                    .{ .todo = .{
+                        .first_content = first_content_token_index,
+                        .last_content = last_token_index,
+                    } }
+                else
+                    .{ .todo_empty = {} };
             },
-        }
-    }
-
-    {
-        const Parser = struct {
-            tokens: []const Token,
-            i: Token.Index = 0,
-
-            fn peek(self: *@This()) ?Token.Index {
-                if (self.i >= self.tokens.len) return null;
-                return self.i;
-            }
-
-            fn next(self: *@This()) ?Token.Index {
-                const token = self.peek() orelse return null;
-                self.i += 1;
-                return token;
-            }
-
-            fn skip(self: *@This()) void {
-                _ = self.next();
-            }
+            else => continue :tokens,
         };
-        var p = Parser{ .tokens = tokens.items };
-        tokens: while (p.next()) |token| {
-            if (p.tokens[token].tag != .source_comment) continue :tokens;
 
-            const first_token = p.next() orelse break :tokens;
+        // Skip until we see another comment tag or EOF
+        while (p.peek()) |index| {
+            if (p.tokens[index].tag.isComment()) break else p.i += 1;
+        }
 
-            var comment: Comment = .{
+        if (maybe_kind) |kind| {
+            try comments.append(.{
                 .first_token = first_token,
-                .last_token = undefined, // Set last
-                .kind = undefined, // Set below
-            };
-
-            switch (p.tokens[first_token].tag) {
-                .disable_lint_current_line,
-                .disable_lint_next_line,
-                => {
-                    var maybe_first_rule_token: ?Token.Index = null;
-                    var maybe_last_rule_token: ?Token.Index = null;
-
-                    while (p.peek()) |next| {
-                        switch (p.tokens[next].tag) {
-                            .word => {
-                                const slice = p.tokens[next].getSlice(source);
-                                if (std.mem.eql(u8, slice, "-")) break;
-
-                                if (maybe_first_rule_token == null) {
-                                    maybe_first_rule_token = next;
-                                }
-                                maybe_last_rule_token = next;
-                            },
-                            .delimiter => {
-                                // TODO: Add more source information here:
-                                const slice = p.tokens[next].getSlice(source);
-                                std.log.warn("Unexpected delimitor '{s}'. Expected a rule name", .{slice});
-                            },
-                            else => break,
-                        }
-                        p.skip();
-                    }
-
-                    const line = switch (p.tokens[first_token].tag) {
-                        .disable_lint_current_line => p.tokens[first_token].line_number,
-                        .disable_lint_next_line => p.tokens[first_token].line_number + 1,
-                        else => unreachable,
-                    };
-                    comment.kind = .{
-                        .disable = .{
-                            .line_start = line,
-                            .line_end = line,
-                            .rule_ids = if (maybe_first_rule_token) |first_rule_token| .{
-                                .first = first_rule_token,
-                                .last = maybe_last_rule_token.?,
-                            } else null,
-                        },
-                    };
-                },
-                .todo => {
-                    while (p.peek()) |peek| {
-                        if (p.tokens[peek].tag != .delimiter) break;
-                        p.skip();
-                    }
-                    const first_content_token_index = p.i;
-
-                    const maybe_last_token = token: {
-                        var maybe_last_token: ?Token.Index = null;
-                        while (p.peek()) |next| {
-                            if (p.tokens[next].tag.isComment()) {
-                                break :token maybe_last_token;
-                            } else {
-                                maybe_last_token = p.i;
-                                p.skip();
-                            }
-                        }
-                        break :token maybe_last_token;
-                    };
-
-                    if (maybe_last_token) |last_token_index| {
-                        comment.kind = .{
-                            .todo = .{
-                                .first_content = first_content_token_index,
-                                .last_content = last_token_index,
-                            },
-                        };
-                    } else {
-                        comment.kind = .{
-                            .todo_empty = {},
-                        };
-                    }
-                },
-                else => continue :tokens,
-            }
-
-            while (p.peek()) |index| {
-                if (p.tokens[index].tag.isComment()) break else p.i += 1;
-            }
-
-            comment.last_token = p.i - 1;
-            try comments.append(comment);
+                .last_token = p.i - 1,
+                .kind = kind,
+            });
         }
     }
+
     return .{
-        .tokens = try tokens.toOwnedSlice(),
+        .tokens = tokens,
         .comments = try comments.toOwnedSlice(),
     };
 }
