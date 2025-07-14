@@ -5,7 +5,6 @@
 
 const std = @import("std");
 
-/// Contains extracted comments from a documents source.
 pub const DocumentComments = struct {
     tokens: []const Token,
     comments: []const Comment,
@@ -13,13 +12,15 @@ pub const DocumentComments = struct {
     pub fn deinit(self: *DocumentComments, gpa: std.mem.Allocator) void {
         gpa.free(self.comments);
         gpa.free(self.tokens);
-
         self.* = undefined;
     }
 };
 
-/// Represents a comment in the source file
 pub const Comment = struct {
+    /// Inclusive
+    first_token: Token.Index,
+    /// Inclusive
+    last_token: Token.Index,
     kind: union(enum) {
         /// Represents a comment that disables some lint rules within a line range
         /// of a given source file.
@@ -53,27 +54,15 @@ pub const Comment = struct {
             last_content: Token.Index,
         },
     },
-
-    /// Inclusive
-    first_token: Token.Index,
-
-    /// Inclusive
-    last_token: Token.Index,
 };
 
-/// Represents a comment relevant token from a given source.
 const Token = struct {
     const Index = u32;
-
     /// Inclusive
     first_byte: usize,
-
-    /// Inclusive
     len: usize,
-
     /// Line number in source document that this token appears on
     line_number: u32,
-
     tag: Tag,
 
     const Tag = enum {
