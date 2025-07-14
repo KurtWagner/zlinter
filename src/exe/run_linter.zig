@@ -236,6 +236,31 @@ pub fn main() !u8 {
         var comments = try zlinter.comments.allocParse(ast.source, gpa);
         defer comments.deinit(gpa);
 
+        for (comments.comments) |comment| {
+            switch (comment.kind) {
+                .standard => {},
+                .todo => |todo| {
+                    std.debug.print("TODO: '{s}'\n", .{ast.source[comments.tokens[todo.first_content].first_byte .. comments.tokens[todo.last_content].last_byte + 1]});
+                },
+                .todo_empty => {
+                    std.debug.print("EMPTY TODO\n", .{});
+                },
+                .disable => |disable| {
+                    std.debug.print("DISABLE:\n", .{});
+                    std.debug.print(" for {s}:{d}\n", .{ lint_file.pathname, disable.line_start });
+                    if (disable.rule_ids) |rule_ids| {
+                        for (comments.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
+                            std.debug.print(
+                                "- {s}\n",
+                                .{ast.source[token.first_byte .. token.last_byte + 1]},
+                            );
+                        }
+                    }
+                },
+            }
+            std.debug.print("Raw: '{s}'\n\n", .{ast.source[comments.tokens[comment.first_token].first_byte .. comments.tokens[comment.last_token].last_byte + 1]});
+        }
+
         if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "  - Parsing doc comments: {d}ms", .{ms});
 
         var rule_filter_map = map: {
@@ -275,7 +300,7 @@ pub fn main() !u8 {
 
             if (rule_result) |result| {
                 for (result.problems) |*err| {
-                    err.disabled_by_comment = shouldSkip(comments.disable_comments, err.*);
+                    err.disabled_by_comment = shouldSkip(comments, err.*, ast.source);
                 }
                 try results.append(gpa, result);
             }
@@ -462,18 +487,24 @@ fn allocAstErrorMsg(
 ///
 /// Returns true if a lint error should be skipped / ignored due to a comment
 /// in the source code.
-fn shouldSkip(disable_comments: []zlinter.comments.LintDisableComment, err: zlinter.results.LintProblem) bool {
-    for (disable_comments) |comment| {
-        if (comment.line_start <= err.start.line and err.start.line <= comment.line_end) {
-            // When there's no explicity rules set, we disable for all rules.
-            if (comment.rule_ids.len == 0) return true;
+fn shouldSkip(doc_comments: zlinter.comments.DocumentComments, err: zlinter.results.LintProblem, source: []const u8) bool {
+    for (doc_comments.comments) |comment| {
+        switch (comment.kind) {
+            .disable => |disable_comment| {
+                if (disable_comment.line_start <= err.start.line and err.start.line <= disable_comment.line_end) {
+                    // When there's no explicity rules set, we disable for all rules.
+                    const rule_ids = disable_comment.rule_ids orelse return true;
 
-            // Otherwise, we only disable for explicitly given rules.
-            for (comment.rule_ids) |rule_id| {
-                if (std.mem.eql(u8, rule_id, err.rule_id)) {
-                    return true;
+                    // Otherwise, we only disable for explicitly given rules.
+                    for (doc_comments.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
+                        const rule_id = source[token.first_byte .. token.last_byte + 1];
+                        if (std.mem.eql(u8, rule_id, err.rule_id)) {
+                            return true;
+                        }
+                    }
                 }
-            }
+            },
+            else => {},
         }
     }
     return false;
