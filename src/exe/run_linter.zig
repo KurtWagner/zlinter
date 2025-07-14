@@ -235,32 +235,7 @@ pub fn main() !u8 {
 
         var comments = try zlinter.comments.allocParse(ast.source, gpa);
         defer comments.deinit(gpa);
-
-        for (comments.comments) |comment| {
-            switch (comment.kind) {
-                .todo => |todo| {
-                    std.debug.print("TODO: '{s}'\n", .{
-                        ast.source[comments.tokens[todo.first_content].first_byte .. comments.tokens[todo.last_content].first_byte + comments.tokens[todo.last_content].len],
-                    });
-                },
-                .todo_empty => {
-                    std.debug.print("EMPTY TODO\n", .{});
-                },
-                .disable => |disable| {
-                    std.debug.print("DISABLE:\n", .{});
-                    std.debug.print(" for {s}:{d}\n", .{ lint_file.pathname, disable.line_start });
-                    if (disable.rule_ids) |rule_ids| {
-                        for (comments.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
-                            std.debug.print(
-                                "- {s}\n",
-                                .{ast.source[token.first_byte .. token.first_byte + token.len]},
-                            );
-                        }
-                    }
-                },
-            }
-            std.debug.print("Raw: '{s}'\n\n", .{ast.source[comments.tokens[comment.first_token].first_byte .. comments.tokens[comment.last_token].first_byte + comments.tokens[comment.last_token].len]});
-        }
+        // comments.debugDump(lint_file.pathname, ast.source);
 
         if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "  - Parsing doc comments: {d}ms", .{ms});
 

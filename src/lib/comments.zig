@@ -3,8 +3,6 @@
 //! Some comments can alter the behaviour of the linter. e.g., a comment may
 //! disable a specific rule on a specific line.
 
-const std = @import("std");
-
 pub const DocumentComments = struct {
     tokens: []const Token,
     comments: []const Comment,
@@ -13,6 +11,34 @@ pub const DocumentComments = struct {
         gpa.free(self.comments);
         gpa.free(self.tokens);
         self.* = undefined;
+    }
+
+    pub fn debugDump(self: DocumentComments, file_path: []const u8, source: []const u8) void {
+        for (self.comments) |comment| {
+            switch (comment.kind) {
+                .todo => |todo| {
+                    std.debug.print("TODO: '{s}'\n", .{
+                        source[self.tokens[todo.first_content].first_byte .. self.tokens[todo.last_content].first_byte + self.tokens[todo.last_content].len],
+                    });
+                },
+                .todo_empty => {
+                    std.debug.print("EMPTY TODO\n", .{});
+                },
+                .disable => |disable| {
+                    std.debug.print("DISABLE:\n", .{});
+                    std.debug.print(" for {s}:{d}\n", .{ file_path, disable.line_start });
+                    if (disable.rule_ids) |rule_ids| {
+                        for (self.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
+                            std.debug.print(
+                                "- {s}\n",
+                                .{source[token.first_byte .. token.first_byte + token.len]},
+                            );
+                        }
+                    }
+                },
+            }
+            std.debug.print("Raw: '{s}'\n\n", .{source[self.tokens[comment.first_token].first_byte .. self.tokens[comment.last_token].first_byte + self.tokens[comment.last_token].len]});
+        }
     }
 };
 
@@ -199,6 +225,174 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
     return tokens.toOwnedSlice();
 }
 
+test "tokenize no comments" {
+    try testTokenizer(&.{}, &.{});
+    try testTokenizer(&.{""}, &.{});
+    try testTokenizer(&.{"var a = 10;"}, &.{});
+}
+
+test "tokenize file comment" {
+    try testTokenizer(&.{
+        "//! Hello from a file comment",
+        "//! that has multiple lines",
+    }, &.{
+        .{ 0, .file_comment, "//!" },
+        .{ 0, .word, "Hello" },
+        .{ 0, .word, "from" },
+        .{ 0, .word, "a" },
+        .{ 0, .word, "file" },
+        .{ 0, .word, "comment" },
+        .{ 1, .file_comment, "//!" },
+        .{ 1, .word, "that" },
+        .{ 1, .word, "has" },
+        .{ 1, .word, "multiple" },
+        .{ 1, .word, "lines" },
+    });
+}
+
+test "tokenize doc comment" {
+    try testTokenizer(&.{
+        "/// Hello from a doc comment",
+        "/// that has multiple lines",
+    }, &.{
+        .{ 0, .doc_comment, "///" },
+        .{ 0, .word, "Hello" },
+        .{ 0, .word, "from" },
+        .{ 0, .word, "a" },
+        .{ 0, .word, "doc" },
+        .{ 0, .word, "comment" },
+        .{ 1, .doc_comment, "///" },
+        .{ 1, .word, "that" },
+        .{ 1, .word, "has" },
+        .{ 1, .word, "multiple" },
+        .{ 1, .word, "lines" },
+    });
+}
+
+test "tokenize disable line comments" {
+    try testTokenizer(&.{
+        "// zlinter-disable-current-line",
+        "// zlinter-disable-current-line - has comment ",
+        "// zlinter-disable-next-line rule",
+        "// zlinter-disable-next-line\trule - has comment",
+        "// zlinter-disable-current-line rule_1  rule_2",
+        "// zlinter-disable-current-line rule_1 rule_2  -  has comment ",
+    }, &.{
+        .{ 0, .source_comment, "//" },
+        .{ 0, .disable_lint_current_line, "zlinter-disable-current-line" },
+        .{ 1, .source_comment, "//" },
+        .{ 1, .disable_lint_current_line, "zlinter-disable-current-line" },
+        .{ 1, .word, "-" },
+        .{ 1, .word, "has" },
+        .{ 1, .word, "comment" },
+        .{ 2, .source_comment, "//" },
+        .{ 2, .disable_lint_next_line, "zlinter-disable-next-line" },
+        .{ 2, .word, "rule" },
+        .{ 3, .source_comment, "//" },
+        .{ 3, .disable_lint_next_line, "zlinter-disable-next-line" },
+        .{ 3, .word, "rule" },
+        .{ 3, .word, "-" },
+        .{ 3, .word, "has" },
+        .{ 3, .word, "comment" },
+        .{ 4, .source_comment, "//" },
+        .{ 4, .disable_lint_current_line, "zlinter-disable-current-line" },
+        .{ 4, .word, "rule_1" },
+        .{ 4, .word, "rule_2" },
+        .{ 5, .source_comment, "//" },
+        .{ 5, .disable_lint_current_line, "zlinter-disable-current-line" },
+        .{ 5, .word, "rule_1" },
+        .{ 5, .word, "rule_2" },
+        .{ 5, .word, "-" },
+        .{ 5, .word, "has" },
+        .{ 5, .word, "comment" },
+    });
+}
+
+test "tokenize ordinary comments" {
+    try testTokenizer(&.{
+        "// Hello from a source comment ",
+        "// \tthat has multiple lines",
+    }, &.{
+        .{ 0, .source_comment, "//" },
+        .{ 0, .word, "Hello" },
+        .{ 0, .word, "from" },
+        .{ 0, .word, "a" },
+        .{ 0, .word, "source" },
+        .{ 0, .word, "comment" },
+        .{ 1, .source_comment, "//" },
+        .{ 1, .word, "that" },
+        .{ 1, .word, "has" },
+        .{ 1, .word, "multiple" },
+        .{ 1, .word, "lines" },
+    });
+}
+
+test "tokenize todo" {
+    try testTokenizer(&.{
+        "//! TODO: something a ",
+        "/// todo something b",
+        "// Todo something c",
+    }, &.{
+        .{ 0, .file_comment, "//!" },
+        .{ 0, .todo, "TODO" },
+        .{ 0, .delimiter, ":" },
+        .{ 0, .word, "something" },
+        .{ 0, .word, "a" },
+        .{ 1, .doc_comment, "///" },
+        .{ 1, .todo, "todo" },
+        .{ 1, .word, "something" },
+        .{ 1, .word, "b" },
+        .{ 2, .source_comment, "//" },
+        .{ 2, .todo, "Todo" },
+        .{ 2, .word, "something" },
+        .{ 2, .word, "c" },
+    });
+}
+
+fn testTokenizer(
+    comptime lines: []const []const u8,
+    // zlinter-disable-next-line field_naming - https://github.com/KurtWagner/zlinter/issues/59
+    expected: []const struct { u32, Token.Tag, []const u8 },
+) !void {
+    inline for (&.{ "\n", "\r\n" }) |new_line| {
+        comptime var source: [:0]const u8 = "";
+        if (lines.len > 0) source = source ++ lines[0];
+        if (lines.len > 1) {
+            inline for (lines[1..]) |line|
+                source = source ++ new_line ++ line;
+        }
+
+        const tokens = try allocTokenize(source, std.testing.allocator);
+        defer std.testing.allocator.free(tokens);
+
+        // zlinter-disable-next-line field_naming - https://github.com/KurtWagner/zlinter/issues/59
+        var actual = std.ArrayList(struct { u32, Token.Tag, []const u8 }).init(std.testing.allocator);
+        defer actual.deinit();
+        for (tokens) |token| try actual.append(.{
+            token.line_number,
+            token.tag,
+            token.getSlice(source),
+        });
+
+        std.testing.expectEqualDeep(expected, actual.items) catch |e| {
+            std.debug.print("Expected: &.{{\n", .{});
+            for (expected) |tuple| std.debug.print(
+                "  .{{ {d}, .{s}, \"{s}\" }},\n",
+                .{ tuple.@"0", @tagName(tuple.@"1"), tuple.@"2" },
+            );
+            std.debug.print("}}\n", .{});
+
+            std.debug.print("Actual: &.{{\n", .{});
+            for (actual.items) |tuple| std.debug.print(
+                "  .{{ {d}, .{s}, \"{s}\" }},\n",
+                .{ tuple.@"0", @tagName(tuple.@"1"), tuple.@"2" },
+            );
+            std.debug.print("}}\n", .{});
+            return e;
+        };
+    }
+}
+
 const Parser = struct {
     tokens: []const Token,
     i: Token.Index = 0,
@@ -325,217 +519,4 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
     };
 }
 
-// TODO: Bring back these tests:
-// test "allocParse - zlinter-disable-current-line" {
-//     inline for (&.{ "\n", "\r\n" }) |newline| {
-//         var comments = try allocParse(
-//             "var line_0 = 0;" ++ newline ++
-//                 "var line_1 = 0; // zlinter-disable-current-line" ++ newline ++
-//                 "var line_2 = 0; // \t zlinter-disable-current-line  rule_a \t  rule_b " ++ newline ++
-//                 "var line_3 = 0; // zlinter-disable-current-line rule_c - comment",
-//             std.testing.allocator,
-//         );
-//         defer comments.deinit(std.testing.allocator);
-
-//         try std.testing.expectEqualDeep(&.{
-//             Comment{
-//                 .kind = .{
-//                     .disable = .{
-//                         .line_start = 1,
-//                         .line_end = 1,
-//                         .rule_ids = &.{},
-//                     },
-//                 },
-//                 .start = .{
-//                     .byte_offset = 34,
-//                     .line = 1,
-//                     .column = 18,
-//                 },
-//                 .end = .{
-//                     .byte_offset = 62,
-//                     .line = 1,
-//                     .column = 46,
-//                 },
-//             },
-//             Comment{
-//                 .kind = .{
-//                     .disable = .{
-//                         .line_start = 2,
-//                         .line_end = 2,
-//                         .rule_ids = &.{ "rule_a", "rule_b" },
-//                     },
-//                 },
-//                 .start = .{
-//                     .byte_offset = 18,
-//                     .line = 1,
-//                     .column = 2,
-//                 },
-//                 .end = .{
-//                     .byte_offset = 62,
-//                     .line = 1,
-//                     .column = 46,
-//                 },
-//             },
-//             Comment{
-//                 .kind = .{
-//                     .disable = .{
-//                         .line_start = 3,
-//                         .line_end = 3,
-//                         .rule_ids = &.{"rule_c"},
-//                     },
-//                 },
-//                 .start = .{
-//                     .byte_offset = 24,
-//                     .line = 1,
-//                     .column = 8,
-//                 },
-//                 .end = .{
-//                     .byte_offset = 62,
-//                     .line = 1,
-//                     .column = 46,
-//                 },
-//             },
-//         }, comments.comments);
-//     }
-// }
-
-// test "allocParse - zlinter-disable-next-line" {
-//     inline for (&.{ "\n", "\r\n" }) |newline| {
-//         var comments = try allocParse(
-//             "var line_0 = 0;" ++ newline ++
-//                 "// \tzlinter-disable-next-line" ++ newline ++
-//                 "var line_2 = 0;" ++ newline ++
-//                 "//zlinter-disable-next-line \t rule_a, rule_b -  comment" ++ newline ++
-//                 "var line_4 = 0;" ++ newline ++
-//                 "// zlinter-disable-next-line  rule_c " ++ newline ++
-//                 "var line_6 = 0;",
-//             std.testing.allocator,
-//         );
-//         defer comments.deinit(std.testing.allocator);
-
-//         try std.testing.expectEqualDeep(&.{
-//             Comment{
-//                 .kind = .{
-//                     .disable = .{
-//                         .line_start = 2,
-//                         .line_end = 2,
-//                         .rule_ids = &.{},
-//                     },
-//                 },
-//                 .start = .{
-//                     .byte_offset = 24,
-//                     .line = 1,
-//                     .column = 8,
-//                 },
-//                 .end = .{
-//                     .byte_offset = 62,
-//                     .line = 1,
-//                     .column = 46,
-//                 },
-//             },
-//             Comment{
-//                 .kind = .{
-//                     .disable = .{
-//                         .line_start = 4,
-//                         .line_end = 4,
-//                         .rule_ids = &.{ "rule_a", "rule_b" },
-//                     },
-//                 },
-//                 .start = .{
-//                     .byte_offset = 24,
-//                     .line = 1,
-//                     .column = 8,
-//                 },
-//                 .end = .{
-//                     .byte_offset = 62,
-//                     .line = 1,
-//                     .column = 46,
-//                 },
-//             },
-//             Comment{
-//                 .kind = .{
-//                     .disable = .{
-//                         .line_start = 6,
-//                         .line_end = 6,
-//                         .rule_ids = &.{"rule_c"},
-//                     },
-//                 },
-//                 .start = .{
-//                     .byte_offset = 24,
-//                     .line = 1,
-//                     .column = 8,
-//                 },
-//                 .end = .{
-//                     .byte_offset = 62,
-//                     .line = 1,
-//                     .column = 46,
-//                 },
-//             },
-//         }, comments.comments);
-//     }
-// }
-
-// TODO: Add tests for empty comments.
-
-test "allocParse - todo" {
-    var comments = try allocParse(
-        \\var line_0 = 0;
-        \\// todo a b c
-        \\var line_2 = 0;
-        \\// TODO: c b a
-        \\var line_4 = 0;
-        \\//TODO- e f g
-        \\var line_6 = 0;
-    ,
-        std.testing.allocator,
-    );
-    defer comments.deinit(std.testing.allocator);
-
-    try std.testing.expectEqualDeep(&.{
-        Comment{
-            .kind = .{
-                .todo = {},
-            },
-            .start = .{
-                .byte_offset = 24,
-                .line = 1,
-                .column = 8,
-            },
-            .end = .{
-                .byte_offset = 28,
-                .line = 1,
-                .column = 12,
-            },
-        },
-        Comment{
-            .kind = .{
-                .todo = {},
-            },
-            .start = .{
-                .byte_offset = 55,
-                .line = 3,
-                .column = 9,
-            },
-            .end = .{
-                .byte_offset = 59,
-                .line = 3,
-                .column = 13,
-            },
-        },
-        Comment{
-            .kind = .{
-                .todo = {},
-            },
-            .start = .{
-                .byte_offset = 85,
-                .line = 5,
-                .column = 8,
-            },
-            .end = .{
-                .byte_offset = 89,
-                .line = 5,
-                .column = 12,
-            },
-        },
-    }, comments.comments);
-}
+const std = @import("std");
