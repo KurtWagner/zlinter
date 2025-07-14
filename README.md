@@ -57,6 +57,7 @@ A **linter** is a tool that automatically checks source code for style issues, b
   - [Disable with Comments](#disable-with-comments)
   - [Command-Line Arguments](#command-line-arguments)
   - [Optimization](#configure-optimization)
+- [Supported zig versions](#supported-zig-versions)
 - [Contributing](#contributing)
   - [How to Contribute](#contributions)
   - [Run tests](#run-tests)
@@ -249,6 +250,14 @@ var builder = zlinter.builder(b, .{.optimize = .ReleaseFast });
 ```
 
 If your project is large it may be worth setting optimize to `.ReleaseFast` - keep in mind the first run may be slower as it builds the the modules for the first time with the new optimisation.
+
+## Supported zig versions
+
+The plan is to support `master` (mostly because its an important exercise in keeping up to date with whats changing in zig) and the latest previous version.
+
+Currently, `0.14.x` and `master`.
+
+This may change once zig hits `1.x`.
 
 ## Contributing
 
