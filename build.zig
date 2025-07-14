@@ -219,6 +219,14 @@ pub fn build(b: *std.Build) void {
     const run_integration_tests = b.addSystemCommand(&.{ b.graph.zig_exe, "build", "test" });
     run_integration_tests.setCwd(b.path("./integration_tests"));
 
+    // Add directory and file inputs to ensure that we can watch and re-run tests
+    // as these can't be resolved magicaly through the system call.
+    addWatchDirectoryInput(b, run_integration_tests, b.path("./integration_tests/src")) catch @panic("OOM");
+    addWatchDirectoryInput(b, run_integration_tests, b.path("./integration_tests/test_cases")) catch @panic("OOM");
+    addWatchDirectoryInput(b, run_integration_tests, b.path("./src")) catch @panic("OOM");
+    run_integration_tests.step.addWatchInput(b.path("./integration_tests/build.zig")) catch @panic("OOM");
+    run_integration_tests.step.addWatchInput(b.path("./build_rules.zig")) catch @panic("OOM");
+
     const integration_test_step = b.step("integration-test", "Run integration tests");
     integration_test_step.dependOn(&run_integration_tests.step);
 
@@ -475,6 +483,35 @@ fn checkNoNameCollision(comptime name: []const u8) []const u8 {
         }
     }
     return name;
+}
+
+fn addWatchDirectoryInput(b: *std.Build, run: *std.Build.Step.Run, dir: std.Build.LazyPath) !void {
+    const needs_dir_derived = try run.step.addDirectoryWatchInput(dir);
+
+    const src_dir_path = dir.getPath3(b, &run.step);
+    var src_dir = src_dir_path.root_dir.handle.openDir(
+        src_dir_path.subPathOrDot(),
+        .{ .iterate = true },
+    ) catch |err| {
+        switch (version.zig) {
+            .@"0.14" => @panic(b.fmt("Unable to open directory '{}': {s}", .{ src_dir_path, @errorName(err) })),
+            .@"0.15" => @panic(b.fmt("Unable to open directory '{f}': {t}", .{ src_dir_path, err })),
+        }
+    };
+
+    var it = try src_dir.walk(b.allocator);
+    defer it.deinit();
+
+    while (try it.next()) |entry| {
+        switch (entry.kind) {
+            .directory => if (needs_dir_derived) {
+                const entry_path = try src_dir_path.join(b.allocator, entry.path);
+                try run.step.addDirectoryWatchInputFromPath(entry_path);
+            },
+            .file => try run.step.addWatchInput(try dir.join(b.allocator, entry.path)),
+            else => continue,
+        }
+    }
 }
 
 fn buildRule(
