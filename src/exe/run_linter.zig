@@ -240,7 +240,9 @@ pub fn main() !u8 {
             switch (comment.kind) {
                 .standard => {},
                 .todo => |todo| {
-                    std.debug.print("TODO: '{s}'\n", .{ast.source[comments.tokens[todo.first_content].first_byte .. comments.tokens[todo.last_content].last_byte + 1]});
+                    std.debug.print("TODO: '{s}'\n", .{
+                        ast.source[comments.tokens[todo.first_content].first_byte .. comments.tokens[todo.last_content].first_byte + comments.tokens[todo.last_content].len],
+                    });
                 },
                 .todo_empty => {
                     std.debug.print("EMPTY TODO\n", .{});
@@ -252,13 +254,13 @@ pub fn main() !u8 {
                         for (comments.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
                             std.debug.print(
                                 "- {s}\n",
-                                .{ast.source[token.first_byte .. token.last_byte + 1]},
+                                .{ast.source[token.first_byte .. token.first_byte + token.len]},
                             );
                         }
                     }
                 },
             }
-            std.debug.print("Raw: '{s}'\n\n", .{ast.source[comments.tokens[comment.first_token].first_byte .. comments.tokens[comment.last_token].last_byte + 1]});
+            std.debug.print("Raw: '{s}'\n\n", .{ast.source[comments.tokens[comment.first_token].first_byte .. comments.tokens[comment.last_token].first_byte + comments.tokens[comment.last_token].len]});
         }
 
         if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "  - Parsing doc comments: {d}ms", .{ms});
@@ -497,7 +499,7 @@ fn shouldSkip(doc_comments: zlinter.comments.DocumentComments, err: zlinter.resu
 
                     // Otherwise, we only disable for explicitly given rules.
                     for (doc_comments.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
-                        const rule_id = source[token.first_byte .. token.last_byte + 1];
+                        const rule_id = source[token.first_byte .. token.first_byte + token.len];
                         if (std.mem.eql(u8, rule_id, err.rule_id)) {
                             return true;
                         }

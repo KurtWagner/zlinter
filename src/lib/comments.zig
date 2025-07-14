@@ -1,16 +1,19 @@
-//! Module containing methods for extracting lint relevant comments from source files.
+//! Module containing methods for extracting comments from source files.
 //!
-//! These comments can alter the behaviour of the linter. e.g., a comment may disable a specific rule on a specific line.
+//! Some comments can alter the behaviour of the linter. e.g., a comment may
+//! disable a specific rule on a specific line.
 
 const std = @import("std");
 
+/// Contains extracted comments from a documents source.
 pub const DocumentComments = struct {
     tokens: []const Token,
-    comments: []Comment,
+    comments: []const Comment,
 
     pub fn deinit(self: *DocumentComments, gpa: std.mem.Allocator) void {
         gpa.free(self.comments);
         gpa.free(self.tokens);
+
         self.* = undefined;
     }
 };
@@ -18,17 +21,6 @@ pub const DocumentComments = struct {
 /// Represents a comment in the source file
 pub const Comment = struct {
     kind: union(enum) {
-        // TODO: Implement this.
-        standard: void,
-        /// Represents a `TODO:` comment in the source tree
-        todo: struct {
-            /// Inclusive
-            first_content: Token.Index,
-            /// Inclusive
-            last_content: Token.Index,
-        },
-        /// Represents an empty `TODO:` comment in the source tree
-        todo_empty: void,
         /// Represents a comment that disables some lint rules within a line range
         /// of a given source file.
         disable: struct {
@@ -46,6 +38,20 @@ pub const Comment = struct {
                 last: Token.Index,
             } = null,
         },
+
+        // TODO: Implement this.
+        standard: void,
+
+        /// Represents an empty `TODO:` comment in the source tree
+        todo_empty: void,
+
+        /// Represents a `TODO:` comment in the source tree
+        todo: struct {
+            /// Inclusive
+            first_content: Token.Index,
+            /// Inclusive
+            last_content: Token.Index,
+        },
     },
 
     /// Inclusive
@@ -55,6 +61,7 @@ pub const Comment = struct {
     last_token: Token.Index,
 };
 
+/// Represents a comment relevant token from a given source.
 const Token = struct {
     const Index = u32;
 
@@ -62,10 +69,11 @@ const Token = struct {
     first_byte: usize,
 
     /// Inclusive
-    last_byte: usize,
+    len: usize,
 
-    line_number: usize,
-    column_number: usize,
+    /// Line number in source document that this token appears on
+    line_number: u32,
+
     tag: Tag,
 
     const Tag = enum {
@@ -97,7 +105,7 @@ const Token = struct {
     };
 
     inline fn getSlice(self: Token, source: []const u8) []const u8 {
-        return source[self.first_byte .. self.last_byte + 1];
+        return source[self.first_byte .. self.first_byte + self.len];
     }
 };
 
@@ -117,13 +125,11 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
         };
 
         const Tokenizer = struct {
+            /// Current byte offset in source
             i: usize = 0,
-            line_start: usize = 0,
-            line_number: usize = 0,
 
-            fn column(self: @This()) usize {
-                return self.i - self.line_start;
-            }
+            /// Current line number (increments when seeing a new line)
+            line_number: u32 = 0,
         };
         var t = Tokenizer{};
 
@@ -146,7 +152,6 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
             },
             .consume_newline => {
                 t.i += 1;
-                t.line_start = t.i;
                 t.line_number += 1;
                 continue :state .parsing;
             },
@@ -164,15 +169,12 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
                 try tokens.append(.{
                     .tag = tag,
                     .first_byte = start,
-                    .last_byte = start + len - 1,
+                    .len = len,
                     .line_number = t.line_number,
-                    .column_number = t.column(),
                 });
 
                 start = t.i;
                 while (true) {
-
-                    // zlinter-disable-next-line - ok
                     switch (source[t.i]) {
                         ':', '\t', ' ', 0, '\n' => |c| {
                             if (start < t.i) {
@@ -187,9 +189,8 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
                                     else
                                         .word,
                                     .first_byte = start,
-                                    .last_byte = t.i - 1,
+                                    .len = t.i - start,
                                     .line_number = t.line_number,
-                                    .column_number = t.column(),
                                 });
                             }
 
@@ -198,9 +199,8 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
                                 ':' => try tokens.append(.{
                                     .tag = .delimiter,
                                     .first_byte = t.i,
-                                    .last_byte = t.i,
+                                    .len = 1,
                                     .line_number = t.line_number,
-                                    .column_number = t.column(),
                                 }),
                                 else => {},
                             }
