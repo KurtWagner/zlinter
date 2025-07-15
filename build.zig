@@ -280,7 +280,6 @@ pub fn build(b: *std.Build) void {
 
     const lint_cmd = b.step("lint", "Lint the linters own source code.");
     lint_cmd.dependOn(step: {
-        // TODO: Update the self lint step to use the step builder methods like end users would
         var exclude_paths = std.ArrayList(std.Build.LazyPath).init(b.allocator);
         defer exclude_paths.deinit();
 
