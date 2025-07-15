@@ -19,10 +19,10 @@ A **linter** is a tool that automatically checks source code for style issues, b
 > [!NOTE]
 > **2025-07-03:** `zlinter` is **new**.  
 >
-> - Expect breaking changes between commits.  
+> - Expect [breaking changes](https://github.com/KurtWagner/zlinter/pulls?q=is%3Apr+is%3Aclosed+label%3A%22breaking+change%22) between commits.
 > - Some features may not work as documented.  
 >
-> Please report issues and contribute fixes!
+> Please [report issues](https://github.com/KurtWagner/zlinter/issues/new) and contribute fixes!
 
 ![Screenshot](./screenshot.png)
 
