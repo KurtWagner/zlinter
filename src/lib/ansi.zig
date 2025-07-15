@@ -5,8 +5,6 @@
 ///
 /// This makes it safe to just call whenever writing stdout.
 pub inline fn get(comptime codes: []const Codes) []const u8 {
-    // TODO: Actually check if platform supports colors (e.g., CLICOLOR and if TTY)
-
     // https://no-color.org
     const no_color = no_color: {
         var mem: [1]u8 = undefined;

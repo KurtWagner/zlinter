@@ -63,7 +63,7 @@ pub fn main() !u8 {
     if (args.unknown_args) |unknown_args| {
         for (unknown_args) |arg|
             printer.println(.err, "Unknown argument: {s}", .{arg});
-        return ExitCode.usage_error.int(); // TODO: Print help docs.
+        return ExitCode.usage_error.int();
     }
 
     // Key is file path and value are errors for the file.
@@ -486,7 +486,7 @@ fn shouldSkip(doc_comments: zlinter.comments.DocumentComments, err: zlinter.resu
     return false;
 }
 
-// TODO: Could do with being moved to lib and having tests written for it
+// TODO: Move buildExcludesIndex and buildFilterIndex to lib and write unit tests
 
 /// Returns an index of files to exclude if exclude configuration is found in args
 fn buildExcludesIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Args) !?std.BufSet {
@@ -535,7 +535,6 @@ fn buildExcludesIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Arg
     return index;
 }
 
-// TODO: Could do with being moved to lib and having tests written for it
 /// Returns an index of files to only include if filter configuration is found in args
 fn buildFilterIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Args) !?std.BufSet {
     const filter_paths: []zlinter.files.LintFile = exclude: {

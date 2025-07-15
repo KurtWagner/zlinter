@@ -21,7 +21,6 @@ pub const LintDocument = struct {
         gpa.free(self.path);
     }
 
-    // TODO: Add tests for this:
     pub inline fn resolveTypeOfNode(self: @This(), node: std.zig.Ast.Node.Index) !?zls.Analyser.Type {
         return switch (version.zig) {
             .@"0.15" => self.analyser.resolveTypeOfNode(.of(node, self.handle)),
@@ -29,7 +28,6 @@ pub const LintDocument = struct {
         };
     }
 
-    // TODO: Add tests for this:
     pub inline fn resolveTypeOfTypeNode(self: @This(), node: std.zig.Ast.Node.Index) !?zls.Analyser.Type {
         const resolved_type = try self.resolveTypeOfNode(node) orelse return null;
         const instance_type = if (resolved_type.isMetaType()) resolved_type else switch (version.zig) {

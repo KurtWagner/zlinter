@@ -110,7 +110,6 @@ fn walkDirectory(
 }
 
 fn isLintableFilePath(file_path: []const u8) !bool {
-    // TODO: Should we support gitignore parsing?
     const extension = ".zig";
 
     const basename = std.fs.path.basename(file_path);

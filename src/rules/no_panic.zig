@@ -35,9 +35,6 @@
 //! ```
 //!
 
-// TODO: exclude_test flags should also include `if (builtin.is_test)` checks
-// TODO: exclude_debug should we add option to exclude when guarded by `if (builtin.mode == .Debug)`?
-
 /// Config for no_panic rule.
 pub const Config = struct {
     /// The severity of using `@panic` (off, warning, error).
