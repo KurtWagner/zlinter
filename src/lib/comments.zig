@@ -13,19 +13,19 @@ const Token = struct {
     tag: Tag,
 
     const Tag = enum {
-        /// `///`
+        /// e.g., `///`
         doc_comment,
-        /// `//!`
+        /// e.g., `//!`
         file_comment,
-        /// `//`
+        /// e.g., `//`
         source_comment,
-
-        /// `TODO` or `todo`
+        /// e.g., `TODO`, `Todo`, or `todo`
         todo,
-        /// `zlinter-disable-next-line`
+        /// e.g., `zlinter-disable-next-line`
         disable_lint_current_line,
-        /// `zlinter-disable-current-line`
+        /// e.g., `zlinter-disable-current-line`
         disable_lint_next_line,
+        /// e.g., `:`
         delimiter,
         word,
 
@@ -476,9 +476,9 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
                             maybe_last_rule_token = next;
                         },
                         .delimiter => {
-                            // TODO: Add more source information here:
-                            const slice = p.tokens[next].getSlice(source);
-                            std.log.warn("Unexpected delimitor '{s}'. Expected a rule name", .{slice});
+                            // TODO: Maybe one day report this mistake to user, for now lets just ignore it and keeping parsing
+                            // const slice = p.tokens[next].getSlice(source);
+                            // std.log.warn("Unexpected delimitor '{s}'. Expected a rule name", .{slice});
                         },
                         else => break,
                     }
