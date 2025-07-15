@@ -1,13 +1,16 @@
 name: coverage
 run-name: Coverage
 on:
-  push:
+  workflow_run:
+    workflows: ["linux"]
+    types:
+      - completed
     branches:
       - master
       - 0.14.x
 jobs:
   coverage:
-    if: github.repository_owner == 'KurtWagner'
+    if: github.event.workflow_run.conclusion == 'success' && github.repository_owner == 'KurtWagner'
     # Can't use 24 - see https://github.com/SimonKagstrom/kcov/issues/473
     runs-on: ubuntu-22.04
     name: Test coverage
