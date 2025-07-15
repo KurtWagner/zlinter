@@ -235,7 +235,7 @@ pub fn main() !u8 {
 
         var comments = try zlinter.comments.allocParse(ast.source, gpa);
         defer comments.deinit(gpa);
-        // comments.debugDump(lint_file.pathname, ast.source);
+        // comments.debugPrint(lint_file.pathname, ast.source);
 
         if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "  - Parsing doc comments: {d}ms", .{ms});
 

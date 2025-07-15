@@ -3,84 +3,6 @@
 //! Some comments can alter the behaviour of the linter. e.g., a comment may
 //! disable a specific rule on a specific line.
 
-pub const DocumentComments = struct {
-    tokens: []const Token,
-    comments: []const Comment,
-
-    pub fn deinit(self: *DocumentComments, gpa: std.mem.Allocator) void {
-        gpa.free(self.comments);
-        gpa.free(self.tokens);
-        self.* = undefined;
-    }
-
-    pub fn debugDump(self: DocumentComments, file_path: []const u8, source: []const u8) void {
-        for (self.comments) |comment| {
-            switch (comment.kind) {
-                .todo => |todo| {
-                    std.debug.print("TODO: '{s}'\n", .{
-                        source[self.tokens[todo.first_content].first_byte .. self.tokens[todo.last_content].first_byte + self.tokens[todo.last_content].len],
-                    });
-                },
-                .todo_empty => {
-                    std.debug.print("EMPTY TODO\n", .{});
-                },
-                .disable => |disable| {
-                    std.debug.print("DISABLE:\n", .{});
-                    std.debug.print(" for {s}:{d}\n", .{ file_path, disable.line_start });
-                    if (disable.rule_ids) |rule_ids| {
-                        for (self.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
-                            std.debug.print(
-                                "- {s}\n",
-                                .{source[token.first_byte .. token.first_byte + token.len]},
-                            );
-                        }
-                    }
-                },
-            }
-            std.debug.print("Raw: '{s}'\n\n", .{source[self.tokens[comment.first_token].first_byte .. self.tokens[comment.last_token].first_byte + self.tokens[comment.last_token].len]});
-        }
-    }
-};
-
-pub const Comment = struct {
-    /// Inclusive
-    first_token: Token.Index,
-    /// Inclusive
-    last_token: Token.Index,
-    kind: Kind,
-
-    const Kind = union(enum) {
-        /// Represents a comment that disables some lint rules within a line range
-        /// of a given source file.
-        disable: struct {
-            /// Line of source (index zero) to disable rules from (inclusive).
-            line_start: usize,
-
-            /// Line of source (index zero) to disable rules to (inclusive).
-            line_end: usize,
-
-            /// Rules to disable, if empty, it means, disable all rules.
-            rule_ids: ?struct {
-                /// Inclusive
-                first: Token.Index,
-                /// Inclusive
-                last: Token.Index,
-            } = null,
-        },
-
-        /// Represents an empty `// TODO:` comment in the source tree
-        todo_empty: void,
-
-        /// Represents a `// TODO: <content>` comment in the source tree
-        todo: struct {
-            /// Inclusive
-            first_content: Token.Index,
-            /// Inclusive
-            last_content: Token.Index,
-        },
-    };
-};
-
 const Token = struct {
     const Index = u32;
     /// Inclusive
@@ -226,13 +148,13 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
 }
 
 test "tokenize no comments" {
-    try testTokenizer(&.{}, &.{});
-    try testTokenizer(&.{""}, &.{});
-    try testTokenizer(&.{"var a = 10;"}, &.{});
+    try testTokenize(&.{}, &.{});
+    try testTokenize(&.{""}, &.{});
+    try testTokenize(&.{"var a = 10;"}, &.{});
 }
 
 test "tokenize file comment" {
-    try testTokenizer(&.{
+    try testTokenize(&.{
         "//! Hello from a file comment",
         "//! that has multiple lines",
     }, &.{
@@ -251,7 +173,7 @@ test "tokenize file comment" {
 }
 
 test "tokenize doc comment" {
-    try testTokenizer(&.{
+    try testTokenize(&.{
         "/// Hello from a doc comment",
         "/// that has multiple lines",
     }, &.{
@@ -270,7 +192,7 @@ test "tokenize doc comment" {
 }
 
 test "tokenize disable line comments" {
-    try testTokenizer(&.{
+    try testTokenize(&.{
         "// zlinter-disable-current-line",
         "// zlinter-disable-current-line - has comment ",
         "// zlinter-disable-next-line rule",
@@ -309,7 +231,7 @@ test "tokenize disable line comments" {
 }
 
 test "tokenize ordinary comments" {
-    try testTokenizer(&.{
+    try testTokenize(&.{
         "// Hello from a source comment ",
         "// \tthat has multiple lines",
     }, &.{
@@ -328,7 +250,7 @@ test "tokenize ordinary comments" {
 }
 
 test "tokenize todo" {
-    try testTokenizer(&.{
+    try testTokenize(&.{
         "//! TODO: something a ",
         "/// todo something b",
         "// Todo something c",
@@ -349,7 +271,7 @@ test "tokenize todo" {
     });
 }
 
-fn testTokenizer(
+fn testTokenize(
     comptime lines: []const []const u8,
     // zlinter-disable-next-line field_naming - https://github.com/KurtWagner/zlinter/issues/59
     expected: []const struct { u32, Token.Tag, []const u8 },
@@ -393,6 +315,116 @@ fn testTokenizer(
     }
 }
 
+pub const DocumentComments = struct {
+    tokens: []const Token,
+    comments: []const Comment,
+
+    pub fn deinit(self: *DocumentComments, gpa: std.mem.Allocator) void {
+        gpa.free(self.comments);
+        gpa.free(self.tokens);
+        self.* = undefined;
+    }
+
+    pub fn debugPrint(self: DocumentComments, file_path: []const u8, source: []const u8) void {
+        for (self.comments) |comment| {
+            switch (comment.kind) {
+                .todo => |todo| {
+                    std.debug.print("TODO: '{s}'\n", .{
+                        if (todo.content) |content|
+                            source[self.tokens[content.first].first_byte .. self.tokens[content.last].first_byte + self.tokens[content.last].len]
+                        else
+                            "",
+                    });
+                },
+                .disable => |disable| {
+                    std.debug.print("DISABLE:\n", .{});
+                    std.debug.print(" for {s}:{d}\n", .{ file_path, disable.line_start });
+                    if (disable.rule_ids) |rule_ids| {
+                        for (self.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
+                            std.debug.print(
+                                "- {s}\n",
+                                .{source[token.first_byte .. token.first_byte + token.len]},
+                            );
+                        }
+                    }
+                },
+            }
+            std.debug.print("Raw: '{s}'\n\n", .{source[self.tokens[comment.first_token].first_byte .. self.tokens[comment.last_token].first_byte + self.tokens[comment.last_token].len]});
+        }
+    }
+};
+
+pub const Comment = struct {
+    /// Inclusive - either `.doc_comment`, `.file_comment` or `.source_comment`
+    first_token: Token.Index,
+    /// Inclusive
+    last_token: Token.Index,
+    kind: Kind,
+
+    const Kind = union(enum) {
+        /// Represents a comment that disables some lint rules within a line range
+        /// of a given source file.
+        disable: struct {
+            /// Line of source (index zero) to disable rules from (inclusive).
+            line_start: usize,
+
+            /// Line of source (index zero) to disable rules to (inclusive).
+            line_end: usize,
+
+            /// Rules to disable, if empty, it means, disable all rules.
+            rule_ids: ?struct {
+                /// Inclusive
+                first: Token.Index,
+                /// Inclusive
+                last: Token.Index,
+            } = null,
+        },
+
+        /// Represents a `// TODO: <content>` comment in the source tree
+        todo: struct {
+            content: ?struct {
+                /// Inclusive
+                first: Token.Index,
+                /// Inclusive
+                last: Token.Index,
+            } = null,
+        },
+    };
+
+    fn debugPrint(self: Comment) void {
+        std.debug.print(".{{\n", .{});
+        std.debug.print("  .first_token = {d},\n", .{self.first_token});
+        std.debug.print("  .last_token = {d},\n", .{self.last_token});
+        std.debug.print("  .kind = .{{\n", .{});
+        switch (self.kind) {
+            .disable => |disable| {
+                std.debug.print("  .disable = .{{\n", .{});
+                std.debug.print("      .line_start = {d},\n", .{disable.line_start});
+                std.debug.print("      .line_end = {d},\n", .{disable.line_end});
+                if (disable.rule_ids) |rule_ids| {
+                    std.debug.print("      .rule_ids = .{{\n", .{});
+                    std.debug.print("        .first = {d},\n", .{rule_ids.first});
+                    std.debug.print("        .last = {d},\n", .{rule_ids.last});
+                    std.debug.print("      }},\n", .{});
+                }
+                std.debug.print("  }},\n", .{});
+            },
+            .todo => |todo| {
+                std.debug.print("  .todo = .{{\n", .{});
+                if (todo.content) |content| {
+                    std.debug.print("      .content = .{{\n", .{});
+                    std.debug.print("        .first = {d},\n", .{content.first});
+                    std.debug.print("        .last = {d},\n", .{content.last});
+                    std.debug.print("      }},\n", .{});
+                }
+                std.debug.print("  }},\n", .{});
+            },
+        }
+        std.debug.print("  }},\n", .{});
+        std.debug.print("}},\n", .{});
+    }
+};
+
 const Parser = struct {
     tokens: []const Token,
     i: Token.Index = 0,
@@ -422,9 +454,10 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
     var p = Parser{ .tokens = tokens };
     tokens: while (p.next()) |token| {
         if (!p.tokens[token].tag.isComment()) continue :tokens;
+        const first_token = token;
 
-        const first_token = p.next() orelse break :tokens;
-        const maybe_kind: ?Comment.Kind = kind: switch (p.tokens[first_token].tag) {
+        const second_token = p.next() orelse break :tokens;
+        const maybe_kind: ?Comment.Kind = kind: switch (p.tokens[second_token].tag) {
             .disable_lint_current_line,
             .disable_lint_next_line,
             => {
@@ -452,9 +485,9 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
                     p.skip();
                 }
 
-                const line = switch (p.tokens[first_token].tag) {
-                    .disable_lint_current_line => p.tokens[first_token].line_number,
-                    .disable_lint_next_line => p.tokens[first_token].line_number + 1,
+                const line = switch (p.tokens[second_token].tag) {
+                    .disable_lint_current_line => p.tokens[second_token].line_number,
+                    .disable_lint_next_line => p.tokens[second_token].line_number + 1,
                     else => unreachable,
                 };
                 break :kind .{
@@ -489,12 +522,16 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
                 };
 
                 break :kind if (maybe_last_token) |last_token_index|
-                    .{ .todo = .{
-                        .first_content = first_content_token_index,
-                        .last_content = last_token_index,
-                    } }
+                    .{
+                        .todo = .{
+                            .content = .{
+                                .first = first_content_token_index,
+                                .last = last_token_index,
+                            },
+                        },
+                    }
                 else
-                    .{ .todo_empty = {} };
+                    .{ .todo = .{ .content = null } };
             },
             else => continue :tokens,
         };
@@ -517,6 +554,166 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
         .tokens = tokens,
         .comments = try comments.toOwnedSlice(),
     };
+}
+
+test "parse - no comments" {
+    try testParse(&.{""}, &.{});
+    try testParse(&.{}, &.{});
+    try testParse(&.{"var ok = 1;"}, &.{});
+}
+
+test "parse - disable next line comments" {
+    try testParse(
+        &.{
+            "// zlinter-disable-next-line rule_a - false positive",
+            "var unused = 1;",
+        },
+        &.{.{
+            .first_token = 0,
+            .last_token = 5,
+            .kind = .{
+                .disable = .{
+                    .line_start = 1,
+                    .line_end = 1,
+                    .rule_ids = .{
+                        .first = 2,
+                        .last = 2,
+                    },
+                },
+            },
+        }},
+    );
+
+    try testParse(
+        &.{
+            "",
+            "",
+            "// zlinter-disable-next-line rule_a rule_b",
+            "var unused = 1;",
+        },
+        &.{.{
+            .first_token = 0,
+            .last_token = 3,
+            .kind = .{
+                .disable = .{
+                    .line_start = 3,
+                    .line_end = 3,
+                    .rule_ids = .{
+                        .first = 2,
+                        .last = 3,
+                    },
+                },
+            },
+        }},
+    );
+
+    try testParse(
+        &.{
+            "",
+            "// zlinter-disable-next-line",
+            "var unused = 1;",
+        },
+        &.{.{
+            .first_token = 0,
+            .last_token = 1,
+            .kind = .{
+                .disable = .{
+                    .line_start = 2,
+                    .line_end = 2,
+                },
+            },
+        }},
+    );
+}
+
+test "parse - disable current line comments" {
+    try testParse(
+        &.{
+            "var unused = 1; // zlinter-disable-current-line rule_a - false positive",
+        },
+        &.{.{
+            .first_token = 0,
+            .last_token = 5,
+            .kind = .{
+                .disable = .{
+                    .line_start = 0,
+                    .line_end = 0,
+                    .rule_ids = .{
+                        .first = 2,
+                        .last = 2,
+                    },
+                },
+            },
+        }},
+    );
+
+    try testParse(
+        &.{
+            "",
+            "",
+            "var unused = 1; // zlinter-disable-current-line rule_a rule_b",
+        },
+        &.{.{
+            .first_token = 0,
+            .last_token = 3,
+            .kind = .{
+                .disable = .{
+                    .line_start = 2,
+                    .line_end = 2,
+                    .rule_ids = .{
+                        .first = 2,
+                        .last = 3,
+                    },
+                },
+            },
+        }},
+    );
+
+    try testParse(
+        &.{
+            "",
+            "var unused = 1; // zlinter-disable-current-line",
+        },
+        &.{.{
+            .first_token = 0,
+            .last_token = 1,
+            .kind = .{
+                .disable = .{
+                    .line_start = 1,
+                    .line_end = 1,
+                },
+            },
+        }},
+    );
+}
+
+fn testParse(
+    comptime lines: []const []const u8,
+    expected: []const Comment,
+) !void {
+    inline for (&.{"\n"}) |new_line| {
+        comptime var source: [:0]const u8 = "";
+        if (lines.len > 0) source = source ++ lines[0];
+        if (lines.len > 1) {
+            inline for (lines[1..]) |line|
+                source = source ++ new_line ++ line;
+        }
+
+        var doc_comments = try allocParse(source, std.testing.allocator);
+        defer doc_comments.deinit(std.testing.allocator);
+
+        const actual = doc_comments.comments;
+        std.testing.expectEqualDeep(expected, actual) catch |e| {
+            std.debug.print("Expected: &.{{\n", .{});
+            for (expected) |comment| comment.debugPrint();
+            std.debug.print("}}\n", .{});
+
+            std.debug.print("Actual: &.{{\n", .{});
+            for (actual) |comment| comment.debugPrint();
+            std.debug.print("}}\n", .{});
+            return e;
+        };
+    }
 }
 
 const std = @import("std");
