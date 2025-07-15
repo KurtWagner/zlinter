@@ -221,9 +221,9 @@ pub fn build(b: *std.Build) void {
 
     // Add directory and file inputs to ensure that we can watch and re-run tests
     // as these can't be resolved magicaly through the system call.
-    addWatchDirectoryInput(b, run_integration_tests, b.path("./integration_tests/src")) catch @panic("OOM");
-    addWatchDirectoryInput(b, run_integration_tests, b.path("./integration_tests/test_cases")) catch @panic("OOM");
-    addWatchDirectoryInput(b, run_integration_tests, b.path("./src")) catch @panic("OOM");
+    addWatchDirectoryInput(b, &run_integration_tests.step, b.path("./integration_tests/src")) catch @panic("OOM");
+    addWatchDirectoryInput(b, &run_integration_tests.step, b.path("./integration_tests/test_cases")) catch @panic("OOM");
+    addWatchDirectoryInput(b, &run_integration_tests.step, b.path("./src")) catch @panic("OOM");
     run_integration_tests.step.addWatchInput(b.path("./integration_tests/build.zig")) catch @panic("OOM");
     run_integration_tests.step.addWatchInput(b.path("./build_rules.zig")) catch @panic("OOM");
 
@@ -454,10 +454,15 @@ fn buildStep(
     if (b.verbose) zlinter_run.addArgs(&.{"--verbose"});
 
     if (options.include_paths) |include_paths| {
-        for (include_paths.items) |path|
+        for (include_paths.items) |path| {
             zlinter_run.addArgs(
                 &.{ "--build-include", path.getPath3(b, &zlinter_run.step).sub_path },
             );
+        }
+    } else {
+        zlinter_run.addArgs(
+            &.{ "--build-include", b.path("./").getPath3(b, &zlinter_run.step).sub_path },
+        );
     }
 
     if (options.exclude_paths) |exclude_paths| {
@@ -488,10 +493,10 @@ fn checkNoNameCollision(comptime name: []const u8) []const u8 {
     return name;
 }
 
-fn addWatchDirectoryInput(b: *std.Build, run: *std.Build.Step.Run, dir: std.Build.LazyPath) !void {
-    const needs_dir_derived = try run.step.addDirectoryWatchInput(dir);
+fn addWatchDirectoryInput(b: *std.Build, step: *std.Build.Step, dir: std.Build.LazyPath) !void {
+    const needs_dir_derived = try step.addDirectoryWatchInput(dir);
 
-    const src_dir_path = dir.getPath3(b, &run.step);
+    const src_dir_path = dir.getPath3(b, step);
     var src_dir = src_dir_path.root_dir.handle.openDir(
         src_dir_path.subPathOrDot(),
         .{ .iterate = true },
@@ -509,9 +514,9 @@ fn addWatchDirectoryInput(b: *std.Build, run: *std.Build.Step.Run, dir: std.Buil
         switch (entry.kind) {
             .directory => if (needs_dir_derived) {
                 const entry_path = try src_dir_path.join(b.allocator, entry.path);
-                try run.step.addDirectoryWatchInputFromPath(entry_path);
+                try step.addDirectoryWatchInputFromPath(entry_path);
             },
-            .file => try run.step.addWatchInput(try dir.join(b.allocator, entry.path)),
+            .file => try step.addWatchInput(try dir.join(b.allocator, entry.path)),
             else => continue,
         }
     }
