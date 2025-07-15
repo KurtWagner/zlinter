@@ -14,7 +14,7 @@ An extendable and customizable **Zig linter** that is integrated from source int
 A **linter** is a tool that automatically checks source code for style issues, bugs, or patterns that may lead to errors, helping developers write cleaner and more reliable code.
 
 > [!IMPORTANT]
-> `zlinter` currently analyzes the Zig AST, which has limited context without trying to re-implement the Zig compiler (not doing).
+> `zlinter` currently analyzes the Zig AST, which has [limited context](https://github.com/KurtWagner/zlinter/issues/65) without trying to re-implement the Zig compiler (not doing).
 >
 > A more accurate approach would integrate more closely with the Zig build system and compiler (e.g., the proposed Zig compiler server), but for now, using the AST should be sufficient for most cases, and maybe one day `zlinter` can use newer Zig Compiler APIs as they become available.
 >
