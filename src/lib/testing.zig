@@ -151,14 +151,6 @@ pub fn createFiles(dir: std.fs.Dir, file_paths: [][]const u8) !void {
     }
 }
 
-fn print(comptime fmt: []const u8, args: anytype) void {
-    if (@inComptime()) {
-        @compileError(std.fmt.comptimePrint(fmt, args));
-    } else {
-        std.debug.print(fmt, args);
-    }
-}
-
 inline fn assertTestOnly() void {
     comptime if (!builtin.is_test) @compileError("Test only");
 }
