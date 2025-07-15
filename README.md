@@ -177,8 +177,8 @@ add included and excluded paths. For example,
 
 ```zig
 builder.addPaths(.{
-    .include = &.{ "engine-src/", "src/" },
-    .exclude = &.{ "src/android/", "engine-src/generated.zig" },
+    .include = &.{ b.path("engine-src/"), b.path("src/") },
+    .exclude = &.{ b.path("src/android/"), b.path("engine-src/generated.zig") },
 });
 ```
 

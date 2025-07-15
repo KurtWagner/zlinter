@@ -64,8 +64,8 @@ pub fn builder(b: *std.Build, options: BuilderOptions) StepBuilder {
 
 const StepBuilder = struct {
     rules: std.ArrayListUnmanaged(BuiltRule),
-    include_paths: std.BufSet,
-    exclude_paths: std.BufSet,
+    include_paths: std.ArrayList(std.Build.LazyPath),
+    exclude_paths: std.ArrayList(std.Build.LazyPath),
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
@@ -97,14 +97,14 @@ const StepBuilder = struct {
     pub fn addPaths(
         self: *StepBuilder,
         paths: struct {
-            include: ?[]const []const u8 = null,
-            exclude: ?[]const []const u8 = null,
+            include: ?[]const std.Build.LazyPath = null,
+            exclude: ?[]const std.Build.LazyPath = null,
         },
     ) void {
         if (paths.include) |includes|
-            for (includes) |path| self.include_paths.insert(path) catch @panic("OOM");
+            for (includes) |path| self.include_paths.append(path) catch @panic("OOM");
         if (paths.exclude) |excludes|
-            for (excludes) |path| self.exclude_paths.insert(path) catch @panic("OOM");
+            for (excludes) |path| self.exclude_paths.append(path) catch @panic("OOM");
     }
 
     /// Returns a build step and cleans itself up.
@@ -277,14 +277,15 @@ pub fn build(b: *std.Build) void {
     // ------------------------------------------------------------------------
     // zig build lint
     // ------------------------------------------------------------------------
+
     const lint_cmd = b.step("lint", "Lint the linters own source code.");
     lint_cmd.dependOn(step: {
         // TODO: Update the self lint step to use the step builder methods like end users would
-        var exclude_paths = std.BufSet.init(b.allocator);
+        var exclude_paths = std.ArrayList(std.Build.LazyPath).init(b.allocator);
         defer exclude_paths.deinit();
 
-        exclude_paths.insert("integration_tests/test_cases") catch @panic("OOM");
-        exclude_paths.insert("integration_tests/src/test_case_references.zig") catch @panic("OOM");
+        exclude_paths.append(b.path("integration_tests/test_cases")) catch @panic("OOM");
+        exclude_paths.append(b.path("integration_tests/src/test_case_references.zig")) catch @panic("OOM");
 
         break :step buildStep(
             b,
@@ -400,8 +401,8 @@ fn buildStep(
             dependency: *std.Build.Dependency,
             module: *std.Build.Module,
         },
-        include_paths: ?std.BufSet = null,
-        exclude_paths: ?std.BufSet = null,
+        include_paths: ?std.ArrayList(std.Build.LazyPath) = null,
+        exclude_paths: ?std.ArrayList(std.Build.LazyPath) = null,
     },
 ) *std.Build.Step {
     const zlinter_lib_module: *std.Build.Module, const exe_file: std.Build.LazyPath, const build_rules_exe_file: std.Build.LazyPath = switch (options.zlinter) {
@@ -453,15 +454,17 @@ fn buildStep(
     if (b.verbose) zlinter_run.addArgs(&.{"--verbose"});
 
     if (options.include_paths) |include_paths| {
-        var it = include_paths.iterator();
-        while (it.next()) |path|
-            zlinter_run.addArgs(&.{ "--build-include", path.* });
+        for (include_paths.items) |path|
+            zlinter_run.addArgs(
+                &.{ "--build-include", path.getPath3(b, &zlinter_run.step).sub_path },
+            );
     }
 
     if (options.exclude_paths) |exclude_paths| {
-        var it = exclude_paths.iterator();
-        while (it.next()) |path|
-            zlinter_run.addArgs(&.{ "--build-exclude", path.* });
+        for (exclude_paths.items) |path|
+            zlinter_run.addArgs(
+                &.{ "--build-exclude", path.getPath3(b, &zlinter_run.step).sub_path },
+            );
     }
 
     zlinter_run.addArgs(&.{ "--zig_exe", b.graph.zig_exe });
