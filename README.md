@@ -16,7 +16,7 @@ A **linter** is a tool that automatically checks source code for style issues, b
 > [!IMPORTANT]
 > `zlinter` currently analyzes the Zig AST, which has [limited context](https://github.com/KurtWagner/zlinter/issues/65) without trying to re-implement the Zig compiler (not doing).
 >
-> A more accurate approach would integrate more closely with the Zig build system and compiler (e.g., the proposed Zig compiler server), but for now, using the AST should be sufficient for most cases, and maybe one day `zlinter` can use newer Zig Compiler APIs as they become available.
+> A more accurate approach could be to integrate more closely with the Zig build system and compiler (e.g., the proposed Zig compiler server), but for now, using the AST should be sufficient for most cases, and maybe one day `zlinter` can use newer Zig Compiler APIs as they become available. The [milestones](#milestones) will help inform this.
 >
 > Also, `zlinter` is **new**.
 > - Expect [breaking changes](https://github.com/KurtWagner/zlinter/pulls?q=is%3Apr+is%3Aclosed+label%3A%22breaking+change%22) between commits.
@@ -61,6 +61,7 @@ A **linter** is a tool that automatically checks source code for style issues, b
   - [Command-Line Arguments](#command-line-arguments)
   - [Optimization](#configure-optimization)
 - [Supported zig versions](#supported-zig-versions)
+- [Milestones](#milestones)
 - [Contributing](#contributing)
   - [How to Contribute](#contributions)
   - [Run tests](#run-tests)
@@ -260,7 +261,17 @@ The plan is to support `master` (mostly because its an important exercise in kee
 
 Currently, `0.14.x` and `master`.
 
+Fixes and improvements to rules may be cherry-picked to older versions if there's no API compatibility issues.
+
 This may change once zig hits `1.x`.
+
+## Milestones
+
+1. [in-progress] **Rough implementaton of 20 diverse linter rules** - this is important to understanding limitations (e.g., [the AST](https://github.com/KurtWagner/zlinter/issues/65) and design patterns to a stable API.
+  
+1. [pending] **Run and review the results on at least 5 large open source Zig projects** - this is to discover unknown unknowns to populate caveats and limitations of current approach.
+
+1. [pending] **To be informed by (1) and (2)** - could be that AST is good enough for enough cases to provide value providing adequate documentation, AND/OR, could be that it's worth contributing time into Zigs efforts around "multibuild" and zig compiler server.
 
 ## Contributing
 
