@@ -5,7 +5,15 @@ on:
     branches:
       - master
       - 0.14.x
+    paths:
+      - '**.zig'
+      - '**.zon'
+      - 'integration_tests/test_cases/**'
   pull_request:
+    paths:
+      - '**.zig'
+      - '**.zon'
+      - 'integration_tests/test_cases/**'
 jobs:
   test:
     runs-on: windows-latest
