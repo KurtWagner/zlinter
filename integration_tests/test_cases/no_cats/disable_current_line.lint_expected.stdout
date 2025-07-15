@@ -1,0 +1,7 @@
+warning I'm allergic to cats [test_cases/no_cats/disable_current_line.input.zig:8:11] no_cats
+
+ 8 | pub const bad_cats = false; // zlinter-disable-current-line no_unused
+   |           ^^^^^^^^
+
+x 1 warnings
+x 3 skipped
