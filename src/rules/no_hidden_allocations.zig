@@ -33,9 +33,6 @@ pub const Config = struct {
     /// Skip if found within `test { ... }` block.
     exclude_tests: bool = true,
 
-    // TODO: Should we check for returned slices/pointers without a deinit contract?
-    // check_returned_owned_memory: bool = true,
-
     // TODO: Should we flag global allocators?
     // detect_global_allocator_use: bool = true,
 };
@@ -115,7 +112,7 @@ fn run(
                         if (decl_handle.handle.tree.fullVarDecl(ast_node)) |var_decl| {
                             if (zlinter.shims.NodeIndexShim.initOptional(var_decl.ast.init_node)) |init_node| {
                                 _ = init_node;
-                                //TODO: If .call_one then check return value
+                                // TODO: If .call_one then check return value
                                 // std.debug.print("{} - {s}\n", .{
                                 //     zlinter.shims.nodeTag(decl_handle.handle.tree, init_node.toNodeIndex()),
                                 //     decl_handle.handle.tree.getNodeSource(init_node.toNodeIndex()),
