@@ -80,46 +80,7 @@ fn run(
 
     var node: zlinter.shims.NodeIndexShim = .root;
     while (node.index < tree.nodes.len) : (node.index += 1) {
-        if (tree.fullContainerDecl(&buffer, node.toNodeIndex())) |container_decl| {
-            const container_tag = if (node.index == 0) .keyword_struct else tree.tokens.items(.tag)[container_decl.ast.main_token];
-
-            for (container_decl.ast.members) |member| {
-                if (tree.fullContainerField(member)) |container_field| {
-                    const type_kind = try doc.resolveTypeKind(.{ .container_field = container_field });
-                    const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const container_name: []const u8 = tuple: {
-                        break :tuple switch (container_tag) {
-                            .keyword_struct => if (type_kind) |kind|
-                                switch (kind) {
-                                    .fn_returns_type => .{ config.struct_field_that_is_type_fn, "Type function" },
-                                    .@"fn" => .{ config.struct_field_that_is_fn, "Function" },
-                                    .namespace_type => .{ config.struct_field_that_is_namespace, "Namespace" },
-                                    .fn_type, .fn_type_returns_type => .{ config.struct_field_that_is_type, "Function Type" },
-                                    .type => .{ config.struct_field_that_is_type, "Type" },
-                                    else => .{ config.struct_field, "Struct" },
-                                }
-                            else
-                                .{ config.struct_field, "Struct" },
-                            .keyword_union => .{ config.union_field, "Union" },
-                            .keyword_enum => .{ config.enum_field, "Enum" },
-                            else => continue,
-                        };
-                    };
-
-                    const name_token = container_field.ast.main_token;
-                    const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
-
-                    if (!style_with_severity.style.check(name)) {
-                        try lint_problems.append(allocator, .{
-                            .rule_id = rule.rule_id,
-                            .severity = style_with_severity.severity,
-                            .start = .startOfToken(tree, name_token),
-                            .end = .endOfToken(tree, name_token),
-                            .message = try std.fmt.allocPrint(allocator, "{s} fields should be {s}", .{ container_name, style_with_severity.style.name() }),
-                        });
-                    }
-                }
-            }
-        } else if (zlinter.shims.nodeTag(tree, node.toNodeIndex()) == .error_set_decl) {
+        if (zlinter.shims.nodeTag(tree, node.toNodeIndex()) == .error_set_decl) {
             const node_data = zlinter.shims.nodeData(tree, node.toNodeIndex());
 
             const rbrace = switch (zlinter.version.zig) {
@@ -142,6 +103,48 @@ fn run(
                     else => {},
                 }
             }
+        } else if (tree.fullContainerDecl(&buffer, node.toNodeIndex())) |container_decl| {
+            const container_tag = if (node.index == 0) .keyword_struct else tree.tokens.items(.tag)[container_decl.ast.main_token];
+
+            fields: for (container_decl.ast.members) |member| {
+                if (tree.fullContainerField(member)) |container_field| {
+                    const type_kind = try doc.resolveTypeKind(.{ .container_field = container_field });
+                    const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const container_kind: zlinter.session.LintDocument.TypeKind = tuple: {
+                        break :tuple switch (container_tag) {
+                            .keyword_struct => if (type_kind) |kind|
+                                switch (kind) {
+                                    .fn_returns_type => .{ config.struct_field_that_is_type_fn, kind },
+                                    .@"fn" => .{ config.struct_field_that_is_fn, kind },
+                                    .namespace_type => .{ config.struct_field_that_is_namespace, kind },
+                                    .fn_type, .fn_type_returns_type => .{ config.struct_field_that_is_type, .fn_type },
+                                    .type => .{ config.struct_field_that_is_type, kind },
+                                    else => .{ config.struct_field, .struct_type },
+                                }
+                            else
+                                .{ config.struct_field, .struct_type },
+                            .keyword_union => .{ config.union_field, .union_type },
+                            .keyword_enum => .{ config.enum_field, .enum_type },
+                            else => continue :fields,
+                        };
+                    };
+
+                    // Ignore struct tuples as they don't have names, just types
+                    if (container_kind == .struct_type and container_field.ast.tuple_like) continue :fields;
+
+                    const name_token = container_field.ast.main_token;
+                    const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
+
+                    if (!style_with_severity.style.check(name)) {
+                        try lint_problems.append(allocator, .{
+                            .rule_id = rule.rule_id,
+                            .severity = style_with_severity.severity,
+                            .start = .startOfToken(tree, name_token),
+                            .end = .endOfToken(tree, name_token),
+                            .message = try std.fmt.allocPrint(allocator, "{s} fields should be {s}", .{ container_kind.name(), style_with_severity.style.name() }),
+                        });
+                    }
+                }
+            }
         }
     }
 
@@ -157,6 +160,18 @@ fn run(
 
 test {
     std.testing.refAllDecls(@This());
+}
+
+test "regression 59 - tuples not included in field naming" {
+    const rule = buildRule(.{});
+    var result = try zlinter.testing.runRule(
+        rule,
+        zlinter.testing.paths.posix("path/to/file.zig"),
+        "const Tuple = struct { TitleCase, snake_case, camelCase, MACRO_CASE };",
+        .{},
+    );
+    defer if (result) |*r| r.deinit(std.testing.allocator);
+    try std.testing.expectEqual(null, result);
 }
 
 test "run - implicit struct (root struct)" {
