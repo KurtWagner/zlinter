@@ -73,6 +73,27 @@ pub const LintDocument = struct {
         /// e.g., `const Color = union { rgba: Rgba, rgb: Rgb };`
         union_type,
         opaque_type,
+
+        pub fn name(self: TypeKind) []const u8 {
+            return switch (self) {
+                .other => "Other",
+                .@"fn" => "Function",
+                .fn_returns_type => "Type function",
+                .opaque_instance => "Opaque instance",
+                .enum_instance => "Enum instance",
+                .struct_instance => "Struct instance",
+                .union_instance => "Union instance",
+                .error_type => "Error",
+                .fn_type => "Function type",
+                .fn_type_returns_type => "Type function type",
+                .type => "Type",
+                .enum_type => "Enum",
+                .struct_type => "Struct",
+                .namespace_type => "Namespace",
+                .union_type => "Union",
+                .opaque_type => "Opaque",
+            };
+        }
     };
 
     /// Resolves a given declaration or container field by looking at the type
