@@ -13,16 +13,19 @@ An extendable and customizable **Zig linter** that is integrated from source int
 
 A **linter** is a tool that automatically checks source code for style issues, bugs, or patterns that may lead to errors, helping developers write cleaner and more reliable code.
 
-> [!TIP]
-> While Zig is `0.x.x`,  **`no_deprecated`** is important - it will do best effort to **report the usage of deprecated and removed zig features**.
-
-> [!NOTE]
-> **2025-07-03:** `zlinter` is **new**.  
+> [!IMPORTANT]
+> `zlinter` currently analyzes the Zig AST, which has limited context without trying to re-implement the Zig compiler (not doing).
 >
+> A more accurate approach would integrate more closely with the Zig build system and compiler (e.g., the proposed Zig compiler server), but for now, using the AST should be sufficient for most cases, and maybe one day `zlinter` can use newer Zig Compiler APIs as they become available.
+>
+> Also, `zlinter` is **new**.
 > - Expect [breaking changes](https://github.com/KurtWagner/zlinter/pulls?q=is%3Apr+is%3Aclosed+label%3A%22breaking+change%22) between commits.
 > - Some features may not work as documented.  
 >
 > Please [report issues](https://github.com/KurtWagner/zlinter/issues/new) and contribute fixes!
+
+> [!TIP]
+> While Zig is `0.x.x`,  **`no_deprecated`** is important - it will do best effort to **report the usage of deprecated and removed zig features**.
 
 ![Screenshot](./screenshot.png)
 
