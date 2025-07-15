@@ -41,7 +41,6 @@ pub const NodeLineageIterator = struct {
         self.* = undefined;
     }
 
-    // zlinter-disable-next-line - TODO fix bug with tuple naming!
     pub fn next(self: *Self) error{OutOfMemory}!?struct { shims.NodeIndexShim, NodeConnections } {
         if (self.queue.pop()) |node_shim| {
             const connections = self.lineage.get(node_shim.index);

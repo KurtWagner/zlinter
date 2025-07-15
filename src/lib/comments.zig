@@ -273,7 +273,6 @@ test "tokenize todo" {
 
 fn testTokenize(
     comptime lines: []const []const u8,
-    // zlinter-disable-next-line field_naming - https://github.com/KurtWagner/zlinter/issues/59
     expected: []const struct { u32, Token.Tag, []const u8 },
 ) !void {
     inline for (&.{ "\n", "\r\n" }) |new_line| {
@@ -287,7 +286,6 @@ fn testTokenize(
         const tokens = try allocTokenize(source, std.testing.allocator);
         defer std.testing.allocator.free(tokens);
 
-        // zlinter-disable-next-line field_naming - https://github.com/KurtWagner/zlinter/issues/59
         var actual = std.ArrayList(struct { u32, Token.Tag, []const u8 }).init(std.testing.allocator);
         defer actual.deinit();
         for (tokens) |token| try actual.append(.{
