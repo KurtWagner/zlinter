@@ -259,7 +259,7 @@ const Context = union(enum) {
     array: *std.ArrayList(u8),
 };
 
-// TODO: Look into the following bug?
+// TODO: remove disable - https://github.com/KurtWagner/zlinter/issues/63
 // zlinter-disable-next-line declaration_naming - This looks like a bug in zlinter as error type should be TitleCase
 const WriteError = std.fs.File.WriteError || std.mem.Allocator.Error;
 
