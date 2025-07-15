@@ -380,6 +380,16 @@ pub const Comment = struct {
             } = null,
         },
 
+        /// Represents a `// <content>` comment in the source tree
+        line: struct {
+            content: ?struct {
+                /// Inclusive
+                first: Token.Index,
+                /// Inclusive
+                last: Token.Index,
+            } = null,
+        },
+
         /// Represents a `// TODO: <content>` comment in the source tree
         todo: struct {
             content: ?struct {
@@ -412,6 +422,16 @@ pub const Comment = struct {
             .todo => |todo| {
                 std.debug.print("  .todo = .{{\n", .{});
                 if (todo.content) |content| {
+                    std.debug.print("      .content = .{{\n", .{});
+                    std.debug.print("        .first = {d},\n", .{content.first});
+                    std.debug.print("        .last = {d},\n", .{content.last});
+                    std.debug.print("      }},\n", .{});
+                }
+                std.debug.print("  }},\n", .{});
+            },
+            .line => |line| {
+                std.debug.print("  .line = .{{\n", .{});
+                if (line.content) |content| {
                     std.debug.print("      .content = .{{\n", .{});
                     std.debug.print("        .first = {d},\n", .{content.first});
                     std.debug.print("        .last = {d},\n", .{content.last});
@@ -456,84 +476,114 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
         if (!p.tokens[token].tag.isComment()) continue :tokens;
         const first_token = token;
 
-        const second_token = p.next() orelse break :tokens;
-        const maybe_kind: ?Comment.Kind = kind: switch (p.tokens[second_token].tag) {
-            .disable_lint_current_line,
-            .disable_lint_next_line,
-            => {
-                var maybe_first_rule_token: ?Token.Index = null;
-                var maybe_last_rule_token: ?Token.Index = null;
+        const kind: Comment.Kind = kind: {
+            if (p.next()) |second_token| {
+                switch (p.tokens[second_token].tag) {
+                    .disable_lint_current_line,
+                    .disable_lint_next_line,
+                    => {
+                        var maybe_first_rule_token: ?Token.Index = null;
+                        var maybe_last_rule_token: ?Token.Index = null;
 
-                while (p.peek()) |next| {
-                    switch (p.tokens[next].tag) {
-                        .word => {
-                            const slice = p.tokens[next].getSlice(source);
-                            if (std.mem.eql(u8, slice, "-")) break;
+                        while (p.peek()) |next| {
+                            switch (p.tokens[next].tag) {
+                                .word => {
+                                    const slice = p.tokens[next].getSlice(source);
+                                    if (std.mem.eql(u8, slice, "-")) break;
 
-                            if (maybe_first_rule_token == null) {
-                                maybe_first_rule_token = next;
+                                    if (maybe_first_rule_token == null) {
+                                        maybe_first_rule_token = next;
+                                    }
+                                    maybe_last_rule_token = next;
+                                },
+                                .delimiter => {
+                                    // TODO: Maybe one day report this mistake to user, for now lets just ignore it and keeping parsing
+                                    // const slice = p.tokens[next].getSlice(source);
+                                    // std.log.warn("Unexpected delimitor '{s}'. Expected a rule name", .{slice});
+                                },
+                                else => break,
                             }
-                            maybe_last_rule_token = next;
-                        },
-                        .delimiter => {
-                            // TODO: Maybe one day report this mistake to user, for now lets just ignore it and keeping parsing
-                            // const slice = p.tokens[next].getSlice(source);
-                            // std.log.warn("Unexpected delimitor '{s}'. Expected a rule name", .{slice});
-                        },
-                        else => break,
-                    }
-                    p.skip();
-                }
-
-                const line = switch (p.tokens[second_token].tag) {
-                    .disable_lint_current_line => p.tokens[second_token].line_number,
-                    .disable_lint_next_line => p.tokens[second_token].line_number + 1,
-                    else => unreachable,
-                };
-                break :kind .{
-                    .disable = .{
-                        .line_start = line,
-                        .line_end = line,
-                        .rule_ids = if (maybe_first_rule_token) |first_rule_token| .{
-                            .first = first_rule_token,
-                            .last = maybe_last_rule_token.?,
-                        } else null,
-                    },
-                };
-            },
-            .todo => {
-                while (p.peek()) |peek| {
-                    if (p.tokens[peek].tag != .delimiter) break;
-                    p.skip();
-                }
-                const first_content_token_index = p.i;
-
-                const maybe_last_token = token: {
-                    var maybe_last_token: ?Token.Index = null;
-                    while (p.peek()) |next| {
-                        if (p.tokens[next].tag.isComment()) {
-                            break :token maybe_last_token;
-                        } else {
-                            maybe_last_token = p.i;
                             p.skip();
                         }
-                    }
-                    break :token maybe_last_token;
-                };
 
-                break :kind if (maybe_last_token) |last_token_index|
-                    .{
-                        .todo = .{
-                            .content = .{
-                                .first = first_content_token_index,
-                                .last = last_token_index,
+                        const line = switch (p.tokens[second_token].tag) {
+                            .disable_lint_current_line => p.tokens[second_token].line_number,
+                            .disable_lint_next_line => p.tokens[second_token].line_number + 1,
+                            else => unreachable,
+                        };
+                        break :kind .{
+                            .disable = .{
+                                .line_start = line,
+                                .line_end = line,
+                                .rule_ids = if (maybe_first_rule_token) |first_rule_token| .{
+                                    .first = first_rule_token,
+                                    .last = maybe_last_rule_token.?,
+                                } else null,
                             },
-                        },
-                    }
-                else
-                    .{ .todo = .{ .content = null } };
-            },
-            else => continue :tokens,
+                        };
+                    },
+                    .todo => {
+                        while (p.peek()) |peek| {
+                            if (p.tokens[peek].tag != .delimiter) break;
+                            p.skip();
+                        }
+                        const first_content_token_index = p.i;
+
+                        const maybe_last_token = token: {
+                            var maybe_last_token: ?Token.Index = null;
+                            while (p.peek()) |next| {
+                                if (p.tokens[next].tag.isComment()) {
+                                    break :token maybe_last_token;
+                                } else {
+                                    maybe_last_token = p.i;
+                                    p.skip();
+                                }
+                            }
+                            break :token maybe_last_token;
+                        };
+
+                        break :kind .{
+                            .todo = .{
+                                .content = if (maybe_last_token) |last_token_index| .{
+                                    .first = first_content_token_index,
+                                    .last = last_token_index,
+                                } else null,
+                            },
+                        };
+                    },
+                    else => {
+                        p.i -= 1; // unwind to consume first token after `//`, `///`, or `//!`
+                        const first_content_token_index = p.i;
+
+                        const maybe_last_token = token: {
+                            var maybe_last_token: ?Token.Index = null;
+                            while (p.peek()) |next| {
+                                if (p.tokens[next].tag.isComment()) {
+                                    break :token maybe_last_token;
+                                } else {
+                                    maybe_last_token = p.i;
+                                    p.skip();
+                                }
+                            }
+                            break :token maybe_last_token;
+                        };
+
+                        break :kind .{
+                            .line = .{
+                                .content = if (maybe_last_token) |last_token_index| .{
+                                    .first = first_content_token_index,
+                                    .last = last_token_index,
+                                } else null,
+                            },
+                        };
+                    },
+                }
+            } else break :kind .{
+                // No token after start of comment token so empty line
+                .line = .{
+                    .content = null,
+                },
+            };
         };
 
         // Skip until we see another comment tag or EOF
@@ -541,13 +591,11 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
             if (p.tokens[index].tag.isComment()) break else p.i += 1;
         }
 
-        if (maybe_kind) |kind| {
-            try comments.append(.{
-                .first_token = first_token,
-                .last_token = p.i - 1,
-                .kind = kind,
-            });
-        }
+        try comments.append(.{
+            .first_token = first_token,
+            .last_token = p.i - 1,
+            .kind = kind,
+        });
     }
 
     return .{
@@ -560,6 +608,89 @@ test "parse - no comments" {
     try testParse(&.{""}, &.{});
     try testParse(&.{}, &.{});
     try testParse(&.{"var ok = 1;"}, &.{});
+}
+
+test "parse - todo comments" {
+    try testParse(
+        &.{
+            "// TODO:  First todo ",
+            "// todo  Second todo ",
+            "// Todo", // Deliberately empty
+        },
+        &.{
+            .{
+                .first_token = 0,
+                .last_token = 4,
+                .kind = .{
+                    .todo = .{
+                        .content = .{
+                            .first = 3,
+                            .last = 4,
+                        },
+                    },
+                },
+            },
+            .{
+                .first_token = 5,
+                .last_token = 8,
+                .kind = .{
+                    .todo = .{
+                        .content = .{
+                            .first = 7,
+                            .last = 8,
+                        },
+                    },
+                },
+            },
+            .{
+                .first_token = 9,
+                .last_token = 10,
+                .kind = .{
+                    .todo = .{},
+                },
+            },
+        },
+    );
+}
+
+test "parse - line comments" {
+    try testParse(&.{
+        "//! Hello from file comment",
+        "// Hello from a line ",
+        "/// ", // Deliberately empty
+    }, &.{
+        .{
+            .first_token = 0,
+            .last_token = 4,
+            .kind = .{
+                .line = .{
+                    .content = .{
+                        .first = 1,
+                        .last = 4,
+                    },
+                },
+            },
+        },
+        .{
+            .first_token = 5,
+            .last_token = 9,
+            .kind = .{
+                .line = .{
+                    .content = .{
+                        .first = 6,
+                        .last = 9,
+                    },
+                },
+            },
+        },
+        .{
+            .first_token = 10,
+            .last_token = 10,
+            .kind = .{
+                .line = .{},
+            },
+        },
+    });
 }
 
 test "parse - disable next line comments" {
