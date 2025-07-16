@@ -246,9 +246,15 @@ pub fn main() !u8 {
         defer if (rule_filter_map) |*m| m.deinit(gpa);
 
         printer.println(.verbose, "  - Rules", .{});
+
+        var rule_run_arena = std.heap.ArenaAllocator.init(gpa);
+        defer rule_run_arena.deinit();
+
         for (rules) |rule| {
             if (rule_filter_map) |map|
                 if (!map.contains(rule.rule_id)) continue;
+
+            defer _ = rule_run_arena.reset(.retain_capacity);
 
             const rule_result = try rule.run(
                 rule,
@@ -261,8 +267,13 @@ pub fn main() !u8 {
                             if (rule_config_overrides.get(rule.rule_id)) |zon_path| {
                                 inline for (@typeInfo(configs).@"struct".decls) |decl| {
                                     if (std.mem.eql(u8, rule.rule_id, decl.name)) {
-                                        // TODO: This leaks memory...
-                                        break :config @as(*anyopaque, @constCast(try allocZon(@FieldType(configs, decl.name), zon_path, gpa)));
+                                        break :config @as(*anyopaque, @constCast(
+                                            try allocZon(
+                                                @TypeOf(@field(configs, decl.name)),
+                                                zon_path,
+                                                rule_run_arena.allocator(),
+                                            ),
+                                        ));
                                     }
                                 }
                             }
@@ -642,18 +653,25 @@ fn allocZon(T: type, file_path: []const u8, gpa: std.mem.Allocator) !*T {
     });
     defer file.close();
 
-    const file_content = try file.reader().readAllAlloc(gpa, max_file_size_bytes);
-    defer gpa.free(file_content);
-
-    const null_terminated = try gpa.dupeZ(u8, file_content);
+    const null_terminated = value: {
+        const file_content = try file.reader().readAllAlloc(gpa, max_file_size_bytes);
+        defer gpa.free(file_content);
+        break :value try gpa.dupeZ(u8, file_content);
+    };
     defer gpa.free(null_terminated);
 
-    var status: std.zon.parse.Status = undefined;
+    var status: std.zon.parse.Status = .{};
 
     const result = try gpa.create(T);
     errdefer gpa.destroy(result);
 
-    result.* = std.zon.parse.fromSlice(T, gpa, file_content, &status, .{}) catch |e| {
+    result.* = std.zon.parse.fromSlice(
+        T,
+        gpa,
+        null_terminated,
+        &status,
+        .{},
+    ) catch |e| {
         std.log.err("Failed to parse rule config: " ++ switch (zlinter.version.zig) {
             .@"0.14" => "{}",
             .@"0.15" => "{f}",
