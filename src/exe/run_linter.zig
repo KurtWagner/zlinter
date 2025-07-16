@@ -654,13 +654,16 @@ fn allocZon(T: type, file_path: []const u8, gpa: std.mem.Allocator) !*T {
     defer file.close();
 
     const null_terminated = value: {
-        const file_content = try file.reader().readAllAlloc(gpa, max_file_size_bytes);
+        const file_content = try file.deprecatedReader().readAllAlloc(gpa, max_file_size_bytes);
         defer gpa.free(file_content);
         break :value try gpa.dupeZ(u8, file_content);
     };
     defer gpa.free(null_terminated);
 
-    var status: std.zon.parse.Status = .{};
+    var status: switch(zlinter.version.zig) {
+        .@"0.14" => std.zon.parse.Status,
+        .@"0.15" => std.zon.parse.Diagnostics,
+    }= .{};
 
     const result = try gpa.create(T);
     errdefer gpa.destroy(result);
