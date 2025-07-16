@@ -9,7 +9,7 @@ const Token = struct {
     first_byte: usize,
     len: usize,
     /// Line number in source document that this token appears on
-    line_number: u32,
+    line: u32,
     tag: Tag,
 
     const Tag = enum {
@@ -56,14 +56,18 @@ const Token = struct {
 const Tokenizer = struct {
     /// Current byte offset in source
     i: usize = 0,
-
     /// Current line number (increments when seeing a new line)
-    line_number: u32 = 0,
+    line: u32 = 0,
 };
 
-fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory}![]const Token {
+/// Returns tokens and line starts (line starts inclusive zero index)
+fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory}!struct { []const Token, []const usize } {
     var tokens = std.ArrayList(Token).init(gpa);
     defer tokens.deinit();
+
+    var line_starts = std.ArrayList(usize).init(gpa);
+    defer line_starts.deinit();
+    try line_starts.append(0); // First line starts on byte zero
 
     const State = enum {
         parsing,
@@ -92,7 +96,8 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
         },
         .consume_newline => {
             t.i += 1;
-            t.line_number += 1;
+            t.line += 1;
+            try line_starts.append(t.i);
             continue :state .parsing;
         },
         .consume_comment => {
@@ -109,7 +114,7 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
                 .tag = tag,
                 .first_byte = start,
                 .len = len,
-                .line_number = t.line_number,
+                .line = t.line,
             });
 
             start = t.i;
@@ -121,7 +126,7 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
                             .tag = Token.keywords.get(token_slice) orelse .word,
                             .first_byte = start,
                             .len = t.i - start,
-                            .line_number = t.line_number,
+                            .line = t.line,
                         });
                     }
 
@@ -132,7 +137,7 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
                             .tag = .delimiter,
                             .first_byte = t.i,
                             .len = 1,
-                            .line_number = t.line_number,
+                            .line = t.line,
                         }),
                         ' ', '\t', '\r' => {},
                         else => unreachable,
@@ -144,7 +149,24 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
             };
         },
     }
-    return tokens.toOwnedSlice();
+    return .{ try tokens.toOwnedSlice(), try line_starts.toOwnedSlice() };
+}
+
+test "tokenize line_starts" {
+    const tokens, const line_starts = try allocTokenize(
+        \\var a = 1;
+        \\var b = 11;
+        \\var c = 123;
+        \\var d = 1234;
+        \\
+    , std.testing.allocator);
+    defer std.testing.allocator.free(tokens);
+    defer std.testing.allocator.free(line_starts);
+
+    std.testing.expectEqualDeep(&[_]usize{ 0, 11, 23, 36, 50 }, line_starts) catch |e| {
+        std.debug.print("Actual: {any}\n", .{line_starts});
+        return e;
+    };
 }
 
 test "tokenize no comments" {
@@ -283,13 +305,14 @@ fn testTokenize(
                 source = source ++ new_line ++ line;
         }
 
-        const tokens = try allocTokenize(source, std.testing.allocator);
+        const tokens, const line_starts = try allocTokenize(source, std.testing.allocator);
+        defer std.testing.allocator.free(line_starts);
         defer std.testing.allocator.free(tokens);
 
         var actual = std.ArrayList(struct { u32, Token.Tag, []const u8 }).init(std.testing.allocator);
         defer actual.deinit();
         for (tokens) |token| try actual.append(.{
-            token.line_number,
+            token.line,
             token.tag,
             token.getSlice(source),
         });
@@ -313,17 +336,37 @@ fn testTokenize(
     }
 }
 
-pub const DocumentComments = struct {
+pub const CommentsDocument = struct {
     tokens: []const Token,
+    /// Zero index inclusive
+    line_starts: []const usize,
     comments: []const Comment,
 
-    pub fn deinit(self: *DocumentComments, gpa: std.mem.Allocator) void {
-        gpa.free(self.comments);
-        gpa.free(self.tokens);
+    pub fn deinit(self: *CommentsDocument, allocator: std.mem.Allocator) void {
+        allocator.free(self.comments);
+        allocator.free(self.tokens);
+        allocator.free(self.line_starts);
         self.* = undefined;
     }
 
-    pub fn debugPrint(self: DocumentComments, file_path: []const u8, source: []const u8) void {
+    // TODO: Add unit tests for this new method:
+    // Returns the slice containing the text content of the comment. For example
+    // for a todo, this would be all text after the todo keyword.
+    pub fn getCommentContent(self: @This(), comment: Comment, source: []const u8) []const u8 {
+        return switch (comment.kind) {
+            .line => |line| if (line.content) |c|
+                source[self.tokens[c.first].first_byte .. self.tokens[c.last].first_byte + self.tokens[c.last].len]
+            else
+                "",
+            .todo => |todo| if (todo.content) |c|
+                source[self.tokens[c.first].first_byte .. self.tokens[c.last].first_byte + self.tokens[c.last].len]
+            else
+                "",
+            .disable => source[self.tokens[comment.first_token + 1].first_byte .. self.tokens[comment.last_token].first_byte + self.tokens[comment.last_token].len],
+        };
+    }
+
+    pub fn debugPrint(self: CommentsDocument, file_path: []const u8, source: []const u8) void {
         for (self.comments) |comment| {
             switch (comment.kind) {
                 .todo => |todo| {
@@ -463,8 +506,8 @@ const Parser = struct {
     }
 };
 
-pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory}!DocumentComments {
-    const tokens = try allocTokenize(source, gpa);
+pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory}!CommentsDocument {
+    const tokens, const line_starts = try allocTokenize(source, gpa);
 
     var comments = std.ArrayList(Comment).init(gpa);
     defer comments.deinit();
@@ -505,8 +548,8 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
                         }
 
                         const line = switch (p.tokens[second_token].tag) {
-                            .disable_lint_current_line => p.tokens[second_token].line_number,
-                            .disable_lint_next_line => p.tokens[second_token].line_number + 1,
+                            .disable_lint_current_line => p.tokens[second_token].line,
+                            .disable_lint_next_line => p.tokens[second_token].line + 1,
                             else => unreachable,
                         };
                         break :kind .{
@@ -599,6 +642,7 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
     return .{
         .tokens = tokens,
         .comments = try comments.toOwnedSlice(),
+        .line_starts = line_starts,
     };
 }
 
