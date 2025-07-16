@@ -55,6 +55,10 @@ rules: ?[][]const u8 = null,
 /// Whether to write additional information out to stdout.
 verbose: bool = false,
 
+/// Contains rule id to path names for overriding the build time config for
+/// a rule. This is typically just useful for internal testing.
+rule_config_overrides: ?*std.BufMap = null,
+
 pub fn deinit(self: Args, allocator: std.mem.Allocator) void {
     if (self.zig_exe) |zig_exe|
         allocator.free(zig_exe);
@@ -64,6 +68,11 @@ pub fn deinit(self: Args, allocator: std.mem.Allocator) void {
 
     if (self.zig_lib_directory) |zig_lib_directory|
         allocator.free(zig_lib_directory);
+
+    if (self.rule_config_overrides) |rule_config_overrides| {
+        rule_config_overrides.deinit();
+        allocator.destroy(rule_config_overrides);
+    }
 
     inline for (&.{
         "exclude_paths",
@@ -89,6 +98,7 @@ pub fn allocParse(
     var index: usize = 0;
 
     var lint_args = Args{};
+    errdefer lint_args.deinit(allocator);
 
     var unknown_args = std.ArrayListUnmanaged([]const u8).empty;
     defer unknown_args.deinit(allocator);
@@ -116,6 +126,13 @@ pub fn allocParse(
     var rules = std.ArrayListUnmanaged([]const u8).empty;
     defer rules.deinit(allocator);
 
+    const rule_config_overrides = try allocator.create(std.BufMap);
+    rule_config_overrides.* = std.BufMap.init(allocator);
+    errdefer {
+        rule_config_overrides.deinit();
+        allocator.destroy(rule_config_overrides);
+    }
+
     const State = enum {
         parsing,
         fix_arg,
@@ -131,6 +148,7 @@ pub fn allocParse(
         exclude_path_arg,
         build_include_path_arg,
         build_exclude_path_arg,
+        rule_config_arg,
     };
 
     state: switch (State.parsing) {
@@ -164,6 +182,8 @@ pub fn allocParse(
                     continue :state State.global_cache_root_arg;
                 } else if (std.mem.eql(u8, arg, "--format")) {
                     continue :state State.format_arg;
+                } else if (std.mem.eql(u8, arg, "--rule-config")) {
+                    continue :state State.rule_config_arg;
                 }
                 continue :state State.unknown_arg;
             }
@@ -294,6 +314,28 @@ pub fn allocParse(
             try unknown_args.append(allocator, try allocator.dupe(u8, args[index]));
             continue :state State.parsing;
         },
+        .rule_config_arg => {
+            index += 1;
+            if (index == args.len) {
+                rendering.process_printer.println(.err, "--rule-config arg missing rule id", .{});
+                return error.InvalidArgs;
+            }
+            const rule_id = args[index];
+
+            index += 1;
+            if (index == args.len) {
+                rendering.process_printer.println(.err, "--rule-config arg missing zon file path", .{});
+                return error.InvalidArgs;
+            }
+            const zon_file_path = args[index];
+
+            if (rule_config_overrides.get(rule_id) != null) {
+                rendering.process_printer.println(.err, "--rule-config rule id '{s}' already set", .{rule_id});
+                return error.InvalidArgs;
+            }
+            try rule_config_overrides.put(rule_id, zon_file_path);
+            continue :state State.parsing;
+        },
     }
 
     if (unknown_args.items.len > 0) {
@@ -316,6 +358,12 @@ pub fn allocParse(
     }
     if (rules.items.len > 0) {
         lint_args.rules = try rules.toOwnedSlice(allocator);
+    }
+    if (rule_config_overrides.count() > 0) {
+        lint_args.rule_config_overrides = rule_config_overrides;
+    } else {
+        rule_config_overrides.deinit();
+        allocator.destroy(rule_config_overrides);
     }
 
     return lint_args;
@@ -683,6 +731,10 @@ test "allocParse fuzz" {
         );
         defer args.deinit(std.testing.allocator);
     }
+}
+
+test "allocParse with rule_config arg" {
+    // TODO: Write this before merging!
 }
 
 const testing = struct {
