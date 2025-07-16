@@ -437,7 +437,7 @@ fn cmpFix(context: void, a: zlinter.results.LintProblemFix, b: zlinter.results.L
 
 /// Allocates an AST error into a string.
 ///
-/// The returned string must be freed by the caller. i.e., allocator.free(error_message);
+/// The returned string must be freed by the caller. i.e., `allocator.free(error_message);`
 fn allocAstErrorMsg(
     ast: std.zig.Ast,
     err: std.zig.Ast.Error,
