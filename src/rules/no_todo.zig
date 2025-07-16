@@ -1,6 +1,6 @@
 //! Disallows todo comments
 //!
-//! Todo comments are often used to indicate missing logic, features or the existence
+//! `TODO` comments are often used to indicate missing logic, features or the existence
 //! of bugs. While this is useful during development, leaving them untracked can
 //! lead to them being forgotten or not prioritised correctly.
 //!
@@ -49,26 +49,31 @@ fn run(
     var content_accumulator = std.ArrayList(u8).init(allocator);
     defer content_accumulator.deinit();
 
+    const tree = doc.handle.tree;
+    const source = tree.source;
+
     skip: for (doc.comments.comments) |comment| {
         if (comment.kind != .todo) continue :skip;
 
         const todo = comment.kind.todo;
-        no_skip: {
-            if (!config.exclude_if_contains_issue_number and !config.exclude_if_contains_url) break :no_skip;
 
-            const content = todo.content orelse break :no_skip;
-            var token_index: zlinter.comments.Token.Index = content.first;
-            while (token_index <= content.last) : (token_index += 1) {
-                const token = doc.comments.tokens[token_index];
-                if (token.tag != .word) continue;
+        if (config.exclude_if_contains_issue_number or
+            config.exclude_if_contains_url)
+        {
+            if (todo.inner_content) |inner_content| {
+                if (isExcluded(
+                    doc.comments.getRangeContent(inner_content, source),
+                    config,
+                ))
+                    continue :skip;
+            }
 
-                const slice = token.getSlice(doc.handle.tree.source);
-                if (config.exclude_if_contains_issue_number and looksLikeIssueId(slice)) {
+            if (todo.content) |content| {
+                if (isExcluded(
+                    doc.comments.getRangeContent(content, source),
+                    config,
+                ))
                     continue :skip;
-                }
-                if (config.exclude_if_contains_issue_number and looksLikeUrl(slice)) {
-                    continue :skip;
-                }
             }
         }
 
@@ -92,6 +97,27 @@ fn run(
         )
     else
         null;
+}
+
+// It would be nice to walk to the comment tokens but we use ":" as a special
+// character, which makes urls (e.g, http://) more difficult so to keep it
+// super simple we'll iterate again using whitespace delimiter. This will
+// probably be ok as we're just doing this for TODO comments not all comments.
+fn isExcluded(content: []const u8, config: Config) bool {
+    var it = std.mem.splitAny(
+        u8,
+        content,
+        &std.ascii.whitespace,
+    );
+    while (it.next()) |word| {
+        if (config.exclude_if_contains_issue_number and looksLikeIssueId(word)) {
+            return true;
+        }
+        if (config.exclude_if_contains_issue_number and looksLikeUrl(word)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 fn looksLikeIssueId(content: []const u8) bool {
