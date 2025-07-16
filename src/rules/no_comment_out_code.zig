@@ -1,6 +1,27 @@
-//! Enforces that there's no source code comments that look like code.
+//! Discourage leaving commented-out code in committed files.
 //!
-//! Code encased in backticks, like `this` is ignored.
+//! **Why?**
+//!
+//! Commenting out blocks of old or unused code might seem helpful during development, but leaving them behind creates clutter and confusion over time.
+//!
+//! **Problems:**
+//!
+//! * Makes files noisy - harder to read and navigate.
+//! * Creates dead code that might be mistakenly reused or assumed to be maintained.
+//! * Can increase merge conflicts and noise in diffs.
+//! * Hides real version history — version control should preserve old code, not your comments!
+//!
+//! **What to do instead?**:
+//!
+//! * If you don’t need it, delete it — you can always recover it from version control.
+//! * If it’s experimental, keep it on a branch or behind a flag instead.
+//!
+//! **Notes:**
+//!
+//! * Comments that contain back ticks, like `this("example")` will be ignored
+//! * The heuristic of what looks like code isn't perfect and may have false
+//! negatives (e.g., commenting out struct fields) but will slowly improve
+//! overtime as the linter evolves.
 
 /// Config for no_comment_out_code rule.
 pub const Config = struct {

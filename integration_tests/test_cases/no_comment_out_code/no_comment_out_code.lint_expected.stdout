@@ -1,0 +1,16 @@
+warning Avoid code in comments [test_cases/no_comment_out_code/no_comment_out_code.input.zig:8:5] no_comment_out_code
+
+ 8 |     // std.debug.print("Hello world", .{});
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Avoid code in comments [test_cases/no_comment_out_code/no_comment_out_code.input.zig:14:1] no_comment_out_code
+
+ 14 | // pub fn myFunc() u32 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^
+ 15 | //     return 10;
+    | ^^^^^^^^^^^^^^^^^
+ 16 | // }
+    | ^^^^^
+
+x 2 warnings
+x 1 skipped
