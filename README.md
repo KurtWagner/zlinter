@@ -19,6 +19,7 @@ A **linter** is a tool that automatically checks source code for style issues, b
 > A more accurate approach could be to integrate more closely with the Zig build system and compiler (e.g., the proposed Zig compiler server), but for now, using the AST should be sufficient for most cases, and maybe one day `zlinter` can use newer Zig Compiler APIs as they become available. The [milestones](#milestones) will help inform this.
 >
 > Also, `zlinter` is **new**.
+>
 > - Expect [breaking changes](https://github.com/KurtWagner/zlinter/pulls?q=is%3Apr+is%3Aclosed+label%3A%22breaking+change%22) between commits.
 > - Some features may not work as documented.  
 >
@@ -43,6 +44,7 @@ A **linter** is a tool that automatically checks source code for style issues, b
   - [file_naming](RULES.md#file_naming)
   - [function_naming](RULES.md#function_naming)
   - [max_positional_args](RULES.md#max_positional_args)
+  - [no_comment_out_code](RULES.md#no_comment_out_code)
   - [no_deprecated](RULES.md#no_deprecated)
   - [no_hidden_allocations](RULES.md#no_hidden_allocations)
   - [no_inferred_error_unions](RULES.md#no_inferred_error_unions)

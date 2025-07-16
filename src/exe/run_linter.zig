@@ -233,12 +233,6 @@ pub fn main() !u8 {
         }
         if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "  - Process syntax errors: {d}ms", .{ms});
 
-        var comments = try zlinter.comments.allocParse(ast.source, gpa);
-        defer comments.deinit(gpa);
-        // comments.debugPrint(lint_file.pathname, ast.source);
-
-        if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "  - Parsing doc comments: {d}ms", .{ms});
-
         var rule_filter_map = map: {
             var map = std.StringHashMapUnmanaged(void).empty;
             if (args.rules) |filter_rules| {
@@ -276,7 +270,7 @@ pub fn main() !u8 {
 
             if (rule_result) |result| {
                 for (result.problems) |*err| {
-                    err.disabled_by_comment = shouldSkip(comments, err.*, ast.source);
+                    err.disabled_by_comment = shouldSkip(doc.comments, err.*, ast.source);
                 }
                 try results.append(gpa, result);
             }
@@ -463,7 +457,7 @@ fn allocAstErrorMsg(
 ///
 /// Returns true if a lint error should be skipped / ignored due to a comment
 /// in the source code.
-fn shouldSkip(doc_comments: zlinter.comments.DocumentComments, err: zlinter.results.LintProblem, source: []const u8) bool {
+fn shouldSkip(doc_comments: zlinter.comments.CommentsDocument, err: zlinter.results.LintProblem, source: []const u8) bool {
     for (doc_comments.comments) |comment| {
         switch (comment.kind) {
             .disable => |disable_comment| {

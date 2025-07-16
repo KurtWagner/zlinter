@@ -199,6 +199,24 @@ pub const LintProblemLocation = struct {
         }, LintProblemLocation.endOfToken(ast, 7));
     }
 
+    pub fn startOfComment(doc: comments.CommentsDocument, comment: comments.Comment) LintProblemLocation {
+        const first_token = doc.tokens[comment.first_token];
+        return .{
+            .byte_offset = first_token.first_byte,
+            .line = first_token.line,
+            .column = first_token.first_byte - doc.line_starts[first_token.line],
+        };
+    }
+
+    pub fn endOfComment(doc: comments.CommentsDocument, comment: comments.Comment) LintProblemLocation {
+        const last_token = doc.tokens[comment.last_token];
+        return .{
+            .byte_offset = last_token.first_byte + last_token.len,
+            .line = last_token.line,
+            .column = last_token.first_byte + last_token.len - doc.line_starts[last_token.line],
+        };
+    }
+
     pub fn debugPrint(self: @This(), writer: anytype) void {
         self.debugPrintWithIndent(writer, 0);
     }
@@ -295,3 +313,4 @@ pub const LintProblemFix = struct {
 
 const std = @import("std");
 const rules = @import("rules.zig");
+const comments = @import("comments.zig");

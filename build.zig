@@ -19,6 +19,7 @@ pub const BuiltinLintRule = enum {
     no_hidden_allocations,
     switch_case_ordering,
     max_positional_args,
+    no_comment_out_code,
     no_literal_args,
     no_swallow_error,
     no_panic,
@@ -303,6 +304,7 @@ pub fn build(b: *std.Build) void {
                 buildBuiltinRule(b, .require_doc_comment, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .no_hidden_allocations, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .no_swallow_error, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+                buildBuiltinRule(b, .no_comment_out_code, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .no_panic, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .max_positional_args, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(
