@@ -105,16 +105,70 @@ fn looksLikeCode(content: []const u8, gpa: std.mem.Allocator) !bool {
     if (content.len == 0) return false;
     if (std.mem.containsAtLeastScalar(u8, content, 1, '`')) return false;
 
-    const container = try std.fmt.allocPrintZ(gpa, "fn wrap() void {{\n{s}\n}}\n", .{content});
-    defer gpa.free(container);
+    const statement_container_fmt = "fn wrap() void {{\n{s}\n}}\n";
+    const declaration_container_fmt = "{s}";
 
-    var ast = try std.zig.Ast.parse(gpa, container, .zig);
-    defer ast.deinit(gpa);
+    const buffer = try gpa.allocSentinel(u8, content.len + @max(statement_container_fmt.len, declaration_container_fmt.len) + 1, 0);
+    defer gpa.free(buffer);
 
-    if (ast.nodes.len <= 1) return false;
-    if (ast.errors.len > 0) return false;
+    const looks_like_statement = looks_like_statement: {
+        const container_code = std.fmt.bufPrintZ(buffer, statement_container_fmt, .{content}) catch unreachable;
+        var ast = try std.zig.Ast.parse(gpa, container_code, .zig);
+        defer ast.deinit(gpa);
 
-    return true;
+        const root_and_wrap_fn_nodes = 5;
+        if (ast.nodes.len <= root_and_wrap_fn_nodes) break :looks_like_statement false;
+        if (ast.errors.len > 0) break :looks_like_statement false;
+        break :looks_like_statement true;
+    };
+    if (looks_like_statement) return true;
+
+    const looks_like_declaration = looks_like_declaration: {
+        const root_code = std.fmt.bufPrintZ(buffer, declaration_container_fmt, .{content}) catch unreachable;
+        var ast = try std.zig.Ast.parse(gpa, root_code, .zig);
+        defer ast.deinit(gpa);
+
+        // zlinter-disable-next-line no_comment_out_code
+        // var dummy_node: u32 = 0;
+        // while (dummy_node < ast.nodes.len) : (dummy_node += 1) {
+        //     std.debug.print("{s} = '{s}'\n", .{ @tagName(zlinter.shims.nodeTag(ast, dummy_node)), ast.getNodeSource(dummy_node) });
+        // }
+
+        const root_node = 1;
+        if (ast.nodes.len <= root_node) break :looks_like_declaration false;
+        if (ast.errors.len > 0) break :looks_like_declaration false;
+
+        var node = zlinter.shims.NodeIndexShim.init(0);
+        while (node.index < ast.nodes.len) : (node.index += 1) {
+            switch (zlinter.shims.nodeTag(ast, node.toNodeIndex())) {
+                .test_decl,
+                .global_var_decl,
+                .local_var_decl,
+                .simple_var_decl,
+                .aligned_var_decl,
+                .fn_decl,
+                .container_field_align,
+                .container_field,
+                => break :looks_like_declaration true,
+                else => {
+                    // TODO: Work out the container field situation as the AST
+                    // appears to not be behaving how it is documented.
+                    // zlinter-disable-next-line no_comment_out_code
+                    // if (ast.fullContainerField(node.toNodeIndex())) |container_field| {
+                    //     std.debug.print("{} - '{s}'\n", .{ container_field.ast, ast.tokenSlice(container_field.ast.main_token) });
+                    //     if (zlinter.shims.NodeIndexShim.initOptional(container_field.ast.type_expr) != null and
+                    //         ast.lastToken(node.toNodeIndex()) + 1 < ast.tokens.len and
+                    //         ast.tokens.items(.tag)[ast.lastToken(node.toNodeIndex()) + 1] == .comma)
+                    //     {
+                    //         break :looks_like_declaration true;
+                    //     }
+                    // }
+                },
+            }
+        }
+        break :looks_like_declaration false;
+    };
+    return looks_like_declaration;
 
     // zlinter-disable-next-line no_comment_out_code
     // const looks_like_code = looks_like_code: {
@@ -195,6 +249,48 @@ fn looksLikeCode(content: []const u8, gpa: std.mem.Allocator) !bool {
     // };
     //
     // return looks_like_code;
+}
+
+test "looksLikeCode when true" {
+    inline for (&.{
+        "var a: u32 = 10;",
+        \\std.debug.print("Hello world", .{});
+        ,
+        \\ const a = @import("b");
+        ,
+        \\ pub fn example() u32 {
+        \\  return 10; 
+        \\}
+        // ,
+        // \\ field: u32,
+        // ,
+        // \\ field: u32 = 1,
+    }) |content| {
+        std.testing.expect(try looksLikeCode(content, std.testing.allocator)) catch |e| {
+            std.debug.print("Expected is code: '{s}'\n", .{content});
+            return e;
+        };
+    }
+}
+
+test "looksLikeCode when false" {
+    inline for (&.{
+        "e.g., `var a: u32 = 10;`",
+        \\e.g., `std.debug.print("Hello world", .{});`
+        ,
+        "a",
+        "var",
+        "const",
+        "this is a single line comment",
+        \\ field,
+        ,
+        \\ field = 1,
+    }) |content| {
+        std.testing.expect(!(try looksLikeCode(content, std.testing.allocator))) catch |e| {
+            std.debug.print("Expected not code: '{s}'\n", .{content});
+            return e;
+        };
+    }
 }
 
 test {
