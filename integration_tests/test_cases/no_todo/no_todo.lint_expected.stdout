@@ -1,0 +1,31 @@
+warning Avoid todo comments that don't link to a tracked issue [test_cases/no_todo/no_todo.input.zig:17:1] no_todo
+
+ 17 | // TODO()
+    | ^^^^^^^^^^
+
+warning Avoid todo comments that don't link to a tracked issue [test_cases/no_todo/no_todo.input.zig:18:1] no_todo
+
+ 18 | // TODO
+    | ^^^^^^^^
+
+warning Avoid todo comments that don't link to a tracked issue [test_cases/no_todo/no_todo.input.zig:19:1] no_todo
+
+ 19 | // TODO: content
+    | ^^^^^^^^^^^^^^^^^
+
+warning Avoid todo comments that don't link to a tracked issue [test_cases/no_todo/no_todo.input.zig:20:1] no_todo
+
+ 20 | // TODO content of todo
+    | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Avoid todo comments that don't link to a tracked issue [test_cases/no_todo/no_todo.input.zig:21:1] no_todo
+
+ 21 | // TODO(): content
+    | ^^^^^^^^^^^^^^^^^^^
+
+warning Avoid todo comments that don't link to a tracked issue [test_cases/no_todo/no_todo.input.zig:22:1] no_todo
+
+ 22 | // TODO(10) this will be caught
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+x 6 warnings

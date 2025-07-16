@@ -67,6 +67,7 @@ pub fn build(b: *std.Build) !void {
         builder.addRule(.{ .builtin = .no_unused }, .{});
         builder.addRule(.{ .builtin = .no_panic }, .{});
         builder.addRule(.{ .builtin = .no_comment_out_code }, .{});
+        builder.addRule(.{ .builtin = .no_todo }, .{});
         builder.addRule(.{ .builtin = .no_undefined }, .{});
         builder.addRule(.{ .builtin = .require_doc_comment }, .{});
         builder.addRule(.{ .builtin = .max_positional_args }, .{});
