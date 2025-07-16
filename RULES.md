@@ -477,6 +477,37 @@ For example, `catch {}` and `catch unreachable`
 
   * **Default:** `true`
 
+## `no_todo`
+
+Disallows todo comments
+
+Todo comments are often used to indicate missing logic, features or the existence
+of bugs. While this is useful during development, leaving them untracked can
+lead to them being forgotten or not prioritised correctly.
+
+If you must leave a todo comment it's best to include a link to an issue
+in your issue tracker so it's visible, prioritized and won't be forgotten.
+
+**Config options:**
+
+* `severity`
+
+  * The severity (off, warning, error).
+
+  * **Default:** `.warning`
+
+* `exclude_if_contains_issue_number`
+
+  * Exclude todo comments that contain a `#[0-9]+` in a word token or nested in the todo suffix. For example, `// TODO(http://my-issue-tracker.com/10): <info>` or `// TODO: Fix http://my-issue-tracker.com/10`
+
+  * **Default:** `true`
+
+* `exclude_if_contains_url`
+
+  * Exclude todo comments that contain a url in a word token or nested in the todo suffix. For example, `// TODO(http://my-issue-tracker.com/10): <info>` or `// TODO: Fix http://my-issue-tracker.com/10`
+
+  * **Default:** `true`
+
 ## `no_undefined`
 
 Enforces no uses of `undefined`. There are some valid use case, in which

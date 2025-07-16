@@ -3,8 +3,8 @@
 //! Some comments can alter the behaviour of the linter. e.g., a comment may
 //! disable a specific rule on a specific line.
 
-const Token = struct {
-    const Index = u32;
+pub const Token = struct {
+    pub const Index = u32;
     /// Inclusive
     first_byte: usize,
     len: usize,
@@ -48,7 +48,7 @@ const Token = struct {
         .{ "Todo", .todo },
     });
 
-    inline fn getSlice(self: Token, source: []const u8) []const u8 {
+    pub inline fn getSlice(self: Token, source: []const u8) []const u8 {
         return source[self.first_byte .. self.first_byte + self.len];
     }
 };
