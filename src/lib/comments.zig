@@ -3,8 +3,8 @@
 //! Some comments can alter the behaviour of the linter. e.g., a comment may
 //! disable a specific rule on a specific line.
 
-const Token = struct {
-    const Index = u32;
+pub const Token = struct {
+    pub const Index = u32;
     /// Inclusive
     first_byte: usize,
     len: usize,
@@ -25,8 +25,12 @@ const Token = struct {
         disable_lint_current_line,
         /// e.g., `zlinter-disable-current-line`
         disable_lint_next_line,
-        /// e.g., `:`
-        delimiter,
+        /// `:`
+        colon,
+        /// `(`
+        open_parenthesis,
+        /// `)`
+        close_parenthesis,
         word,
 
         fn isComment(self: Tag) bool {
@@ -48,7 +52,7 @@ const Token = struct {
         .{ "Todo", .todo },
     });
 
-    inline fn getSlice(self: Token, source: []const u8) []const u8 {
+    pub inline fn getSlice(self: Token, source: []const u8) []const u8 {
         return source[self.first_byte .. self.first_byte + self.len];
     }
 };
@@ -119,7 +123,7 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
 
             start = t.i;
             while (true) switch (source[t.i]) {
-                ':', '\t', ' ', '\n', '\r', 0 => |c| {
+                ':', '(', ')', '\t', ' ', '\n', '\r', 0 => |c| {
                     if (start < t.i) {
                         const token_slice = source[start..t.i];
                         try tokens.append(.{
@@ -134,7 +138,19 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
                         0 => break,
                         '\n' => continue :state .consume_newline,
                         ':' => try tokens.append(.{
-                            .tag = .delimiter,
+                            .tag = .colon,
+                            .first_byte = t.i,
+                            .len = 1,
+                            .line = t.line,
+                        }),
+                        ')' => try tokens.append(.{
+                            .tag = .close_parenthesis,
+                            .first_byte = t.i,
+                            .len = 1,
+                            .line = t.line,
+                        }),
+                        '(' => try tokens.append(.{
+                            .tag = .open_parenthesis,
                             .first_byte = t.i,
                             .len = 1,
                             .line = t.line,
@@ -276,10 +292,13 @@ test "tokenize todo" {
         "//! TODO: something a ",
         "/// todo something b",
         "// Todo something c",
+        "// Todo(inner word) something d",
+        "/// TODO(inner): something e",
+        "/// TODO(): something f",
     }, &.{
         .{ 0, .file_comment, "//!" },
         .{ 0, .todo, "TODO" },
-        .{ 0, .delimiter, ":" },
+        .{ 0, .colon, ":" },
         .{ 0, .word, "something" },
         .{ 0, .word, "a" },
         .{ 1, .doc_comment, "///" },
@@ -290,6 +309,29 @@ test "tokenize todo" {
         .{ 2, .todo, "Todo" },
         .{ 2, .word, "something" },
         .{ 2, .word, "c" },
+        .{ 3, .source_comment, "//" },
+        .{ 3, .todo, "Todo" },
+        .{ 3, .open_parenthesis, "(" },
+        .{ 3, .word, "inner" },
+        .{ 3, .word, "word" },
+        .{ 3, .close_parenthesis, ")" },
+        .{ 3, .word, "something" },
+        .{ 3, .word, "d" },
+        .{ 4, .doc_comment, "///" },
+        .{ 4, .todo, "TODO" },
+        .{ 4, .open_parenthesis, "(" },
+        .{ 4, .word, "inner" },
+        .{ 4, .close_parenthesis, ")" },
+        .{ 4, .colon, ":" },
+        .{ 4, .word, "something" },
+        .{ 4, .word, "e" },
+        .{ 5, .doc_comment, "///" },
+        .{ 5, .todo, "TODO" },
+        .{ 5, .open_parenthesis, "(" },
+        .{ 5, .close_parenthesis, ")" },
+        .{ 5, .colon, ":" },
+        .{ 5, .word, "something" },
+        .{ 5, .word, "f" },
     });
 }
 
@@ -366,6 +408,10 @@ pub const CommentsDocument = struct {
         };
     }
 
+    pub fn getRangeContent(self: @This(), range: Comment.Range, source: []const u8) []const u8 {
+        return source[self.tokens[range.first].first_byte .. self.tokens[range.last].first_byte + self.tokens[range.last].len];
+    }
+
     pub fn debugPrint(self: CommentsDocument, file_path: []const u8, source: []const u8) void {
         for (self.comments) |comment| {
             switch (comment.kind) {
@@ -402,6 +448,13 @@ pub const Comment = struct {
     last_token: Token.Index,
     kind: Kind,
 
+    const Range = struct {
+        /// Inclusive
+        first: Token.Index,
+        /// Inclusive
+        last: Token.Index,
+    };
+
     const Kind = union(enum) {
         /// Represents a comment that disables some lint rules within a line range
         /// of a given source file.
@@ -423,22 +476,17 @@ pub const Comment = struct {
 
         /// Represents a `// <content>` comment in the source tree
         line: struct {
-            content: ?struct {
-                /// Inclusive
-                first: Token.Index,
-                /// Inclusive
-                last: Token.Index,
-            } = null,
+            content: ?Range = null,
         },
 
         /// Represents a `// TODO: <content>` comment in the source tree
         todo: struct {
-            content: ?struct {
-                /// Inclusive
-                first: Token.Index,
-                /// Inclusive
-                last: Token.Index,
-            } = null,
+            /// Optional content that appears inside the todo
+            /// For example, `// todo(content here) ...`
+            inner_content: ?Range = null,
+
+            /// Optional content that appears after the todo token
+            content: ?Range = null,
         },
     };
 
@@ -462,6 +510,12 @@ pub const Comment = struct {
             },
             .todo => |todo| {
                 std.debug.print("  .todo = .{{\n", .{});
+                if (todo.inner_content) |inner_content| {
+                    std.debug.print("      .inner_content = .{{\n", .{});
+                    std.debug.print("        .first = {d},\n", .{inner_content.first});
+                    std.debug.print("        .last = {d},\n", .{inner_content.last});
+                    std.debug.print("      }},\n", .{});
+                }
                 if (todo.content) |content| {
                     std.debug.print("      .content = .{{\n", .{});
                     std.debug.print("        .first = {d},\n", .{content.first});
@@ -537,7 +591,7 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
                                     }
                                     maybe_last_rule_token = next;
                                 },
-                                .delimiter => {
+                                .colon => {
                                     // TODO: Maybe one day report this mistake to user, for now lets just ignore it and keeping parsing
                                     // const slice = p.tokens[next].getSlice(source);
                                     // std.log.warn("Unexpected delimitor '{s}'. Expected a rule name", .{slice});
@@ -564,8 +618,33 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
                         };
                     },
                     .todo => {
+                        const inner_content: ?Comment.Range = consume_inner_content: {
+                            const next = p.peek() orelse break :consume_inner_content null;
+                            if (p.tokens[next].tag != .open_parenthesis) break :consume_inner_content null;
+                            p.skip();
+
+                            var maybe_first: ?Token.Index = null;
+                            var maybe_last: ?Token.Index = null;
+                            while (p.peek()) |token_index| {
+                                if (p.tokens[token_index].tag == .close_parenthesis) break;
+                                maybe_first = maybe_first orelse token_index;
+                                maybe_last = token_index;
+
+                                p.skip();
+                            }
+
+                            const first = maybe_first orelse break :consume_inner_content null;
+                            const last = maybe_last orelse break :consume_inner_content null;
+
+                            break :consume_inner_content .{
+                                .first = first,
+                                .last = last,
+                            };
+                        };
+
+                        // Skip colon if present:
                         while (p.peek()) |peek| {
-                            if (p.tokens[peek].tag != .delimiter) break;
+                            if (p.tokens[peek].tag != .colon) break;
                             p.skip();
                         }
                         const first_content_token_index = p.i;
@@ -589,6 +668,7 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
                                     .first = first_content_token_index,
                                     .last = last_token_index,
                                 } else null,
+                                .inner_content = inner_content,
                             },
                         };
                     },
@@ -658,6 +738,9 @@ test "parse - todo comments" {
             "// TODO:  First todo ",
             "// todo  Second todo ",
             "// Todo", // Deliberately empty
+            "// TODO(#10)",
+            "// TODO(hello world) message",
+            "// TODO(): message",
         },
         &.{
             .{
@@ -689,6 +772,50 @@ test "parse - todo comments" {
                 .last_token = 10,
                 .kind = .{
                     .todo = .{},
+                },
+            },
+            .{
+                .first_token = 11,
+                .last_token = 15,
+                .kind = .{
+                    .todo = .{
+                        .inner_content = .{
+                            .first = 14,
+                            .last = 14,
+                        },
+                        .content = .{
+                            .first = 15,
+                            .last = 15,
+                        },
+                    },
+                },
+            },
+            .{
+                .first_token = 16,
+                .last_token = 22,
+                .kind = .{
+                    .todo = .{
+                        .inner_content = .{
+                            .first = 19,
+                            .last = 20,
+                        },
+                        .content = .{
+                            .first = 21,
+                            .last = 22,
+                        },
+                    },
+                },
+            },
+            .{
+                .first_token = 23,
+                .last_token = 28,
+                .kind = .{
+                    .todo = .{
+                        .content = .{
+                            .first = 26,
+                            .last = 28,
+                        },
+                    },
                 },
             },
         },
