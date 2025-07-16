@@ -1,0 +1,14 @@
+.{
+    .struct_field_order = .{
+        .order = .alphabetical_descending,
+        .severity = .@"error",
+    },
+    .enum_field_order = .{
+        .order = .alphabetical_ascending,
+        .severity = .warning,
+    },
+    .union_field_order = .{
+        .order = .alphabetical_ascending,
+        .severity = .@"error",
+    },
+}

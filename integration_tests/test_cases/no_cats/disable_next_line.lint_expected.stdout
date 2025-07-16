@@ -1,4 +1,4 @@
-warning I'm allergic to cats [test_cases/no_cats/disable_next_line.input.zig:11:11] no_cats
+warning I'm scared of cats [test_cases/no_cats/disable_next_line.input.zig:11:11] no_cats
 
  11 | pub const bad_cats = false; // expect to catch this
     |           ^^^^^^^^
