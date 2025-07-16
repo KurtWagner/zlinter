@@ -322,6 +322,17 @@ pub fn allocParse(
             }
             const rule_id = args[index];
 
+            const rule_exists: bool = exists: {
+                for (available_rules) |available_rule| {
+                    if (std.mem.eql(u8, available_rule.rule_id, args[index])) break :exists true;
+                }
+                break :exists false;
+            };
+            if (!rule_exists) {
+                rendering.process_printer.println(.err, "rule '{s}' not found", .{args[index]});
+                return error.InvalidArgs;
+            }
+
             index += 1;
             if (index == args.len) {
                 rendering.process_printer.println(.err, "--rule-config arg missing zon file path", .{});
@@ -734,7 +745,63 @@ test "allocParse fuzz" {
 }
 
 test "allocParse with rule_config arg" {
-    // TODO: Write this before merging!
+    const args = try allocParse(
+        testing.cliArgs(&.{ "--rule-config", "my_rule", "./path/rule_config.zon" }),
+        &.{.{
+            .rule_id = "my_rule",
+            .run = undefined,
+        }},
+        std.testing.allocator,
+    );
+    defer args.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(1, args.rule_config_overrides.?.count());
+    try std.testing.expectEqualStrings("./path/rule_config.zon", args.rule_config_overrides.?.get("my_rule").?);
+}
+
+test "allocParse with invalid rule config rule id arg" {
+    var stderr_sink = try rendering.process_printer.attachFakeStderrSink(std.testing.allocator);
+    defer stderr_sink.deinit();
+
+    try std.testing.expectError(error.InvalidArgs, allocParse(
+        testing.cliArgs(&.{ "--rule-config", "my_rule", "./path/rule_config.zon" }),
+        &.{.{
+            .rule_id = "another_rule",
+            .run = undefined,
+        }},
+        std.testing.allocator,
+    ));
+
+    try std.testing.expectEqualStrings("rule 'my_rule' not found\n", stderr_sink.output());
+}
+
+test "allocParse with with missing rule config rule id" {
+    var stderr_sink = try rendering.process_printer.attachFakeStderrSink(std.testing.allocator);
+    defer stderr_sink.deinit();
+
+    try std.testing.expectError(error.InvalidArgs, allocParse(
+        testing.cliArgs(&.{"--rule-config"}),
+        &.{},
+        std.testing.allocator,
+    ));
+
+    try std.testing.expectEqualStrings("--rule-config arg missing rule id\n", stderr_sink.output());
+}
+
+test "allocParse with with missing rule config rule config path" {
+    var stderr_sink = try rendering.process_printer.attachFakeStderrSink(std.testing.allocator);
+    defer stderr_sink.deinit();
+
+    try std.testing.expectError(error.InvalidArgs, allocParse(
+        testing.cliArgs(&.{ "--rule-config", "my_rule" }),
+        &.{.{
+            .rule_id = "my_rule",
+            .run = undefined,
+        }},
+        std.testing.allocator,
+    ));
+
+    try std.testing.expectEqualStrings("--rule-config arg missing zon file path\n", stderr_sink.output());
 }
 
 const testing = struct {
