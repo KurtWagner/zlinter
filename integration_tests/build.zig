@@ -50,6 +50,7 @@ pub fn build(b: *std.Build) !void {
             ".lint_expected.stdout",
             ".fix_expected.stdout",
             ".fix_expected.zig",
+            ".input.zon",
         }) |suffix| {
             addFileArgIfExists(
                 b,
@@ -64,50 +65,10 @@ pub fn build(b: *std.Build) !void {
     const lint_cmd = b.step("lint", "Lint source code.");
     lint_cmd.dependOn(step: {
         var builder = zlinter.builder(b, .{ .target = target, .optimize = optimize });
-        builder.addRule(.{ .builtin = .no_unused }, .{});
-        builder.addRule(.{ .builtin = .no_panic }, .{});
-        builder.addRule(.{ .builtin = .no_comment_out_code }, .{});
-        builder.addRule(.{ .builtin = .no_todo }, .{});
-        builder.addRule(.{ .builtin = .no_undefined }, .{});
-        builder.addRule(.{ .builtin = .require_doc_comment }, .{});
-        builder.addRule(.{ .builtin = .max_positional_args }, .{});
-        builder.addRule(.{ .builtin = .no_literal_args }, .{
-            .detect_string_literal = .@"error",
-            .detect_char_literal = .@"error",
-            .exclude_fn_names = &.{ "excludeFnName", "print" },
-        });
-        builder.addRule(.{ .builtin = .switch_case_ordering }, .{});
-        builder.addRule(.{ .builtin = .field_naming }, .{});
-        builder.addRule(.{ .builtin = .field_ordering }, .{
-            .struct_field_order = .{
-                .order = .alphabetical_descending,
-                .severity = .@"error",
-            },
-            .enum_field_order = .{
-                .order = .alphabetical_ascending,
-                .severity = .warning,
-            },
-            .union_field_order = .{
-                .order = .alphabetical_ascending,
-                .severity = .@"error",
-            },
-        });
-        builder.addRule(.{ .builtin = .declaration_naming }, .{});
-        builder.addRule(.{ .builtin = .function_naming }, .{
-            .function_that_returns_type = .{
-                .severity = .warning,
-                .style = .title_case,
-            },
-        });
-        builder.addRule(.{ .builtin = .file_naming }, .{});
-        builder.addRule(.{ .builtin = .no_deprecated }, .{});
-        builder.addRule(.{ .builtin = .no_inferred_error_unions }, .{});
-        builder.addRule(.{ .builtin = .no_hidden_allocations }, .{});
-        builder.addRule(.{ .builtin = .no_swallow_error }, .{});
-        builder.addRule(.{ .builtin = .no_orelse_unreachable }, .{});
-        builder.addRule(.{ .custom = .{ .name = "no_cats", .path = "src/no_cats.zig" } }, .{
-            .message = "I'm allergic to cats",
-        });
+        inline for (@typeInfo(zlinter.BuiltinLintRule).@"enum".fields) |field| {
+            builder.addRule(.{ .builtin = @enumFromInt(field.value) }, .{});
+        }
+        builder.addRule(.{ .custom = .{ .name = "no_cats", .path = "src/no_cats.zig" } }, .{});
         break :step builder.build();
     });
 }

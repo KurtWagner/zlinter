@@ -1,5 +1,6 @@
 const max_file_size_bytes = 10 * 1024 * 1024;
-const input_suffix = ".input.zig";
+const input_zig_suffix = ".input.zig";
+const input_zon_suffix = ".input.zon";
 const lint_output_suffix = ".lint_expected.stdout";
 const fix_zig_output_suffix = ".fix_expected.zig";
 const fix_stdout_output_suffix = ".fix_expected.stdout";
@@ -11,6 +12,7 @@ test "integration test rules" {
     defer std.process.argsFree(allocator, args);
 
     var input_zig_file: ?[:0]u8 = null;
+    var input_zon_file: ?[:0]u8 = null;
     var lint_stdout_expected_file: ?[:0]u8 = null;
     var fix_zig_expected_file: ?[:0]u8 = null;
     var fix_stdout_expected_file: ?[:0]u8 = null;
@@ -24,7 +26,7 @@ test "integration test rules" {
     const test_name = args[3];
     _ = test_name;
     for (args[4..]) |arg| {
-        if (std.mem.endsWith(u8, arg, input_suffix)) {
+        if (std.mem.endsWith(u8, arg, input_zig_suffix)) {
             input_zig_file = arg;
         } else if (std.mem.endsWith(u8, arg, lint_output_suffix)) {
             lint_stdout_expected_file = arg;
@@ -32,6 +34,8 @@ test "integration test rules" {
             fix_zig_expected_file = arg;
         } else if (std.mem.endsWith(u8, arg, fix_stdout_output_suffix)) {
             fix_stdout_expected_file = arg;
+        } else if (std.mem.endsWith(u8, arg, input_zon_suffix)) {
+            input_zon_file = arg;
         } else {
             std.log.err("Unable to handle input file: {s}", .{arg});
             @panic("Failed");
@@ -42,18 +46,28 @@ test "integration test rules" {
     // Lint command "zig build lint -- <file>.zig"
     // --------------------------------------------------------------------
     {
-        const lint_output = try runLintCommand(
-            &.{
-                zig_bin,
-                "build",
-                "lint",
-                "--",
-                "--rule",
+        var lint_args = std.ArrayList([]const u8).init(std.testing.allocator);
+        defer lint_args.deinit();
+
+        try lint_args.appendSlice(&.{
+            zig_bin,
+            "build",
+            "lint",
+            "--",
+            "--rule",
+            rule_name,
+            "--include",
+            input_zig_file.?,
+        });
+        if (input_zon_file) |file| {
+            try lint_args.appendSlice(&.{
+                "--rule-config",
                 rule_name,
-                "--include",
-                input_zig_file.?,
-            },
-        );
+                file,
+            });
+        }
+
+        const lint_output = try runLintCommand(lint_args.items);
         defer allocator.free(lint_output.stdout);
         defer allocator.free(lint_output.stderr);
 
@@ -96,19 +110,29 @@ test "integration test rules" {
             .{},
         );
 
-        const fix_output = try runLintCommand(
-            &.{
-                zig_bin,
-                "build",
-                "lint",
-                "--",
-                "--rule",
+        var lint_args = std.ArrayList([]const u8).init(std.testing.allocator);
+        defer lint_args.deinit();
+
+        try lint_args.appendSlice(&.{
+            zig_bin,
+            "build",
+            "lint",
+            "--",
+            "--rule",
+            rule_name,
+            "--fix",
+            "--include",
+            temp_path,
+        });
+        if (input_zon_file) |file| {
+            try lint_args.appendSlice(&.{
+                "--rule-config",
                 rule_name,
-                "--fix",
-                "--include",
-                temp_path,
-            },
-        );
+                file,
+            });
+        }
+
+        const fix_output = try runLintCommand(lint_args.items);
         defer allocator.free(fix_output.stdout);
         defer allocator.free(fix_output.stderr);
 

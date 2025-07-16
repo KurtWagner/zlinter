@@ -1,0 +1,5 @@
+.{
+    .detect_string_literal = .@"error",
+    .detect_char_literal = .@"error",
+    .exclude_fn_names = .{ "excludeFnName", "print" },
+}
