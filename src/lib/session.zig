@@ -7,6 +7,7 @@ pub const LintDocument = struct {
     handle: *zls.DocumentStore.Handle,
     analyser: *zls.Analyser,
     lineage: *ast.NodeLineage,
+    comments: comments.CommentsDocument,
 
     pub fn deinit(self: *LintDocument, gpa: std.mem.Allocator) void {
         while (self.lineage.pop()) |connections| {
@@ -19,6 +20,8 @@ pub const LintDocument = struct {
         self.analyser.deinit();
         gpa.destroy(self.analyser);
         gpa.free(self.path);
+
+        self.comments.deinit(gpa);
     }
 
     pub inline fn resolveTypeOfNode(self: @This(), node: std.zig.Ast.Node.Index) !?zls.Analyser.Type {
@@ -453,6 +456,7 @@ pub const LintContext = struct {
             .handle = handle,
             .analyser = try gpa.create(zls.Analyser),
             .lineage = lineage,
+            .comments = try comments.allocParse(handle.tree.source, gpa),
         };
 
         doc.analyser.* = switch (version.zig) {
@@ -839,3 +843,4 @@ const version = @import("version.zig");
 const shims = @import("shims.zig");
 const testing = @import("testing.zig");
 const ast = @import("ast.zig");
+const comments = @import("comments.zig");
