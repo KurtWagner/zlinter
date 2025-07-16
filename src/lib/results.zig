@@ -31,7 +31,7 @@ pub const LintResult = struct {
 pub const LintProblemLocation = struct {
     /// Location in entire source (inclusive)
     byte_offset: usize,
-    /// Line number in source (index zero)
+    /// Line number in source (index zero - i.e., first line in doc is 0)
     line: usize,
     /// Column on line in source (index zero)
     column: usize,
@@ -208,6 +208,46 @@ pub const LintProblemLocation = struct {
         };
     }
 
+    test startOfComment {
+        const source: [:0]const u8 =
+            \\ //! Comment 1
+            \\ var ok = 1; // Comment 2
+            \\ /// Comment 3
+        ;
+        var doc = try comments.allocParse(source, std.testing.allocator);
+        defer doc.deinit(std.testing.allocator);
+
+        // For `//! Comment 1`
+        try std.testing.expectEqualDeep(
+            LintProblemLocation{
+                .byte_offset = 1,
+                .line = 0,
+                .column = 1,
+            },
+            LintProblemLocation.startOfComment(doc, doc.comments[0]),
+        );
+
+        // For `... // Comment 2`
+        try std.testing.expectEqualDeep(
+            LintProblemLocation{
+                .byte_offset = 28,
+                .line = 1,
+                .column = 13,
+            },
+            LintProblemLocation.startOfComment(doc, doc.comments[1]),
+        );
+
+        // For `/// Comment 3`
+        try std.testing.expectEqualDeep(
+            LintProblemLocation{
+                .byte_offset = 42,
+                .line = 2,
+                .column = 1,
+            },
+            LintProblemLocation.startOfComment(doc, doc.comments[2]),
+        );
+    }
+
     pub fn endOfComment(doc: comments.CommentsDocument, comment: comments.Comment) LintProblemLocation {
         const last_token = doc.tokens[comment.last_token];
         return .{
@@ -215,6 +255,46 @@ pub const LintProblemLocation = struct {
             .line = last_token.line,
             .column = last_token.first_byte + last_token.len - doc.line_starts[last_token.line],
         };
+    }
+
+    test endOfComment {
+        const source: [:0]const u8 =
+            \\ //! Comment 1
+            \\ var ok = 1; // Comment 2
+            \\ /// Comment 3
+        ;
+        var doc = try comments.allocParse(source, std.testing.allocator);
+        defer doc.deinit(std.testing.allocator);
+
+        // For `//! Comment 1`
+        try std.testing.expectEqualDeep(
+            LintProblemLocation{
+                .byte_offset = 14,
+                .line = 0,
+                .column = 14,
+            },
+            LintProblemLocation.endOfComment(doc, doc.comments[0]),
+        );
+
+        // For `... // Comment 2`
+        try std.testing.expectEqualDeep(
+            LintProblemLocation{
+                .byte_offset = 40,
+                .line = 1,
+                .column = 25,
+            },
+            LintProblemLocation.endOfComment(doc, doc.comments[1]),
+        );
+
+        // For `/// Comment 3`
+        try std.testing.expectEqualDeep(
+            LintProblemLocation{
+                .byte_offset = 55,
+                .line = 2,
+                .column = 14,
+            },
+            LintProblemLocation.endOfComment(doc, doc.comments[2]),
+        );
     }
 
     pub fn debugPrint(self: @This(), writer: anytype) void {

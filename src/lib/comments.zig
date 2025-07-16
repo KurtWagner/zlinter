@@ -60,7 +60,7 @@ const Tokenizer = struct {
     line: u32 = 0,
 };
 
-/// Returns tokens and line starts
+/// Returns tokens and line starts (line starts inclusive zero index)
 fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory}!struct { []const Token, []const usize } {
     var tokens = std.ArrayList(Token).init(gpa);
     defer tokens.deinit();
@@ -150,6 +150,23 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
         },
     }
     return .{ try tokens.toOwnedSlice(), try line_starts.toOwnedSlice() };
+}
+
+test "tokenize line_starts" {
+    const tokens, const line_starts = try allocTokenize(
+        \\var a = 1;
+        \\var b = 11;
+        \\var c = 123;
+        \\var d = 1234;
+        \\
+    , std.testing.allocator);
+    defer std.testing.allocator.free(tokens);
+    defer std.testing.allocator.free(line_starts);
+
+    std.testing.expectEqualDeep(&[_]usize{ 0, 11, 23, 36, 50 }, line_starts) catch |e| {
+        std.debug.print("Actual: {any}\n", .{line_starts});
+        return e;
+    };
 }
 
 test "tokenize no comments" {
@@ -288,7 +305,8 @@ fn testTokenize(
                 source = source ++ new_line ++ line;
         }
 
-        const tokens = try allocTokenize(source, std.testing.allocator).@"0";
+        const tokens, const line_starts = try allocTokenize(source, std.testing.allocator);
+        defer std.testing.allocator.free(line_starts);
         defer std.testing.allocator.free(tokens);
 
         var actual = std.ArrayList(struct { u32, Token.Tag, []const u8 }).init(std.testing.allocator);
@@ -320,6 +338,7 @@ fn testTokenize(
 
 pub const CommentsDocument = struct {
     tokens: []const Token,
+    /// Zero index inclusive
     line_starts: []const usize,
     comments: []const Comment,
 
