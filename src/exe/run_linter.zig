@@ -191,6 +191,26 @@ pub fn main() !u8 {
             continue;
         };
         defer doc.deinit(ctx.gpa);
+
+        {
+            var explorer_arena = std.heap.ArenaAllocator.init(gpa);
+            defer explorer_arena.deinit();
+
+            const json = try zlinter.explorer.jsonTree(doc.handle.tree, explorer_arena.allocator());
+            try std.json.stringify(
+                json,
+                .{ .whitespace = .indent_2 },
+                switch (zlinter.version.zig) {
+                    .@"0.14" => std.io.getStdOut().writer(),
+                    .@"0.15" => std.fs.File.stdout().deprecatedWriter(),
+                },
+            );
+
+            const str = try zlinter.explorer.parseToJsonStringAlloc(doc.handle.tree.source, gpa);
+            defer gpa.free(str);
+            std.debug.print("{s}\n", .{str});
+        }
+
         if (timer.lapMilliseconds()) |ms|
             printer.println(.verbose, "  - Load document: {d}ms", .{ms})
         else

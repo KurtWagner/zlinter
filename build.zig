@@ -277,6 +277,32 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(integration_test_step);
 
     // ------------------------------------------------------------------------
+    // zig build wasm
+    // ------------------------------------------------------------------------
+    const build_wasm = b.step("wasm", "Build wasm entry point.");
+    const wasm_exe = b.addExecutable(.{
+        .name = "wasm",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/exe/wasm.zig"),
+            .imports = &.{zlinter_import},
+            .target = b.resolveTargetQuery(.{
+                .cpu_arch = .wasm32,
+                .os_tag = .freestanding,
+            }),
+            .optimize = .ReleaseSafe,
+        }),
+    });
+    wasm_exe.entry = .disabled;
+    wasm_exe.rdynamic = true;
+    const install_wasm_step = b.addInstallArtifact(wasm_exe, .{ .dest_dir = .{
+        .override = .{ .custom = "explorer/" },
+    } });
+    build_wasm.dependOn(&install_wasm_step.step);
+
+    build_wasm.dependOn(&b.addInstallFile(b.path("explorer/index.html"), "./explorer/index.html").step);
+    build_wasm.dependOn(&b.addInstallFile(b.path("explorer/loader.js"), "./explorer/loader.js").step);
+
+    // ------------------------------------------------------------------------
     // zig build lint
     // ------------------------------------------------------------------------
 

@@ -13,6 +13,7 @@ pub const shims = @import("shims.zig");
 pub const strings = @import("strings.zig");
 pub const testing = @import("testing.zig");
 pub const version = @import("version.zig");
+pub const explorer = @import("explorer.zig");
 pub const zls = @import("zls");
 
 test {
