@@ -306,14 +306,17 @@ pub const LintDocument = struct {
         return it;
     }
 
-    pub fn getEnclosingBlock(self: LintDocument, node: shims.NodeIndexShim) ?shims.NodeIndexShim {
-        while (self.lineage.items(.parent)[node.index]) |parent| {
-            if (switch (shims.nodeTag(self.handle.tree, parent)) {
-                .block_two, .block_two_semicolon, .block, .block_semicolon => true,
-                else => false,
-            }) return parent;
+    /// Returns true if the given node appears within a `test {..}` declaration
+    /// block.
+    pub fn isEnclosedInTestBlock(self: LintDocument, node: shims.NodeIndexShim) bool {
+        var next = node;
+        while (self.lineage.items(.parent)[next.index]) |parent| {
+            switch (shims.nodeTag(self.handle.tree, parent)) {
+                .test_decl => return true,
+                else => next = shims.NodeIndexShim.init(parent),
+            }
         }
-        return null;
+        return false;
     }
 
     /// For debugging purposes only, should never be left in

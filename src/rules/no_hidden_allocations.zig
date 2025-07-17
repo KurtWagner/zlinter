@@ -68,17 +68,13 @@ fn run(
 
     skip: while (try it.next()) |tuple| {
         const node, const connections = tuple;
+        _ = connections;
 
         if (zlinter.shims.nodeTag(tree, node.toNodeIndex()) != .field_access) continue :skip;
 
         // if configured, skip if a parent is a test block
-        if (config.exclude_tests) {
-            var next_parent = connections.parent;
-            while (next_parent) |parent| {
-                if (zlinter.shims.nodeTag(tree, parent) == .test_decl) continue :skip;
-
-                next_parent = doc.lineage.items(.parent)[zlinter.shims.NodeIndexShim.init(parent).index];
-            }
+        if (config.exclude_tests and doc.isEnclosedInTestBlock(node)) {
+            continue :skip;
         }
 
         // unwrap field access lhs and identifier (e.g., lhs.identifier)
