@@ -171,10 +171,50 @@ function parse(source) {
                 const tokens = json.tokens;
 
                 tree_element.innerHTML = "";
-                tree_element.append(createTreeNode({
+
+
+                const tree_root_element = createTreeNode({
                     tag: "root",
                     body: json.body,
-                }));
+                });
+
+                const maybe_errors = createTreeErrors(json);
+                if (maybe_errors) tree_root_element.prepend(maybe_errors);
+
+                tree_element.append(tree_root_element);
+
+
+                function createTreeErrors(json_object) {
+                    if (json_object.errors.len == 0) return;
+
+                    const errors_element = document.createElement('div');
+                    errors_element.classList.add("tree__node__errors");
+
+                    for (const error of json_object.errors) {
+                        const error_element = document.createElement("div");
+                        error_element.classList.add("tree__node__errors__error");
+
+                        for (const [key, val] of Object.entries(error)) {
+                            const error_field_element = document.createElement("div");
+                            error_field_element.classList.add("tree__node__errors__error__field");
+
+                            const name_element = document.createElement('span');
+                            name_element.classList.add('tree__node__errors__error__field__name');
+                            name_element.textContent = key;
+                            error_field_element.append(name_element);
+
+                            const value_element = document.createElement('span');
+                            value_element.classList.add('tree__node__errors__error__field__value');
+                            value_element.textContent = val;
+                            error_field_element.append(value_element);
+
+                            error_element.append(error_field_element);
+                        }
+                        errors_element.append(error_element);
+                    }
+
+                    return errors_element;
+                }
 
 
                 function createTreeNode(json_object) {

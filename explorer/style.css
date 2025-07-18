@@ -30,13 +30,17 @@ body {
 
 
 .header {
-    height: 30px;
-    padding: 20px;
-    color: #222;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 2;
+    color: white;
     font-weight: bold;
-    font-size: 20px;
-    padding-left: 50px;
+    font-size: 18px;
+    margin-left: 50px;
+    margin-top: 10px;
     position: absolute;
+    border-radius: 20px;
+    background-color: #222;
 }
 
 .editor {
@@ -55,7 +59,7 @@ body {
     text-align: right;
     padding-right: 10px;
     padding-left: 10px;
-    padding-top: 60px;
+    padding-top: 90px;
 }
 
 .code {
@@ -74,7 +78,7 @@ body {
     width: 100%;
     white-space: pre-wrap;
     padding-left: 20px;
-    padding-top: 60px;
+    padding-top: 90px;
 }
 
 /* Syntax */
@@ -101,7 +105,7 @@ body {
 }
 
 .tree {
-    padding-top: 60px;
+    padding-top: 20px;
     background: #f5f5f5;
     line-height: 1.7;
     font-family: monospace;
@@ -119,7 +123,7 @@ body {
 
 
 .tree__node--highlighted {
-    background-color: #eddb92;
+    background-color: #f3e6b3;
 }
 
 
@@ -162,3 +166,29 @@ body {
 .tree__node__field__meta:after {
     content: ")";
 }
+
+/* Tree errors */
+
+.tree__node__errors {
+    margin-bottom: 10px;
+}
+
+.tree__node__errors__error {
+    margin-left: 20px;
+    background-color: rgb(227, 95, 95);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.tree__node__errors__error__field {}
+
+.tree__node__errors__error__field__name {
+    font-weight: bold;
+}
+
+.tree__node__errors__error__field__name:after {
+    content: ": ";
+}
+
+.tree__node__errors__error__field__value {}
