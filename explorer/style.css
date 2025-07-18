@@ -1,3 +1,16 @@
+[contenteditable]:focus {
+    outline: 0px solid transparent;
+}
+
+[contenteditable] {
+    font-weight: normal;
+    font-style: normal;
+}
+
+[contenteditable] img {
+    display: none;
+}
+
 body {
     display: flex;
     flex-direction: row;
@@ -8,7 +21,7 @@ body {
     background-color: aliceblue
 }
 
-.code {
+.editor {
     display: flex;
     flex: 0.5;
     background-color: #ccc;
@@ -17,18 +30,45 @@ body {
     line-height: 1.5;
 }
 
-.code #line_numbers {
+.editor #line_numbers {
     background-color: #222;
     color: white;
     white-space: pre-wrap;
-    padding-left: 10px;
+    text-align: right;
     padding-right: 10px;
+    padding-left: 10px;
 }
 
-.code #input {
+.code {
     flex: 1;
+    display: block;
+    position: relative;
+}
+
+#highlight {
+    position: absolute;
+    pointer-events: none;
+}
+
+#input,
+#highlight {
+    width: 100%;
     white-space: pre-wrap;
     padding-left: 10px;
+}
+
+/* Syntax */
+
+.syntax-keyword {
+    color: #3b4cce;
+}
+
+.syntax-string-literal {
+    color: rgb(215, 73, 33);
+}
+
+.syntax-brace {
+    color: rgb(103, 103, 103);
 }
 
 /* Tree styling */
