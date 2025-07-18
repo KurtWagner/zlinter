@@ -32,8 +32,35 @@ function parse(source) {
     const highlight_element = document.getElementById("highlight");
     const tree_element = document.getElementById("tree");
 
+    var last_json = null;
+
+    const getCursorPosition = () => {
+        const selection = window.getSelection();
+        if (selection.rangeCount) {
+            const range = selection.getRangeAt(0);
+            if (range.commonAncestorContainer.parentNode == input_element) {
+                return range.endOffset;
+            }
+        }
+        return 0;
+    };
+
+    const setCursorPosition = (pos) => {
+        const selection = window.getSelection()
+
+        const range = document.createRange()
+        range.setStart(input_element.childNodes[0], pos)
+        range.collapse(true)
+
+        selection.removeAllRanges()
+        selection.addRange(range)
+    }
+
+
     input_element.addEventListener('input', syncLineNumbers);
     input_element.addEventListener('input', syncTree);
+    input_element.addEventListener('keyup', syncCursorToken);
+    input_element.addEventListener('click', syncCursorToken);
 
     input_element.textContent = default_code;
     input_element.dispatchEvent(new Event('input'));
@@ -48,13 +75,66 @@ function parse(source) {
         line_numbers_element.innerHTML = fill.join("\n");
     }
 
+    function syncCursorToken() {
+        const highlight_class = "tree__node--highlighted";
+        [...document.getElementsByClassName(highlight_class)].forEach(elem => elem.classList.remove(highlight_class));
+
+        const token_tuple = getSelectedToken();
+        if (token_tuple == null) return;
+        console.log("Selected token", token_tuple[1]);
+
+
+        var smallest_elem = null;
+        [...document.getElementsByClassName("tree__node")].forEach(elem => {
+
+            const first_token = elem.dataset.firstToken;
+            const last_token = elem.dataset.lastToken;
+            if (first_token == null || last_token == null) return;
+
+            const [token_i,] = token_tuple;
+            if (token_i >= first_token && token_i <= last_token) {
+                smallest_elem = elem;
+            }
+        });
+
+        if (smallest_elem) {
+            smallest_elem.classList.add(highlight_class);
+            smallest_elem.scrollIntoView();
+        }
+
+
+
+
+    }
+
+    function getSelectedToken() {
+        const pos = getCursorPosition();
+        if (pos == 0) return null;
+        if (!last_json) return null;
+
+        for (let i = 0; i < last_json.tokens.length; i++) {
+            const token = last_json.tokens[i];
+            if (pos >= token.start && pos < token.start + token.len) {
+                return [i, token];
+            }
+        }
+        return null;
+    }
+
 
     function syncTree() {
 
         parse(input_element.textContent)
             .then(json => {
+                last_json = json;
+
+
+
+                const pos = getCursorPosition();
                 const raw = input_element.textContent;
                 input_element.innerHTML = raw;
+                setCursorPosition(pos);
+
 
 
                 console.log('raw', raw);
@@ -80,6 +160,7 @@ function parse(source) {
                 syntax.push(raw.slice(prev));
 
                 console.log('syntax', syntax.join(""));
+
                 highlight_element.innerHTML = syntax.join("");
 
 
@@ -99,6 +180,9 @@ function parse(source) {
                 function createTreeNode(json_object) {
                     const div = document.createElement('div');
                     div.classList.add('tree__node');
+
+                    div.setAttribute("data-first-token", json_object.first_token);
+                    div.setAttribute("data-last-token", json_object.last_token);
 
                     for (const [key, val] of Object.entries(json_object)) {
                         if (key == "body") continue;
@@ -166,4 +250,6 @@ function parse(source) {
             });
     }
 })();
+
+
 

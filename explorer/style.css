@@ -38,6 +38,10 @@ body {
     padding-left: 50px;
 }
 
+.tree__node--highlighted {
+    background-color: #eddb92;
+}
+
 .editor {
     display: flex;
     flex: 0.5;
