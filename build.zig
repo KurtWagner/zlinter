@@ -298,9 +298,13 @@ pub fn build(b: *std.Build) void {
         .override = .{ .custom = "explorer/" },
     } });
     build_wasm.dependOn(&install_wasm_step.step);
-
-    build_wasm.dependOn(&b.addInstallFile(b.path("explorer/index.html"), "./explorer/index.html").step);
-    build_wasm.dependOn(&b.addInstallFile(b.path("explorer/loader.js"), "./explorer/loader.js").step);
+    const install_public_step = b.addInstallDirectory(.{
+        .source_dir = b.path("explorer"),
+        .install_dir = .prefix,
+        .install_subdir = "explorer",
+    });
+    build_wasm.dependOn(&install_public_step.step);
+    // addWatchDirectoryInput(b, &install_public_step.step, b.path("explorer")) catch @panic("OOM");
 
     // ------------------------------------------------------------------------
     // zig build lint

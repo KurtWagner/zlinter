@@ -3,11 +3,16 @@
 
 <head>
     <title>Zig AST explorer</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-    <h3>Zig AST explorer</h3>
+    <div class="code">
+        <div id="line_numbers"></div>
+        <div id="input" contenteditable="true"></div>
+    </div>
+    <div class="tree"></div>
 </body>
-<script src="./loader.js"></script>
+<script src="./explorer.js"></script>
 
 </html>

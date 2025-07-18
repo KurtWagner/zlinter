@@ -1,0 +1,38 @@
+body {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background-color: aliceblue
+}
+
+.code {
+    display: flex;
+    flex: 0.5;
+    background-color: #ccc;
+    font-family: monospace;
+    font-size: 16px;
+    line-height: 1.5;
+}
+
+.code #line_numbers {
+    background-color: #222;
+    color: white;
+    white-space: pre-wrap;
+    padding-left: 10px;
+    padding-right: 10px;
+}
+
+.code #input {
+    flex: 1;
+    white-space: pre-wrap;
+    padding-left: 10px;
+}
+
+.tree {
+    flex: 0.5;
+    font-size: 16px;
+    background: #eee;
+}
