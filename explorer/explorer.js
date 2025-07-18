@@ -58,11 +58,11 @@
     inputElem.addEventListener('keyup', syncCursorToken);
     inputElem.addEventListener('click', syncCursorToken);
 
-    inputElem.textContent = default_code;
+    inputElem.innerText = default_code;
     inputElem.dispatchEvent(new Event('input'));
 
     function syncLineNumbers() {
-        const noOfLines = inputElem.textContent.split("\n").length;
+        const noOfLines = inputElem.innerText.split("\n").length;
 
         var fill = [];
         for (let i = 1; i <= noOfLines; i++) fill.push(i);
@@ -76,12 +76,12 @@
         [...document.getElementsByClassName(highlightClass)].forEach(elem => elem.classList.remove(highlightClass));
 
         const tokenIndexAndToken = getSelectedToken();
-        if (tokenIndexAndToken == null) return;
+        if (tokenIndexAndToken === null) return;
 
         var lowestOverlappingNode = null;
         [...document.getElementsByClassName("tree__node")].forEach(elem => {
             const { firstToken, lastToken } = elem.dataset;
-            if (firstToken == null || lastToken == null) return;
+            if (firstToken === null || lastToken === null) return;
 
             const [token_i,] = tokenIndexAndToken;
             if (token_i >= firstToken && token_i <= lastToken) {
@@ -110,7 +110,7 @@
     }
 
     function syncTree() {
-        parse(inputElem.textContent)
+        parse(inputElem.innerText)
             .then(json => {
                 console.debug('AST:', json);
                 lastJson = json;
@@ -121,7 +121,7 @@
                 }
 
                 const pos = getCursorPosition();
-                const raw = inputElem.textContent;
+                const raw = inputElem.innerText;
                 inputElem.innerHTML = raw;
                 setCursorPosition(pos);
 
@@ -146,11 +146,7 @@
                     }
 
                     const slice = raw.slice(token.start, token.start + token.len);
-                    if (classes.length == 0) {
-                        syntax.push(slice);
-                    } else {
-                        syntax.push(`<span class="${classes.join(' ')}">${slice}</span>`);
-                    }
+                    syntax.push(`<span data-token-index="${tokenIndex}" class="${classes.join(' ')}">${slice}</span>`);
 
                     prev = token.start + token.len;
                 }
