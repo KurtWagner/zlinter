@@ -87,7 +87,7 @@ pub fn jsonTree(
 
     try zls.ast.iterateChildren(
         tree,
-        0,
+        shims.NodeIndexShim.root.toNodeIndex(),
         Context{
             .arena = arena,
             .indent = 0,
