@@ -68,7 +68,7 @@ pub fn jsonTree(
                 callback,
             );
 
-            try node_object.put("children", .{ .array = node_children });
+            try node_object.put("body", .{ .array = node_children });
 
             try self.node_children.append(.{
                 .object = node_object,
@@ -98,7 +98,7 @@ pub fn jsonTree(
         Context.callback,
     );
 
-    try root_json_object.put("children", .{ .array = root_node_children });
+    try root_json_object.put("body", .{ .array = root_node_children });
 
     return std.json.Value{ .object = root_json_object };
 }

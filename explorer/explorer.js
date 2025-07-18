@@ -1,3 +1,14 @@
+
+
+const default_code = [
+    "",
+    "pub fn main() void {",
+    "    std.debug.print(\"Hello AST explorer!\", .{});",
+    "}",
+    "const std = @import(\"std\");",
+    "",
+].join("\n");
+
 const wasm_promise = fetch('wasm.wasm')
     .then(response => response.arrayBuffer())
     .then(file => WebAssembly.instantiate(file))
@@ -17,16 +28,18 @@ function parse(source) {
 }
 
 (() => {
+    var sync_tree_timeout = 0;
+    const sync_tree_debounce_ms = 200;
+
     const input_element = document.getElementById("input");
     const line_numbers_element = document.getElementById("line_numbers");
+    const tree_element = document.getElementById("tree");
 
     input_element.addEventListener('input', syncLineNumbers);
     input_element.addEventListener('input', syncTree);
 
-    input_element.innerText = default_zig_source_code;
+    input_element.innerText = default_code;
     input_element.dispatchEvent(new Event('input'));
-
-
 
     function syncLineNumbers() {
         const num_of_lines = input_element.innerText.split("\n").length;
@@ -38,17 +51,93 @@ function parse(source) {
         line_numbers_element.innerHTML = fill.join("\n");
     }
 
+
     function syncTree() {
-        parse(input_element.innerText).then(console.log);
+        // Debounce to avoid parsing for every keystroke
+        clearTimeout(sync_tree_timeout);
+        sync_tree_timeout = setTimeout(() => {
+            parse(input_element.innerText)
+                .then(json => {
+                    console.log(json);
+
+                    const tokens = json.tokens;
+
+                    tree_element.innerHTML = "";
+                    tree_element.append(createTreeNode({
+                        tag: "root",
+                        body: json.body,
+                    }));
+
+
+                    function createTreeNode(json_object) {
+                        const div = document.createElement('div');
+                        div.classList.add('tree__node');
+
+                        for (const [key, val] of Object.entries(json_object)) {
+                            if (key == "body") continue;
+
+                            const field_div = document.createElement('div');
+                            field_div.classList.add('tree__node__field');
+
+                            if (key == "tag") {
+                                const tag_span = document.createElement('span');
+                                tag_span.classList.add('tree__node__field__tag');
+                                tag_span.textContent = val;
+                                field_div.append(tag_span);
+                            } else {
+
+                                const name_span = document.createElement('span');
+                                name_span.classList.add('tree__node__field__name');
+                                name_span.textContent = key;
+                                field_div.append(name_span);
+
+                                const value_span = document.createElement('span');
+                                value_span.classList.add('tree__node__field__value');
+                                value_span.textContent = val;
+                                field_div.append(value_span);
+
+                                if (key.endsWith("_token")) {
+                                    const meta_span = document.createElement('span');
+                                    meta_span.classList.add('tree__node__field__meta');
+                                    meta_span.textContent = getTokenDescription(val);
+                                    field_div.append(meta_span);
+                                }
+                            }
+
+                            div.append(field_div);
+                        }
+
+                        if (json_object.body && json_object.body.length > 0) {
+                            const field_div = document.createElement('div');
+                            field_div.classList.add('tree__node__field');
+
+                            const name_span = document.createElement('span');
+                            name_span.classList.add('tree__node__field__name');
+                            name_span.textContent = "body";
+                            field_div.append(name_span);
+
+                            div.append(field_div);
+
+                            for (const child_node of json_object.body) {
+                                div.append(createTreeNode(child_node))
+                            }
+                        }
+
+
+                        return div;
+
+
+                    }
+
+                    function getTokenDescription(token) {
+                        const parts = [];
+                        for (const [key, val] of Object.entries(json.tokens[token] || {})) {
+                            parts.push(`${key}: ${val}`);
+                        }
+                        return parts.join(", ");
+                    }
+                });
+        }, sync_tree_debounce_ms);
     }
 })();
 
-
-const default_zig_source_code = [
-    "",
-    "pub fn main() void {",
-    "    std.debug.print(\"Hello AST explorer!\", .{});",
-    "}",
-    "const std = @import(\"std\");",
-    "",
-].join("\n");
