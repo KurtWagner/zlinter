@@ -1,20 +1,16 @@
-export fn parse(in: [*]u8, len: u32) u32 {
-    comptime if (!builtin.cpu.arch.isWasm()) {
-        @compileError("Wasm only");
-    };
+/// Consumes `len` bytes from given `buffer`, parses it into a Zig AST json
+/// string and then writes it back to the start of the given `buffer` returning
+/// the length.
+export fn parse(buffer: [*]u8, len: u32) u32 {
+    comptime if (!builtin.cpu.arch.isWasm()) @compileError("Wasm only");
 
-    const allocator = std.heap.wasm_allocator;
-
-    var arena = std.heap.ArenaAllocator.init(allocator);
+    var arena = std.heap.ArenaAllocator.init(std.heap.wasm_allocator);
     defer arena.deinit();
 
-    const source: [:0]const u8 = std.mem.sliceTo(in[0..len :0], 0);
-
+    const source: [:0]const u8 = arena.allocator().dupeZ(u8, buffer[0..len]) catch @panic("OOM");
     const json = zlinter.explorer.parseToJsonStringAlloc(source, arena.allocator()) catch @panic("OOM");
 
-    for (json, 0..) |c, i| {
-        in[len + i] = c;
-    }
+    @memcpy(buffer, json);
     return json.len;
 }
 
