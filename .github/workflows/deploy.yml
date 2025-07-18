@@ -1,5 +1,5 @@
-name: deploy AST explorer
-run-name: Deploy AST explorer
+name: Deploy website
+run-name: Deploy website
 on:
   workflow_dispatch:
 
@@ -21,7 +21,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    name: Deploy AST explorer from linux
+    name: Deploy website from linux
     timeout-minutes: 3
     steps:
       - name: "Checkout repo"
@@ -37,8 +37,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload entire repository
-          path: './zig-out/explorer'
+          path: './zig-out/website'
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

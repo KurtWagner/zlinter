@@ -277,9 +277,9 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(integration_test_step);
 
     // ------------------------------------------------------------------------
-    // zig build wasm
+    // zig build website
     // ------------------------------------------------------------------------
-    const build_wasm = b.step("wasm", "Build wasm entry point.");
+    const build_website = b.step("website", "Build website.");
     const wasm_exe = b.addExecutable(.{
         .name = "wasm",
         .root_module = b.createModule(.{
@@ -295,16 +295,15 @@ pub fn build(b: *std.Build) void {
     wasm_exe.entry = .disabled;
     wasm_exe.rdynamic = true;
     const install_wasm_step = b.addInstallArtifact(wasm_exe, .{ .dest_dir = .{
-        .override = .{ .custom = "explorer/" },
+        .override = .{ .custom = "website/explorer/" },
     } });
-    build_wasm.dependOn(&install_wasm_step.step);
+    build_website.dependOn(&install_wasm_step.step);
     const install_public_step = b.addInstallDirectory(.{
-        .source_dir = b.path("explorer"),
+        .source_dir = b.path("website"),
         .install_dir = .prefix,
-        .install_subdir = "explorer",
+        .install_subdir = "website",
     });
-    build_wasm.dependOn(&install_public_step.step);
-    // addWatchDirectoryInput(b, &install_public_step.step, b.path("explorer")) catch @panic("OOM");
+    build_website.dependOn(&install_public_step.step);
 
     // ------------------------------------------------------------------------
     // zig build lint
