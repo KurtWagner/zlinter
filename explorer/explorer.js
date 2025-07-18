@@ -178,6 +178,7 @@
                     for (const error of jsonObj.errors) {
                         const errorDiv = document.createElement("div");
                         errorDiv.classList.add("tree__node__errors__error");
+                        errorDiv.textContent = "AST Error"
 
                         for (const [key, val] of Object.entries(error)) {
                             const errorFieldDiv = document.createElement("div");
