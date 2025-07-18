@@ -9,7 +9,7 @@
 [![Coverage Status](https://coveralls.io/repos/github/KurtWagner/zlinter/badge.svg?branch=0.14.x)](https://coveralls.io/github/KurtWagner/zlinter?branch=0.14.x)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An extendable and customizable **Zig linter** that is integrated from source into your `build.zig`.
+An extendable and customizable **Zig linter** (with work-in-progress [AST explorer](https://kurtwagner.github.io/zlinter/explorer/)) that is integrated from source into your `build.zig`.
 
 A **linter** is a tool that automatically checks source code for style issues, bugs, or patterns that may lead to errors, helping developers write cleaner and more reliable code.
 
