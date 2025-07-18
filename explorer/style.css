@@ -12,19 +12,36 @@
 }
 
 body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: 'Helvetica', 'Arial', sans-serif;
+}
+
+.body {
     display: flex;
     flex-direction: row;
     align-items: stretch;
     height: 100%;
     margin: 0;
     padding: 0;
-    background-color: aliceblue
+}
+
+
+.header {
+    height: 30px;
+    background-color: #222;
+    padding: 20px;
+    color: white;
+    font-weight: bold;
+    font-size: 20px;
+    padding-left: 50px;
 }
 
 .editor {
     display: flex;
     flex: 0.5;
-    background-color: #ccc;
+    background-color: white;
     font-family: monospace;
     font-size: 16px;
     line-height: 1.5;
@@ -37,6 +54,7 @@ body {
     text-align: right;
     padding-right: 10px;
     padding-left: 10px;
+    padding-top: 20px;
 }
 
 .code {
@@ -54,7 +72,8 @@ body {
 #highlight {
     width: 100%;
     white-space: pre-wrap;
-    padding-left: 10px;
+    padding-left: 20px;
+    padding-top: 20px;
 }
 
 /* Syntax */
@@ -74,12 +93,14 @@ body {
 /* Tree styling */
 
 .tree {
+    padding-top: 20px;
     flex: 0.5;
-    background: #eee;
+    background: #f5f5f5;
     line-height: 1.7;
     font-family: monospace;
     font-size: 16px;
     line-height: 1.5;
+    border-left: 1px solid #e4e4e4;
 }
 
 .tree__node {

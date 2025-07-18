@@ -1,7 +1,6 @@
 
 
 const default_code = [
-    "",
     "pub fn main() void {",
     "    std.debug.print(\"Hello AST explorer!\", .{});",
     "}",
@@ -54,11 +53,8 @@ function parse(source) {
 
         parse(input_element.textContent)
             .then(json => {
-
-
-
-
                 const raw = input_element.textContent;
+                input_element.innerHTML = raw;
 
 
                 console.log('raw', raw);
