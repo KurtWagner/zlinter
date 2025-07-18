@@ -191,6 +191,7 @@ pub fn main() !u8 {
             continue;
         };
         defer doc.deinit(ctx.gpa);
+
         if (timer.lapMilliseconds()) |ms|
             printer.println(.verbose, "  - Load document: {d}ms", .{ms})
         else

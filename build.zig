@@ -277,6 +277,36 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(integration_test_step);
 
     // ------------------------------------------------------------------------
+    // zig build wasm
+    // ------------------------------------------------------------------------
+    const build_wasm = b.step("wasm", "Build wasm entry point.");
+    const wasm_exe = b.addExecutable(.{
+        .name = "wasm",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/exe/wasm.zig"),
+            .imports = &.{zlinter_import},
+            .target = b.resolveTargetQuery(.{
+                .cpu_arch = .wasm32,
+                .os_tag = .freestanding,
+            }),
+            .optimize = .ReleaseSmall,
+        }),
+    });
+    wasm_exe.entry = .disabled;
+    wasm_exe.rdynamic = true;
+    const install_wasm_step = b.addInstallArtifact(wasm_exe, .{ .dest_dir = .{
+        .override = .{ .custom = "explorer/" },
+    } });
+    build_wasm.dependOn(&install_wasm_step.step);
+    const install_public_step = b.addInstallDirectory(.{
+        .source_dir = b.path("explorer"),
+        .install_dir = .prefix,
+        .install_subdir = "explorer",
+    });
+    build_wasm.dependOn(&install_public_step.step);
+    // addWatchDirectoryInput(b, &install_public_step.step, b.path("explorer")) catch @panic("OOM");
+
+    // ------------------------------------------------------------------------
     // zig build lint
     // ------------------------------------------------------------------------
 

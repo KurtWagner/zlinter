@@ -1,0 +1,197 @@
+[contenteditable]:focus {
+    outline: 0px solid transparent;
+}
+
+[contenteditable] {
+    font-weight: normal;
+    font-style: normal;
+}
+
+[contenteditable] img {
+    display: none;
+}
+
+html,
+body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: 'Helvetica', 'Arial', sans-serif;
+}
+
+.body {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+
+.header {
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 2;
+    color: white;
+    font-weight: bold;
+    font-size: 18px;
+    margin-left: 50px;
+    margin-top: 10px;
+    position: absolute;
+    border-radius: 20px;
+    background-color: #222;
+}
+
+.editor {
+    display: flex;
+    flex: 0.5;
+    background-color: white;
+    font-family: monospace;
+    font-size: 16px;
+    line-height: 1.5;
+}
+
+.editor #line_numbers {
+    background-color: #222;
+    color: white;
+    white-space: pre-wrap;
+    text-align: right;
+    padding-right: 10px;
+    padding-left: 10px;
+    padding-top: 90px;
+}
+
+.code {
+    flex: 1;
+    display: block;
+    position: relative;
+}
+
+#highlight {
+    position: absolute;
+    pointer-events: none;
+}
+
+#input,
+#highlight {
+    width: 100%;
+    white-space: pre-wrap;
+    padding-left: 20px;
+    padding-top: 90px;
+}
+
+/* Syntax */
+
+.syntax-keyword {
+    color: #3b4cce;
+}
+
+.syntax-string-literal {
+    color: rgb(215, 73, 33);
+}
+
+.syntax-error {
+    background-color: rgb(245, 153, 153);
+}
+
+.syntax-brace {
+    color: rgb(103, 103, 103);
+}
+
+/* Tree styling */
+
+.right-panel {
+    flex: 0.5;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.tree {
+    padding-top: 20px;
+    background: #f5f5f5;
+    line-height: 1.7;
+    font-family: monospace;
+    font-size: 16px;
+    line-height: 1.5;
+    border-left: 1px solid #e4e4e4;
+    overflow-y: scroll;
+    display: flex;
+    flex: 1;
+}
+
+.tree__node {
+    flex: 1;
+}
+
+.tree__node--highlighted {
+    background-color: #f3e6b3;
+}
+
+
+.tree__node>.tree__node {
+    margin-left: 20px;
+}
+
+.tree__node__field {
+    margin-left: 20px;
+}
+
+.tree__node__field__tag {
+    color: #2e58c1;
+    font-weight: bold;
+}
+
+
+.tree__node__field__name {
+    color: #bc9b15;
+    padding-left: 20px;
+}
+
+.tree__node__field__name:after {
+    content: ": ";
+}
+
+
+.tree__node__field__value {
+    color: #4a9936;
+}
+
+.tree__node__field__meta {
+    color: #777777;
+}
+
+.tree__node__field__meta:before {
+    content: " (";
+}
+
+.tree__node__field__meta:after {
+    content: ")";
+}
+
+/* Tree errors */
+
+.tree__node__errors {
+    margin-bottom: 10px;
+}
+
+.tree__node__errors__error {
+    margin-left: 20px;
+    background-color: rgb(227, 95, 95);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.tree__node__errors__error__field {}
+
+.tree__node__errors__error__field__name {
+    font-weight: bold;
+}
+
+.tree__node__errors__error__field__name:after {
+    content: ": ";
+}
+
+.tree__node__errors__error__field__value {}
