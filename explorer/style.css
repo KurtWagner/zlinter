@@ -91,6 +91,10 @@ body {
     color: rgb(215, 73, 33);
 }
 
+.syntax-error {
+    background-color: rgb(245, 153, 153);
+}
+
 .syntax-brace {
     color: rgb(103, 103, 103);
 }
@@ -120,7 +124,6 @@ body {
 .tree__node {
     flex: 1;
 }
-
 
 .tree__node--highlighted {
     background-color: #f3e6b3;

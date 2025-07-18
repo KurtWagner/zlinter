@@ -1,44 +1,42 @@
-
-
-const default_code = [
-    "pub fn main() void {",
-    "    std.debug.print(\"Hello AST explorer!\", .{});",
-    "}",
-    "const std = @import(\"std\");",
-    "",
-].join("\n");
-
-const wasm_promise = fetch('wasm.wasm')
-    .then(response => response.arrayBuffer())
-    .then(file => WebAssembly.instantiate(file))
-    .then(wasm => wasm.instance.exports)
-
-function parse(source) {
-    return wasm_promise
-        .then(({ memory, parse }) => {
-            const encoded_input = (new TextEncoder()).encode(source);
-            const array_input = new Uint8Array(memory.buffer, 0, encoded_input.length);
-            array_input.set(encoded_input, 0);
-
-            const out_len = parse(array_input.byteOffset, encoded_input.length);
-            const json_str = (new TextDecoder()).decode(new Uint8Array(memory.buffer, 0, out_len));
-            return JSON.parse(json_str);
-        });
-}
-
 (() => {
-    const input_element = document.getElementById("input");
-    const line_numbers_element = document.getElementById("line_numbers");
-    const highlight_element = document.getElementById("highlight");
-    const tree_element = document.getElementById("tree");
+    const default_code = [
+        "pub fn main() void {",
+        "    std.debug.print(\"Hello AST explorer!\", .{});",
+        "}",
+        "const std = @import(\"std\");",
+        "",
+    ].join("\n");
 
-    var last_json = null;
+    const wasmPromise = fetch('wasm.wasm')
+        .then(response => response.arrayBuffer())
+        .then(file => WebAssembly.instantiate(file))
+        .then(wasm => wasm.instance.exports)
+
+    function parse(source) {
+        return wasmPromise
+            .then(({ memory, parse }) => {
+                const encodedInput = (new TextEncoder()).encode(source);
+                const arrayInput = new Uint8Array(memory.buffer, 0, encodedInput.length);
+                arrayInput.set(encodedInput, 0);
+
+                const outLen = parse(arrayInput.byteOffset, encodedInput.length);
+                const jsonStr = (new TextDecoder()).decode(new Uint8Array(memory.buffer, 0, outLen));
+                return JSON.parse(jsonStr);
+            });
+    }
+
+    const inputElem = document.getElementById("input");
+    const lineNumbersElem = document.getElementById("line_numbers");
+    const highlightElem = document.getElementById("highlight");
+    const treeElem = document.getElementById("tree");
+
+    var lastJson = null;
 
     const getCursorPosition = () => {
         const selection = window.getSelection();
         if (selection.rangeCount) {
             const range = selection.getRangeAt(0);
-            if (range.commonAncestorContainer.parentNode == input_element) {
+            if (range.commonAncestorContainer.parentNode == inputElem) {
                 return range.endOffset;
             }
         }
@@ -46,74 +44,64 @@ function parse(source) {
     };
 
     const setCursorPosition = (pos) => {
-        const selection = window.getSelection()
-
         const range = document.createRange()
-        range.setStart(input_element.childNodes[0], pos)
+        range.setStart(inputElem.childNodes[0], pos)
         range.collapse(true)
 
+        const selection = window.getSelection()
         selection.removeAllRanges()
         selection.addRange(range)
     }
 
+    inputElem.addEventListener('input', syncLineNumbers);
+    inputElem.addEventListener('input', syncTree);
+    inputElem.addEventListener('keyup', syncCursorToken);
+    inputElem.addEventListener('click', syncCursorToken);
 
-    input_element.addEventListener('input', syncLineNumbers);
-    input_element.addEventListener('input', syncTree);
-    input_element.addEventListener('keyup', syncCursorToken);
-    input_element.addEventListener('click', syncCursorToken);
-
-    input_element.textContent = default_code;
-    input_element.dispatchEvent(new Event('input'));
+    inputElem.textContent = default_code;
+    inputElem.dispatchEvent(new Event('input'));
 
     function syncLineNumbers() {
-        const num_of_lines = input_element.textContent.split("\n").length;
+        const noOfLines = inputElem.textContent.split("\n").length;
 
         var fill = [];
-        for (let i = 1; i <= num_of_lines; i++) fill.push(i);
-        fill.push(num_of_lines + 1);
+        for (let i = 1; i <= noOfLines; i++) fill.push(i);
+        fill.push(noOfLines + 1);
 
-        line_numbers_element.innerHTML = fill.join("\n");
+        lineNumbersElem.innerHTML = fill.join("\n");
     }
 
     function syncCursorToken() {
-        const highlight_class = "tree__node--highlighted";
-        [...document.getElementsByClassName(highlight_class)].forEach(elem => elem.classList.remove(highlight_class));
+        const highlightClass = "tree__node--highlighted";
+        [...document.getElementsByClassName(highlightClass)].forEach(elem => elem.classList.remove(highlightClass));
 
-        const token_tuple = getSelectedToken();
-        if (token_tuple == null) return;
-        console.log("Selected token", token_tuple[1]);
+        const tokenIndexAndToken = getSelectedToken();
+        if (tokenIndexAndToken == null) return;
 
-
-        var smallest_elem = null;
+        var lowestOverlappingNode = null;
         [...document.getElementsByClassName("tree__node")].forEach(elem => {
+            const { firstToken, lastToken } = elem.dataset;
+            if (firstToken == null || lastToken == null) return;
 
-            const first_token = elem.dataset.firstToken;
-            const last_token = elem.dataset.lastToken;
-            if (first_token == null || last_token == null) return;
-
-            const [token_i,] = token_tuple;
-            if (token_i >= first_token && token_i <= last_token) {
-                smallest_elem = elem;
+            const [token_i,] = tokenIndexAndToken;
+            if (token_i >= firstToken && token_i <= lastToken) {
+                lowestOverlappingNode = elem;
             }
         });
 
-        if (smallest_elem) {
-            smallest_elem.classList.add(highlight_class);
-            smallest_elem.scrollIntoView();
+        if (lowestOverlappingNode) {
+            lowestOverlappingNode.classList.add(highlightClass);
+            lowestOverlappingNode.scrollIntoView();
         }
-
-
-
-
     }
 
     function getSelectedToken() {
         const pos = getCursorPosition();
         if (pos == 0) return null;
-        if (!last_json) return null;
+        if (!lastJson) return null;
 
-        for (let i = 0; i < last_json.tokens.length; i++) {
-            const token = last_json.tokens[i];
+        for (let i = 0; i < lastJson.tokens.length; i++) {
+            const token = lastJson.tokens[i];
             if (pos >= token.start && pos < token.start + token.len) {
                 return [i, token];
             }
@@ -121,163 +109,153 @@ function parse(source) {
         return null;
     }
 
-
     function syncTree() {
-
-        parse(input_element.textContent)
+        parse(inputElem.textContent)
             .then(json => {
-                last_json = json;
+                console.debug('AST:', json);
+                lastJson = json;
 
-
+                const tokensWithError = new Set();
+                for (const error of json.errors || []) {
+                    tokensWithError.add(error.token);
+                }
 
                 const pos = getCursorPosition();
-                const raw = input_element.textContent;
-                input_element.innerHTML = raw;
+                const raw = inputElem.textContent;
+                inputElem.innerHTML = raw;
                 setCursorPosition(pos);
-
-
-
-                console.log('raw', raw);
 
                 var prev = 0;
                 const syntax = [];
-                for (const token of json.tokens) {
+                for (let tokenIndex = 0; tokenIndex < json.tokens.length; tokenIndex++) {
+                    const token = json.tokens[tokenIndex];
+
                     syntax.push(raw.slice(prev, token.start));
 
-                    const slice = raw.slice(token.start, token.start + token.len);
+                    const classes = [];
+                    if (tokensWithError.has(tokenIndex)) {
+                        classes.push("syntax-error");
+                    }
+
                     if (token.tag.startsWith('keyword_')) {
-                        syntax.push(`<span class="syntax-keyword">${slice}</span>`);
+                        classes.push("syntax-keyword");
                     } else if (token.tag.startsWith('string_literal')) {
-                        syntax.push(`<span class="syntax-string-literal">${slice}</span>`);
+                        classes.push("syntax-string-literal");
                     } else if (['l_brace', 'r_brace'].includes(token.tag)) {
-                        syntax.push(`<span class="syntax-brace">${slice}</span>`);
-                    } else {
+                        classes.push("syntax-brace");
+                    }
+
+                    const slice = raw.slice(token.start, token.start + token.len);
+                    if (classes.length == 0) {
                         syntax.push(slice);
+                    } else {
+                        syntax.push(`<span class="${classes.join(' ')}">${slice}</span>`);
                     }
 
                     prev = token.start + token.len;
                 }
                 syntax.push(raw.slice(prev));
-
-                console.log('syntax', syntax.join(""));
-
-                highlight_element.innerHTML = syntax.join("");
+                highlightElem.innerHTML = syntax.join("");
 
 
-
-
-                console.log(json);
-
-                const tokens = json.tokens;
-
-                tree_element.innerHTML = "";
-
-
-                const tree_root_element = createTreeNode({
+                const treeRootElem = createTreeNode({
                     tag: "root",
                     body: json.body,
                 });
 
-                const maybe_errors = createTreeErrors(json);
-                if (maybe_errors) tree_root_element.prepend(maybe_errors);
+                const maybeErrors = createTreeErrors(json);
+                if (maybeErrors) treeRootElem.prepend(maybeErrors);
 
-                tree_element.append(tree_root_element);
+                treeElem.innerHTML = "";
+                treeElem.append(treeRootElem);
 
+                function createTreeErrors(jsonObj) {
+                    if (jsonObj.errors.len == 0) return;
 
-                function createTreeErrors(json_object) {
-                    if (json_object.errors.len == 0) return;
+                    const errorsDiv = document.createElement('div');
+                    errorsDiv.classList.add("tree__node__errors");
 
-                    const errors_element = document.createElement('div');
-                    errors_element.classList.add("tree__node__errors");
-
-                    for (const error of json_object.errors) {
-                        const error_element = document.createElement("div");
-                        error_element.classList.add("tree__node__errors__error");
+                    for (const error of jsonObj.errors) {
+                        const errorDiv = document.createElement("div");
+                        errorDiv.classList.add("tree__node__errors__error");
 
                         for (const [key, val] of Object.entries(error)) {
-                            const error_field_element = document.createElement("div");
-                            error_field_element.classList.add("tree__node__errors__error__field");
+                            const errorFieldDiv = document.createElement("div");
+                            errorFieldDiv.classList.add("tree__node__errors__error__field");
 
-                            const name_element = document.createElement('span');
-                            name_element.classList.add('tree__node__errors__error__field__name');
-                            name_element.textContent = key;
-                            error_field_element.append(name_element);
+                            const nameSpan = document.createElement('span');
+                            nameSpan.classList.add('tree__node__errors__error__field__name');
+                            nameSpan.textContent = key;
+                            errorFieldDiv.append(nameSpan);
 
-                            const value_element = document.createElement('span');
-                            value_element.classList.add('tree__node__errors__error__field__value');
-                            value_element.textContent = val;
-                            error_field_element.append(value_element);
+                            const valueSpan = document.createElement('span');
+                            valueSpan.classList.add('tree__node__errors__error__field__value');
+                            valueSpan.textContent = val;
+                            errorFieldDiv.append(valueSpan);
 
-                            error_element.append(error_field_element);
+                            errorDiv.append(errorFieldDiv);
                         }
-                        errors_element.append(error_element);
+                        errorsDiv.append(errorDiv);
                     }
-
-                    return errors_element;
+                    return errorsDiv;
                 }
 
 
-                function createTreeNode(json_object) {
+                function createTreeNode(jsonObj) {
                     const div = document.createElement('div');
                     div.classList.add('tree__node');
 
-                    div.setAttribute("data-first-token", json_object.first_token);
-                    div.setAttribute("data-last-token", json_object.last_token);
+                    div.dataset.firstToken = jsonObj.first_token;
+                    div.dataset.lastToken = jsonObj.last_token;
 
-                    for (const [key, val] of Object.entries(json_object)) {
+                    for (const [key, val] of Object.entries(jsonObj)) {
                         if (key == "body") continue;
 
-                        const field_div = document.createElement('div');
-                        field_div.classList.add('tree__node__field');
+                        const fieldDiv = document.createElement('div');
+                        fieldDiv.classList.add('tree__node__field');
 
                         if (key == "tag") {
-                            const tag_span = document.createElement('span');
-                            tag_span.classList.add('tree__node__field__tag');
-                            tag_span.textContent = val;
-                            field_div.append(tag_span);
+                            const tagSpan = document.createElement('span');
+                            tagSpan.classList.add('tree__node__field__tag');
+                            tagSpan.textContent = val;
+                            fieldDiv.append(tagSpan);
                         } else {
+                            const nameSpan = document.createElement('span');
+                            nameSpan.classList.add('tree__node__field__name');
+                            nameSpan.textContent = key;
+                            fieldDiv.append(nameSpan);
 
-                            const name_span = document.createElement('span');
-                            name_span.classList.add('tree__node__field__name');
-                            name_span.textContent = key;
-                            field_div.append(name_span);
-
-                            const value_span = document.createElement('span');
-                            value_span.classList.add('tree__node__field__value');
-                            value_span.textContent = val;
-                            field_div.append(value_span);
+                            const valueSpan = document.createElement('span');
+                            valueSpan.classList.add('tree__node__field__value');
+                            valueSpan.textContent = val;
+                            fieldDiv.append(valueSpan);
 
                             if (key.endsWith("_token")) {
                                 const meta_span = document.createElement('span');
                                 meta_span.classList.add('tree__node__field__meta');
                                 meta_span.textContent = getTokenDescription(val);
-                                field_div.append(meta_span);
+                                fieldDiv.append(meta_span);
                             }
                         }
-
-                        div.append(field_div);
+                        div.append(fieldDiv);
                     }
 
-                    if (json_object.body && json_object.body.length > 0) {
-                        const field_div = document.createElement('div');
-                        field_div.classList.add('tree__node__field');
+                    if (jsonObj.body && jsonObj.body.length > 0) {
+                        const fieldDiv = document.createElement('div');
+                        fieldDiv.classList.add('tree__node__field');
 
-                        const name_span = document.createElement('span');
-                        name_span.classList.add('tree__node__field__name');
-                        name_span.textContent = "body";
-                        field_div.append(name_span);
+                        const nameSpan = document.createElement('span');
+                        nameSpan.classList.add('tree__node__field__name');
+                        nameSpan.textContent = "body";
+                        fieldDiv.append(nameSpan);
 
-                        div.append(field_div);
+                        div.append(fieldDiv);
 
-                        for (const child_node of json_object.body) {
-                            div.append(createTreeNode(child_node))
+                        for (const child of jsonObj.body) {
+                            div.append(createTreeNode(child))
                         }
                     }
-
-
                     return div;
-
-
                 }
 
                 function getTokenDescription(token) {
@@ -290,6 +268,3 @@ function parse(source) {
             });
     }
 })();
-
-
-
