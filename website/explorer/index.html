@@ -2,12 +2,22 @@
 <html>
 
 <head>
-    <title>Zig AST explorer</title>
+    <title>Zlinter - Zig AST explorer</title>
     <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-    <div class="header">Zig AST Explorer</div>
+    <div class="header">
+        <span class="header__title">Zlinter - AST Explorer</span>
+        <span class="header__subtitle">Work-in-progress AST explorer for aiding lint rule writing (uses <a
+                href="https://github.com/zigtools/zls" target="_blank">ZLS</a>)</span>
+
+    </div>
+    <a class="github-link" title="Open project in Github" target="_blank"
+        href="https://github.com/KurtWagner/zlinter/tree/0.14.x/website/explorer">
+        <img width="20px" height="20px" src="github.svg" />
+    </a>
+
     <div class="body">
         <div class="editor">
             <div id="line_numbers"></div>

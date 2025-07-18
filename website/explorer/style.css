@@ -30,17 +30,45 @@ body {
 
 
 .header {
-    padding-left: 10px;
-    padding-right: 10px;
-    line-height: 2;
-    color: white;
-    font-weight: bold;
-    font-size: 18px;
     margin-left: 50px;
     margin-top: 10px;
     position: absolute;
+    line-height: 2;
+
+}
+
+.header__title {
+    padding: 8px 20px;
+    color: white;
+    font-weight: bold;
+    font-size: 16px;
     border-radius: 20px;
-    background-color: #222;
+    background-color: #223044;
+}
+
+.header__subtitle {
+    padding: 8px;
+    color: #223044;
+    font-size: 16px;
+}
+
+.header__subtitle a[href]:visited,
+.header__subtitle a[href] {
+    color: #223044;
+    z-index: 10000;
+}
+
+.github-link {
+    position: absolute;
+    right: 0;
+    margin: 10px 20px;
+    padding: 10px 12px;
+    border-radius: 35px;
+    background-color: #223044
+}
+
+.github-link:hover {
+    background-color: #3e516c
 }
 
 .editor {
@@ -50,10 +78,11 @@ body {
     font-family: monospace;
     font-size: 16px;
     line-height: 1.5;
+    height: 100%;
 }
 
 .editor #line_numbers {
-    background-color: #222;
+    background-color: #333;
     color: white;
     white-space: pre-wrap;
     text-align: right;
@@ -78,7 +107,8 @@ body {
     width: 100%;
     white-space: pre-wrap;
     padding-left: 20px;
-    padding-top: 90px;
+    margin-top: 90px;
+    overflow-y: scroll;
 }
 
 /* Syntax */
@@ -129,7 +159,6 @@ body {
     background-color: #f3e6b3;
 }
 
-
 .tree__node>.tree__node {
     margin-left: 20px;
 }
@@ -143,7 +172,6 @@ body {
     font-weight: bold;
 }
 
-
 .tree__node__field__name {
     color: #bc9b15;
     padding-left: 20px;
@@ -152,7 +180,6 @@ body {
 .tree__node__field__name:after {
     content: ": ";
 }
-
 
 .tree__node__field__value {
     color: #4a9936;
