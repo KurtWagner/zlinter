@@ -34,13 +34,35 @@
 
     const getCursorPosition = () => {
         const selection = window.getSelection();
-        if (selection.rangeCount) {
-            const range = selection.getRangeAt(0);
-            if (range.commonAncestorContainer.parentNode == inputElem) {
-                return range.endOffset;
+
+        if (!selection.focusNode) return 0;
+        if (!hasAncestor(selection.focusNode, inputElem)) return 0;
+
+        var offset = selection.focusOffset;
+        var node = selection.focusNode;
+        while (node !== inputElem) {
+            if (interpretAsNewline(node)) {
+                offset += 1; // For newline
+            }
+
+            if (node.previousSibling) {
+                node = node.previousSibling;
+                offset += normalizeNodeText(node).length;
+            } else {
+                node = node.parentNode;
+
             }
         }
-        return 0;
+        return offset;
+
+        function hasAncestor(node, parentNode) {
+            while (node !== null) {
+                if (node === parentNode) return true;
+                node = node.parentNode;
+            }
+            return false;
+        };
+
     };
 
     const setCursorPosition = (pos) => {
@@ -58,15 +80,14 @@
     inputElem.addEventListener('keyup', syncCursorToken);
     inputElem.addEventListener('click', syncCursorToken);
 
-    inputElem.innerText = default_code;
+    inputElem.textContent = normalizeNodeText(default_code);
     inputElem.dispatchEvent(new Event('input'));
 
     function syncLineNumbers() {
-        const noOfLines = inputElem.innerText.split("\n").length;
+        const noOfLines = normalizeNodeText(inputElem).split("\n").length - 1;
 
         var fill = [];
         for (let i = 1; i <= noOfLines; i++) fill.push(i);
-        fill.push(noOfLines + 1);
 
         lineNumbersElem.innerHTML = fill.join("\n");
     }
@@ -110,7 +131,9 @@
     }
 
     function syncTree() {
-        parse(inputElem.innerText)
+        const textContent = normalizeNodeText(inputElem);
+
+        parse(textContent)
             .then(json => {
                 console.debug('AST:', json);
                 lastJson = json;
@@ -120,9 +143,9 @@
                     tokensWithError.add(error.token);
                 }
 
+
                 const pos = getCursorPosition();
-                const raw = inputElem.innerText;
-                inputElem.innerHTML = raw;
+                inputElem.innerHTML = textContent;
                 setCursorPosition(pos);
 
                 var prev = 0;
@@ -130,7 +153,7 @@
                 for (let tokenIndex = 0; tokenIndex < json.tokens.length; tokenIndex++) {
                     const token = json.tokens[tokenIndex];
 
-                    syntax.push(raw.slice(prev, token.start));
+                    syntax.push(textContent.slice(prev, token.start));
 
                     const classes = [];
                     if (tokensWithError.has(tokenIndex)) {
@@ -152,7 +175,6 @@
                 }
                 syntax.push(raw.slice(prev));
                 highlightElem.innerHTML = syntax.join("");
-
 
                 const treeRootElem = createTreeNode({
                     tag: "root",
@@ -196,7 +218,6 @@
                     }
                     return errorsDiv;
                 }
-
 
                 function createTreeNode(jsonObj) {
                     const div = document.createElement('div');
@@ -265,3 +286,44 @@
             });
     }
 })();
+
+function normalizeNodeText(node) {
+    if (node.childNodes.length == 0) {
+        return node.textContent;
+    }
+
+    var parts = [];
+    for (const child of node.childNodes) {
+        parts.push(normalizeChildNodeText(child));
+    }
+    return parts.join('');
+}
+
+function normalizeChildNodeText(node) {
+    var parts = [];
+
+
+    if (interpretAsNewline(node)) {
+        parts.push('\n');
+    }
+
+    if (node.childNodes.length == 0) {
+        parts.push(node.textContent);
+    }
+
+    for (const child of node.childNodes) {
+        parts.push(normalizeChildNodeText(child));
+    }
+    return parts.join('');
+}
+
+function interpretAsNewline(node) {
+    if (!node.previousSibling || node.previousSibling.nodeName != 'BR') {
+        if (node.nodeName == 'BR') {
+            return true;
+        } else if (node.nodeName == 'DIV' && node.textContent.length > 0) {
+            return true;
+        }
+    }
+    return false;
+}
