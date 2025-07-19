@@ -28,6 +28,13 @@ pub fn jsonTree(
         .{ .array = try errorsToJson(tree, arena) },
     );
 
+    if (tree.render(arena)) |rendering| {
+        try root_json_object.put(
+            "render",
+            .{ .string = rendering },
+        );
+    } else |_| {}
+
     const Context = struct {
         arena: std.mem.Allocator,
         indent: u32 = 0,

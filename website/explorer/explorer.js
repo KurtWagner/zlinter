@@ -35,6 +35,7 @@ const trailing_character = "\u2060";
     const lineNumbersElem = document.getElementById("line_numbers");
     const highlightElem = document.getElementById("highlight");
     const treeElem = document.getElementById("tree");
+    const fmtButton = document.getElementById("fmt-button");
 
     var lastJson = null;
 
@@ -95,9 +96,21 @@ const trailing_character = "\u2060";
     inputElem.addEventListener('input', syncTree);
     inputElem.addEventListener('keyup', syncCursorToken);
     inputElem.addEventListener('click', syncCursorToken);
+    fmtButton.addEventListener('click', triggerFmtButton);
 
     inputElem.textContent = default_code + trailing_character;
     inputElem.dispatchEvent(new Event('input'));
+
+    function triggerFmtButton() {
+        if (!lastJson) return;
+        if (lastJson.render) {
+            const new_content = lastJson.render + trailing_character;
+            if (inputElem.textContent !== new_content) {
+                inputElem.textContent = new_content;
+                inputElem.dispatchEvent(new Event('input'));
+            }
+        }
+    }
 
     // We want to force that the cursor is never individually on the last
     // character, which is our special trailing character.
