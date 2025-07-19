@@ -34,16 +34,43 @@
 
     const getCursorPosition = () => {
         const selection = window.getSelection();
-        if (selection.rangeCount) {
-            const range = selection.getRangeAt(0);
-            if (range.commonAncestorContainer.parentNode == inputElem) {
-                return range.endOffset;
+
+        if (!selection.focusNode) return 0;
+        if (!hasAncestor(selection.focusNode, inputElem)) return 0;
+
+        var offset = selection.focusOffset;
+        var node = selection.focusNode;
+        while (node !== inputElem) {
+            if (interpretAsNewline(node)) {
+                offset += 1; // For newline
+            }
+
+            if (node.previousSibling) {
+                node = node.previousSibling;
+                offset += normalizeNodeText(node).length;
+            } else {
+                node = node.parentNode;
+
             }
         }
-        return 0;
+        return offset;
+
+        function hasAncestor(node, parentNode) {
+            while (node !== null) {
+                if (node === parentNode) return true;
+                node = node.parentNode;
+            }
+            return false;
+        };
+
     };
 
     const setCursorPosition = (pos) => {
+        if (!inputElem.childNodes || inputElem.childNodes.length == 0) {
+            console.error("Failed to set cursor position");
+            return;
+        }
+
         const range = document.createRange()
         range.setStart(inputElem.childNodes[0], pos)
         range.collapse(true)
@@ -53,20 +80,41 @@
         selection.addRange(range)
     }
 
+    inputElem.addEventListener('keypress', overrideEnterKeyPress);
     inputElem.addEventListener('input', syncLineNumbers);
     inputElem.addEventListener('input', syncTree);
     inputElem.addEventListener('keyup', syncCursorToken);
     inputElem.addEventListener('click', syncCursorToken);
 
-    inputElem.innerText = default_code;
+    inputElem.textContent = default_code;
     inputElem.dispatchEvent(new Event('input'));
 
+    function overrideEnterKeyPress(e) {
+        // None of the popular browsers seem to agree what new lines look like
+        // in contenteditable elements. Firefox even seems to add two through
+        // nested the current line in a div while adding a new one below. So
+        // unfortunately we're going to get a little dirty and disable enter
+        // and do it ourselves and pray for the best.
+        if (e.key === 'Enter') {
+            e.preventDefault();
+
+            const pos = getCursorPosition();
+            const text = normalizeNodeText(inputElem);
+            inputElem.textContent =
+                text.slice(0, pos)
+                + '\n'
+                + text.slice(pos);
+            setCursorPosition(pos + 1);
+            inputElem.dispatchEvent(new Event('input'));
+
+        }
+    }
+
     function syncLineNumbers() {
-        const noOfLines = inputElem.innerText.split("\n").length;
+        const noOfLines = normalizeNodeText(inputElem).split("\n").length - 1;
 
         var fill = [];
         for (let i = 1; i <= noOfLines; i++) fill.push(i);
-        fill.push(noOfLines + 1);
 
         lineNumbersElem.innerHTML = fill.join("\n");
     }
@@ -110,7 +158,9 @@
     }
 
     function syncTree() {
-        parse(inputElem.innerText)
+        const textContent = normalizeNodeText(inputElem);
+
+        parse(textContent)
             .then(json => {
                 console.debug('AST:', json);
                 lastJson = json;
@@ -121,8 +171,7 @@
                 }
 
                 const pos = getCursorPosition();
-                const raw = inputElem.innerText;
-                inputElem.innerHTML = raw;
+                inputElem.innerHTML = textContent;
                 setCursorPosition(pos);
 
                 var prev = 0;
@@ -130,7 +179,7 @@
                 for (let tokenIndex = 0; tokenIndex < json.tokens.length; tokenIndex++) {
                     const token = json.tokens[tokenIndex];
 
-                    syntax.push(raw.slice(prev, token.start));
+                    syntax.push(textContent.slice(prev, token.start));
 
                     const classes = [];
                     if (tokensWithError.has(tokenIndex)) {
@@ -145,14 +194,13 @@
                         classes.push("syntax-brace");
                     }
 
-                    const slice = raw.slice(token.start, token.start + token.len);
+                    const slice = textContent.slice(token.start, token.start + token.len);
                     syntax.push(`<span data-token-index="${tokenIndex}" class="${classes.join(' ')}">${slice}</span>`);
 
                     prev = token.start + token.len;
                 }
-                syntax.push(raw.slice(prev));
+                syntax.push(textContent.slice(prev));
                 highlightElem.innerHTML = syntax.join("");
-
 
                 const treeRootElem = createTreeNode({
                     tag: "root",
@@ -196,7 +244,6 @@
                     }
                     return errorsDiv;
                 }
-
 
                 function createTreeNode(jsonObj) {
                     const div = document.createElement('div');
@@ -265,3 +312,47 @@
             });
     }
 })();
+
+// None of the popular browsers seem to agree what new lines look like
+// in contenteditable elements. Firefox even seems to add two through
+// nested the current line in a div while adding a new one below. So
+// this method tries to help a little bit by implementing our own html to text
+// logic instead of relying on reading innerText or textContent.
+function normalizeNodeText(node) {
+    if (!node.childNodes || node.childNodes.length == 0) {
+        return node.textContent;
+    }
+
+    var parts = [];
+    for (const child of node.childNodes) {
+        parts.push(normalizeChildNodeText(child));
+    }
+    return parts.join('');
+}
+
+function normalizeChildNodeText(node) {
+    var parts = [];
+    if (interpretAsNewline(node)) {
+        parts.push('\n');
+    }
+
+    if (node.childNodes.length == 0) {
+        parts.push(node.textContent);
+    }
+
+    for (const child of node.childNodes) {
+        parts.push(normalizeChildNodeText(child));
+    }
+    return parts.join('');
+}
+
+function interpretAsNewline(node) {
+    if (!node.previousSibling || node.previousSibling.nodeName != 'BR') {
+        if (node.nodeName == 'BR') {
+            return true;
+        } else if (node.nodeName == 'DIV' && node.textContent.length > 0) {
+            return true;
+        }
+    }
+    return false;
+}

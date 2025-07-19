@@ -286,6 +286,20 @@ Rules are per project configurable so I don't see any problems if new opinionate
 
 If you notice breaking changes in `zig` that will not be picked up by a `Deprecated:` comment then consider contributing to the `no_deprecated.zig` rule, with a specific check for the change. For example, `zig` removed `usingnamespace` in `0.15` so `no_deprecated.zig` will explicitly check and report the usage of `usingnamespace` keyword in `0.14` runs.
 
+### Dependencies
+
+Zlinter avoids dependencies. It's just too much of a burden right now to depend
+on something written for Zig when Zig isn't 1.x.
+
+The one exception is ZLS, as it's well maintained and doesn't appear to be
+going anywhere. More often than not I've wasted hours implementing a method to
+find a very similar method already exists in ZLS, which makes sense, as ZLS
+analyses Zig code using the AST like this linter currently does.
+
+The AST Explorer provided with Zlinter will be similar and aims to be minimal.
+Ideally no build system, no dependencies, just plain JS and CSS targetting
+modern browers as the target audience should all have access to such things.
+
 ### Run tests
 
 Unit tests:
