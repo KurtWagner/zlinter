@@ -170,7 +170,6 @@
                     tokensWithError.add(error.token);
                 }
 
-
                 const pos = getCursorPosition();
                 inputElem.innerHTML = textContent;
                 setCursorPosition(pos);
@@ -333,8 +332,6 @@ function normalizeNodeText(node) {
 
 function normalizeChildNodeText(node) {
     var parts = [];
-
-
     if (interpretAsNewline(node)) {
         parts.push('\n');
     }
