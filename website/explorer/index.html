@@ -6,29 +6,29 @@
     <link rel="stylesheet" href="style.css">
 </head>
 
-<body spellcheck=false>
-    <div class="header">
-        <span class="header__title">Zlinter - AST Explorer</span>
-        <span class="header__subtitle">Work-in-progress AST explorer for aiding lint rule writing (uses <a
-                href="https://github.com/zigtools/zls" target="_blank">ZLS</a>)</span>
-
+<body spellcheck=false class="editor">
+    <div class="editor__toolbar">
+        <span class="editor__toolbar__title"><strong>Zlinter</strong> - Zig AST Explorer</span>
+        <span class="editor__toolbar__subtitle">Work-in-progress AST explorer for aiding lint rule writing (uses
+            <a href="https://github.com/zigtools/zls" target="_blank">ZLS</a>)</span>
+        <a class="editor__toolbar__github" title="Open project in Github" target="_blank"
+            href="https://github.com/KurtWagner/zlinter/tree/0.14.x/website/explorer">
+            <img width="25px" height="25px" src="github.svg" />
+        </a>
     </div>
-    <a class="github-link" title="Open project in Github" target="_blank"
-        href="https://github.com/KurtWagner/zlinter/tree/0.14.x/website/explorer">
-        <img width="20px" height="20px" src="github.svg" />
-    </a>
-
-    <div class="body">
-        <div class="editor">
-            <div id="line_numbers"></div>
-            <div class="code">
-                <div id="highlight"></div>
-                <div id="input" tabindex="1" contenteditable="plaintext-only"></div>
+    <div class="editor__body">
+        <div class="editor__body__content">
+            <div class="editor__body__line-numbers" id="line_numbers"></div>
+            <div class="editor__body__code">
+                <div class="editor__body__code__highlight" id="highlight"></div>
+                <div class="editor__body__code__input" id="input" tabindex="1" contenteditable="plaintext-only">
+                </div>
+            </div>
+            <div class="editor__body__options">
+                <div class="editor__body__options__fmt" id="fmt-button" title="Fmt code">F</div>
             </div>
         </div>
-        <div class="right-panel">
-            <div class="tree" id="tree">
-            </div>
+        <div class="editor__body__tree" id="tree">
         </div>
     </div>
 </body>
