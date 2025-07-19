@@ -1,3 +1,9 @@
+
+
+// We use a hidden character WORD JOINER at the end of contenteditable content
+// to ensure trailing newlines are actually rendered.
+const trailing_character = "\u2060";
+
 (() => {
     const default_code = [
         "pub fn main() void {",
@@ -32,14 +38,23 @@
 
     var lastJson = null;
 
-    const getCursorPosition = () => {
-        const selection = window.getSelection();
+    const insideOfInput = (selection) => {
+        return selection.focusNode &&
+            insideOf(selection.focusNode, inputElem);
 
-        if (!selection.focusNode) return 0;
-        if (!hasAncestor(selection.focusNode, inputElem)) return 0;
+        function insideOf(node, parentNode) {
+            return parentNode === node
+                || parentNode.contains(node);
+        };
+    }
+
+    const getCursorPosition = () => {
+        const selection = document.getSelection();
+        if (!insideOfInput(selection)) return 0; // Should this error?
 
         var offset = selection.focusOffset;
         var node = selection.focusNode;
+
         while (node !== inputElem) {
             if (interpretAsNewline(node)) {
                 offset += 1; // For newline
@@ -55,13 +70,7 @@
         }
         return offset;
 
-        function hasAncestor(node, parentNode) {
-            while (node !== null) {
-                if (node === parentNode) return true;
-                node = node.parentNode;
-            }
-            return false;
-        };
+
 
     };
 
@@ -75,19 +84,32 @@
         range.setStart(inputElem.childNodes[0], pos)
         range.collapse(true)
 
-        const selection = window.getSelection()
+        const selection = document.getSelection()
         selection.removeAllRanges()
         selection.addRange(range)
     }
 
+    document.addEventListener('selectionchange', overrideCursorPosition);
     inputElem.addEventListener('keypress', overrideEnterKeyPress);
     inputElem.addEventListener('input', syncLineNumbers);
     inputElem.addEventListener('input', syncTree);
     inputElem.addEventListener('keyup', syncCursorToken);
     inputElem.addEventListener('click', syncCursorToken);
 
-    inputElem.textContent = default_code;
+    inputElem.textContent = default_code + trailing_character;
     inputElem.dispatchEvent(new Event('input'));
+
+    // We want to force that the cursor is never individually on the last
+    // character, which is our special trailing character.
+    function overrideCursorPosition() {
+        const selection = document.getSelection();
+        if (selection.anchorOffset !== selection.focusOffset) return;
+        if (!insideOfInput(selection)) return;
+
+        if (inputElem.innerHTML.length == getCursorPosition()) {
+            setCursorPosition(inputElem.innerHTML.length - 1);
+        }
+    }
 
     function overrideEnterKeyPress(e) {
         // None of the popular browsers seem to agree what new lines look like
@@ -97,22 +119,12 @@
         // and do it ourselves and pray for the best.
         if (e.key === 'Enter') {
             e.preventDefault();
-
-            const pos = getCursorPosition();
-            const text = normalizeNodeText(inputElem);
-            inputElem.textContent =
-                text.slice(0, pos)
-                + '\n'
-                + text.slice(pos);
-            setCursorPosition(pos + 1);
-            inputElem.dispatchEvent(new Event('input'));
-
+            document.execCommand('insertLineBreak')
         }
     }
 
     function syncLineNumbers() {
-        const noOfLines = normalizeNodeText(inputElem).split("\n").length - 1;
-
+        const noOfLines = normalizeNodeText(inputElem).split("\n").length;
         var fill = [];
         for (let i = 1; i <= noOfLines; i++) fill.push(i);
 
@@ -157,8 +169,11 @@
         return null;
     }
 
-    function syncTree() {
+    function syncTree(e) {
+        const pos = getCursorPosition();
         const textContent = normalizeNodeText(inputElem);
+        inputElem.innerHTML = textContent + trailing_character;
+        setCursorPosition(pos);
 
         parse(textContent)
             .then(json => {
@@ -169,10 +184,6 @@
                 for (const error of json.errors || []) {
                     tokensWithError.add(error.token);
                 }
-
-                const pos = getCursorPosition();
-                inputElem.innerHTML = textContent;
-                setCursorPosition(pos);
 
                 var prev = 0;
                 const syntax = [];
@@ -200,7 +211,7 @@
                     prev = token.start + token.len;
                 }
                 syntax.push(textContent.slice(prev));
-                highlightElem.innerHTML = syntax.join("");
+                highlightElem.innerHTML = syntax.join("") + trailing_character;
 
                 const treeRootElem = createTreeNode({
                     tag: "root",
@@ -319,15 +330,23 @@
 // this method tries to help a little bit by implementing our own html to text
 // logic instead of relying on reading innerText or textContent.
 function normalizeNodeText(node) {
-    if (!node.childNodes || node.childNodes.length == 0) {
-        return node.textContent;
-    }
+    return (() => {
+        if (!node.childNodes || node.childNodes.length == 0) {
+            return node.textContent;
+        }
 
-    var parts = [];
-    for (const child of node.childNodes) {
-        parts.push(normalizeChildNodeText(child));
-    }
-    return parts.join('');
+        // Empty in some browsers seem to just be a <br> child, which is unfortunate
+        // as it can also mean a newline.
+        if (node.childNodes.length == 1 && node.childNodes[0].nodeName == 'BR') {
+            return "";
+        }
+
+        var parts = [];
+        for (const child of node.childNodes) {
+            parts.push(normalizeChildNodeText(child));
+        }
+        return parts.join('');
+    })().replaceAll(trailing_character, "");
 }
 
 function normalizeChildNodeText(node) {
@@ -355,4 +374,9 @@ function interpretAsNewline(node) {
         }
     }
     return false;
+}
+
+function endsWithTrailingCharacter(input) {
+    if (!input) return false;
+    return input.charCodeAt(input.len - 1) === trailing_character.charCodeAt(0);
 }
