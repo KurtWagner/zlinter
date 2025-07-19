@@ -90,12 +90,10 @@ const trailing_character = "\u2060";
         selection.addRange(range)
     }
 
-    document.addEventListener('selectionchange', overrideCursorPosition);
+    document.addEventListener('selectionchange', () => { overrideCursorPosition(); syncCursorToken() });
     inputElem.addEventListener('keypress', overrideEnterKeyPress);
     inputElem.addEventListener('input', syncLineNumbers);
     inputElem.addEventListener('input', syncTree);
-    inputElem.addEventListener('keyup', syncCursorToken);
-    inputElem.addEventListener('click', syncCursorToken);
     fmtButton.addEventListener('click', triggerFmtButton);
 
     inputElem.textContent = default_code + trailing_character;
@@ -169,13 +167,13 @@ const trailing_character = "\u2060";
     }
 
     function getSelectedToken() {
-        const pos = getCursorPosition();
-        if (pos == 0) return null;
         if (!lastJson) return null;
+        if (!insideOfInput(document.getSelection())) return null;
 
+        const pos = getCursorPosition();
         for (let i = 0; i < lastJson.tokens.length; i++) {
             const token = lastJson.tokens[i];
-            if (pos >= token.start && pos < token.start + token.len) {
+            if (pos >= token.start && pos <= token.start + token.len) {
                 return [i, token];
             }
         }
