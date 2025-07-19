@@ -28,7 +28,10 @@ pub fn jsonTree(
         .{ .array = try errorsToJson(tree, arena) },
     );
 
-    if (tree.render(arena)) |rendering| {
+    if (switch (version.zig) {
+        .@"0.14" => tree.render(arena),
+        .@"0.15" => tree.renderAlloc(arena),
+    }) |rendering| {
         try root_json_object.put(
             "render",
             .{ .string = rendering },
@@ -163,4 +166,5 @@ fn tokensToJson(tree: std.zig.Ast, arena: std.mem.Allocator) !std.json.Array {
 const std = @import("std");
 const session = @import("session.zig");
 const shims = @import("shims.zig");
+const version = @import("version.zig");
 const zls = @import("zls");
