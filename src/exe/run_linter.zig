@@ -465,11 +465,12 @@ fn allocAstErrorMsg(
     ast: std.zig.Ast,
     err: std.zig.Ast.Error,
     allocator: std.mem.Allocator,
-) error{OutOfMemory}![]const u8 {
+) error{ OutOfMemory, WriteFailed }![]const u8 {
     var error_message = std.ArrayListUnmanaged(u8).empty;
     defer error_message.deinit(allocator);
 
-    try ast.renderError(err, error_message.writer(allocator));
+    var aw = std.io.Writer.Allocating.fromArrayList(allocator, &error_message);
+    try ast.renderError(err, &aw.writer);
     return error_message.toOwnedSlice(allocator);
 }
 

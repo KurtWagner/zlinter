@@ -111,7 +111,10 @@ pub fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8, op
     std.testing.expectEqual(ast.errors.len, 0) catch |err| {
         std.debug.print("Failed to parse AST:\n", .{});
         for (ast.errors) |ast_err| {
-            try ast.renderError(ast_err, std.fs.File.stderr().deprecatedWriter());
+            var buffer: [1024]u8 = undefined;
+
+            var writer = std.fs.File.stderr().writer(&buffer).interface;
+            try ast.renderError(ast_err, &writer);
         }
         return err;
     };
