@@ -149,6 +149,10 @@ body {
     color: rgb(215, 73, 33);
 }
 
+.syntax-number-literal {
+    color: rgb(73, 156, 73);
+}
+
 .syntax-error {
     background-color: rgb(245, 153, 153);
 }
@@ -158,7 +162,7 @@ body {
 }
 
 .syntax-brace {
-    color: rgb(103, 103, 103);
+    color: rgb(145, 145, 145);
 }
 
 /* Tree styling */

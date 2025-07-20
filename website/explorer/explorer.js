@@ -218,12 +218,17 @@ const trailing_character = "\u2060";
                         classes.push("syntax-error");
                     }
 
+                    const token_tag_css_classes = {
+                        "string_literal": "syntax-string-literal",
+                        "number_literal": "syntax-number-literal",
+                        "l_brace": "syntax-brace",
+                        "r_brace": "syntax-brace",
+                    };
+
                     if (token.tag.startsWith('keyword_')) {
                         classes.push("syntax-keyword");
-                    } else if (token.tag.startsWith('string_literal')) {
-                        classes.push("syntax-string-literal");
-                    } else if (['l_brace', 'r_brace'].includes(token.tag)) {
-                        classes.push("syntax-brace");
+                    } else if (token_tag_css_classes[token.tag]) {
+                        classes.push(token_tag_css_classes[token.tag]);
                     }
 
                     const slice = textContent.slice(token.start, token.start + token.len);
