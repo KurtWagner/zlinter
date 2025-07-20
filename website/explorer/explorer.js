@@ -143,26 +143,36 @@ const trailing_character = "\u2060";
     }
 
     function syncCursorToken() {
-        const highlightClass = "tree__node--highlighted";
-        [...document.getElementsByClassName(highlightClass)].forEach(elem => elem.classList.remove(highlightClass));
+        const highlightNodeClass = "tree__node--highlighted";
+        [...document.getElementsByClassName(highlightNodeClass)].forEach(elem => elem.classList.remove(highlightNodeClass));
+
+        const highlightFieldClass = "tree__node__field--highlighted";
+        [...document.getElementsByClassName(highlightFieldClass)].forEach(elem => elem.classList.remove(highlightFieldClass));
 
         const tokenIndexAndToken = getSelectedToken();
         if (tokenIndexAndToken === null) return;
+        const [token_i,] = tokenIndexAndToken;
 
         var lowestOverlappingNode = null;
         [...document.getElementsByClassName("tree__node")].forEach(elem => {
             const { firstToken, lastToken } = elem.dataset;
-            if (firstToken === null || lastToken === null) return;
+            if (firstToken === null || firstToken === undefined || lastToken === null || lastToken === undefined) return;
 
-            const [token_i,] = tokenIndexAndToken;
             if (token_i >= firstToken && token_i <= lastToken) {
                 lowestOverlappingNode = elem;
             }
         });
 
         if (lowestOverlappingNode) {
-            lowestOverlappingNode.classList.add(highlightClass);
-            lowestOverlappingNode.scrollIntoView();
+            [...lowestOverlappingNode.getElementsByClassName("tree__node__field")].forEach(elem => {
+                const { token } = elem.dataset;
+                if (token === null || token === undefined) return;
+                if (token != token_i) return;
+                elem.classList.add(highlightFieldClass);
+            });
+
+            lowestOverlappingNode.classList.add(highlightNodeClass);
+            lowestOverlappingNode.scrollIntoView({ block: "start" });
         }
     }
 
@@ -317,22 +327,23 @@ const trailing_character = "\u2060";
                         div.append(tokensFieldDiv);
 
                         for (let i = jsonObj["first_token"]; i <= jsonObj["last_token"]; i++) {
-                            const tokenFirstDiv = document.createElement('div');
-                            tokenFirstDiv.classList.add('tree__node__field');
-                            tokenFirstDiv.classList.add('tree__node__field--indent');
+                            const tokenFieldDiv = document.createElement('div');
+                            tokenFieldDiv.classList.add('tree__node__field');
+                            tokenFieldDiv.classList.add('tree__node__field--indent');
+                            tokenFieldDiv.dataset.token = i;
 
                             const token = json.tokens[i];
                             const tokenValueSpan = document.createElement('span');
                             tokenValueSpan.classList.add('tree__node__field__token');
                             tokenValueSpan.textContent = `.${token.tag}`;
-                            tokenFirstDiv.append(tokenValueSpan);
+                            tokenFieldDiv.append(tokenValueSpan);
 
                             const tokenMetaSpan = document.createElement('span');
                             tokenMetaSpan.classList.add('tree__node__field__meta');
                             tokenMetaSpan.textContent = `#${i} "${tokenSlice(source, i)}"`;
-                            tokenFirstDiv.append(tokenMetaSpan);
+                            tokenFieldDiv.append(tokenMetaSpan);
 
-                            div.append(tokenFirstDiv);
+                            div.append(tokenFieldDiv);
                         }
                     }
 

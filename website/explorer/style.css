@@ -175,9 +175,14 @@ body {
 
 .tree__node {
     flex: 1;
+    scroll-margin-top: 70px;
 }
 
 .tree__node--highlighted {
+    background-color: #f3e6b34c;
+}
+
+.tree__node__field--highlighted {
     background-color: #f3e6b3;
 }
 
