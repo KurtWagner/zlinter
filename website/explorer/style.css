@@ -20,6 +20,11 @@ body {
 }
 
 .editor__toolbar {
+    z-index: 2;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
     display: flex;
     flex-direction: row;
     padding: 5px 20px;
@@ -44,7 +49,7 @@ body {
     right: 0;
     position: absolute;
     vertical-align: middle;
-    margin: 5px 30px;
+    margin: 5px 80px;
 }
 
 .editor__toolbar__github:hover {
@@ -85,7 +90,7 @@ body {
     color: #333;
     padding-right: 10px;
     padding-left: 10px;
-    padding-top: 20px;
+    padding-top: 70px;
 }
 
 .editor__body__options__fmt {
@@ -112,7 +117,7 @@ body {
     text-align: right;
     padding-right: 10px;
     padding-left: 10px;
-    padding-top: 20px;
+    padding-top: 70px;
 }
 
 .editor__body__code {
@@ -131,7 +136,7 @@ body {
     width: 100%;
     white-space: pre-wrap;
     padding-left: 20px;
-    margin-top: 20px;
+    margin-top: 70px;
 }
 
 /* Syntax */
@@ -155,7 +160,8 @@ body {
 /* Tree styling */
 
 .editor__body__tree {
-    padding-top: 20px;
+    padding-top: 70px;
+    padding-bottom: 60px;
     background: #f5f5f5;
     line-height: 1.7;
     font-family: monospace;
