@@ -179,8 +179,22 @@ body {
     margin-left: 20px;
 }
 
+.tree__node>.tree__node--indent {
+    margin-left: 40px;
+}
+
 .tree__node__field {
     margin-left: 20px;
+}
+
+.tree__node__field--indent {
+    margin-left: 40px;
+}
+
+.tree__node__field__name:first-child,
+.tree__node__field__value:first-child,
+.tree__node__field__token:first-child {
+    padding-left: 20px;
 }
 
 .tree__node__field__tag {
@@ -188,9 +202,12 @@ body {
     font-weight: bold;
 }
 
+.tree__node__field__token {
+    color: #1e1e1e;
+}
+
 .tree__node__field__name {
     color: #bc9b15;
-    padding-left: 20px;
 }
 
 .tree__node__field__name:after {
@@ -202,15 +219,15 @@ body {
 }
 
 .tree__node__field__meta {
-    color: #777777;
+    color: #959595;
 }
 
 .tree__node__field__meta:before {
-    content: " (";
+    content: " [";
 }
 
 .tree__node__field__meta:after {
-    content: ")";
+    content: "]";
 }
 
 /* Tree errors */
