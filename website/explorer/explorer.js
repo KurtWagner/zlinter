@@ -224,7 +224,7 @@ const trailing_character = "\u2060";
                 syntax.push(textContent.slice(prev));
                 highlightElem.innerHTML = syntax.join("") + trailing_character;
 
-                const treeRootElem = createTreeNode({
+                const treeRootElem = createTreeNode(textContent, {
                     tag: "root",
                     body: json.body,
                 });
@@ -267,7 +267,7 @@ const trailing_character = "\u2060";
                     return errorsDiv;
                 }
 
-                function createTreeNode(jsonObj) {
+                function createTreeNode(source, jsonObj) {
                     const div = document.createElement('div');
                     div.classList.add('tree__node');
 
@@ -275,7 +275,7 @@ const trailing_character = "\u2060";
                     div.dataset.lastToken = jsonObj.last_token;
 
                     for (const [key, val] of Object.entries(jsonObj)) {
-                        if (key == "body") continue;
+                        if (["body", "first_token", "last_token"].includes(key)) continue;
 
                         const fieldDiv = document.createElement('div');
                         fieldDiv.classList.add('tree__node__field');
@@ -283,7 +283,7 @@ const trailing_character = "\u2060";
                         if (key == "tag") {
                             const tagSpan = document.createElement('span');
                             tagSpan.classList.add('tree__node__field__tag');
-                            tagSpan.textContent = val;
+                            tagSpan.textContent = `.${val}`;
                             fieldDiv.append(tagSpan);
                         } else {
                             const nameSpan = document.createElement('span');
@@ -299,11 +299,41 @@ const trailing_character = "\u2060";
                             if (key.endsWith("_token")) {
                                 const meta_span = document.createElement('span');
                                 meta_span.classList.add('tree__node__field__meta');
-                                meta_span.textContent = getTokenDescription(val);
+                                meta_span.textContent = `.${json.tokens[val].tag} "${tokenSlice(source, val)}"`;
                                 fieldDiv.append(meta_span);
                             }
                         }
                         div.append(fieldDiv);
+                    }
+
+                    if (jsonObj["first_token"] !== jsonObj["last_token"]) {
+                        const tokensFieldDiv = document.createElement('div');
+                        tokensFieldDiv.classList.add('tree__node__field');
+
+                        const tokensNameSpan = document.createElement('span');
+                        tokensNameSpan.classList.add('tree__node__field__name');
+                        tokensNameSpan.textContent = "tokens";
+                        tokensFieldDiv.append(tokensNameSpan);
+                        div.append(tokensFieldDiv);
+
+                        for (let i = jsonObj["first_token"]; i <= jsonObj["last_token"]; i++) {
+                            const tokenFirstDiv = document.createElement('div');
+                            tokenFirstDiv.classList.add('tree__node__field');
+                            tokenFirstDiv.classList.add('tree__node__field--indent');
+
+                            const token = json.tokens[i];
+                            const tokenValueSpan = document.createElement('span');
+                            tokenValueSpan.classList.add('tree__node__field__token');
+                            tokenValueSpan.textContent = `.${token.tag}`;
+                            tokenFirstDiv.append(tokenValueSpan);
+
+                            const tokenMetaSpan = document.createElement('span');
+                            tokenMetaSpan.classList.add('tree__node__field__meta');
+                            tokenMetaSpan.textContent = `#${i} "${tokenSlice(source, i)}"`;
+                            tokenFirstDiv.append(tokenMetaSpan);
+
+                            div.append(tokenFirstDiv);
+                        }
                     }
 
                     if (jsonObj.body && jsonObj.body.length > 0) {
@@ -318,18 +348,18 @@ const trailing_character = "\u2060";
                         div.append(fieldDiv);
 
                         for (const child of jsonObj.body) {
-                            div.append(createTreeNode(child))
+                            const treeNode = createTreeNode(source, child);
+                            treeNode.classList.add('tree__node--indent');
+                            div.append(treeNode)
                         }
                     }
                     return div;
                 }
 
-                function getTokenDescription(token) {
-                    const parts = [];
-                    for (const [key, val] of Object.entries(json.tokens[token] || {})) {
-                        parts.push(`${key}: ${val}`);
-                    }
-                    return parts.join(", ");
+                function tokenSlice(source, tokenIndex) {
+                    const token = json.tokens[tokenIndex];
+                    if (!token) return '';
+                    return source.slice(token.start, token.start + token.len);
                 }
             });
     }
