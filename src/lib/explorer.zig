@@ -124,9 +124,17 @@ fn errorsToJson(tree: std.zig.Ast, arena: std.mem.Allocator) !std.json.Array {
         try json_error.put("token_is_prev", .{ .bool = e.token_is_prev });
         try json_error.put("token", .{ .integer = e.token });
 
-        var render_backing = std.ArrayList(u8).init(arena);
-        try tree.renderError(e, render_backing.writer());
-        try json_error.put("message", .{ .string = try render_backing.toOwnedSlice() });
+        var render_backing = std.ArrayListUnmanaged(u8).empty;
+
+        switch (version.zig) {
+            .@"0.14" => try tree.renderError(e, render_backing.writer(arena)),
+            .@"0.15" => {
+                var aw = std.Io.Writer.Allocating.fromArrayList(arena, &render_backing);
+                try tree.renderError(e, &aw.writer);
+            },
+        }
+
+        try json_error.put("message", .{ .string = try render_backing.toOwnedSlice(arena) });
 
         try json_errors.append(.{ .object = json_error });
     }
