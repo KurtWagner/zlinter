@@ -232,7 +232,14 @@ const trailing_character = "\u2060";
                     prev = token.start + token.len;
                 }
                 syntax.push(textContent.slice(prev));
-                highlightElem.innerHTML = syntax.join("") + trailing_character;
+                highlightElem.innerHTML = syntax
+                    .join("")
+                    // Syntax highlight comments:
+                    // Instead we could use the tokenizer in zlinter but this
+                    // is probably overkill for just syntax highlighting
+                    // comments so we will try and make do with a simple regex.
+                    .replaceAll(/\/\/[^\n]+/g, (comment) => `<span class="syntax-comment">${comment}</span>`)
+                    + trailing_character;
 
                 const treeRootElem = createTreeNode(textContent, {
                     tag: "root",

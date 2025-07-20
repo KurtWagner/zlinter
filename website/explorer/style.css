@@ -153,6 +153,10 @@ body {
     background-color: rgb(245, 153, 153);
 }
 
+.syntax-comment {
+    color: rgb(32, 106, 32);
+}
+
 .syntax-brace {
     color: rgb(103, 103, 103);
 }
