@@ -41,38 +41,36 @@ pub fn jsonTree(
     const Context = struct {
         arena: std.mem.Allocator,
         indent: u32 = 0,
-        tree: std.zig.Ast,
         node_children: *std.json.Array,
 
-        fn callback(self: @This(), _: std.zig.Ast, child_node: std.zig.Ast.Node.Index) error{OutOfMemory}!void {
+        fn callback(self: @This(), context_tree: std.zig.Ast, child_node: std.zig.Ast.Node.Index) error{OutOfMemory}!void {
             if (shims.NodeIndexShim.init(child_node).isRoot()) return;
 
             var node_object = std.json.ObjectMap.init(self.arena);
             try node_object.put("tag", .{
-                .string = @tagName(shims.nodeTag(self.tree, child_node)),
+                .string = @tagName(shims.nodeTag(context_tree, child_node)),
             });
 
             try node_object.put("main_token", .{
-                .integer = shims.nodeMainToken(self.tree, child_node),
+                .integer = shims.nodeMainToken(context_tree, child_node),
             });
             try node_object.put("first_token", .{
-                .integer = self.tree.firstToken(child_node),
+                .integer = context_tree.firstToken(child_node),
             });
             try node_object.put("last_token", .{
-                .integer = self.tree.lastToken(child_node),
+                .integer = context_tree.lastToken(child_node),
             });
             // Add more meta data for nodes here...
             // e.g., the "data" union structures
 
             var node_children = std.json.Array.init(self.arena);
             try zls.ast.iterateChildren(
-                self.tree,
+                context_tree,
                 child_node,
                 @This(){
                     .node_children = &node_children,
                     .arena = self.arena,
                     .indent = self.indent + 2,
-                    .tree = self.tree,
                 },
                 error{OutOfMemory},
                 callback,
@@ -101,7 +99,6 @@ pub fn jsonTree(
         Context{
             .arena = arena,
             .indent = 0,
-            .tree = tree,
             .node_children = &root_node_children,
         },
         error{OutOfMemory},
