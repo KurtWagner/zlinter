@@ -48,12 +48,7 @@ body {
     text-decoration: underline;
 }
 
-.editor__toolbar__subtitle {
-    line-height: 2;
-    color: #f2f2f2;
-    font-size: 14px;
-    padding: 4px 0 0 30px;
-}
+
 
 .editor__toolbar__github {
     right: 0;
@@ -66,9 +61,20 @@ body {
     background-color: #3e516c
 }
 
-.editor__toolbar__subtitle a:visited,
-.editor__toolbar__subtitle a {
-    color: #f2f2f2;
+.editor__toolbar__builtwith {
+    line-height: 2;
+    color: #d6d6d6;
+    font-size: 15px;
+    padding: 8px 80px 0 0;
+    position: fixed;
+    right: 0;
+    top: 0;
+}
+
+.editor__toolbar__builtwith a:visited,
+.editor__toolbar__builtwith a {
+    font-weight: bold;
+    color: #ffffff;
 }
 
 .editor {
