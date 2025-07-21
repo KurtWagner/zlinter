@@ -4,6 +4,7 @@
   <h1>Zlinter - Linter for Zig</h1>
 </div>
 
+![Zig support](https://img.shields.io/badge/Zig-0.14.x-color?logo=zig&color=%23f3ab20&link=https%3A%2F%2Fgithub.com%2FKurtWagner%2Fwhat-the-zig)
 [![linux](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml/badge.svg?branch=0.14.x)](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml)
 [![windows](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml/badge.svg?branch=0.14.x)](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml)
 [![Coverage Status](https://coveralls.io/repos/github/KurtWagner/zlinter/badge.svg?branch=0.14.x)](https://coveralls.io/github/KurtWagner/zlinter?branch=0.14.x)
