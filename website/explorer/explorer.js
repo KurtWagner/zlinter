@@ -90,6 +90,7 @@ const trailing_character = "\u2060";
         selection.addRange(range)
     }
 
+    document.addEventListener('click', click);
     document.addEventListener('selectionchange', () => { overrideCursorPosition(); syncCursorToken() });
     inputElem.addEventListener('keydown', overrideEnterKeyDown);
     inputElem.addEventListener('input', syncLineNumbers);
@@ -98,6 +99,22 @@ const trailing_character = "\u2060";
 
     inputElem.textContent = default_code + trailing_character;
     inputElem.dispatchEvent(new Event('input'));
+
+    function click(e) {
+        if (!e || !e.target) return;
+
+        if (e.target.classList.contains('tree__node__expand_tokens_button')) {
+            const container = e.target.closest('.tree__node');
+            if (!container) return;
+
+            const showClass = 'tree__node--show_tokens';
+            if (container.classList.contains(showClass)) {
+                container.classList.remove(showClass);
+            } else {
+                container.classList.add(showClass);
+            }
+        }
+    }
 
     function triggerFmtButton() {
         if (!lastJson) return;
@@ -177,6 +194,7 @@ const trailing_character = "\u2060";
             });
 
             lowestOverlappingNode.classList.add(highlightNodeClass);
+            lowestOverlappingNode.classList.add("tree__node--show-tokens");
             lowestOverlappingNode.scrollIntoView({ block: "start" });
         }
     }
@@ -254,6 +272,8 @@ const trailing_character = "\u2060";
                 const treeRootElem = createTreeNode(textContent, {
                     tag: "root",
                     body: json.body,
+                    first_token: 0,
+                    last_token: json.tokens.length - 1,
                 });
 
                 const maybeErrors = createTreeErrors(json);
@@ -262,13 +282,13 @@ const trailing_character = "\u2060";
                 treeElem.innerHTML = "";
                 treeElem.append(treeRootElem);
 
-                function createTreeErrors(jsonObj) {
-                    if (jsonObj.errors.len == 0) return;
+                function createTreeErrors(nodeObj) {
+                    if (nodeObj.errors.len == 0) return;
 
                     const errorsDiv = document.createElement('div');
                     errorsDiv.classList.add("tree__node__errors");
 
-                    for (const error of jsonObj.errors) {
+                    for (const error of nodeObj.errors) {
                         const errorDiv = document.createElement("div");
                         errorDiv.classList.add("tree__node__errors__error");
                         errorDiv.textContent = "AST Error"
@@ -294,14 +314,15 @@ const trailing_character = "\u2060";
                     return errorsDiv;
                 }
 
-                function createTreeNode(source, jsonObj) {
+                function createTreeNode(source, nodeObj) {
                     const div = document.createElement('div');
                     div.classList.add('tree__node');
 
-                    div.dataset.firstToken = jsonObj.first_token;
-                    div.dataset.lastToken = jsonObj.last_token;
+                    const { first_token: firstToken, last_token: lastToken } = nodeObj;
+                    div.dataset.firstToken = firstToken;
+                    div.dataset.lastToken = lastToken;
 
-                    for (const [key, val] of Object.entries(jsonObj)) {
+                    for (const [key, val] of Object.entries(nodeObj)) {
                         if (["body", "first_token", "last_token"].includes(key)) continue;
 
                         const fieldDiv = document.createElement('div');
@@ -333,7 +354,7 @@ const trailing_character = "\u2060";
                         div.append(fieldDiv);
                     }
 
-                    if (jsonObj["first_token"] !== jsonObj["last_token"]) {
+                    if (firstToken !== lastToken) {
                         const tokensFieldDiv = document.createElement('div');
                         tokensFieldDiv.classList.add('tree__node__field');
 
@@ -341,12 +362,20 @@ const trailing_character = "\u2060";
                         tokensNameSpan.classList.add('tree__node__field__name');
                         tokensNameSpan.textContent = "tokens";
                         tokensFieldDiv.append(tokensNameSpan);
+
+                        const expandTokensButtonSpan = document.createElement("span");
+                        expandTokensButtonSpan.classList.add("tree__node__expand_tokens_button");
+                        tokensFieldDiv.append(expandTokensButtonSpan);
+
                         div.append(tokensFieldDiv);
 
-                        for (let i = jsonObj["first_token"]; i <= jsonObj["last_token"]; i++) {
+                        const tokensContainerDiv = document.createElement('div');
+                        tokensContainerDiv.classList.add('tree__node__tokens');
+                        div.append(tokensContainerDiv);
+
+                        for (let i = firstToken; i <= lastToken; i++) {
                             const tokenFieldDiv = document.createElement('div');
                             tokenFieldDiv.classList.add('tree__node__field');
-                            tokenFieldDiv.classList.add('tree__node__field--indent');
                             tokenFieldDiv.dataset.token = i;
 
                             const token = json.tokens[i];
@@ -360,11 +389,11 @@ const trailing_character = "\u2060";
                             tokenMetaSpan.textContent = `#${i} "${tokenSlice(source, i)}"`;
                             tokenFieldDiv.append(tokenMetaSpan);
 
-                            div.append(tokenFieldDiv);
+                            tokensContainerDiv.append(tokenFieldDiv);
                         }
                     }
 
-                    if (jsonObj.body && jsonObj.body.length > 0) {
+                    if (nodeObj.body && nodeObj.body.length > 0) {
                         const fieldDiv = document.createElement('div');
                         fieldDiv.classList.add('tree__node__field');
 
@@ -375,7 +404,7 @@ const trailing_character = "\u2060";
 
                         div.append(fieldDiv);
 
-                        for (const child of jsonObj.body) {
+                        for (const child of nodeObj.body) {
                             const treeNode = createTreeNode(source, child);
                             treeNode.classList.add('tree__node--indent');
                             div.append(treeNode)
