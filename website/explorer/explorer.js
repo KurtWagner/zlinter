@@ -91,7 +91,7 @@ const trailing_character = "\u2060";
     }
 
     document.addEventListener('selectionchange', () => { overrideCursorPosition(); syncCursorToken() });
-    inputElem.addEventListener('keypress', overrideEnterKeyPress);
+    inputElem.addEventListener('keydown', overrideEnterKeyDown);
     inputElem.addEventListener('input', syncLineNumbers);
     inputElem.addEventListener('input', syncTree);
     fmtButton.addEventListener('click', triggerFmtButton);
@@ -122,15 +122,20 @@ const trailing_character = "\u2060";
         }
     }
 
-    function overrideEnterKeyPress(e) {
+    function overrideEnterKeyDown(e) {
         // None of the popular browsers seem to agree what new lines look like
         // in contenteditable elements. Firefox even seems to add two through
         // nested the current line in a div while adding a new one below. So
         // unfortunately we're going to get a little dirty and disable enter
         // and do it ourselves and pray for the best.
-        if (e.key === 'Enter') {
+        const overrides = {
+            'Enter': () => document.execCommand('insertLineBreak'),
+            'Tab': () => document.execCommand('insertText', false, '    '),
+        };
+        const override = overrides[e.key];
+        if (override) {
             e.preventDefault();
-            document.execCommand('insertLineBreak')
+            override();
         }
     }
 
