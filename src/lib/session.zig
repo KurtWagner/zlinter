@@ -11,7 +11,7 @@ pub const LintDocument = struct {
 
     pub fn deinit(self: *LintDocument, gpa: std.mem.Allocator) void {
         while (self.lineage.pop()) |connections| {
-            if (connections.children) |children| gpa.free(children);
+            connections.deinit(gpa);
         }
 
         self.lineage.deinit(gpa);
@@ -501,6 +501,11 @@ pub const LintContext = struct {
                     item.node.toNodeIndex(),
                 );
 
+                // Ideally this is never necessary as we should only be visiting
+                // each node once while walking the tree and if we're not there's
+                // another bug but for now to be safe memory wise we'll ensure
+                // the previous is cleaned up if needed (no-op if not needed)
+                doc.lineage.get(item.node.index).deinit(gpa);
                 doc.lineage.set(item.node.index, .{
                     .parent = if (item.parent) |p|
                         p.toNodeIndex()

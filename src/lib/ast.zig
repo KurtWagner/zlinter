@@ -6,6 +6,10 @@ pub const NodeConnections = struct {
     /// Null if root
     parent: ?std.zig.Ast.Node.Index = null,
     children: ?[]const std.zig.Ast.Node.Index = null,
+
+    pub fn deinit(self: NodeConnections, allocator: std.mem.Allocator) void {
+        if (self.children) |c| allocator.free(c);
+    }
 };
 
 pub const NodeAncestorIterator = struct {
