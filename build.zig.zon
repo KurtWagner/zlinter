@@ -20,6 +20,8 @@
         "build_rules.zig",
         "build.zig.zon",
         "src",
+        "website",
+        "integration_tests",
         "LICENSE",
     },
 }
