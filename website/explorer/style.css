@@ -38,6 +38,16 @@ body {
     font-size: 18px;
 }
 
+.editor__toolbar__title a,
+.editor__toolbar__title a:visited {
+    font-weight: bold;
+    color: white;
+}
+
+.editor__toolbar__title a:hover {
+    text-decoration: underline;
+}
+
 .editor__toolbar__subtitle {
     line-height: 2;
     color: #f2f2f2;
