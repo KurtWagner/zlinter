@@ -196,6 +196,28 @@ body {
     scroll-margin-top: 70px;
 }
 
+.tree__node__expand_tokens_button:after {
+    content: "+";
+    font-weight: bold;
+    color: rgb(33, 160, 139);
+    cursor: pointer;
+}
+
+.tree__node.tree__node--show_tokens .tree__node__expand_tokens_button:after {
+    content: "-";
+    color: rgb(160, 84, 33);
+}
+
+.tree__node__tokens {
+    margin-left: 20px;
+    display: none;
+}
+
+.tree__node.tree__node--highlighted>.tree__node__tokens,
+.tree__node.tree__node--show_tokens>.tree__node__tokens {
+    display: block;
+}
+
 .tree__node--highlighted {
     background-color: #f3e6b34c;
 }
