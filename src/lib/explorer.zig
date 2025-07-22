@@ -9,8 +9,8 @@ pub fn parseToJsonStringAlloc(source: [:0]const u8, gpa: std.mem.Allocator) ![]c
 }
 
 pub fn parseToJsonTree(source: [:0]const u8, arena: std.mem.Allocator) !std.json.Value {
-    const ast = try std.zig.Ast.parse(arena, source, .zig);
-    return jsonTree(ast, arena);
+    const tree = try std.zig.Ast.parse(arena, source, .zig);
+    return jsonTree(tree, arena);
 }
 
 pub fn jsonTree(
@@ -64,7 +64,7 @@ pub fn jsonTree(
             // e.g., the "data" union structures
 
             var node_children = std.json.Array.init(self.arena);
-            try zls.ast.iterateChildren(
+            try ast.iterateChildren(
                 context_tree,
                 child_node,
                 @This(){
@@ -93,7 +93,7 @@ pub fn jsonTree(
 
     var root_node_children = std.json.Array.init(arena);
 
-    try zls.ast.iterateChildren(
+    try ast.iterateChildren(
         tree,
         shims.NodeIndexShim.root.toNodeIndex(),
         Context{
@@ -173,3 +173,4 @@ const session = @import("session.zig");
 const shims = @import("shims.zig");
 const version = @import("version.zig");
 const zls = @import("zls");
+const ast = @import("ast.zig");
