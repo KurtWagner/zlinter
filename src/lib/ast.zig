@@ -75,7 +75,7 @@ pub fn nodeChildrenAlloc(
     var children: std.ArrayListUnmanaged(std.zig.Ast.Node.Index) = .empty;
     defer children.deinit(gpa);
 
-    try zls.ast.iterateChildren(
+    try iterateChildren(
         tree,
         node,
         Context{
@@ -88,6 +88,38 @@ pub fn nodeChildrenAlloc(
     return children.toOwnedSlice(gpa);
 }
 
+/// Temporary work around to bug in zls that will hopefully be accepted upstream
+/// Basically its not walking the fn decl and then its fn proto, its treating
+/// them as one in the same.
+pub fn iterateChildren(
+    tree: std.zig.Ast,
+    node: std.zig.Ast.Node.Index,
+    context: anytype,
+    comptime Error: type,
+    comptime callback: fn (@TypeOf(context), std.zig.Ast, std.zig.Ast.Node.Index) Error!void,
+) Error!void {
+    if (shims.nodeTag(tree, node) == .fn_decl) {
+        // const ctx = struct {
+        //     fn inner(ctx: *const anyopaque, t: std.zig.Ast, n: std.zig.Ast.Node.Index) anyerror!void {
+        //         return callback(@as(*const @TypeOf(context), @alignCast(@ptrCast(ctx))).*, t, n);
+        //     }
+        // };
+        switch (version.zig) {
+            .@"0.14" => {
+                try callback(context, tree, shims.nodeData(tree, node).lhs);
+                try callback(context, tree, shims.nodeData(tree, node).rhs);
+            },
+            .@"0.15" => {
+                try callback(context, tree, shims.nodeData(tree, node).node_and_node[0]);
+                try callback(context, tree, shims.nodeData(tree, node).node_and_node[1]);
+            },
+        }
+    } else {
+        try zls.ast.iterateChildren(tree, node, context, Error, callback);
+    }
+}
+
 const std = @import("std");
 const zls = @import("zls");
 const shims = @import("shims.zig");
+const version = @import("version.zig");
