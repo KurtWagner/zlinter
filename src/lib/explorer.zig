@@ -5,7 +5,7 @@ pub fn parseToJsonStringAlloc(source: [:0]const u8, gpa: std.mem.Allocator) ![]c
     var arena = std.heap.ArenaAllocator.init(gpa);
     defer arena.deinit();
 
-    return std.json.stringifyAlloc(gpa, try parseToJsonTree(source, arena.allocator()), .{});
+    return std.json.Stringify.stringifyAlloc(gpa, try parseToJsonTree(source, arena.allocator()), .{});
 }
 
 pub fn parseToJsonTree(source: [:0]const u8, arena: std.mem.Allocator) !std.json.Value {

@@ -429,7 +429,8 @@ fn toZonString(val: anytype, allocator: std.mem.Allocator) []const u8 {
     var zon = std.ArrayListUnmanaged(u8).empty;
     defer zon.deinit(allocator);
 
-    std.zon.stringify.serialize(val, .{}, zon.writer(allocator)) catch
+    var aw = std.io.Writer.Allocating.fromArrayList(allocator, &zon);
+    std.zon.stringify.serialize(val, .{}, &aw.writer) catch
         @panic("Invalid rule config");
 
     return zon.toOwnedSlice(allocator) catch @panic("OOM");
