@@ -303,6 +303,18 @@ pub fn build(b: *std.Build) void {
         .install_dir = .prefix,
         .install_subdir = "website",
     });
+
+    const write_file = b.addWriteFiles();
+    const write_index_html = write_file.add(
+        "website/explorer/index.html",
+        readHtmlTemplate(b, b.path("website/explorer/index.template.html")) catch @panic("OOM"),
+    );
+    const install_index_html = b.addInstallFile(
+        write_index_html,
+        "website/explorer/index.html",
+    );
+
+    build_website.dependOn(&install_index_html.step);
     build_website.dependOn(&install_public_step.step);
 
     // ------------------------------------------------------------------------
@@ -843,6 +855,38 @@ const ZlinterRun = struct {
         }
     }
 };
+
+fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
+    const rules_path = path.getPath3(b, null);
+
+    var file = try rules_path.root_dir.handle.openFile(rules_path.subPathOrDot(), .{});
+    defer file.close();
+
+    const max_bytes = 128 * 1024;
+    const bytes = try file.readToEndAlloc(b.allocator, max_bytes);
+    defer b.allocator.free(bytes);
+
+    const replacement = b.fmt("{d}", .{std.time.milliTimestamp()});
+    const needle = "{{build_timestamp}}";
+
+    const buffer = try b.allocator.alloc(u8, std.mem.replacementSize(
+        u8,
+        bytes,
+        needle,
+        replacement,
+    ));
+    errdefer b.allocator.free(buffer);
+
+    const replacements = std.mem.replace(
+        u8,
+        bytes,
+        needle,
+        replacement,
+        buffer,
+    );
+    if (replacements == 0) @panic("Failed to replace template timestamps");
+    return buffer;
+}
 
 const std = @import("std");
 pub const version = @import("./src/lib/version.zig");
