@@ -4,7 +4,7 @@
   <h1>Zlinter - Linter for Zig</h1>
 </div>
 
-[![Zig support](https://img.shields.io/badge/Zig-master-color?logo=zig&color=%23f3ab20)](http://github.com/kurtwagner/what-the-zig)
+[![Zig support](https://img.shields.io/badge/Zig-0.14.x%20%7C%20master-color?logo=zig&color=%23f3ab20)](http://github.com/kurtwagner/what-the-zig)
 [![linux](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml/badge.svg?branch=master)](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml)
 [![windows](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml/badge.svg?branch=master)](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml)
 [![Coverage Status](https://coveralls.io/repos/github/KurtWagner/zlinter/badge.svg?branch=master)](https://coveralls.io/github/KurtWagner/zlinter?branch=master)
@@ -19,22 +19,18 @@ A **linter** is a tool that automatically checks source code for style issues, b
 >
 > A more accurate approach could be to integrate more closely with the Zig build system and compiler (e.g., the proposed Zig compiler server), but for now, using the AST should be sufficient for most cases, and maybe one day `zlinter` can use newer Zig Compiler APIs as they become available. The [milestones](#milestones) will help inform this.
 >
-> Also, `zlinter` is **new**.
+> `zlinter` is **new**.
 >
 > - Expect [breaking changes](https://github.com/KurtWagner/zlinter/pulls?q=is%3Apr+is%3Aclosed+label%3A%22breaking+change%22) between commits.
 > - Some features may not work as documented.  
 >
 > Please [report issues](https://github.com/KurtWagner/zlinter/issues/new) and contribute fixes!
 
-> [!TIP]
-> While Zig is `0.x.x`,  **`no_deprecated`** is important - it will do best effort to **report the usage of deprecated and removed zig features**.
-
 ![Screenshot](./screenshot.png)
 
 ## Table of contents
 
 - [Background](#background)
-- [Versioning](#versioning)
 - [Getting Started](#getting-started)
 - [Autofix](#autofix)
 - [Custom Rules](#custom-rules)
@@ -66,6 +62,7 @@ A **linter** is a tool that automatically checks source code for style issues, b
   - [Optimization](#configure-optimization)
 - [Supported zig versions](#supported-zig-versions)
 - [Milestones](#milestones)
+- [Versioning](#versioning)
 - [Contributing](#contributing)
   - [How to Contribute](#contributions)
   - [Run tests](#run-tests)
@@ -82,16 +79,6 @@ I'm opening it up incase it's more generally useful, and happy to let it
 organically evolve around needs, if there's value in doing so.
 
 It uses [`zls`](https://github.com/zigtools/zls) (an awesome project, go check it out if you haven't already) and `std.zig` to build and analyze zig source files.
-
-## Versioning
-
-`zlinter` will:
-
-- follow the same semantic versioning as `zig`;
-- use branch `master` for `zig` `master` releases; and
-- use branch `0.14.x` for `zig` `0.14.x` releases.
-
-This may change, especially when `zig` is "stable" at `1.x`. If you have opinions on this, feel free to comment on [#20](https://github.com/KurtWagner/zlinter/issues/20).
 
 ## Getting started
 
@@ -128,7 +115,6 @@ hook it up to a build step, like `zig build lint`:
         builder.addRule(.{ .builtin = .no_unused }, .{});
         builder.addRule(.{ .builtin = .no_deprecated }, .{});
         builder.addRule(.{ .builtin = .no_orelse_unreachable }, .{});
-        builder.addRule(.{ .builtin = .max_positional_args }, .{});
         break :step builder.build();
     });
     ```
@@ -276,6 +262,16 @@ This may change once zig hits `1.x`.
 1. [pending] **Run and review the results on at least 5 large open source Zig projects** - this is to discover unknown unknowns to populate caveats and limitations of current approach.
 
 1. [pending] **To be informed by (1) and (2)** - could be that AST is good enough for enough cases to provide value providing adequate documentation, AND/OR, could be that it's worth contributing time into Zigs efforts around "multibuild" and zig compiler server.
+
+## Versioning
+
+`zlinter` will:
+
+- follow the same semantic versioning as `zig`;
+- use branch `master` for `zig` `master` releases; and
+- use branch `0.14.x` for `zig` `0.14.x` releases.
+
+This may change, especially when `zig` is "stable" at `1.x`. If you have opinions on this, feel free to comment on [#20](https://github.com/KurtWagner/zlinter/issues/20).
 
 ## Contributing
 
