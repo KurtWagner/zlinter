@@ -88,4 +88,14 @@ error Error declaration should be TitleCase [test_cases/declaration_naming/types
  40 | const my_bad_error = MyGoodError;
     |       ^^^^^^^^^^^^
 
-x 18 errors
+error Error declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:44:7] declaration_naming
+
+ 44 | const alsoMyBadError = MyGoodError || my_bad_error;
+    |       ^^^^^^^^^^^^^^
+
+error Error declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:45:7] declaration_naming
+
+ 45 | const also_my_bad_error = MyGoodError || my_bad_error;
+    |       ^^^^^^^^^^^^^^^^^
+
+x 20 errors

@@ -268,6 +268,12 @@ pub const LintDocument = struct {
                     if (init_node_type.is_type_val) {
                         switch (init_node_type.data) {
                             .ip_index => return .type,
+                            .other => |node_with_handle| {
+                                switch (shims.nodeTag(node_with_handle.handle.tree, node_with_handle.node)) {
+                                    .merge_error_sets => return .error_type,
+                                    else => {},
+                                }
+                            },
                             else => {},
                         }
                     }
@@ -707,6 +713,12 @@ test "LintDocument.resolveTypeKind" {
         .{
             .contents =
             \\var MyError = error {a,b,c};
+            ,
+            .kind = .error_type,
+        },
+        .{
+            .contents =
+            \\var MyError = some.other.errors || OtherErrors;
             ,
             .kind = .error_type,
         },

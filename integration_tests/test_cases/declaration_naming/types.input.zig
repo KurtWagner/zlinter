@@ -38,3 +38,8 @@ pub inline fn anytypeSampleA(in: anytype) struct { type, type, type } {
 const MyGoodError = error{ ErrorA, ErrorB };
 const myBadError = error{ ErrorA, ErrorB };
 const my_bad_error = MyGoodError;
+
+// Error merge sets (considered errors thus types)
+const AlsoMyGoodError = MyGoodError || my_bad_error;
+const alsoMyBadError = MyGoodError || my_bad_error;
+const also_my_bad_error = MyGoodError || my_bad_error;
