@@ -206,7 +206,9 @@ pub const LintDocument = struct {
                         }
                     }
                 },
-                .error_set_decl => return .error_type,
+                .error_set_decl,
+                .merge_error_sets,
+                => return .error_type,
                 else => {},
             }
 
@@ -220,7 +222,6 @@ pub const LintDocument = struct {
                 }
             } else if (try self.resolveTypeOfNode(node)) |init_node_type| {
                 // std.debug.print("InitNode - ResolvedNode type: {}\n", .{init_node_type});
-                // try self.dumpType(init_node_type, 0);
 
                 const decl = init_node_type.resolveDeclLiteralResultType();
 
@@ -266,14 +267,13 @@ pub const LintDocument = struct {
                     return if (init_node_type.is_type_val) .fn_type else .@"fn";
                 } else {
                     if (init_node_type.is_type_val) {
+                        if (init_node_type.isErrorSetType(self.analyser)) {
+                            return .error_type;
+                        }
                         switch (init_node_type.data) {
+                            // TODO: Maybe this can be merged with what isErrorSet
+                            // is doing to be less branches.
                             .ip_index => return .type,
-                            .other => |node_with_handle| {
-                                switch (shims.nodeTag(node_with_handle.handle.tree, node_with_handle.node)) {
-                                    .merge_error_sets => return .error_type,
-                                    else => {},
-                                }
-                            },
                             else => {},
                         }
                     }
