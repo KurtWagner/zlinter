@@ -88,9 +88,10 @@ pub fn nodeChildrenAlloc(
     return children.toOwnedSlice(gpa);
 }
 
-/// Temporary work around to bug in zls that will hopefully be accepted upstream
-/// Basically its not walking the fn decl and then its fn proto, its treating
-/// them as one in the same.
+/// Temporary work around to bug in zls 0.14 that's now fixed in zls master.
+/// I don't see the point in upstreaming the fix to the ZLS 0.14 branch so
+/// leaving this simple work around in place while we support 0.14 and then it
+/// can be deleted.
 pub fn iterateChildren(
     tree: std.zig.Ast,
     node: std.zig.Ast.Node.Index,
@@ -98,24 +99,16 @@ pub fn iterateChildren(
     comptime Error: type,
     comptime callback: fn (@TypeOf(context), std.zig.Ast, std.zig.Ast.Node.Index) Error!void,
 ) Error!void {
-    if (shims.nodeTag(tree, node) == .fn_decl) {
-        // const ctx = struct {
-        //     fn inner(ctx: *const anyopaque, t: std.zig.Ast, n: std.zig.Ast.Node.Index) anyerror!void {
-        //         return callback(@as(*const @TypeOf(context), @alignCast(@ptrCast(ctx))).*, t, n);
-        //     }
-        // };
-        switch (version.zig) {
-            .@"0.14" => {
+    switch (version.zig) {
+        .@"0.14" => {
+            if (shims.nodeTag(tree, node) == .fn_decl) {
                 try callback(context, tree, shims.nodeData(tree, node).lhs);
                 try callback(context, tree, shims.nodeData(tree, node).rhs);
-            },
-            .@"0.15" => {
-                try callback(context, tree, shims.nodeData(tree, node).node_and_node[0]);
-                try callback(context, tree, shims.nodeData(tree, node).node_and_node[1]);
-            },
-        }
-    } else {
-        try zls.ast.iterateChildren(tree, node, context, Error, callback);
+            } else {
+                try zls.ast.iterateChildren(tree, node, context, Error, callback);
+            }
+        },
+        .@"0.15" => try zls.ast.iterateChildren(tree, node, context, Error, callback),
     }
 }
 
