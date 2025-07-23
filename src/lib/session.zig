@@ -206,7 +206,9 @@ pub const LintDocument = struct {
                         }
                     }
                 },
-                .error_set_decl => return .error_type,
+                .error_set_decl,
+                .merge_error_sets,
+                => return .error_type,
                 else => {},
             }
 
