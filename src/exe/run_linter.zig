@@ -466,12 +466,9 @@ fn allocAstErrorMsg(
     err: std.zig.Ast.Error,
     allocator: std.mem.Allocator,
 ) error{ OutOfMemory, WriteFailed }![]const u8 {
-    var error_message = std.ArrayListUnmanaged(u8).empty;
-    defer error_message.deinit(allocator);
-
-    var aw = std.io.Writer.Allocating.fromArrayList(allocator, &error_message);
+    var aw = std.io.Writer.Allocating.init(allocator);
     try ast.renderError(err, &aw.writer);
-    return error_message.toOwnedSlice(allocator);
+    return aw.toOwnedSlice();
 }
 
 /// An unoptimized algorithm that checks whether a given rule has been disabled

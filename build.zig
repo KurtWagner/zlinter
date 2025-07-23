@@ -426,14 +426,11 @@ pub fn build(b: *std.Build) void {
 }
 
 fn toZonString(val: anytype, allocator: std.mem.Allocator) []const u8 {
-    var zon = std.ArrayListUnmanaged(u8).empty;
-    defer zon.deinit(allocator);
-
-    var aw = std.io.Writer.Allocating.fromArrayList(allocator, &zon);
+    var aw = std.io.Writer.Allocating.init(allocator);
     std.zon.stringify.serialize(val, .{}, &aw.writer) catch
         @panic("Invalid rule config");
 
-    return zon.toOwnedSlice(allocator) catch @panic("OOM");
+    return aw.toOwnedSlice() catch @panic("OOM");
 }
 
 fn buildStep(
