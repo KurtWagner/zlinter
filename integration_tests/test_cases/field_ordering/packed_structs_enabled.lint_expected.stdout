@@ -1,0 +1,19 @@
+warning Struct fields should be in alphabetical order [test_cases/field_ordering/packed_structs_enabled.input.zig:11:24] field_ordering
+
+ 11 | const Normal = struct {
+    |                        
+ 12 |     b: u32,
+    | ^^^^^^^^^^^
+ 13 |     a: u32,
+    | ^^^^^^^^^^^
+
+warning Struct fields should be in alphabetical order [test_cases/field_ordering/packed_structs_enabled.input.zig:1:36] field_ordering
+
+ 1 | const Packed = packed struct(u64) {
+   |                                    
+ 2 |     b: u32,
+   | ^^^^^^^^^^^
+ 3 |     a: u32,
+   | ^^^^^^^^^^^
+
+x 2 warnings

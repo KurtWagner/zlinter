@@ -17,6 +17,16 @@ pub const Config = struct {
     /// Order and severity for struct fields
     struct_field_order: zlinter.rules.LintTextOrderWithSeverity = .off,
 
+    /// Whether to check order of packed structs (e.g., `packed struct(u32) { .. }`).
+    /// You probably never want to enforce order of packed structs, so best to
+    /// leave as `true` unless you're certain.
+    exclude_packed_structs: bool = true,
+
+    /// Whether to check order of extern structs (e.g., `extern struct { .. }`).
+    /// You probably never want to enforce order of extern structs, so best to
+    /// leave as `true` unless you're certain.
+    exclude_extern_structs: bool = true,
+
     /// Order and severity for enum fields. If you're setting this and use
     /// tagged unions (e.g., `union(MyEnum)`) then you will also need to set
     /// the same order for unions.
@@ -63,10 +73,20 @@ fn run(
             if (tree.fullContainerDecl(
                 &container_decl_buffer,
                 node.toNodeIndex(),
-            )) |_| {
+            )) |container_decl| {
                 break :kind switch (tree.tokens.items(.tag)[zlinter.shims.nodeMainToken(tree, node.toNodeIndex())]) {
                     .keyword_union => .{ config.union_field_order, "Union" },
-                    .keyword_struct => .{ config.struct_field_order, "Struct" },
+                    .keyword_struct => {
+                        if (container_decl.layout_token) |layout_token| {
+                            if (config.exclude_extern_structs and tree.tokens.items(.tag)[layout_token] == .keyword_extern) {
+                                break :kind null;
+                            }
+                            if (config.exclude_packed_structs and tree.tokens.items(.tag)[layout_token] == .keyword_packed) {
+                                break :kind null;
+                            }
+                        }
+                        break :kind .{ config.struct_field_order, "Struct" };
+                    },
                     .keyword_enum => .{ config.enum_field_order, "Enum" },
                     else => null,
                 };
@@ -162,10 +182,13 @@ fn run(
 
             try lint_problems.append(allocator, .{
                 .rule_id = rule.rule_id,
-                .severity = .warning,
+                .severity = order_with_severity.severity,
                 .start = actual_start,
                 .end = actual_end,
-                .message = try std.fmt.allocPrint(allocator, "{s} fields should be in alphabetical order", .{container_kind_name}),
+                .message = try std.fmt.allocPrint(allocator, "{s} fields should be in {s} order", .{
+                    container_kind_name,
+                    order_with_severity.order.name(),
+                }),
                 .fix = .{
                     .start = actual_start.byte_offset,
                     .end = actual_end.byte_offset + 1, // + 1 as fix is exclusive
