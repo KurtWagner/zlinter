@@ -46,6 +46,7 @@ A **linter** is a tool that automatically checks source code for style issues, b
   - [no_hidden_allocations](RULES.md#no_hidden_allocations)
   - [no_inferred_error_unions](RULES.md#no_inferred_error_unions)
   - [no_literal_args](RULES.md#no_literal_args)
+  - [no_literal_only_bool_expression](RULES.md#no_literal_only_bool_expression)
   - [no_orelse_unreachable](RULES.md#no_orelse_unreachable)
   - [no_panic](RULES.md#no_panic)
   - [no_swallow_error](RULES.md#no_swallow_error)
