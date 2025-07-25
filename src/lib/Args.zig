@@ -125,6 +125,7 @@ pub fn allocParse(
 
     var rules = std.ArrayListUnmanaged([]const u8).empty;
     defer rules.deinit(allocator);
+    errdefer for (rules.items) |r| allocator.free(r);
 
     const rule_config_overrides = try allocator.create(std.BufMap);
     rule_config_overrides.* = std.BufMap.init(allocator);
