@@ -265,6 +265,8 @@ pub const LintDocument = struct {
                     return if (init_node_type.is_type_val) .fn_type_returns_type else .fn_returns_type;
                 } else if (decl.isFunc()) {
                     return if (init_node_type.is_type_val) .fn_type else .@"fn";
+                } else if (decl.isMetaType()) {
+                    return .type;
                 } else {
                     if (init_node_type.is_type_val) {
                         if (init_node_type.isErrorSetType(self.analyser)) {

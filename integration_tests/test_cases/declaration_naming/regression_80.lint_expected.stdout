@@ -1,0 +1,16 @@
+error Type declaration should be TitleCase [test_cases/declaration_naming/regression_80.input.zig:6:7] declaration_naming
+
+ 6 | const badType = @typeInfo(SomePackedType).@"struct".backing_integer.?;
+   |       ^^^^^^^
+
+error Type declaration should be TitleCase [test_cases/declaration_naming/regression_80.input.zig:7:7] declaration_naming
+
+ 7 | const bad_type = @typeInfo(SomePackedType).@"struct".backing_integer.?;
+   |       ^^^^^^^^
+
+error Type declaration should be TitleCase [test_cases/declaration_naming/regression_80.input.zig:8:7] declaration_naming
+
+ 8 | const BAD_TYPE = @typeInfo(SomePackedType).@"struct".backing_integer.?;
+   |       ^^^^^^^^
+
+x 3 errors
