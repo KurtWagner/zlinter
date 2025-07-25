@@ -1,0 +1,10 @@
+error Struct fields should be in reverse alphabetical order [test_cases/field_ordering/structs_enabled.input.zig:11:24] field_ordering
+
+ 11 | const Normal = struct {
+    |                        
+ 12 |     a: u32,
+    | ^^^^^^^^^^^
+ 13 |     c: u32,
+    | ^^^^^^^^^^^
+
+x 1 errors

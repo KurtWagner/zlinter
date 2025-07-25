@@ -1,0 +1,19 @@
+warning Struct fields should be in alphabetical order [test_cases/field_ordering/extern_structs_enabled.input.zig:11:24] field_ordering
+
+ 11 | const Normal = struct {
+    |                        
+ 12 |     b: u32,
+    | ^^^^^^^^^^^
+ 13 |     a: u32,
+    | ^^^^^^^^^^^
+
+warning Struct fields should be in alphabetical order [test_cases/field_ordering/extern_structs_enabled.input.zig:6:31] field_ordering
+
+ 6 | const Extern = extern struct {
+   |                               
+ 7 |     b: u32,
+   | ^^^^^^^^^^^
+ 8 |     a: u32,
+   | ^^^^^^^^^^^
+
+x 2 warnings

@@ -1,0 +1,7 @@
+.{
+    .struct_field_order = .{
+        .order = .alphabetical_ascending,
+        .severity = .warning,
+    },
+    .exclude_extern_structs = false,
+}
