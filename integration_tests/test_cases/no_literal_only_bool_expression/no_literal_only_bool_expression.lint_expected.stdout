@@ -1,0 +1,41 @@
+error Useless condition [test_cases/no_literal_only_bool_expression/no_literal_only_bool_expression.input.zig:31:20] no_literal_only_bool_expression
+
+ 31 |     if (1 == 2 or (1 > 10 and age < 10)) {}
+    |                    ^^^^^^^
+
+error Useless condition [test_cases/no_literal_only_bool_expression/no_literal_only_bool_expression.input.zig:31:9] no_literal_only_bool_expression
+
+ 31 |     if (1 == 2 or (1 > 10 and age < 10)) {}
+    |         ^^^^^^^
+
+error Useless condition [test_cases/no_literal_only_bool_expression/no_literal_only_bool_expression.input.zig:30:9] no_literal_only_bool_expression
+
+ 30 |     if (2 >= 1) {}
+    |         ^^^^^^^
+
+error Useless condition [test_cases/no_literal_only_bool_expression/no_literal_only_bool_expression.input.zig:29:9] no_literal_only_bool_expression
+
+ 29 |     if (1 == 2) {}
+    |         ^^^^^^^
+
+error Useless condition [test_cases/no_literal_only_bool_expression/no_literal_only_bool_expression.input.zig:19:12] no_literal_only_bool_expression
+
+ 19 |     while (1 == 1) {
+    |            ^^^^^^^
+
+error Useless condition [test_cases/no_literal_only_bool_expression/no_literal_only_bool_expression.input.zig:18:12] no_literal_only_bool_expression
+
+ 18 |     while (false) {}
+    |            ^^^^^^
+
+error Useless condition [test_cases/no_literal_only_bool_expression/no_literal_only_bool_expression.input.zig:5:36] no_literal_only_bool_expression
+
+ 5 |     const also_bad = age == 10 and 1 == 1;
+   |                                    ^^^^^^^
+
+error Useless condition [test_cases/no_literal_only_bool_expression/no_literal_only_bool_expression.input.zig:4:17] no_literal_only_bool_expression
+
+ 4 |     const bad = 1 == 2;
+   |                 ^^^^^^^
+
+x 8 errors

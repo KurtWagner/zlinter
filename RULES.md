@@ -120,6 +120,18 @@ Enforce a consistent, predictable order for fields in structs, enums, and unions
 
   * **Default:** `.off`
 
+* `exclude_packed_structs`
+
+  * Whether to check order of packed structs (e.g., `packed struct(u32) { .. }`). You probably never want to enforce order of packed structs, so best to leave as `true` unless you're certain.
+
+  * **Default:** `true`
+
+* `exclude_extern_structs`
+
+  * Whether to check order of extern structs (e.g., `extern struct { .. }`). You probably never want to enforce order of extern structs, so best to leave as `true` unless you're certain.
+
+  * **Default:** `true`
+
 * `enum_field_order`
 
   * Order and severity for enum fields. If you're setting this and use tagged unions (e.g., `union(MyEnum)`) then you will also need to set the same order for unions.
@@ -374,6 +386,41 @@ These magic literals don’t explain what they mean. Consider using named consta
 
   * **Default:** `&.{ "print", "alloc", "allocWithOptions", "allocWithOptionsRetAddr", "allocSentinel", "alignedAlloc", "allocAdvancedWithRetAddr", "resize", "realloc", "reallocAdvanced", "parseInt", "IntFittingRange", }`
 
+## `no_literal_only_bool_expression`
+
+Disallow boolean expressions that consist only of literal values.
+
+If a boolean expression always evaluates to true or false, the statement is
+redundant and likely unintended. Remove it or replace it with a meaningful
+condition.
+
+For example,
+
+```zig
+// Bad
+if (1 == 1) {
+  // always true
+}
+
+// Bad
+if (false) {
+  // always false
+}
+
+// Ok
+while (true) {
+   break;
+}
+```
+
+**Config options:**
+
+* `severity`
+
+  * The severity (off, warning, error).
+
+  * **Default:** `.@"error"`
+
 ## `no_orelse_unreachable`
 
 Enforces use of `.?` over `orelse unreachable` as `.?` offers comptime checks
@@ -481,7 +528,7 @@ For example, `catch {}` and `catch unreachable`
 
 Disallows todo comments
 
-Todo comments are often used to indicate missing logic, features or the existence
+`TODO` comments are often used to indicate missing logic, features or the existence
 of bugs. While this is useful during development, leaving them untracked can
 lead to them being forgotten or not prioritised correctly.
 
