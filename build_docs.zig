@@ -15,9 +15,10 @@ pub fn main() !void {
     };
     defer output_file.close();
 
-    var writer = output_file.writer();
+    var buffer: [1024]u8 = undefined;
+    var writer = output_file.writer(&buffer);
 
-    try writer.writeAll(
+    try writer.interface.writeAll(
         \\# zlinter rules
         \\
         \\
@@ -31,23 +32,25 @@ pub fn main() !void {
         const basename = std.fs.path.basename(file_name);
         const rule_name = basename[0 .. basename.len - ".zig".len];
 
-        try writer.writeAll("## `");
-        try writer.writeAll(rule_name);
-        try writer.writeAll("`\n\n");
+        try writer.interface.writeAll("## `");
+        try writer.interface.writeAll(rule_name);
+        try writer.interface.writeAll("`\n\n");
 
         var file = try std.fs.cwd().openFile(file_name, .{});
         defer file.close();
 
-        var reader = file.reader();
+        var reader = file.deprecatedReader();
         const content = try reader.readAllAlloc(gpa, 10 * 1024 * 1024);
         defer gpa.free(content);
 
-        try writeFileDocComments(content, writer);
-        try writer.writeByte('\n');
+        try writeFileDocComments(content, &writer.interface);
+        try writer.interface.writeByte('\n');
 
-        try writeFileRuleConfig(content, gpa, writer);
-        try writer.writeByte('\n');
+        try writeFileRuleConfig(content, gpa, &writer.interface);
+        try writer.interface.writeByte('\n');
     }
+
+    try writer.interface.flush();
 
     return std.process.cleanExit();
 }

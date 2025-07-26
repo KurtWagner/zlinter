@@ -42,6 +42,12 @@ pub const Config = struct {
 
     /// Skip if found within `test { ... }` block.
     exclude_tests: bool = true,
+
+    /// Skip `@panic(...)` calls where the content equals a given string (case sensitive).
+    /// For example, maybe your application is happy to panic on OOM, so it
+    /// would be reasonable to add "OOM" to the list here so `@panic("OOM")`
+    /// is allowed.
+    exclude_panic_with_content: []const []const u8 = &.{},
 };
 
 /// Builds and returns the no_panic rule.
@@ -95,6 +101,9 @@ fn run(
             continue :skip;
         }
 
+        // if configured, skip if panic has case sensitive string content matching
+        if (builtinHasParamContent(tree, node.toNodeIndex(), config.exclude_panic_with_content)) continue :skip;
+
         try lint_problems.append(allocator, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
@@ -112,6 +121,81 @@ fn run(
         )
     else
         null;
+}
+
+/// Returns trye if the built call has a single argument that matches one of the
+/// given contents. e.g., `@panic("OOM")` would match `&.{"OOM"}`.
+/// Contents are case sensitive
+fn builtinHasParamContent(
+    tree: std.zig.Ast,
+    node: std.zig.Ast.Node.Index,
+    contents: []const []const u8,
+) bool {
+    if (contents.len == 0) return false;
+
+    var buffer: [2]std.zig.Ast.Node.Index = undefined;
+    const params = tree.builtinCallParams(&buffer, node) orelse return false;
+    if (params.len != 1) return false;
+
+    const param = params[0];
+    const tag = zlinter.shims.nodeTag(tree, param);
+    if (tag != .string_literal) return false;
+
+    const param_slice = tree.tokenSlice(zlinter.shims.nodeMainToken(tree, param));
+    for (contents) |c| {
+        // offset 1 on either side to factor in quotes
+        if (std.mem.eql(u8, param_slice[1 .. param_slice.len - 1], c)) return true;
+    }
+    return false;
+}
+
+test "excludes based on configurable contents" {
+    var config = Config{
+        .exclude_panic_with_content = &.{
+            "OOM", "other",
+        },
+    };
+    const rule = buildRule(.{});
+
+    // Bad cases:
+    inline for (&.{
+        \\ @panic("oom");
+        ,
+        \\ @panic("OTHER");
+    }) |source| {
+        var result = (try zlinter.testing.runRule(
+            rule,
+            zlinter.testing.paths.posix("path/to/my_file.zig"),
+            "pub fn main() void {" ++ source ++ "}",
+            .{ .config = &config },
+        ));
+        defer if (result) |*r| r.deinit(std.testing.allocator);
+        std.testing.expectEqual(1, result.?.problems.len) catch |e| {
+            std.debug.print("Expected issues: {s}\n", .{source});
+            return e;
+        };
+    }
+
+    // Good cases:
+    inline for (&.{
+        \\ @panic("OOM");
+        ,
+        \\ @panic("other");
+        ,
+        \\ const a = @abs(-10);
+    }) |source| {
+        var result = (try zlinter.testing.runRule(
+            rule,
+            zlinter.testing.paths.posix("path/to/my_file.zig"),
+            "pub fn main() void {" ++ source ++ "}",
+            .{ .config = &config },
+        ));
+        defer if (result) |*r| r.deinit(std.testing.allocator);
+        std.testing.expectEqual(null, result) catch |e| {
+            std.debug.print("Expected no issues: {s}\n", .{source});
+            return e;
+        };
+    }
 }
 
 test "no_panic" {
