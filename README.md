@@ -336,4 +336,4 @@ zig build docs
 zig build website && npx http-server -c-1 zig-out/website
 ```
 
-You don't need to use `npx`, its just static content in `zig-out/website. You may decide to use `python -m http.server` instead.
+You don't need to use `npx`, its just static content in `zig-out/website`. You may decide to use `python -m http.server` instead.
