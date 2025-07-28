@@ -258,9 +258,9 @@ This may change once zig hits `1.x`.
 
 ## Milestones
 
-1. [in-progress] **Rough implementaton of 20 diverse linter rules** - this is important to understanding limitations (e.g., [the AST](https://github.com/KurtWagner/zlinter/issues/65) and design patterns to a stable API.
+1. [done] **Rough implementaton of 20 diverse linter rules** - this is important to understanding limitations (e.g., [the AST](https://github.com/KurtWagner/zlinter/issues/65) and design patterns to a stable API.)
   
-1. [pending] **Run and review the results on at least 5 large open source Zig projects** - this is to discover unknown unknowns to populate caveats and limitations of current approach.
+1. [in-progress] **Run and review the results on at least 5 large open source Zig projects** - this is to discover unknown unknowns to populate caveats and limitations of current approach.
 
 1. [pending] **To be informed by (1) and (2)** - could be that AST is good enough for enough cases to provide value providing adequate documentation, AND/OR, could be that it's worth contributing time into Zigs efforts around "multibuild" and zig compiler server.
 
