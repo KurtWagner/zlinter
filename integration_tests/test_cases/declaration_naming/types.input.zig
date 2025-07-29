@@ -53,3 +53,15 @@ extern const good_extern: u32;
 export const BadExport: u32 = 10;
 export const badExport: u32 = 10;
 export const good_export: u32 = 10;
+
+// Aliases are excluded by default
+const system = struct {
+    const FAILURE: u32 = 1; // zlinter-disable-current-line
+    const nested = struct {
+        const Uint: u32 = 10; // zlinter-disable-current-line
+    };
+};
+
+const FAILURE = system.FAILURE;
+pub const Uint = system.nested.Uint;
+const NOT_ALIAS = system.FAILURE;
