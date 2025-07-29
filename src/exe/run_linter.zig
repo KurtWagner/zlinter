@@ -84,59 +84,82 @@ pub fn main() !u8 {
         file_lint_problems.deinit();
     }
 
-    // ------------------------------------------------------------------------
-    // Resolve files then apply excludes and filters
-    // ------------------------------------------------------------------------
-
     var dir = try std.fs.cwd().openDir("./", .{ .iterate = true });
     defer dir.close();
 
-    const lint_files = try zlinter.files.allocLintFiles(
-        dir,
-        // `--include` argument supersedes build defined includes and excludes
-        args.include_paths orelse args.build_include_paths orelse null,
-        gpa,
-    );
-    defer {
-        for (lint_files) |*lint_file| lint_file.deinit(gpa);
-        gpa.free(lint_files);
+    {
+        // ------------------------------------------------------------------------
+        // Resolve files then apply excludes and filters
+        // ------------------------------------------------------------------------
+
+        const lint_files = try zlinter.files.allocLintFiles(
+            dir,
+            // `--include` argument supersedes build defined includes and excludes
+            args.include_paths orelse args.build_include_paths orelse null,
+            gpa,
+        );
+        defer {
+            for (lint_files) |*lint_file| lint_file.deinit(gpa);
+            gpa.free(lint_files);
+        }
+
+        if (try buildExcludesIndex(gpa, dir, args)) |*index| {
+            defer @constCast(index).deinit();
+
+            for (lint_files) |*file|
+                file.excluded = index.contains(file.pathname);
+        }
+
+        if (try buildFilterIndex(gpa, dir, args)) |*index| {
+            defer @constCast(index).deinit();
+
+            for (lint_files) |*file|
+                file.excluded = !index.contains(file.pathname);
+        }
+
+        if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "Resolving {d} files took: {d}ms", .{ lint_files.len, ms });
+
+        defer {
+            printer.printBanner(.verbose);
+            printer.println(.verbose, "Linted {d} files", .{lint_files.len});
+            if (total_timer.lapMilliseconds()) |ms| printer.println(.verbose, "Took {d}ms", .{ms});
+            printer.printBanner(.verbose);
+        }
+
+        try runLinterRules(
+            gpa,
+            lint_files,
+            printer,
+            &timer,
+            &file_lint_problems,
+            args,
+        );
     }
-
-    if (try buildExcludesIndex(gpa, dir, args)) |*index| {
-        defer @constCast(index).deinit();
-
-        for (lint_files) |*file|
-            file.excluded = index.contains(file.pathname);
-    }
-
-    if (try buildFilterIndex(gpa, dir, args)) |*index| {
-        defer @constCast(index).deinit();
-
-        for (lint_files) |*file|
-            file.excluded = !index.contains(file.pathname);
-    }
-
-    if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "Resolving {d} files took: {d}ms", .{ lint_files.len, ms });
-
-    var ctx: zlinter.session.LintContext = undefined;
-    try ctx.init(.{
-        .zig_exe_path = args.zig_exe,
-        .zig_lib_path = args.zig_lib_directory,
-        .global_cache_path = args.global_cache_root,
-    }, gpa);
-    defer ctx.deinit();
 
     // ------------------------------------------------------------------------
-    // Process files and populate results:
+    // Print out results:
     // ------------------------------------------------------------------------
-
-    defer {
-        printer.printBanner(.verbose);
-        printer.println(.verbose, "Linted {d} files", .{lint_files.len});
-        if (total_timer.lapMilliseconds()) |ms| printer.println(.verbose, "Took {d}ms", .{ms});
-        printer.printBanner(.verbose);
+    {
+        const output_writer = std.io.getStdOut().writer();
+        if (args.fix) {
+            return try runFixes(gpa, dir, file_lint_problems, output_writer);
+        } else {
+            const formatter = switch (args.format) {
+                .default => &default_formatter.formatter,
+            };
+            return try runFormatter(gpa, dir, file_lint_problems, output_writer, formatter);
+        }
     }
+}
 
+fn runLinterRules(
+    gpa: std.mem.Allocator,
+    lint_files: []zlinter.files.LintFile,
+    printer: anytype,
+    timer: *Timer,
+    file_lint_problems: *std.StringArrayHashMap([]zlinter.results.LintResult),
+    args: zlinter.Args,
+) !void {
     var maybe_slowest_files = if (args.verbose) SlowestItemQueue.init(gpa) else null;
     defer if (maybe_slowest_files) |*slowest_files| {
         defer slowest_files.deinit();
@@ -161,6 +184,26 @@ pub fn main() !u8 {
         }
         item_timers.unloadAndPrint("Rules", printer);
     };
+
+    var ctx: zlinter.session.LintContext = undefined;
+    try ctx.init(.{
+        .zig_exe_path = args.zig_exe,
+        .zig_lib_path = args.zig_lib_directory,
+        .global_cache_path = args.global_cache_root,
+    }, gpa);
+    defer ctx.deinit();
+
+    var rule_filter_map = map: {
+        var map = std.StringHashMapUnmanaged(void).empty;
+        if (args.rules) |filter_rules| {
+            for (filter_rules) |rule| {
+                try map.put(gpa, rule, {});
+            }
+            break :map map;
+        }
+        break :map null;
+    };
+    defer if (rule_filter_map) |*m| m.deinit(gpa);
 
     for (lint_files, 0..) |lint_file, i| {
         if (lint_file.excluded) {
@@ -234,18 +277,6 @@ pub fn main() !u8 {
         }
         if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "  - Process syntax errors: {d}ms", .{ms});
 
-        var rule_filter_map = map: {
-            var map = std.StringHashMapUnmanaged(void).empty;
-            if (args.rules) |filter_rules| {
-                for (filter_rules) |rule| {
-                    try map.put(gpa, rule, {});
-                }
-                break :map map;
-            }
-            break :map null;
-        };
-        defer if (rule_filter_map) |*m| m.deinit(gpa);
-
         printer.println(.verbose, "  - Rules", .{});
 
         var rule_run_arena = std.heap.ArenaAllocator.init(gpa);
@@ -318,144 +349,150 @@ pub fn main() !u8 {
             );
         }
     }
+}
 
-    // ------------------------------------------------------------------------
-    // Print out results:
-    // ------------------------------------------------------------------------
+fn runFormatter(
+    gpa: std.mem.Allocator,
+    dir: std.fs.Dir,
+    file_lint_problems: std.StringArrayHashMap([]zlinter.results.LintResult),
+    output_writer: anytype,
+    formatter: *const zlinter.formatters.Formatter,
+) !u8 {
+    var arena = std.heap.ArenaAllocator.init(gpa);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
 
-    const output_writer = std.io.getStdOut().writer();
-    if (args.fix) {
-        var total_fixes: usize = 0;
-        var total_disabled_by_comment: usize = 0;
-
-        var it = file_lint_problems.iterator();
-        while (it.next()) |entry| {
-            var lint_fixes = std.ArrayListUnmanaged(zlinter.results.LintProblemFix).empty;
-            defer lint_fixes.deinit(gpa);
-
-            const results = entry.value_ptr.*;
-            for (results) |result| {
-                for (result.problems) |err| {
-                    if (err.disabled_by_comment) {
-                        total_disabled_by_comment += 1;
-                        continue;
-                    }
-
-                    if (err.fix) |fix| {
-                        try lint_fixes.append(gpa, fix);
-                    }
-                }
-            }
-
-            // Sort by range start and then remove overlaps to avoid conflicting
-            // changes. This is needed as we do text based fixes.
-            std.mem.sort(
-                zlinter.results.LintProblemFix,
-                lint_fixes.items,
-                {},
-                cmpFix,
-            );
-
-            const file_path = entry.key_ptr.*;
-            const file = try dir.openFile(file_path, .{
-                .mode = .read_only,
-            });
-            defer file.close();
-
-            const file_content = try file.reader().readAllAlloc(gpa, max_file_size_bytes);
-            defer gpa.free(file_content);
-
-            var output_slices = std.ArrayListUnmanaged([]const u8).empty;
-            defer output_slices.deinit(gpa);
-
-            var file_fixes: usize = 0;
-            var content_index: usize = 0;
-            var previous_fix: ?zlinter.results.LintProblemFix = null;
-            for (lint_fixes.items) |fix| {
-                if (previous_fix) |p| {
-                    if (fix.start <= p.end) {
-                        // Skip this fix as it collides with previous fixes range
-                        // and may cause an invalid result.
-                        continue;
-                    }
-                }
-                previous_fix = fix;
-
-                try output_slices.append(gpa, file_content[content_index..fix.start]);
-                if (fix.text.len > 0) {
-                    try output_slices.append(gpa, fix.text);
-                }
-                content_index = fix.end;
-                total_fixes += 1;
-                file_fixes += 1;
-            }
-            if (content_index < file_content.len - 1) {
-                try output_slices.append(gpa, file_content[content_index..file_content.len]);
-            }
-
-            try output_writer.print("{d} fixes applied to: {s}\n", .{
-                file_fixes,
-                file_path,
-            });
-
-            if (output_slices.items.len > 0) {
-                const new_file = try dir.createFile(file_path, .{
-                    .truncate = true,
-                });
-                defer new_file.close();
-
-                var writer = new_file.writer();
-                for (output_slices.items) |output_slice| {
-                    try writer.writeAll(output_slice);
-                }
-            }
-        }
-
-        try output_writer.print(
-            "Fixed {d} issues in {d} files!\n{d} issues disabled by comments.\n",
-            .{
-                total_fixes,
-                file_lint_problems.count(),
-                total_disabled_by_comment,
-            },
-        );
-        return ExitCode.success.int();
-    } else {
-        var arena = std.heap.ArenaAllocator.init(gpa);
-        defer arena.deinit();
-        const arena_allocator = arena.allocator();
-
-        var flattened = std.ArrayListUnmanaged(zlinter.results.LintResult).empty;
-        for (file_lint_problems.values()) |results| {
-            try flattened.appendSlice(arena_allocator, results);
-        }
-
-        const exit_code = exit_code: {
-            for (flattened.items) |result| {
-                for (result.problems) |problem| {
-                    if (problem.severity == .@"error" and !problem.disabled_by_comment) {
-                        break :exit_code ExitCode.lint_error.int();
-                    }
-                }
-            }
-            break :exit_code ExitCode.success.int();
-        };
-
-        const formatter = switch (args.format) {
-            .default => &default_formatter.formatter,
-        };
-        try formatter.format(.{
-            .results = try flattened.toOwnedSlice(arena_allocator),
-            .dir = dir,
-            .arena = arena_allocator,
-        }, &output_writer);
-
-        return exit_code;
+    var flattened = std.ArrayListUnmanaged(zlinter.results.LintResult).empty;
+    for (file_lint_problems.values()) |results| {
+        try flattened.appendSlice(arena_allocator, results);
     }
+
+    const exit_code = exit_code: {
+        for (flattened.items) |result| {
+            for (result.problems) |problem| {
+                if (problem.severity == .@"error" and !problem.disabled_by_comment) {
+                    break :exit_code ExitCode.lint_error.int();
+                }
+            }
+        }
+        break :exit_code ExitCode.success.int();
+    };
+
+    try formatter.format(.{
+        .results = try flattened.toOwnedSlice(arena_allocator),
+        .dir = dir,
+        .arena = arena_allocator,
+    }, &output_writer);
+
+    return exit_code;
 }
 
 fn cmpFix(context: void, a: zlinter.results.LintProblemFix, b: zlinter.results.LintProblemFix) bool {
     return std.sort.asc(@TypeOf(a.start))(context, a.start, b.start);
+}
+
+fn runFixes(
+    gpa: std.mem.Allocator,
+    dir: std.fs.Dir,
+    file_lint_problems: std.StringArrayHashMap([]zlinter.results.LintResult),
+    output_writer: anytype,
+) !u8 {
+    var total_fixes: usize = 0;
+    var total_disabled_by_comment: usize = 0;
+
+    var it = file_lint_problems.iterator();
+    while (it.next()) |entry| {
+        var lint_fixes = std.ArrayListUnmanaged(zlinter.results.LintProblemFix).empty;
+        defer lint_fixes.deinit(gpa);
+
+        const results = entry.value_ptr.*;
+        for (results) |result| {
+            for (result.problems) |err| {
+                if (err.disabled_by_comment) {
+                    total_disabled_by_comment += 1;
+                    continue;
+                }
+
+                if (err.fix) |fix| {
+                    try lint_fixes.append(gpa, fix);
+                }
+            }
+        }
+
+        // Sort by range start and then remove overlaps to avoid conflicting
+        // changes. This is needed as we do text based fixes.
+        std.mem.sort(
+            zlinter.results.LintProblemFix,
+            lint_fixes.items,
+            {},
+            cmpFix,
+        );
+
+        const file_path = entry.key_ptr.*;
+        const file = try dir.openFile(file_path, .{
+            .mode = .read_only,
+        });
+        defer file.close();
+
+        const file_content = try file.reader().readAllAlloc(gpa, max_file_size_bytes);
+        defer gpa.free(file_content);
+
+        var output_slices = std.ArrayListUnmanaged([]const u8).empty;
+        defer output_slices.deinit(gpa);
+
+        var file_fixes: usize = 0;
+        var content_index: usize = 0;
+        var previous_fix: ?zlinter.results.LintProblemFix = null;
+        for (lint_fixes.items) |fix| {
+            if (previous_fix) |p| {
+                if (fix.start <= p.end) {
+                    // Skip this fix as it collides with previous fixes range
+                    // and may cause an invalid result.
+                    continue;
+                }
+            }
+            previous_fix = fix;
+
+            try output_slices.append(gpa, file_content[content_index..fix.start]);
+            if (fix.text.len > 0) {
+                try output_slices.append(gpa, fix.text);
+            }
+            content_index = fix.end;
+            total_fixes += 1;
+            file_fixes += 1;
+        }
+        if (content_index < file_content.len - 1) {
+            try output_slices.append(gpa, file_content[content_index..file_content.len]);
+        }
+
+        try output_writer.print("{d} fixes applied to: {s}\n", .{
+            file_fixes,
+            file_path,
+        });
+
+        if (output_slices.items.len > 0) {
+            const new_file = try dir.createFile(file_path, .{
+                .truncate = true,
+            });
+            defer new_file.close();
+
+            var writer = new_file.writer();
+            for (output_slices.items) |output_slice| {
+                try writer.writeAll(output_slice);
+            }
+        }
+    }
+
+    try output_writer.print(
+        "Fixed {d} issues in {d} files!\n{d} issues disabled by comments.\n",
+        .{
+            total_fixes,
+            file_lint_problems.count(),
+            total_disabled_by_comment,
+        },
+    );
+
+    return ExitCode.success.int();
 }
 
 /// Allocates an AST error into a string.
