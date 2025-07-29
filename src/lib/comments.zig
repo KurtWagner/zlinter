@@ -25,6 +25,10 @@ pub const Token = struct {
         disable_lint_current_line,
         /// e.g., `zlinter-disable-current-line`
         disable_lint_next_line,
+        /// e.g., `zlinter-enable`
+        enable_lint,
+        /// e.g., `zlinter-disable`
+        disable_lint,
         /// `:`
         colon,
         /// `(`
@@ -47,6 +51,8 @@ pub const Token = struct {
     const keywords = std.StaticStringMap(Tag).initComptime(.{
         .{ "zlinter-disable-next-line", .disable_lint_next_line },
         .{ "zlinter-disable-current-line", .disable_lint_current_line },
+        .{ "zlinter-enable", .enable_lint },
+        .{ "zlinter-disable", .disable_lint },
         .{ "todo", .todo },
         .{ "TODO", .todo },
         .{ "Todo", .todo },
@@ -229,6 +235,84 @@ test "tokenize doc comment" {
     });
 }
 
+test "tokenize disable" {
+    try testTokenize(&.{
+        "// zlinter-disable",
+        "// zlinter-disable - has comment ",
+        "// zlinter-disable rule",
+        "// zlinter-disable\trule - has comment",
+        "// zlinter-disable rule_1  rule_2",
+        "// zlinter-disable rule_1 rule_2  -  has comment ",
+    }, &.{
+        .{ 0, .source_comment, "//" },
+        .{ 0, .disable_lint, "zlinter-disable" },
+        .{ 1, .source_comment, "//" },
+        .{ 1, .disable_lint, "zlinter-disable" },
+        .{ 1, .word, "-" },
+        .{ 1, .word, "has" },
+        .{ 1, .word, "comment" },
+        .{ 2, .source_comment, "//" },
+        .{ 2, .disable_lint, "zlinter-disable" },
+        .{ 2, .word, "rule" },
+        .{ 3, .source_comment, "//" },
+        .{ 3, .disable_lint, "zlinter-disable" },
+        .{ 3, .word, "rule" },
+        .{ 3, .word, "-" },
+        .{ 3, .word, "has" },
+        .{ 3, .word, "comment" },
+        .{ 4, .source_comment, "//" },
+        .{ 4, .disable_lint, "zlinter-disable" },
+        .{ 4, .word, "rule_1" },
+        .{ 4, .word, "rule_2" },
+        .{ 5, .source_comment, "//" },
+        .{ 5, .disable_lint, "zlinter-disable" },
+        .{ 5, .word, "rule_1" },
+        .{ 5, .word, "rule_2" },
+        .{ 5, .word, "-" },
+        .{ 5, .word, "has" },
+        .{ 5, .word, "comment" },
+    });
+}
+
+test "tokenize enable" {
+    try testTokenize(&.{
+        "// zlinter-enable",
+        "// zlinter-enable - has comment ",
+        "// zlinter-enable rule",
+        "// zlinter-enable\trule - has comment",
+        "// zlinter-enable rule_1  rule_2",
+        "// zlinter-enable rule_1 rule_2  -  has comment ",
+    }, &.{
+        .{ 0, .source_comment, "//" },
+        .{ 0, .enable_lint, "zlinter-enable" },
+        .{ 1, .source_comment, "//" },
+        .{ 1, .enable_lint, "zlinter-enable" },
+        .{ 1, .word, "-" },
+        .{ 1, .word, "has" },
+        .{ 1, .word, "comment" },
+        .{ 2, .source_comment, "//" },
+        .{ 2, .enable_lint, "zlinter-enable" },
+        .{ 2, .word, "rule" },
+        .{ 3, .source_comment, "//" },
+        .{ 3, .enable_lint, "zlinter-enable" },
+        .{ 3, .word, "rule" },
+        .{ 3, .word, "-" },
+        .{ 3, .word, "has" },
+        .{ 3, .word, "comment" },
+        .{ 4, .source_comment, "//" },
+        .{ 4, .enable_lint, "zlinter-enable" },
+        .{ 4, .word, "rule_1" },
+        .{ 4, .word, "rule_2" },
+        .{ 5, .source_comment, "//" },
+        .{ 5, .enable_lint, "zlinter-enable" },
+        .{ 5, .word, "rule_1" },
+        .{ 5, .word, "rule_2" },
+        .{ 5, .word, "-" },
+        .{ 5, .word, "has" },
+        .{ 5, .word, "comment" },
+    });
+}
+
 test "tokenize disable line comments" {
     try testTokenize(&.{
         "// zlinter-disable-current-line",
@@ -404,7 +488,10 @@ pub const CommentsDocument = struct {
                 source[self.tokens[c.first].first_byte .. self.tokens[c.last].first_byte + self.tokens[c.last].len]
             else
                 "",
-            .disable => source[self.tokens[comment.first_token + 1].first_byte .. self.tokens[comment.last_token].first_byte + self.tokens[comment.last_token].len],
+            .disable_lines,
+            .disable,
+            .enable,
+            => source[self.tokens[comment.first_token + 1].first_byte .. self.tokens[comment.last_token].first_byte + self.tokens[comment.last_token].len],
         };
     }
 
@@ -423,7 +510,7 @@ pub const CommentsDocument = struct {
                             "",
                     });
                 },
-                .disable => |disable| {
+                .disable_lines => |disable| {
                     std.debug.print("DISABLE:\n", .{});
                     std.debug.print(" for {s}:{d}\n", .{ file_path, disable.line_start });
                     if (disable.rule_ids) |rule_ids| {
@@ -458,7 +545,7 @@ pub const Comment = struct {
     const Kind = union(enum) {
         /// Represents a comment that disables some lint rules within a line range
         /// of a given source file.
-        disable: struct {
+        disable_lines: struct {
             /// Line of source (index zero) to disable rules from (inclusive).
             line_start: usize,
 
@@ -466,6 +553,36 @@ pub const Comment = struct {
             line_end: usize,
 
             /// Rules to disable, if empty, it means, disable all rules.
+            rule_ids: ?struct {
+                /// Inclusive
+                first: Token.Index,
+                /// Inclusive
+                last: Token.Index,
+            } = null,
+        },
+
+        /// Represents a comment that disables some lint rules from a start line
+        /// of a given source file.
+        disable: struct {
+            /// Line of source (index zero) to disable rules from (inclusive).
+            line_start: usize,
+
+            /// Rules to disable, if empty, it means, disable all rules.
+            rule_ids: ?struct {
+                /// Inclusive
+                first: Token.Index,
+                /// Inclusive
+                last: Token.Index,
+            } = null,
+        },
+
+        /// Represents a comment that enables some lint rules from a start line
+        /// of a given source file (usually following a disable comment)
+        enable: struct {
+            /// Line of source (index zero) to enable rules from (inclusive).
+            line_start: usize,
+
+            /// Rules to enable, if empty, it means, enable all rules.
             rule_ids: ?struct {
                 /// Inclusive
                 first: Token.Index,
@@ -496,11 +613,33 @@ pub const Comment = struct {
         std.debug.print("  .last_token = {d},\n", .{self.last_token});
         std.debug.print("  .kind = .{{\n", .{});
         switch (self.kind) {
-            .disable => |disable| {
-                std.debug.print("  .disable = .{{\n", .{});
+            .disable_lines => |disable| {
+                std.debug.print("  .disable_lines = .{{\n", .{});
                 std.debug.print("      .line_start = {d},\n", .{disable.line_start});
                 std.debug.print("      .line_end = {d},\n", .{disable.line_end});
                 if (disable.rule_ids) |rule_ids| {
+                    std.debug.print("      .rule_ids = .{{\n", .{});
+                    std.debug.print("        .first = {d},\n", .{rule_ids.first});
+                    std.debug.print("        .last = {d},\n", .{rule_ids.last});
+                    std.debug.print("      }},\n", .{});
+                }
+                std.debug.print("  }},\n", .{});
+            },
+            .disable => |disable| {
+                std.debug.print("  .disable = .{{\n", .{});
+                std.debug.print("      .line_start = {d},\n", .{disable.line_start});
+                if (disable.rule_ids) |rule_ids| {
+                    std.debug.print("      .rule_ids = .{{\n", .{});
+                    std.debug.print("        .first = {d},\n", .{rule_ids.first});
+                    std.debug.print("        .last = {d},\n", .{rule_ids.last});
+                    std.debug.print("      }},\n", .{});
+                }
+                std.debug.print("  }},\n", .{});
+            },
+            .enable => |enable| {
+                std.debug.print("  .enable = .{{\n", .{});
+                std.debug.print("      .line_start = {d},\n", .{enable.line_start});
+                if (enable.rule_ids) |rule_ids| {
                     std.debug.print("      .rule_ids = .{{\n", .{});
                     std.debug.print("        .first = {d},\n", .{rule_ids.first});
                     std.debug.print("        .last = {d},\n", .{rule_ids.last});
@@ -566,6 +705,12 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
     var comments = std.ArrayList(Comment).init(gpa);
     defer comments.deinit();
 
+    var enables = std.ArrayList(struct { u32, []const u8 }).init(gpa);
+    defer enables.deinit();
+
+    var disables = std.ArrayList(struct { u32, []const u8 }).init(gpa);
+    defer disables.deinit();
+
     var p = Parser{ .tokens = tokens };
     tokens: while (p.next()) |token| {
         if (!p.tokens[token].tag.isComment()) continue :tokens;
@@ -574,6 +719,8 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
         const kind: Comment.Kind = kind: {
             if (p.next()) |second_token| {
                 switch (p.tokens[second_token].tag) {
+                    .enable_lint,
+                    .disable_lint,
                     .disable_lint_current_line,
                     .disable_lint_next_line,
                     => {
@@ -601,20 +748,46 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
                             p.skip();
                         }
 
-                        const line = switch (p.tokens[second_token].tag) {
-                            .disable_lint_current_line => p.tokens[second_token].line,
-                            .disable_lint_next_line => p.tokens[second_token].line + 1,
-                            else => unreachable,
-                        };
-                        break :kind .{
-                            .disable = .{
-                                .line_start = line,
-                                .line_end = line,
-                                .rule_ids = if (maybe_first_rule_token) |first_rule_token| .{
-                                    .first = first_rule_token,
-                                    .last = maybe_last_rule_token.?,
-                                } else null,
+                        break :kind switch (p.tokens[second_token].tag) {
+                            .enable_lint => .{
+                                .enable = .{
+                                    .line_start = p.tokens[second_token].line,
+                                    .rule_ids = if (maybe_first_rule_token) |first_rule_token| .{
+                                        .first = first_rule_token,
+                                        .last = maybe_last_rule_token.?,
+                                    } else null,
+                                },
                             },
+                            .disable_lint => .{
+                                .disable = .{
+                                    .line_start = p.tokens[second_token].line,
+                                    .rule_ids = if (maybe_first_rule_token) |first_rule_token| .{
+                                        .first = first_rule_token,
+                                        .last = maybe_last_rule_token.?,
+                                    } else null,
+                                },
+                            },
+                            .disable_lint_current_line => .{
+                                .disable_lines = .{
+                                    .line_start = p.tokens[second_token].line,
+                                    .line_end = p.tokens[second_token].line,
+                                    .rule_ids = if (maybe_first_rule_token) |first_rule_token| .{
+                                        .first = first_rule_token,
+                                        .last = maybe_last_rule_token.?,
+                                    } else null,
+                                },
+                            },
+                            .disable_lint_next_line => .{
+                                .disable_lines = .{
+                                    .line_start = p.tokens[second_token].line + 1,
+                                    .line_end = p.tokens[second_token].line + 1,
+                                    .rule_ids = if (maybe_first_rule_token) |first_rule_token| .{
+                                        .first = first_rule_token,
+                                        .last = maybe_last_rule_token.?,
+                                    } else null,
+                                },
+                            },
+                            else => unreachable,
                         };
                     },
                     .todo => {
@@ -872,7 +1045,7 @@ test "parse - disable next line comments" {
             .first_token = 0,
             .last_token = 5,
             .kind = .{
-                .disable = .{
+                .disable_lines = .{
                     .line_start = 1,
                     .line_end = 1,
                     .rule_ids = .{
@@ -895,7 +1068,7 @@ test "parse - disable next line comments" {
             .first_token = 0,
             .last_token = 3,
             .kind = .{
-                .disable = .{
+                .disable_lines = .{
                     .line_start = 3,
                     .line_end = 3,
                     .rule_ids = .{
@@ -917,7 +1090,7 @@ test "parse - disable next line comments" {
             .first_token = 0,
             .last_token = 1,
             .kind = .{
-                .disable = .{
+                .disable_lines = .{
                     .line_start = 2,
                     .line_end = 2,
                 },
@@ -935,7 +1108,7 @@ test "parse - disable current line comments" {
             .first_token = 0,
             .last_token = 5,
             .kind = .{
-                .disable = .{
+                .disable_lines = .{
                     .line_start = 0,
                     .line_end = 0,
                     .rule_ids = .{
@@ -957,7 +1130,7 @@ test "parse - disable current line comments" {
             .first_token = 0,
             .last_token = 3,
             .kind = .{
-                .disable = .{
+                .disable_lines = .{
                     .line_start = 2,
                     .line_end = 2,
                     .rule_ids = .{
@@ -978,12 +1151,126 @@ test "parse - disable current line comments" {
             .first_token = 0,
             .last_token = 1,
             .kind = .{
-                .disable = .{
+                .disable_lines = .{
                     .line_start = 1,
                     .line_end = 1,
                 },
             },
         }},
+    );
+}
+
+test "parse - disable" {
+    try testParse(
+        &.{
+            "",
+            "// zlinter-disable rule_a - false positive",
+        },
+        &.{
+            .{
+                .first_token = 0,
+                .last_token = 5,
+                .kind = .{
+                    .disable = .{
+                        .line_start = 1,
+                        .rule_ids = .{ .first = 2, .last = 2 },
+                    },
+                },
+            },
+        },
+    );
+
+    try testParse(
+        &.{
+            "",
+            "",
+            "// zlinter-disable rule_a rule_b",
+        },
+        &.{
+            .{
+                .first_token = 0,
+                .last_token = 3,
+                .kind = .{
+                    .disable = .{
+                        .line_start = 2,
+                        .rule_ids = .{ .first = 2, .last = 3 },
+                    },
+                },
+            },
+        },
+    );
+
+    try testParse(
+        &.{
+            "",
+            "// zlinter-disable",
+        },
+        &.{
+            .{
+                .first_token = 0,
+                .last_token = 1,
+                .kind = .{
+                    .disable = .{ .line_start = 1 },
+                },
+            },
+        },
+    );
+}
+
+test "parse - enable" {
+    try testParse(
+        &.{
+            "",
+            "// zlinter-enable rule_a - false positive",
+        },
+        &.{
+            .{
+                .first_token = 0,
+                .last_token = 5,
+                .kind = .{
+                    .enable = .{
+                        .line_start = 1,
+                        .rule_ids = .{ .first = 2, .last = 2 },
+                    },
+                },
+            },
+        },
+    );
+
+    try testParse(
+        &.{
+            "",
+            "",
+            "// zlinter-enable rule_a rule_b",
+        },
+        &.{
+            .{
+                .first_token = 0,
+                .last_token = 3,
+                .kind = .{
+                    .enable = .{
+                        .line_start = 2,
+                        .rule_ids = .{ .first = 2, .last = 3 },
+                    },
+                },
+            },
+        },
+    );
+
+    try testParse(
+        &.{
+            "",
+            "// zlinter-enable",
+        },
+        &.{
+            .{
+                .first_token = 0,
+                .last_token = 1,
+                .kind = .{
+                    .enable = .{ .line_start = 1 },
+                },
+            },
+        },
     );
 }
 
@@ -1016,4 +1303,72 @@ fn testParse(
     }
 }
 
+pub const LazyRuleSkipper = struct {
+    is_built: bool = false,
+    all: std.bit_set.DynamicBitSet = undefined,
+    rules: std.StringHashMap(std.bit_set.DynamicBitSet) = undefined,
+
+    doc: CommentsDocument,
+    arena: std.heap.ArenaAllocator,
+    source: []const u8,
+
+    pub fn init(doc: CommentsDocument, source: []const u8, allocator: std.mem.Allocator) LazyRuleSkipper {
+        return .{
+            .doc = doc,
+            .source = source,
+            .arena = .init(allocator),
+        };
+    }
+
+    pub fn deinit(self: *LazyRuleSkipper) void {
+        self.arena.deinit();
+    }
+
+    pub fn shouldSkip(self: *LazyRuleSkipper, problem: LintProblem) error{OutOfMemory}!bool {
+        try self.ensureBuilt();
+
+        if (self.all.isSet(problem.start.line)) return true;
+
+        if (self.rules.get(problem.rule_id)) |bits|
+            if (bits.isSet(problem.start.line)) return true;
+
+        return false;
+    }
+
+    fn ensureBuilt(self: *LazyRuleSkipper) error{OutOfMemory}!void {
+        if (self.is_built) return;
+        defer self.is_built = true;
+
+        const line_count = std.mem.count(u8, self.source, "\n") + 1;
+
+        self.rules = .init(self.arena.allocator());
+        self.all = try .initEmpty(self.arena.allocator(), line_count);
+
+        for (self.doc.comments) |comment| {
+            switch (comment.kind) {
+                .disable_lines => |disable_lines| {
+                    var line = disable_lines.line_start;
+                    while (line <= disable_lines.line_end) : (line += 1) {
+                        if (disable_lines.rule_ids) |rule_ids| {
+                            for (self.doc.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
+                                const rule_id = self.source[token.first_byte .. token.first_byte + token.len];
+
+                                const result = try self.rules.getOrPut(rule_id);
+                                if (!result.found_existing) {
+                                    result.value_ptr.* = try .initEmpty(self.arena.allocator(), line_count);
+                                }
+                                result.value_ptr.set(line);
+                            }
+                        } else {
+                            self.all.set(line);
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+};
+
 const std = @import("std");
+const LintProblem = @import("results.zig").LintProblem;
