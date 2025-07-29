@@ -108,4 +108,10 @@ error Constant declaration should be snake_case [test_cases/declaration_naming/t
  54 | export const badExport: u32 = 10;
     |              ^^^^^^^^^
 
-x 22 errors
+error Constant declaration should be snake_case [test_cases/declaration_naming/types.input.zig:67:7] declaration_naming
+
+ 67 | const NOT_ALIAS = system.FAILURE;
+    |       ^^^^^^^^^
+
+x 23 errors
+x 2 skipped

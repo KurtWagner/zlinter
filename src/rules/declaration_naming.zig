@@ -15,6 +15,12 @@ pub const Config = struct {
     /// the code being linked, in which case, you may set this to true.
     exclude_export: bool = false,
 
+    /// When true the linter will exclude naming checks for declarations that have
+    /// the same name as the field they're aliasing (e.g., `pub const FAILURE = system.FAILURE`).
+    /// In these cases it can often be better to be consistent and to leave the
+    /// naming convention up to the definition being aliased.
+    exclude_aliases: bool = true,
+
     /// Style and severity for declarations with `const` mutability.
     var_decl: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .snake_case,
@@ -94,6 +100,16 @@ fn run(
         const type_kind = try doc.resolveTypeKind(.{ .var_decl = var_decl }) orelse continue :skip;
         const name_token = var_decl.ast.mut_token + 1;
         const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
+
+        if (config.exclude_aliases) {
+            if (zlinter.shims.NodeIndexShim.initOptional(var_decl.ast.init_node)) |init_node| {
+                if (zlinter.shims.nodeTag(tree, init_node.toNodeIndex()) == .field_access) {
+                    const last_token = tree.lastToken(init_node.toNodeIndex());
+                    const field_name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(last_token));
+                    if (std.mem.eql(u8, field_name, name)) continue :skip;
+                }
+            }
+        }
 
         const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const var_desc: []const u8 =
             switch (type_kind) {
