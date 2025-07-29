@@ -1,6 +1,6 @@
-warning `@panic` forcibly stops the program at runtime and should be avoided [test_cases/no_panic/no_panic.input.zig:7:17] no_panic
+warning `@panic` forcibly stops the program at runtime and should be avoided [test_cases/no_panic/no_panic.input.zig:9:17] no_panic
 
- 7 |     if (y == 0) @panic("Divide by zero!");
+ 9 |     if (y == 0) @panic("Divide by zero!");
    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 x 1 warnings

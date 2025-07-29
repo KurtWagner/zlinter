@@ -1,0 +1,47 @@
+warning I'm scared of cats [test_cases/no_cats/disable_and_enable_comments.input.zig:1:11] no_cats
+
+ 1 | pub const bad_cats_1 = false;
+   |           ^^^^^^^^^^
+
+warning I'm scared of cats [test_cases/no_cats/disable_and_enable_comments.input.zig:8:11] no_cats
+
+ 8 | pub const bad_cats_2 = false;
+   |           ^^^^^^^^^^
+
+warning I'm scared of cats [test_cases/no_cats/disable_and_enable_comments.input.zig:9:11] no_cats
+
+ 9 | pub const also_bad_cats_2 = false;
+   |           ^^^^^^^^^^^^^^^
+
+warning I'm scared of cats [test_cases/no_cats/disable_and_enable_comments.input.zig:16:11] no_cats
+
+ 16 | pub const bad_cats_4 = false;
+    |           ^^^^^^^^^^
+
+warning I'm scared of cats [test_cases/no_cats/disable_and_enable_comments.input.zig:17:11] no_cats
+
+ 17 | pub const also_bad_cats_4 = false;
+    |           ^^^^^^^^^^^^^^^
+
+warning I'm scared of cats [test_cases/no_cats/disable_and_enable_comments.input.zig:20:11] no_cats
+
+ 20 | pub const bad_cats_5 = false;
+    |           ^^^^^^^^^^
+
+warning I'm scared of cats [test_cases/no_cats/disable_and_enable_comments.input.zig:21:11] no_cats
+
+ 21 | pub const also_bad_cats_5 = false;
+    |           ^^^^^^^^^^^^^^^
+
+warning I'm scared of cats [test_cases/no_cats/disable_and_enable_comments.input.zig:24:11] no_cats
+
+ 24 | pub const bad_cats_6 = false;
+    |           ^^^^^^^^^^
+
+warning I'm scared of cats [test_cases/no_cats/disable_and_enable_comments.input.zig:25:11] no_cats
+
+ 25 | pub const also_bad_cats_6 = false;
+    |           ^^^^^^^^^^^^^^^
+
+x 9 warnings
+x 4 skipped
