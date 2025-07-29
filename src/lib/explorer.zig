@@ -28,15 +28,17 @@ pub fn jsonTree(
         .{ .array = try errorsToJson(tree, arena) },
     );
 
-    if (switch (version.zig) {
-        .@"0.14" => tree.render(arena),
-        .@"0.15" => tree.renderAlloc(arena),
-    }) |rendering| {
-        try root_json_object.put(
-            "render",
-            .{ .string = rendering },
-        );
-    } else |_| {}
+    if (tree.errors.len == 0) {
+        if (switch (version.zig) {
+            .@"0.14" => tree.render(arena),
+            .@"0.15" => tree.renderAlloc(arena),
+        }) |rendering| {
+            try root_json_object.put(
+                "render",
+                .{ .string = rendering },
+            );
+        } else |_| {}
+    }
 
     const Context = struct {
         arena: std.mem.Allocator,
@@ -93,17 +95,19 @@ pub fn jsonTree(
 
     var root_node_children = std.json.Array.init(arena);
 
-    try ast.iterateChildren(
-        tree,
-        shims.NodeIndexShim.root.toNodeIndex(),
-        Context{
-            .arena = arena,
-            .indent = 0,
-            .node_children = &root_node_children,
-        },
-        error{OutOfMemory},
-        Context.callback,
-    );
+    if (tree.errors.len == 0) {
+        try ast.iterateChildren(
+            tree,
+            shims.NodeIndexShim.root.toNodeIndex(),
+            Context{
+                .arena = arena,
+                .indent = 0,
+                .node_children = &root_node_children,
+            },
+            error{OutOfMemory},
+            Context.callback,
+        );
+    }
 
     try root_json_object.put("body", .{ .array = root_node_children });
 
