@@ -19,6 +19,12 @@ Enforces that variable declaration names use consistent naming. For example,
 
   * **Default:** `false`
 
+* `exclude_aliases`
+
+  * When true the linter will exclude naming checks for declarations that have the same name as the field they're aliasing (e.g., `pub const FAILURE = system.FAILURE`). In these cases it can often be better to be consistent and to leave the naming convention up to the definition being aliased.
+
+  * **Default:** `true`
+
 * `var_decl`
 
   * Style and severity for declarations with `const` mutability.
