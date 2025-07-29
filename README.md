@@ -225,22 +225,69 @@ where `Config` struct are found in the rule source files [`no_deprecated.Config`
 
 ### Disable with comments
 
-#### `zlinter-disable-next-line [rule_1] [rule_n] [- comment]`
+#### Disable next line
 
-Disable all rules or an explicit set of rules for the next source code line. For example,
+Disable all rules or an explicit set of rules for the next source code line.
+
+Syntax:
+
+```shell
+zlinter-disable-next-line [rule_1] [rule_n] [- comment]`
+```
+
+For example,
 
 ```zig
 // zlinter-disable-next-line no_deprecated - not updating so safe
 const a = this.is.deprecated();
 ```
 
-#### `zlinter-disable-current-line [rule_1] [rule_n] [- comment]`
+#### Disable current line
 
-Disable all rules or an explicit set of rules for the current source code line. For example,
+Disable all rules or an explicit set of rules for the current source code line.
+
+Syntax:
+
+```shell
+zlinter-disable-current-line [rule_1] [rule_n] [- comment]
+```
+
+For example,
 
 ```zig
 const a = this.is.deprecated(); // zlinter-disable-current-line
 ```
+
+#### Disable multiple lines
+
+Disable all rules or an explicit set of rules for multiple source code lines.
+
+Syntax:
+
+```shell
+zlinter-disable [rule_1] [rule_n] [- comment]
+zlinter-enable [rule_1] [rule_n] [- comment]
+```
+
+For example, to disable multiple lines for a given set of rules:
+
+```zig
+// zlinter-disable rule_a rule_b - rationale
+var something = doSomethin();
+var something_else = doSomethingElse();
+// zlinter-disable rule_a rule_b
+```
+
+For example, to disable multiple lines for all rules:
+
+```zig
+// zlinter-disable - rationale
+var something = doSomethin();
+var something_else = doSomethingElse();
+// zlinter-disable
+```
+
+If you omit `zlinter-enable`, all lines until EOF will be disabled.
 
 ### Command-Line Arguments
 
