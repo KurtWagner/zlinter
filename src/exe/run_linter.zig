@@ -192,9 +192,6 @@ pub fn main() !u8 {
         };
         defer doc.deinit(ctx.gpa);
 
-        var skipper: zlinter.comments.LazyRuleSkipper = .init(doc.comments, doc.handle.tree.source, gpa);
-        defer skipper.deinit();
-
         if (timer.lapMilliseconds()) |ms|
             printer.println(.verbose, "  - Load document: {d}ms", .{ms})
         else
@@ -296,7 +293,7 @@ pub fn main() !u8 {
 
             if (rule_result) |result| {
                 for (result.problems) |*err| {
-                    err.disabled_by_comment = try skipper.shouldSkip(err.*);
+                    err.disabled_by_comment = try doc.shouldSkipProblem(err.*);
                 }
                 try results.append(gpa, result);
             }
