@@ -1297,7 +1297,9 @@ fn testParse(
 
 pub const LazyRuleSkipper = struct {
     const Index = struct {
+        /// Bits are set for enabled lines
         all: std.bit_set.DynamicBitSet,
+        /// Bits are set for enabled lines per rule
         rules: std.StringHashMap(std.bit_set.DynamicBitSet),
 
         fn deinit(self: *@This()) void {
@@ -1328,10 +1330,10 @@ pub const LazyRuleSkipper = struct {
     pub fn shouldSkip(self: *LazyRuleSkipper, problem: LintProblem) error{OutOfMemory}!bool {
         const index = try self.ensureBuilt();
 
-        if (index.all.isSet(problem.start.line)) return true;
+        if (!index.all.isSet(problem.start.line)) return true;
 
         if (index.rules.get(problem.rule_id)) |bits|
-            if (bits.isSet(problem.start.line)) return true;
+            if (!bits.isSet(problem.start.line)) return true;
 
         return false;
     }
@@ -1342,7 +1344,7 @@ pub const LazyRuleSkipper = struct {
         const line_count = self.doc.line_starts.len;
         var index: Index = .{
             .rules = .init(self.gpa),
-            .all = try .initEmpty(self.gpa, line_count + 1),
+            .all = try .initFull(self.gpa, line_count + 1),
         };
         errdefer index.deinit();
 
@@ -1354,17 +1356,17 @@ pub const LazyRuleSkipper = struct {
                         .end = info.line_end + 1, // + 1 as not inclusive but line_end is
                     },
                     .rule_ids = info.rule_ids,
-                    .value = true,
+                    .value = false,
                 },
                 .disable_lint => |info| .{
                     .range = .{ .start = info.line_start, .end = line_count },
                     .rule_ids = info.rule_ids,
-                    .value = true,
+                    .value = false,
                 },
                 .enable_lint => |info| .{
                     .range = .{ .start = info.line_start, .end = line_count },
                     .rule_ids = info.rule_ids,
-                    .value = false,
+                    .value = true,
                 },
                 else => continue,
             };
@@ -1374,7 +1376,7 @@ pub const LazyRuleSkipper = struct {
 
                     const result = try index.rules.getOrPut(rule_id);
                     if (!result.found_existing) {
-                        result.value_ptr.* = try .initEmpty(self.gpa, line_count + 1);
+                        result.value_ptr.* = try .initFull(self.gpa, line_count + 1);
                     }
                     result.value_ptr.setRangeValue(set.range, set.value);
                 }
