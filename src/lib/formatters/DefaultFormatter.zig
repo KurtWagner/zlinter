@@ -12,13 +12,18 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: any
     var warning_count: u32 = 0;
     var total_disabled_by_comment: usize = 0;
 
+    var file_arena = std.heap.ArenaAllocator.init(input.arena);
+
     for (input.results) |file_result| {
+        defer _ = file_arena.reset(.retain_capacity);
+
         var file = input.dir.openFile(
             file_result.file_path,
             .{ .mode = .read_only },
         ) catch |e| return logAndReturnWriteFailure("Open file", e);
+
         const file_renderer = zlinter.rendering.LintFileRenderer.init(
-            input.arena,
+            file_arena.allocator(),
             file.deprecatedReader(),
         ) catch |e| return logAndReturnWriteFailure("Render", e);
 
