@@ -258,4 +258,3 @@ fn runLintCommand(args: []const []const u8) !std.process.Child.RunResult {
 }
 
 const std = @import("std");
-const builtin = @import("builtin");

@@ -1340,12 +1340,10 @@ pub const LazyRuleSkipper = struct {
     fn ensureBuilt(self: *LazyRuleSkipper) error{OutOfMemory}!Index {
         if (self.index) |index| return index;
 
-        // TODO: Surely this is already somewhere....
-        const line_count = std.mem.count(u8, self.source, "\n") + 1;
-
+        const line_count = self.doc.line_starts.len;
         var index: Index = .{
             .rules = .init(self.arena.allocator()),
-            .all = try .initEmpty(self.arena.allocator(), line_count),
+            .all = try .initEmpty(self.arena.allocator(), line_count + 1),
         };
         errdefer {
             index.all.deinit();
@@ -1355,15 +1353,34 @@ pub const LazyRuleSkipper = struct {
         for (self.doc.comments) |comment| {
             switch (comment.kind) {
                 .disable_lines => |disable_lines| {
-                    var line = disable_lines.line_start;
-                    while (line <= disable_lines.line_end) : (line += 1) {
-                        if (disable_lines.rule_ids) |rule_ids| {
+                    const range: std.bit_set.Range = .{
+                        .start = disable_lines.line_start,
+                        .end = disable_lines.line_end + 1, // + 1 as not inclusive but line_end is
+                    };
+                    if (disable_lines.rule_ids) |rule_ids| {
+                        for (self.doc.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
+                            const rule_id = self.source[token.first_byte .. token.first_byte + token.len];
+
+                            const result = try index.rules.getOrPut(rule_id);
+                            if (!result.found_existing) {
+                                result.value_ptr.* = try .initEmpty(self.arena.allocator(), line_count + 1);
+                            }
+                            result.value_ptr.setRangeValue(range, true);
+                        }
+                    } else {
+                        index.all.setRangeValue(range, true);
+                    }
+                },
+                .disable => |disable| {
+                    var line = disable.line_start;
+                    while (line <= line_count) : (line += 1) {
+                        if (disable.rule_ids) |rule_ids| {
                             for (self.doc.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
                                 const rule_id = self.source[token.first_byte .. token.first_byte + token.len];
 
                                 const result = try index.rules.getOrPut(rule_id);
                                 if (!result.found_existing) {
-                                    result.value_ptr.* = try .initEmpty(self.arena.allocator(), line_count);
+                                    result.value_ptr.* = try .initEmpty(self.arena.allocator(), line_count + 1);
                                 }
                                 result.value_ptr.set(line);
                             }
@@ -1372,6 +1389,25 @@ pub const LazyRuleSkipper = struct {
                         }
                     }
                 },
+
+                // .enable => |enable| {
+                //     var line = enable.line_start;
+                //     while (line <= line_count) : (line += 1) {
+                //         if (enable.rule_ids) |rule_ids| {
+                //             for (self.doc.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
+                //                 const rule_id = self.source[token.first_byte .. token.first_byte + token.len];
+
+                //                 const result = try index.rules.getOrPut(rule_id);
+                //                 if (!result.found_existing) {
+                //                     result.value_ptr.* = try .initEmpty(self.arena.allocator(), line_count);
+                //                 }
+                //                 result.value_ptr.set(line);
+                //             }
+                //         } else {
+                //             index.all.unset(line);
+                //         }
+                //     }
+                // },
                 else => {},
             }
         }
