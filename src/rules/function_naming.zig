@@ -9,6 +9,12 @@ pub const Config = struct {
     /// enforce naming conventions on these functions.
     exclude_extern: bool = true,
 
+    /// Exclude exported functions. Export makes the symbol visible to
+    /// external code, such as C or other languages that might link against
+    /// your Zig code. You may prefer to rely on the naming conventions of
+    /// the code being linked, in which case, you may set this to true.
+    exclude_export: bool = false,
+
     /// Style and severity for non-type functions
     function: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .camel_case,
@@ -79,6 +85,10 @@ fn run(
                 const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
                 if (token_tag == .keyword_extern) continue :skip;
             }
+            if (config.exclude_export and fn_proto.extern_export_inline_token != null) {
+                const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
+                if (token_tag == .keyword_export) continue :skip;
+            }
 
             const fn_name_token = fn_proto.name_token.?;
             const fn_name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(fn_name_token));
@@ -128,6 +138,10 @@ fn run(
             if (config.exclude_extern and fn_proto.extern_export_inline_token != null) {
                 const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
                 if (token_tag == .keyword_extern) continue :skip;
+            }
+            if (config.exclude_export and fn_proto.extern_export_inline_token != null) {
+                const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
+                if (token_tag == .keyword_export) continue :skip;
             }
 
             for (fn_proto.ast.params) |param| {
@@ -195,6 +209,90 @@ pub fn fnProto(tree: std.zig.Ast, buffer: *[1]std.zig.Ast.Node.Index, node: std.
         return fn_proto;
     }
     return null;
+}
+
+test "export excluded" {
+    std.testing.refAllDecls(@This());
+
+    const rule = buildRule(.{});
+    const source =
+        \\export fn export_not_good() void;
+        \\export fn exportNotGood() void;
+        \\export fn exportWith(BadArg: u32) void;
+    ;
+    var config = Config{ .exclude_export = true };
+    var result = (try zlinter.testing.runRule(
+        rule,
+        zlinter.testing.paths.posix("path/to/file.zig"),
+        source,
+        .{
+            .config = &config,
+        },
+    ));
+    defer if (result) |*r| r.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(null, result);
+}
+
+test "export included" {
+    std.testing.refAllDecls(@This());
+
+    const rule = buildRule(.{});
+    const source =
+        \\export fn export_not_good() void;
+        \\export fn exportGood() void;
+        \\export fn exportWith(BadArg: u32) void;
+    ;
+    var config = Config{ .exclude_export = false };
+    var result = (try zlinter.testing.runRule(
+        rule,
+        zlinter.testing.paths.posix("path/to/file.zig"),
+        source,
+        .{
+            .config = &config,
+        },
+    )).?;
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectStringEndsWith(
+        result.file_path,
+        zlinter.testing.paths.posix("path/to/file.zig"),
+    );
+
+    try zlinter.testing.expectProblemsEqual(&[_]zlinter.results.LintProblem{
+        .{
+            .rule_id = "function_naming",
+            .severity = .@"error",
+            .start = .{
+                .byte_offset = 10,
+                .line = 0,
+                .column = 10,
+            },
+            .end = .{
+                .byte_offset = 24,
+                .line = 0,
+                .column = 24,
+            },
+            .message = "Callable should be camelCase",
+        },
+        .{
+            .rule_id = "function_naming",
+            .severity = .@"error",
+            .start = .{
+                .byte_offset = 84,
+                .line = 2,
+                .column = 21,
+            },
+            .end = .{
+                .byte_offset = 89,
+                .line = 2,
+                .column = 26,
+            },
+            .message = "Function argument should be snake_case",
+        },
+    }, result.problems);
+
+    try std.testing.expectEqualStrings("export_not_good", result.problems[0].sliceSource(source));
 }
 
 test "extern excluded" {

@@ -3,6 +3,18 @@
 
 /// Config for declaration_naming rule.
 pub const Config = struct {
+    /// Exclude extern / foreign declarations. An extern declaration refers to a
+    /// foreign declaration — typically defined outside of Zig, such as in a C
+    /// library or other system-provided binary. You typically don't want to
+    /// enforce naming conventions on these declarations.
+    exclude_extern: bool = true,
+
+    /// Exclude exported declarations. Export makes the symbol visible to
+    /// external code, such as C or other languages that might link against
+    /// your Zig code. You may prefer to rely on the naming conventions of
+    /// the code being linked, in which case, you may set this to true.
+    exclude_export: bool = false,
+
     /// Style and severity for declarations with `const` mutability.
     var_decl: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .snake_case,
@@ -66,41 +78,50 @@ fn run(
     const tree = doc.handle.tree;
 
     var node: zlinter.shims.NodeIndexShim = .init(1); // Skip root node at 0
-    while (node.index < tree.nodes.len) : (node.index += 1) {
-        if (tree.fullVarDecl(node.toNodeIndex())) |var_decl| {
-            if (try doc.resolveTypeKind(.{ .var_decl = var_decl })) |type_kind| {
-                const name_token = var_decl.ast.mut_token + 1;
-                const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
+    skip: while (node.index < tree.nodes.len) : (node.index += 1) {
+        const var_decl = tree.fullVarDecl(node.toNodeIndex()) orelse continue :skip;
 
-                const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const var_desc: []const u8 =
-                    switch (type_kind) {
-                        .fn_returns_type => .{ config.decl_that_is_type_fn, "Type function" },
-                        .@"fn" => .{ config.decl_that_is_fn, "Function" },
-                        .namespace_type => .{ config.decl_that_is_namespace, "Namespace" },
-                        .type => .{ config.decl_that_is_type, "Type" },
-                        .fn_type, .fn_type_returns_type => .{ config.decl_that_is_type, "Function type" },
-                        .struct_type => .{ config.decl_that_is_type, "Struct" },
-                        .enum_type => .{ config.decl_that_is_type, "Enum" },
-                        .union_type => .{ config.decl_that_is_type, "Union" },
-                        .opaque_type => .{ config.decl_that_is_type, "Opaque" },
-                        .error_type => .{ config.decl_that_is_type, "Error" },
-                        else => switch (tree.tokens.items(.tag)[var_decl.ast.mut_token]) {
-                            .keyword_const => .{ config.const_decl, "Constant" },
-                            .keyword_var => .{ config.var_decl, "Variable" },
-                            else => unreachable,
-                        },
-                    };
+        if (config.exclude_extern and var_decl.extern_export_token != null) {
+            const token_tag = tree.tokens.items(.tag)[var_decl.extern_export_token.?];
+            if (token_tag == .keyword_extern) continue :skip;
+        }
 
-                if (!style_with_severity.style.check(name)) {
-                    try lint_problems.append(allocator, .{
-                        .rule_id = rule.rule_id,
-                        .severity = style_with_severity.severity,
-                        .start = .startOfToken(tree, name_token),
-                        .end = .endOfToken(tree, name_token),
-                        .message = try std.fmt.allocPrint(allocator, "{s} declaration should be {s}", .{ var_desc, style_with_severity.style.name() }),
-                    });
-                }
-            }
+        if (config.exclude_export and var_decl.extern_export_token != null) {
+            const token_tag = tree.tokens.items(.tag)[var_decl.extern_export_token.?];
+            if (token_tag == .keyword_export) continue :skip;
+        }
+
+        const type_kind = try doc.resolveTypeKind(.{ .var_decl = var_decl }) orelse continue :skip;
+        const name_token = var_decl.ast.mut_token + 1;
+        const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
+
+        const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const var_desc: []const u8 =
+            switch (type_kind) {
+                .fn_returns_type => .{ config.decl_that_is_type_fn, "Type function" },
+                .@"fn" => .{ config.decl_that_is_fn, "Function" },
+                .namespace_type => .{ config.decl_that_is_namespace, "Namespace" },
+                .type => .{ config.decl_that_is_type, "Type" },
+                .fn_type, .fn_type_returns_type => .{ config.decl_that_is_type, "Function type" },
+                .struct_type => .{ config.decl_that_is_type, "Struct" },
+                .enum_type => .{ config.decl_that_is_type, "Enum" },
+                .union_type => .{ config.decl_that_is_type, "Union" },
+                .opaque_type => .{ config.decl_that_is_type, "Opaque" },
+                .error_type => .{ config.decl_that_is_type, "Error" },
+                else => switch (tree.tokens.items(.tag)[var_decl.ast.mut_token]) {
+                    .keyword_const => .{ config.const_decl, "Constant" },
+                    .keyword_var => .{ config.var_decl, "Variable" },
+                    else => unreachable,
+                },
+            };
+
+        if (!style_with_severity.style.check(name)) {
+            try lint_problems.append(allocator, .{
+                .rule_id = rule.rule_id,
+                .severity = style_with_severity.severity,
+                .start = .startOfToken(tree, name_token),
+                .end = .endOfToken(tree, name_token),
+                .message = try std.fmt.allocPrint(allocator, "{s} declaration should be {s}", .{ var_desc, style_with_severity.style.name() }),
+            });
         }
     }
 
@@ -254,6 +275,98 @@ test "declaration_naming" {
         },
         result.problems,
     );
+}
+
+test "export included" {
+    std.testing.refAllDecls(@This());
+
+    const rule = buildRule(.{});
+    inline for (&.{
+        "export const NotGood: u32 = 10;",
+        "export const notGood: u32 = 10;",
+        "export const no_good = u32;",
+    }) |source| {
+        var config = Config{ .exclude_export = false };
+        var result = (try zlinter.testing.runRule(
+            rule,
+            zlinter.testing.paths.posix("path/to/file.zig"),
+            source,
+            .{
+                .config = &config,
+            },
+        ));
+        defer if (result) |*r| r.deinit(std.testing.allocator);
+        try std.testing.expectEqual(1, result.?.problems.len);
+    }
+}
+
+test "export excluded" {
+    std.testing.refAllDecls(@This());
+
+    const rule = buildRule(.{});
+    inline for (&.{
+        "export const NotGood: u32 = 10;",
+        "export const notGood: u32 = 10;",
+        "export const no_good = u32;",
+    }) |source| {
+        var config = Config{ .exclude_export = true };
+        var result = (try zlinter.testing.runRule(
+            rule,
+            zlinter.testing.paths.posix("path/to/file.zig"),
+            source,
+            .{
+                .config = &config,
+            },
+        ));
+        defer if (result) |*r| r.deinit(std.testing.allocator);
+        try std.testing.expectEqual(null, result);
+    }
+}
+
+test "extern included" {
+    std.testing.refAllDecls(@This());
+
+    const rule = buildRule(.{});
+    inline for (&.{
+        "extern const NotGood: u32;",
+        "extern const notGood: u32;",
+        "extern const no_good: type;",
+    }) |source| {
+        var config = Config{ .exclude_extern = false };
+        var result = (try zlinter.testing.runRule(
+            rule,
+            zlinter.testing.paths.posix("path/to/file.zig"),
+            source,
+            .{
+                .config = &config,
+            },
+        ));
+        defer if (result) |*r| r.deinit(std.testing.allocator);
+        try std.testing.expectEqual(1, result.?.problems.len);
+    }
+}
+
+test "extern excluded" {
+    std.testing.refAllDecls(@This());
+
+    const rule = buildRule(.{});
+    inline for (&.{
+        "extern const NotGood: u32;",
+        "extern const notGood: u32;",
+        "extern const no_good: type;",
+    }) |source| {
+        var config = Config{ .exclude_extern = true };
+        var result = (try zlinter.testing.runRule(
+            rule,
+            zlinter.testing.paths.posix("path/to/file.zig"),
+            source,
+            .{
+                .config = &config,
+            },
+        ));
+        defer if (result) |*r| r.deinit(std.testing.allocator);
+        try std.testing.expectEqual(null, result);
+    }
 }
 
 const std = @import("std");

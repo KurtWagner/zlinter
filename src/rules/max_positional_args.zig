@@ -12,8 +12,21 @@ pub const Config = struct {
     /// The severity (off, warning, error).
     severity: zlinter.rules.LintProblemSeverity = .warning,
 
-    /// The max number of positional arguments. Functions with more than this many arguments will fail the rule.
+    /// The max number of positional arguments. Functions with more than this
+    /// many arguments will fail the rule.
     max: u8 = 5,
+
+    /// Exclude extern / foreign functions. An extern function refers to a
+    /// foreign function — typically defined outside of Zig, such as in a C
+    /// library or other system-provided binary. You typically don't want to
+    /// enforce naming conventions on these functions.
+    exclude_extern: bool = true,
+
+    /// Exclude exported functions. Export makes the symbol visible to
+    /// external code, such as C or other languages that might link against
+    /// your Zig code. You may prefer to rely on the naming conventions of
+    /// the code being linked, in which case, you may set this to true.
+    exclude_export: bool = false,
 };
 
 /// Builds and returns the max_positional_args rule.
@@ -43,9 +56,20 @@ fn run(
     var fn_buffer: [1]std.zig.Ast.Node.Index = undefined;
 
     var node: zlinter.shims.NodeIndexShim = .init(1);
-    while (node.index < tree.nodes.len) : (node.index += 1) {
-        const fn_proto = fnProto(tree, &fn_buffer, node.toNodeIndex()) orelse continue;
-        if (fn_proto.ast.params.len <= config.max) continue;
+    skip: while (node.index < tree.nodes.len) : (node.index += 1) {
+        const fn_proto = fnProto(tree, &fn_buffer, node.toNodeIndex()) orelse continue :skip;
+
+        if (config.exclude_extern and fn_proto.extern_export_inline_token != null) {
+            const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
+            if (token_tag == .keyword_extern) continue :skip;
+        }
+
+        if (config.exclude_export and fn_proto.extern_export_inline_token != null) {
+            const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
+            if (token_tag == .keyword_export) continue :skip;
+        }
+
+        if (fn_proto.ast.params.len <= config.max) continue :skip;
 
         try lint_problems.append(allocator, .{
             .rule_id = rule.rule_id,
@@ -80,7 +104,91 @@ test {
     std.testing.refAllDecls(@This());
 }
 
-test "max_positional_args" {
+test "export excluded" {
+    std.testing.refAllDecls(@This());
+
+    const rule = buildRule(.{});
+    const source =
+        \\export fn exportToManyArgs(u32, u32) void;
+    ;
+    var config = Config{ .exclude_export = true, .max = 1 };
+    var result = (try zlinter.testing.runRule(
+        rule,
+        zlinter.testing.paths.posix("path/to/file.zig"),
+        source,
+        .{
+            .config = &config,
+        },
+    ));
+    defer if (result) |*r| r.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(null, result);
+}
+
+test "export included" {
+    std.testing.refAllDecls(@This());
+
+    const rule = buildRule(.{});
+    const source =
+        \\export fn exportToManyArgs(u32, u32) void;
+    ;
+    var config = Config{ .exclude_export = false, .max = 1 };
+    var result = (try zlinter.testing.runRule(
+        rule,
+        zlinter.testing.paths.posix("path/to/file.zig"),
+        source,
+        .{
+            .config = &config,
+        },
+    ));
+    defer if (result) |*r| r.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(1, result.?.problems.len);
+}
+
+test "extern excluded" {
+    std.testing.refAllDecls(@This());
+
+    const rule = buildRule(.{});
+    const source =
+        \\extern fn externToManyArgs(u32, u32) void;
+    ;
+    var config = Config{ .exclude_extern = true, .max = 1 };
+    var result = (try zlinter.testing.runRule(
+        rule,
+        zlinter.testing.paths.posix("path/to/file.zig"),
+        source,
+        .{
+            .config = &config,
+        },
+    ));
+    defer if (result) |*r| r.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(null, result);
+}
+
+test "extern included" {
+    std.testing.refAllDecls(@This());
+
+    const rule = buildRule(.{});
+    const source =
+        \\extern fn externToManyArgs(u32, u32) void;
+    ;
+    var config = Config{ .exclude_extern = false, .max = 1 };
+    var result = (try zlinter.testing.runRule(
+        rule,
+        zlinter.testing.paths.posix("path/to/file.zig"),
+        source,
+        .{
+            .config = &config,
+        },
+    ));
+    defer if (result) |*r| r.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(1, result.?.problems.len);
+}
+
+test "general" {
     std.testing.refAllDecls(@This());
 
     const source: [:0]const u8 =
