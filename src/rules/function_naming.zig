@@ -3,6 +3,12 @@
 
 /// Config for function_naming rule.
 pub const Config = struct {
+    /// Exclude extern / foreign functions. An extern function refers to a
+    /// foreign function — typically defined outside of Zig, such as in a C
+    /// library or other system-provided binary. You typically don't want to
+    /// enforce naming conventions on these functions.
+    exclude_extern: bool = true,
+
     /// Style and severity for non-type functions
     function: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .camel_case,
@@ -66,9 +72,14 @@ fn run(
     const tree = doc.handle.tree;
 
     var node: zlinter.shims.NodeIndexShim = .init(1); // Skip root node at 0
-    while (node.index < tree.nodes.len) : (node.index += 1) {
+    skip: while (node.index < tree.nodes.len) : (node.index += 1) {
         var buffer: [1]std.zig.Ast.Node.Index = undefined;
         if (namedFnProto(tree, &buffer, node.toNodeIndex())) |fn_proto| {
+            if (config.exclude_extern and fn_proto.extern_export_inline_token != null) {
+                const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
+                if (token_tag == .keyword_extern) continue :skip;
+            }
+
             const fn_name_token = fn_proto.name_token.?;
             const fn_name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(fn_name_token));
 
@@ -77,7 +88,7 @@ fn run(
                     .@"0.14" => fn_proto.ast.return_type,
                     .@"0.15" => fn_proto.ast.return_type.unwrap().?,
                 },
-            )) orelse break;
+            )) orelse continue :skip;
 
             const error_message: ?[]const u8, const severity: ?zlinter.rules.LintProblemSeverity = msg: {
                 if (return_type.isMetaType()) {
@@ -114,6 +125,11 @@ fn run(
 
         // Check arguments:
         if (fnProto(tree, &buffer, node.toNodeIndex())) |fn_proto| {
+            if (config.exclude_extern and fn_proto.extern_export_inline_token != null) {
+                const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
+                if (token_tag == .keyword_extern) continue :skip;
+            }
+
             for (fn_proto.ast.params) |param| {
                 const colon_token = tree.firstToken(param) - 1;
                 if (tree.tokens.items(.tag)[colon_token] != .colon) continue;
@@ -181,7 +197,91 @@ pub fn fnProto(tree: std.zig.Ast, buffer: *[1]std.zig.Ast.Node.Index, node: std.
     return null;
 }
 
-test "run" {
+test "extern excluded" {
+    std.testing.refAllDecls(@This());
+
+    const rule = buildRule(.{});
+    const source =
+        \\extern fn extern_not_good() void;
+        \\extern fn ExternNotGood() void;
+        \\extern fn externWith(BadArg: u32) void;
+    ;
+    var config = Config{ .exclude_extern = true };
+    var result = (try zlinter.testing.runRule(
+        rule,
+        zlinter.testing.paths.posix("path/to/file.zig"),
+        source,
+        .{
+            .config = &config,
+        },
+    ));
+    defer if (result) |*r| r.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(null, result);
+}
+
+test "extern included" {
+    std.testing.refAllDecls(@This());
+
+    const rule = buildRule(.{});
+    const source =
+        \\extern fn extern_not_good() void;
+        \\extern fn externGood() void;
+        \\extern fn externWith(BadArg: u32) void;
+    ;
+    var config = Config{ .exclude_extern = false };
+    var result = (try zlinter.testing.runRule(
+        rule,
+        zlinter.testing.paths.posix("path/to/file.zig"),
+        source,
+        .{
+            .config = &config,
+        },
+    )).?;
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectStringEndsWith(
+        result.file_path,
+        zlinter.testing.paths.posix("path/to/file.zig"),
+    );
+
+    try zlinter.testing.expectProblemsEqual(&[_]zlinter.results.LintProblem{
+        .{
+            .rule_id = "function_naming",
+            .severity = .@"error",
+            .start = .{
+                .byte_offset = 10,
+                .line = 0,
+                .column = 10,
+            },
+            .end = .{
+                .byte_offset = 24,
+                .line = 0,
+                .column = 24,
+            },
+            .message = "Callable should be camelCase",
+        },
+        .{
+            .rule_id = "function_naming",
+            .severity = .@"error",
+            .start = .{
+                .byte_offset = 84,
+                .line = 2,
+                .column = 21,
+            },
+            .end = .{
+                .byte_offset = 89,
+                .line = 2,
+                .column = 26,
+            },
+            .message = "Function argument should be snake_case",
+        },
+    }, result.problems);
+
+    try std.testing.expectEqualStrings("extern_not_good", result.problems[0].sliceSource(source));
+}
+
+test "general" {
     std.testing.refAllDecls(@This());
 
     const rule = buildRule(.{});
@@ -193,9 +293,6 @@ test "run" {
         \\fn AlsoGood(T: type) type { return T; }
         \\fn NotGood() void {}
         \\
-        \\extern fn extern_not_good() void;
-        \\extern fn externGood() void;
-        \\
         \\fn here(Arg: u32, t: type, fn_call: *const fn (A: u32) void) t {
         \\fn_call(Arg);
         \\return @intCast(Arg);
@@ -206,7 +303,10 @@ test "run" {
         \\    return @intCast(arg);
         \\}
     ;
-    var result = (try zlinter.testing.runRule(rule, zlinter.testing.paths.posix("path/to/file.zig"), source, .{})).?;
+    var config = Config{};
+    var result = (try zlinter.testing.runRule(rule, zlinter.testing.paths.posix("path/to/file.zig"), source, .{
+        .config = &config,
+    })).?;
     defer result.deinit(std.testing.allocator);
 
     try std.testing.expectStringEndsWith(
@@ -249,28 +349,13 @@ test "run" {
             .rule_id = "function_naming",
             .severity = .@"error",
             .start = .{
-                .byte_offset = 135,
+                .byte_offset = 133,
                 .line = 7,
-                .column = 10,
-            },
-            .end = .{
-                .byte_offset = 149,
-                .line = 7,
-                .column = 24,
-            },
-            .message = "Callable should be camelCase",
-        },
-        .{
-            .rule_id = "function_naming",
-            .severity = .@"error",
-            .start = .{
-                .byte_offset = 197,
-                .line = 10,
                 .column = 8,
             },
             .end = .{
-                .byte_offset = 199,
-                .line = 10,
+                .byte_offset = 135,
+                .line = 7,
                 .column = 10,
             },
             .message = "Function argument should be snake_case",
@@ -279,13 +364,13 @@ test "run" {
             .rule_id = "function_naming",
             .severity = .@"error",
             .start = .{
-                .byte_offset = 207,
-                .line = 10,
+                .byte_offset = 143,
+                .line = 7,
                 .column = 18,
             },
             .end = .{
-                .byte_offset = 207,
-                .line = 10,
+                .byte_offset = 143,
+                .line = 7,
                 .column = 18,
             },
             .message = "Function argument of type should be TitleCase",
@@ -294,13 +379,13 @@ test "run" {
             .rule_id = "function_naming",
             .severity = .@"error",
             .start = .{
-                .byte_offset = 216,
-                .line = 10,
+                .byte_offset = 152,
+                .line = 7,
                 .column = 27,
             },
             .end = .{
-                .byte_offset = 222,
-                .line = 10,
+                .byte_offset = 158,
+                .line = 7,
                 .column = 33,
             },
             .message = "Function argument of function should be camelCase",
@@ -309,13 +394,13 @@ test "run" {
             .rule_id = "function_naming",
             .severity = .@"error",
             .start = .{
-                .byte_offset = 236,
-                .line = 10,
+                .byte_offset = 172,
+                .line = 7,
                 .column = 47,
             },
             .end = .{
-                .byte_offset = 236,
-                .line = 10,
+                .byte_offset = 172,
+                .line = 7,
                 .column = 47,
             },
             .message = "Function argument should be snake_case",

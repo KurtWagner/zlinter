@@ -73,3 +73,9 @@ fn exampleE(_: goodFn) void {}
 // Function of function args
 fn exampleF(_: *const fn (good_int: u32, GoodType: type, goodFn: fn () void) void) void {}
 fn exampleG(_: *const fn (badInt: u32, bad_type: type, BadFn: fn () void) void) void {}
+
+// Externs are excluded by default
+extern fn extern_excluded() void;
+extern fn ExternExcluded() void;
+extern fn EXTERN_EXCLUDED() void;
+extern fn externWith(BadArg: u32, good_arg: u32, BAD_ARG: u32, badArg: u32) void;
