@@ -1,0 +1,31 @@
+error Callable should be camelCase [test_cases/function_naming/extern_included.input.zig:2:11] function_naming
+
+ 2 | extern fn extern_included() void;
+   |           ^^^^^^^^^^^^^^^
+
+error Callable should be camelCase [test_cases/function_naming/extern_included.input.zig:3:11] function_naming
+
+ 3 | extern fn ExternIncluded() void;
+   |           ^^^^^^^^^^^^^^
+
+error Callable should be camelCase [test_cases/function_naming/extern_included.input.zig:4:11] function_naming
+
+ 4 | extern fn EXTERN_INCLUDED() void;
+   |           ^^^^^^^^^^^^^^^
+
+error Function argument should be snake_case [test_cases/function_naming/extern_included.input.zig:6:22] function_naming
+
+ 6 | extern fn externWith(BadArg: u32, good_arg: u32, BAD_ARG: u32, badArg: u32) void;
+   |                      ^^^^^^
+
+error Function argument should be snake_case [test_cases/function_naming/extern_included.input.zig:6:50] function_naming
+
+ 6 | extern fn externWith(BadArg: u32, good_arg: u32, BAD_ARG: u32, badArg: u32) void;
+   |                                                  ^^^^^^^
+
+error Function argument should be snake_case [test_cases/function_naming/extern_included.input.zig:6:64] function_naming
+
+ 6 | extern fn externWith(BadArg: u32, good_arg: u32, BAD_ARG: u32, badArg: u32) void;
+   |                                                                ^^^^^^
+
+x 6 errors
