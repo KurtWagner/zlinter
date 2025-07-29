@@ -129,6 +129,32 @@ hook it up to a build step, like `zig build lint`:
     zig build lint -- --include src/ file.zig
     ```
 
+### Alternative: Enable all built in rules
+
+If you just want to test out zlinter, you can also enable all rules and then
+selectively run rules from the command line. A lot of rules are quite pedantic
+so this is not recommended outside of testing zlinters rules for your project:
+
+1. Enable all built in rules in `build.zig`
+
+  ```zig
+  const zlinter = @import("zlinter");
+  const lint_cmd = b.step("lint", "Lint source code.");
+  lint_cmd.dependOn(step: {
+      var builder = zlinter.builder(b, .{});
+      inline for (@typeInfo(zlinter.BuiltinLintRule).@"enum".fields) |f| {
+          builder.addRule(.{ .builtin = @enumFromInt(f.value) }, .{});
+      }
+      break :step builder.build();
+  });
+  ```
+
+1. Selectively run rules:
+
+  ```shell
+  zig build lint -- --rule no_unused no_deprecated
+  ```
+
 ## Autofix
 
 Some linter rules support auto fixing some problems.
