@@ -3,41 +3,40 @@
 pub const LintFileRenderer = struct {
     const Self = @This();
 
-    lines: [][]const u8,
+    source: []const u8,
+    line_ends: []usize,
 
     pub fn init(allocator: std.mem.Allocator, stream: anytype) !Self {
-        var lines = std.ArrayListUnmanaged([]const u8).empty;
-        defer lines.deinit(allocator);
+        // TODO: Should max source file size be consistent and shared?
+        const source = try stream.readAllAlloc(allocator, 100 * 1024 * 1024);
 
-        const max_line_bytes = 1024 * 1024;
-        var buf: [max_line_bytes]u8 = undefined;
-        var fbs = std.io.fixedBufferStream(&buf);
-        while (true) {
-            fbs.reset();
-            if (stream.streamUntilDelimiter(
-                fbs.writer(),
-                '\n',
-                fbs.buffer.len,
-            )) {
-                const output = fbs.getWritten();
-                const slice = if (output.len > 0 and output[output.len - 1] == '\r')
-                    output[0 .. output.len - 1]
-                else
-                    output[0..];
+        var line_ends = try std.ArrayList(usize).initCapacity(allocator, source.len / 40);
+        defer line_ends.deinit();
 
-                try lines.append(allocator, try allocator.dupe(u8, slice));
-            } else |err| switch (err) {
-                error.EndOfStream => {
-                    if (fbs.getWritten().len == 0) {
-                        try lines.append(allocator, try allocator.dupe(u8, ""));
-                    }
-                    break;
-                },
-                else => |e| return e,
-            }
+        for (0..source.len) |i| {
+            if (source[i] == '\n')
+                try line_ends.append(i);
+        }
+        if (source[source.len - 1] != '\n') {
+            try line_ends.append(source.len - 1);
         }
 
-        return .{ .lines = try lines.toOwnedSlice(allocator) };
+        return .{
+            .source = source,
+            .line_ends = try line_ends.toOwnedSlice(),
+        };
+    }
+
+    pub fn getLine(self: Self, line: usize) []const u8 {
+        // Given this should only ever be called for a small handful of lines
+        // we trim the potential carriage return in here and not during parsing
+        // to keep parsing as simple as possible.
+        return std.mem.trimRight(u8, if (line == 0)
+            self.source[0..self.line_ends[line]]
+        else if (line < self.line_ends.len)
+            self.source[self.line_ends[line - 1] + 1 .. self.line_ends[line]]
+        else
+            "", &.{'\r'});
     }
 
     /// Renders a given line with a span highlighted with "^" below the line.
@@ -61,7 +60,7 @@ pub const LintFileRenderer = struct {
                 try self.renderLine(
                     line_index,
                     0,
-                    if (self.lines[line_index].len == 0) 0 else self.lines[line_index].len - 1,
+                    if (self.getLine(line_index).len == 0) 0 else self.getLine(line_index).len - 1,
                     writer,
                 );
             } else if (is_start and is_end) {
@@ -75,7 +74,7 @@ pub const LintFileRenderer = struct {
                 try self.renderLine(
                     line_index,
                     start_column,
-                    if (self.lines[line_index].len == 0) 0 else self.lines[line_index].len - 1,
+                    if (self.getLine(line_index).len == 0) 0 else self.getLine(line_index).len - 1,
                     writer,
                 );
             } else if (is_end) {
@@ -114,7 +113,7 @@ pub const LintFileRenderer = struct {
         try writer.writeAll(ansi.get(&.{.reset}));
 
         // Actual code
-        try writer.writeAll(self.lines[line]);
+        try writer.writeAll(self.getLine(line));
         try writer.writeByte('\n');
 
         // LHS of arrows to impacted area
@@ -132,8 +131,8 @@ pub const LintFileRenderer = struct {
     }
 
     pub fn deinit(self: Self, allocator: std.mem.Allocator) void {
-        for (self.lines) |line| allocator.free(line);
-        allocator.free(self.lines);
+        allocator.free(self.line_ends);
+        allocator.free(self.source);
     }
 };
 
@@ -148,11 +147,9 @@ test "LintFileRenderer" {
         );
         defer renderer.deinit(std.testing.allocator);
 
-        try std.testing.expectEqualDeep(&[3][]const u8{
-            "123456789",
-            "987654321",
-            "",
-        }, renderer.lines);
+        try std.testing.expectEqualStrings("123456789", renderer.getLine(0));
+        try std.testing.expectEqualStrings("987654321", renderer.getLine(1));
+        try std.testing.expectEqualStrings("", renderer.getLine(2));
 
         {
             var output = std.ArrayListUnmanaged(u8).empty;
