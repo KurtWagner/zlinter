@@ -164,6 +164,12 @@ that return types and `camelCase` for others.
 
 **Config options:**
 
+* `exclude_extern`
+
+  * Exclude extern / foreign functions. An extern function refers to a foreign function — typically defined outside of Zig, such as in a C library or other system-provided binary. You typically don't want to enforce naming conventions on these functions.
+
+  * **Default:** `true`
+
 * `function`
 
   * Style and severity for non-type functions
