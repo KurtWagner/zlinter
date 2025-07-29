@@ -170,8 +170,6 @@ fn tokensToJson(tree: std.zig.Ast, arena: std.mem.Allocator) !std.json.Array {
 }
 
 const std = @import("std");
-const session = @import("session.zig");
 const shims = @import("shims.zig");
 const version = @import("version.zig");
-const zls = @import("zls");
 const ast = @import("ast.zig");

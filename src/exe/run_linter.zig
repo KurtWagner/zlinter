@@ -293,7 +293,7 @@ pub fn main() !u8 {
 
             if (rule_result) |result| {
                 for (result.problems) |*err| {
-                    err.disabled_by_comment = shouldSkip(doc.comments, err.*, ast.source);
+                    err.disabled_by_comment = try doc.shouldSkipProblem(err.*);
                 }
                 try results.append(gpa, result);
             }
@@ -469,36 +469,6 @@ fn allocAstErrorMsg(
     var aw = std.io.Writer.Allocating.init(allocator);
     try ast.renderError(err, &aw.writer);
     return aw.toOwnedSlice();
-}
-
-/// An unoptimized algorithm that checks whether a given rule has been disabled
-/// by a comment in the same source file. If files have a lot of disable
-/// comments this algorithm may become a problem (but a lot of disables is an
-/// anti pattern so probably ok?)
-///
-/// Returns true if a lint error should be skipped / ignored due to a comment
-/// in the source code.
-fn shouldSkip(doc_comments: zlinter.comments.CommentsDocument, err: zlinter.results.LintProblem, source: []const u8) bool {
-    for (doc_comments.comments) |comment| {
-        switch (comment.kind) {
-            .disable => |disable_comment| {
-                if (disable_comment.line_start <= err.start.line and err.start.line <= disable_comment.line_end) {
-                    // When there's no explicity rules set, we disable for all rules.
-                    const rule_ids = disable_comment.rule_ids orelse return true;
-
-                    // Otherwise, we only disable for explicitly given rules.
-                    for (doc_comments.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
-                        const rule_id = source[token.first_byte .. token.first_byte + token.len];
-                        if (std.mem.eql(u8, rule_id, err.rule_id)) {
-                            return true;
-                        }
-                    }
-                }
-            },
-            else => {},
-        }
-    }
-    return false;
 }
 
 // TODO: Move buildExcludesIndex and buildFilterIndex to lib and write unit tests

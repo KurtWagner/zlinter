@@ -8,6 +8,7 @@ pub const LintDocument = struct {
     analyser: *zls.Analyser,
     lineage: *ast.NodeLineage,
     comments: comments.CommentsDocument,
+    skipper: comments.LazyRuleSkipper,
 
     pub fn deinit(self: *LintDocument, gpa: std.mem.Allocator) void {
         while (self.lineage.pop()) |connections| {
@@ -22,6 +23,12 @@ pub const LintDocument = struct {
         gpa.free(self.path);
 
         self.comments.deinit(gpa);
+
+        self.skipper.deinit();
+    }
+
+    pub fn shouldSkipProblem(self: *@This(), problem: LintProblem) error{OutOfMemory}!bool {
+        return self.skipper.shouldSkip(problem);
     }
 
     pub inline fn resolveTypeOfNode(self: @This(), node: std.zig.Ast.Node.Index) !?zls.Analyser.Type {
@@ -468,7 +475,9 @@ pub const LintContext = struct {
             .analyser = try gpa.create(zls.Analyser),
             .lineage = lineage,
             .comments = try comments.allocParse(handle.tree.source, gpa),
+            .skipper = undefined, // zlinter-disable-current-line no_undefined - set below
         };
+        doc.skipper = .init(doc.comments, doc.handle.tree.source, gpa);
 
         doc.analyser.* = switch (version.zig) {
             .@"0.14" => zls.Analyser.init(
@@ -866,3 +875,4 @@ const shims = @import("shims.zig");
 const testing = @import("testing.zig");
 const ast = @import("ast.zig");
 const comments = @import("comments.zig");
+const LintProblem = @import("results.zig").LintProblem;
