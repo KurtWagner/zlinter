@@ -14,7 +14,7 @@ pub const Config = struct {
     detect_string_literal: zlinter.rules.LintProblemSeverity = .off,
 
     /// The severity of detecting number literals (off, warning, error).
-    detect_number_literal: zlinter.rules.LintProblemSeverity = .warning,
+    detect_number_literal: zlinter.rules.LintProblemSeverity = .off,
 
     /// The severity of detecting bool literals (off, warning, error).
     detect_bool_literal: zlinter.rules.LintProblemSeverity = .warning,
@@ -75,7 +75,7 @@ fn run(
         const node, const connections = tuple;
         _ = connections;
 
-        const call = tree.fullCall(&call_buffer, node.toNodeIndex()) orelse continue;
+        const call = tree.fullCall(&call_buffer, node.toNodeIndex()) orelse continue :skip;
 
         for (call.ast.params) |param_node| {
             const kind: LiteralKind = switch (zlinter.shims.nodeTag(tree, param_node)) {
@@ -167,11 +167,12 @@ test "no_literal_args" {
         \\  call(true, 0, num, 0.5, flag, false);
         \\}
     ;
+    var config = Config{ .detect_number_literal = .warning };
     var result = (try zlinter.testing.runRule(
         rule,
         zlinter.testing.paths.posix("path/to/my_file.zig"),
         source,
-        .{},
+        .{ .config = &config },
     )).?;
     defer result.deinit(std.testing.allocator);
 
