@@ -542,6 +542,13 @@ pub const Comment = struct {
         last: Token.Index,
     };
 
+    const RuleIds = struct {
+        /// Inclusive
+        first: Token.Index,
+        /// Inclusive
+        last: Token.Index,
+    };
+
     const Kind = union(enum) {
         /// Represents a comment that disables some lint rules within a line range
         /// of a given source file.
@@ -553,12 +560,7 @@ pub const Comment = struct {
             line_end: usize,
 
             /// Rules to disable, if empty, it means, disable all rules.
-            rule_ids: ?struct {
-                /// Inclusive
-                first: Token.Index,
-                /// Inclusive
-                last: Token.Index,
-            } = null,
+            rule_ids: ?RuleIds = null,
         },
 
         /// Represents a comment that disables some lint rules from a start line
@@ -568,12 +570,7 @@ pub const Comment = struct {
             line_start: usize,
 
             /// Rules to disable, if empty, it means, disable all rules.
-            rule_ids: ?struct {
-                /// Inclusive
-                first: Token.Index,
-                /// Inclusive
-                last: Token.Index,
-            } = null,
+            rule_ids: ?RuleIds = null,
         },
 
         /// Represents a comment that enables some lint rules from a start line
@@ -583,12 +580,7 @@ pub const Comment = struct {
             line_start: usize,
 
             /// Rules to enable, if empty, it means, enable all rules.
-            rule_ids: ?struct {
-                /// Inclusive
-                first: Token.Index,
-                /// Inclusive
-                last: Token.Index,
-            } = null,
+            rule_ids: ?RuleIds = null,
         },
 
         /// Represents a `// <content>` comment in the source tree
@@ -1307,23 +1299,30 @@ pub const LazyRuleSkipper = struct {
     const Index = struct {
         all: std.bit_set.DynamicBitSet,
         rules: std.StringHashMap(std.bit_set.DynamicBitSet),
+
+        fn deinit(self: *@This()) void {
+            self.all.deinit();
+            var it = self.rules.iterator();
+            while (it.next()) |e| e.value_ptr.deinit();
+            self.rules.deinit();
+        }
     };
 
     index: ?Index = null,
     doc: CommentsDocument,
-    arena: std.heap.ArenaAllocator,
+    gpa: std.mem.Allocator,
     source: []const u8,
 
-    pub fn init(doc: CommentsDocument, source: []const u8, allocator: std.mem.Allocator) LazyRuleSkipper {
+    pub fn init(doc: CommentsDocument, source: []const u8, gpa: std.mem.Allocator) LazyRuleSkipper {
         return .{
             .doc = doc,
             .source = source,
-            .arena = .init(allocator),
+            .gpa = gpa,
         };
     }
 
     pub fn deinit(self: *LazyRuleSkipper) void {
-        self.arena.deinit();
+        if (self.index) |*index| index.deinit();
     }
 
     pub fn shouldSkip(self: *LazyRuleSkipper, problem: LintProblem) error{OutOfMemory}!bool {
@@ -1342,73 +1341,45 @@ pub const LazyRuleSkipper = struct {
 
         const line_count = self.doc.line_starts.len;
         var index: Index = .{
-            .rules = .init(self.arena.allocator()),
-            .all = try .initEmpty(self.arena.allocator(), line_count + 1),
+            .rules = .init(self.gpa),
+            .all = try .initEmpty(self.gpa, line_count + 1),
         };
-        errdefer {
-            index.all.deinit();
-            index.rules.deinit();
-        }
+        errdefer index.deinit();
 
         for (self.doc.comments) |comment| {
-            switch (comment.kind) {
-                .disable_lines => |disable_lines| {
-                    const range: std.bit_set.Range = .{
-                        .start = disable_lines.line_start,
-                        .end = disable_lines.line_end + 1, // + 1 as not inclusive but line_end is
-                    };
-                    if (disable_lines.rule_ids) |rule_ids| {
-                        for (self.doc.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
-                            const rule_id = self.source[token.first_byte .. token.first_byte + token.len];
-
-                            const result = try index.rules.getOrPut(rule_id);
-                            if (!result.found_existing) {
-                                result.value_ptr.* = try .initEmpty(self.arena.allocator(), line_count + 1);
-                            }
-                            result.value_ptr.setRangeValue(range, true);
-                        }
-                    } else {
-                        index.all.setRangeValue(range, true);
-                    }
+            const set: struct { range: std.bit_set.Range, rule_ids: ?Comment.RuleIds, value: bool } = switch (comment.kind) {
+                .disable_lines => |info| .{
+                    .range = .{
+                        .start = info.line_start,
+                        .end = info.line_end + 1, // + 1 as not inclusive but line_end is
+                    },
+                    .rule_ids = info.rule_ids,
+                    .value = true,
                 },
-                .disable => |disable| {
-                    var line = disable.line_start;
-                    while (line <= line_count) : (line += 1) {
-                        if (disable.rule_ids) |rule_ids| {
-                            for (self.doc.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
-                                const rule_id = self.source[token.first_byte .. token.first_byte + token.len];
-
-                                const result = try index.rules.getOrPut(rule_id);
-                                if (!result.found_existing) {
-                                    result.value_ptr.* = try .initEmpty(self.arena.allocator(), line_count + 1);
-                                }
-                                result.value_ptr.set(line);
-                            }
-                        } else {
-                            index.all.set(line);
-                        }
-                    }
+                .disable => |info| .{
+                    .range = .{ .start = info.line_start, .end = line_count },
+                    .rule_ids = info.rule_ids,
+                    .value = true,
                 },
+                .enable => |info| .{
+                    .range = .{ .start = info.line_start, .end = line_count },
+                    .rule_ids = info.rule_ids,
+                    .value = false,
+                },
+                else => continue,
+            };
+            if (set.rule_ids) |rule_ids| {
+                for (self.doc.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
+                    const rule_id = self.source[token.first_byte .. token.first_byte + token.len];
 
-                // .enable => |enable| {
-                //     var line = enable.line_start;
-                //     while (line <= line_count) : (line += 1) {
-                //         if (enable.rule_ids) |rule_ids| {
-                //             for (self.doc.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
-                //                 const rule_id = self.source[token.first_byte .. token.first_byte + token.len];
-
-                //                 const result = try index.rules.getOrPut(rule_id);
-                //                 if (!result.found_existing) {
-                //                     result.value_ptr.* = try .initEmpty(self.arena.allocator(), line_count);
-                //                 }
-                //                 result.value_ptr.set(line);
-                //             }
-                //         } else {
-                //             index.all.unset(line);
-                //         }
-                //     }
-                // },
-                else => {},
+                    const result = try index.rules.getOrPut(rule_id);
+                    if (!result.found_existing) {
+                        result.value_ptr.* = try .initEmpty(self.gpa, line_count + 1);
+                    }
+                    result.value_ptr.setRangeValue(set.range, set.value);
+                }
+            } else {
+                index.all.setRangeValue(set.range, set.value);
             }
         }
         self.index = index;
