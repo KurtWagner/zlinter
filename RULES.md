@@ -402,7 +402,7 @@ These magic literals don’t explain what they mean. Consider using named consta
 
   * The severity of detecting number literals (off, warning, error).
 
-  * **Default:** `.warning`
+  * **Default:** `.off`
 
 * `detect_bool_literal`
 
