@@ -1304,10 +1304,12 @@ fn testParse(
 }
 
 pub const LazyRuleSkipper = struct {
-    is_built: bool = false,
-    all: std.bit_set.DynamicBitSet = undefined,
-    rules: std.StringHashMap(std.bit_set.DynamicBitSet) = undefined,
+    const Index = struct {
+        all: std.bit_set.DynamicBitSet,
+        rules: std.StringHashMap(std.bit_set.DynamicBitSet),
+    };
 
+    index: ?Index = null,
     doc: CommentsDocument,
     arena: std.heap.ArenaAllocator,
     source: []const u8,
@@ -1325,24 +1327,30 @@ pub const LazyRuleSkipper = struct {
     }
 
     pub fn shouldSkip(self: *LazyRuleSkipper, problem: LintProblem) error{OutOfMemory}!bool {
-        try self.ensureBuilt();
+        const index = try self.ensureBuilt();
 
-        if (self.all.isSet(problem.start.line)) return true;
+        if (index.all.isSet(problem.start.line)) return true;
 
-        if (self.rules.get(problem.rule_id)) |bits|
+        if (index.rules.get(problem.rule_id)) |bits|
             if (bits.isSet(problem.start.line)) return true;
 
         return false;
     }
 
-    fn ensureBuilt(self: *LazyRuleSkipper) error{OutOfMemory}!void {
-        if (self.is_built) return;
-        defer self.is_built = true;
+    fn ensureBuilt(self: *LazyRuleSkipper) error{OutOfMemory}!Index {
+        if (self.index) |index| return index;
 
+        // TODO: Surely this is already somewhere....
         const line_count = std.mem.count(u8, self.source, "\n") + 1;
 
-        self.rules = .init(self.arena.allocator());
-        self.all = try .initEmpty(self.arena.allocator(), line_count);
+        var index: Index = .{
+            .rules = .init(self.arena.allocator()),
+            .all = try .initEmpty(self.arena.allocator(), line_count),
+        };
+        errdefer {
+            index.all.deinit();
+            index.rules.deinit();
+        }
 
         for (self.doc.comments) |comment| {
             switch (comment.kind) {
@@ -1353,20 +1361,22 @@ pub const LazyRuleSkipper = struct {
                             for (self.doc.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
                                 const rule_id = self.source[token.first_byte .. token.first_byte + token.len];
 
-                                const result = try self.rules.getOrPut(rule_id);
+                                const result = try index.rules.getOrPut(rule_id);
                                 if (!result.found_existing) {
                                     result.value_ptr.* = try .initEmpty(self.arena.allocator(), line_count);
                                 }
                                 result.value_ptr.set(line);
                             }
                         } else {
-                            self.all.set(line);
+                            index.all.set(line);
                         }
                     }
                 },
                 else => {},
             }
         }
+        self.index = index;
+        return index;
     }
 };
 
