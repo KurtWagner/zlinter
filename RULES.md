@@ -7,6 +7,18 @@ Enforces that variable declaration names use consistent naming. For example,
 
 **Config options:**
 
+* `exclude_extern`
+
+  * Exclude extern / foreign declarations. An extern declaration refers to a foreign declaration — typically defined outside of Zig, such as in a C library or other system-provided binary. You typically don't want to enforce naming conventions on these declarations.
+
+  * **Default:** `true`
+
+* `exclude_export`
+
+  * Exclude exported declarations. Export makes the symbol visible to external code, such as C or other languages that might link against your Zig code. You may prefer to rely on the naming conventions of the code being linked, in which case, you may set this to true.
+
+  * **Default:** `false`
+
 * `var_decl`
 
   * Style and severity for declarations with `const` mutability.
@@ -170,6 +182,12 @@ that return types and `camelCase` for others.
 
   * **Default:** `true`
 
+* `exclude_export`
+
+  * Exclude exported functions. Export makes the symbol visible to external code, such as C or other languages that might link against your Zig code. You may prefer to rely on the naming conventions of the code being linked, in which case, you may set this to true.
+
+  * **Default:** `false`
+
 * `function`
 
   * Style and severity for non-type functions
@@ -230,6 +248,18 @@ appropriate defaults.
   * The max number of positional arguments. Functions with more than this many arguments will fail the rule.
 
   * **Default:** `5`
+
+* `exclude_extern`
+
+  * Exclude extern / foreign functions. An extern function refers to a foreign function — typically defined outside of Zig, such as in a C library or other system-provided binary. You typically don't want to enforce naming conventions on these functions.
+
+  * **Default:** `true`
+
+* `exclude_export`
+
+  * Exclude exported functions. Export makes the symbol visible to external code, such as C or other languages that might link against your Zig code. You may prefer to rely on the naming conventions of the code being linked, in which case, you may set this to true.
+
+  * **Default:** `false`
 
 ## `no_comment_out_code`
 
