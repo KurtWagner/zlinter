@@ -149,12 +149,6 @@ fn looksLikeCode(content: []const u8, gpa: std.mem.Allocator) !bool {
         var ast = try std.zig.Ast.parse(gpa, root_code, .zig);
         defer ast.deinit(gpa);
 
-        // zlinter-disable-next-line no_comment_out_code
-        // var dummy_node: u32 = 0;
-        // while (dummy_node < ast.nodes.len) : (dummy_node += 1) {
-        //     std.debug.print("{s} = '{s}'\n", .{ @tagName(zlinter.shims.nodeTag(ast, dummy_node)), ast.getNodeSource(dummy_node) });
-        // }
-
         const root_node = 1;
         if (ast.nodes.len <= root_node) break :looks_like_declaration false;
         if (ast.errors.len > 0) break :looks_like_declaration false;
@@ -190,86 +184,6 @@ fn looksLikeCode(content: []const u8, gpa: std.mem.Allocator) !bool {
         break :looks_like_declaration false;
     };
     return looks_like_declaration;
-
-    // zlinter-disable-next-line no_comment_out_code
-    // const looks_like_code = looks_like_code: {
-    //     var node = zlinter.shims.NodeIndexShim.init(0);
-    //     while (node.index < ast.nodes.len) : (node.index += 1) {
-    //         // std.debug.print(" - {s}\n", .{@tagName(zlinter.shims.nodeTag(ast, node.toNodeIndex()))});
-    //         switch (zlinter.shims.nodeTag(ast, node.toNodeIndex())) {
-    //             .test_decl,
-    //             .global_var_decl,
-    //             .local_var_decl,
-    //             .simple_var_decl,
-    //             .aligned_var_decl,
-    //             .@"errdefer",
-    //             .@"defer",
-    //             .assign_mul,
-    //             .assign_div,
-    //             .assign_mod,
-    //             .assign_add,
-    //             .assign_sub,
-    //             .assign_shl,
-    //             .assign_shl_sat,
-    //             .assign_shr,
-    //             .assign_bit_and,
-    //             .assign_bit_xor,
-    //             .assign_bit_or,
-    //             .assign_mul_wrap,
-    //             .assign_add_wrap,
-    //             .assign_sub_wrap,
-    //             .assign_mul_sat,
-    //             .assign_add_sat,
-    //             .assign_sub_sat,
-    //             .assign,
-    //             .assign_destructure,
-    //             .call_one,
-    //             .call_one_comma,
-    //             .call,
-    //             .call_comma,
-    //             .@"switch",
-    //             .switch_comma,
-    //             .while_simple,
-    //             .while_cont,
-    //             .@"while",
-    //             .for_simple,
-    //             .@"for",
-    //             .for_range,
-    //             .if_simple,
-    //             .@"if",
-    //             .@"continue",
-    //             .@"break",
-    //             .@"return",
-    //             .fn_proto_simple,
-    //             .fn_proto_multi,
-    //             .fn_proto_one,
-    //             .fn_proto,
-    //             .fn_decl,
-    //             .builtin_call_two,
-    //             .builtin_call_two_comma,
-    //             .builtin_call,
-    //             .builtin_call_comma,
-    //             .error_set_decl,
-    //             .container_decl,
-    //             .container_decl_trailing,
-    //             .container_decl_two,
-    //             .container_decl_two_trailing,
-    //             .container_decl_arg,
-    //             .container_decl_arg_trailing,
-    //             .tagged_union,
-    //             .tagged_union_trailing,
-    //             .tagged_union_two,
-    //             .tagged_union_two_trailing,
-    //             .tagged_union_enum_tag,
-    //             .tagged_union_enum_tag_trailing,
-    //             => break :looks_like_code true,
-    //             else => {},
-    //         }
-    //     }
-    //     break :looks_like_code false;
-    // };
-    //
-    // return looks_like_code;
 }
 
 test "looksLikeCode when true" {
