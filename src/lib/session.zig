@@ -1,6 +1,11 @@
 //! Linting module for items relating to the linting session (e.g., overall context
 //! and document store).
 
+pub const max_zig_file_size_bytes = bytes: {
+    const bytes_in_mb = 1024 * 1024;
+    break :bytes 32 * bytes_in_mb;
+};
+
 /// A loaded and parsed zig file that is given to zig lint rules.
 pub const LintDocument = struct {
     path: []const u8,

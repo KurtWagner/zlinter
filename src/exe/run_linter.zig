@@ -1,8 +1,3 @@
-const max_file_size_bytes = bytes: {
-    const bytes_in_mb = 1024 * 1024;
-    break :bytes 1024 * bytes_in_mb;
-};
-
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 const default_formatter = zlinter.formatters.DefaultFormatter{};
 
@@ -155,7 +150,7 @@ pub fn main() !u8 {
 fn runLinterRules(
     gpa: std.mem.Allocator,
     lint_files: []zlinter.files.LintFile,
-    printer: anytype,
+    printer: *zlinter.rendering.Printer,
     timer: *Timer,
     file_lint_problems: *std.StringArrayHashMap([]zlinter.results.LintResult),
     args: zlinter.Args,
@@ -434,7 +429,7 @@ fn runFixes(
         });
         defer file.close();
 
-        const file_content = try file.deprecatedReader().readAllAlloc(gpa, max_file_size_bytes);
+        const file_content = try file.deprecatedReader().readAllAlloc(gpa, zlinter.session.max_zig_file_size_bytes);
         defer gpa.free(file_content);
 
         var output_slices = std.ArrayListUnmanaged([]const u8).empty;
@@ -661,8 +656,8 @@ fn allocZon(T: type, file_path: []const u8, gpa: std.mem.Allocator) !*T {
 
     const null_terminated = value: {
         const file_content = switch (zlinter.version.zig) {
-            .@"0.14" => try file.reader().readAllAlloc(gpa, max_file_size_bytes),
-            .@"0.15" => try file.deprecatedReader().readAllAlloc(gpa, max_file_size_bytes),
+            .@"0.14" => try file.reader().readAllAlloc(gpa, zlinter.session.max_zig_file_size_bytes),
+            .@"0.15" => try file.deprecatedReader().readAllAlloc(gpa, zlinter.session.max_zig_file_size_bytes),
         };
         defer gpa.free(file_content);
         break :value try gpa.dupeZ(u8, file_content);

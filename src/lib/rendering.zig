@@ -7,8 +7,7 @@ pub const LintFileRenderer = struct {
     line_ends: []usize,
 
     pub fn init(allocator: std.mem.Allocator, stream: anytype) !Self {
-        // TODO: Should max source file size be consistent and shared?
-        const source = try stream.readAllAlloc(allocator, 100 * 1024 * 1024);
+        const source = try stream.readAllAlloc(allocator, max_zig_file_size_bytes);
 
         var line_ends = try std.ArrayList(usize).initCapacity(allocator, source.len / 40);
         defer line_ends.deinit();
@@ -256,10 +255,7 @@ const Context = union(enum) {
     array: *std.ArrayList(u8),
 };
 
-// TODO: remove disable - https://github.com/KurtWagner/zlinter/issues/63
-// zlinter-disable-next-line declaration_naming - This looks like a bug in zlinter as error type should be TitleCase
 const WriteError = std.fs.File.WriteError || std.mem.Allocator.Error;
-
 const Writer = std.io.GenericWriter(Context, WriteError, writeFn);
 
 fn writeFn(context: Context, bytes: []const u8) WriteError!usize {
@@ -311,3 +307,4 @@ inline fn assertTestOnly() void {
 
 const std = @import("std");
 const ansi = @import("ansi.zig");
+const max_zig_file_size_bytes = @import("session.zig").max_zig_file_size_bytes;
