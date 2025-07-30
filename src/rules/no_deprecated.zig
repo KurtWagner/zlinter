@@ -210,7 +210,6 @@ fn handleIdentifierAccess(
                 .error_token => |err_token| {
                     if (err_token == identifier_token) return;
                 },
-                // TODO: We can probably skip more types but for now the above will do
                 else => {},
             }
         }

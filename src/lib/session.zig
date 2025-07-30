@@ -735,21 +735,24 @@ test "LintDocument.resolveTypeKind" {
             ,
             .kind = .error_type,
         },
-        // TODO: Fix this and add test with error union
-        // .{
-        //     .contents =
-        //     \\var MyError = Reference;
-        //     \\const Reference = error {a,b,c}
-        //     ,
-        //     .kind = .error_type,
-        // },
-
+        .{
+            .contents =
+            \\var MyError = Reference;
+            \\const Reference = error {a,b,c};
+            ,
+            .kind = .error_type,
+        },
         // Error instance
         .{
             .contents =
             \\const err = error.MyError;
             ,
-            // TODO: This should be error_instance but for now its other
+            .kind = .other,
+        },
+        .{
+            .contents =
+            \\var MyError:error{a} = other;
+            ,
             .kind = .other,
         },
         // Union instance:
@@ -825,7 +828,6 @@ test "LintDocument.resolveTypeKind" {
             \\
             \\extern fn show_window(*Window) callconv(.C) void;
             ,
-            // TODO: This should be opaque_instance but for now its other
             .kind = .other,
         },
     }) |test_case| {
