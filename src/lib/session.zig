@@ -865,11 +865,10 @@ test "LintDocument.resolveTypeKind" {
 
         std.testing.expectEqual(test_case.kind, actual_kind) catch |e| {
             const border: [50]u8 = @splat('-');
-            var writer = std.io.getStdErr().writer();
-            try writer.print("Node:\n{s}\n{s}\n{s}\n", .{ border, doc.handle.tree.getNodeSource(node), border });
-            try writer.print("Expected: {any}\n", .{test_case.kind});
-            try writer.print("Actual: {any}\n", .{actual_kind});
-            try writer.print("Contents:\n{s}\n{s}\n{s}\n", .{ border, test_case.contents, border });
+            std.debug.print("Node:\n{s}\n{s}\n{s}\n", .{ border, doc.handle.tree.getNodeSource(node), border });
+            std.debug.print("Expected: {any}\n", .{test_case.kind});
+            std.debug.print("Actual: {any}\n", .{actual_kind});
+            std.debug.print("Contents:\n{s}\n{s}\n{s}\n", .{ border, test_case.contents, border });
 
             return e;
         };

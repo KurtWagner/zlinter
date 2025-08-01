@@ -228,6 +228,9 @@ pub const Printer = struct {
     }
 
     pub fn init(self: *Printer, stdout: Writer, stderr: Writer, tty: ansi.Tty, verbose: bool) void {
+        std.debug.assert(self.stdout == null);
+        std.debug.assert(self.stderr == null);
+
         self.stderr = stderr;
         self.stdout = stdout;
         self.tty = tty;
