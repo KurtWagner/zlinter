@@ -49,6 +49,7 @@ pub const LintFileRenderer = struct {
         end_line: usize,
         end_column: usize,
         writer: anytype,
+        tty: ansi.Tty,
     ) !void {
         for (start_line..end_line + 1) |line_index| {
             const is_start = start_line == line_index;
@@ -61,6 +62,7 @@ pub const LintFileRenderer = struct {
                     0,
                     if (self.getLine(line_index).len == 0) 0 else self.getLine(line_index).len - 1,
                     writer,
+                    tty,
                 );
             } else if (is_start and is_end) {
                 try self.renderLine(
@@ -68,6 +70,7 @@ pub const LintFileRenderer = struct {
                     start_column,
                     end_column,
                     writer,
+                    tty,
                 );
             } else if (is_start) {
                 try self.renderLine(
@@ -75,6 +78,7 @@ pub const LintFileRenderer = struct {
                     start_column,
                     if (self.getLine(line_index).len == 0) 0 else self.getLine(line_index).len - 1,
                     writer,
+                    tty,
                 );
             } else if (is_end) {
                 try self.renderLine(
@@ -82,6 +86,7 @@ pub const LintFileRenderer = struct {
                     0,
                     end_column,
                     writer,
+                    tty,
                 );
             } else {
                 @panic("No possible");
@@ -99,6 +104,7 @@ pub const LintFileRenderer = struct {
         column: usize,
         end_column: usize,
         writer: anytype,
+        tty: ansi.Tty,
     ) !void {
         const lhs_format = " {d} ";
         const line_lhs_max_width = comptime std.fmt.comptimePrint(lhs_format, .{std.math.maxInt(@TypeOf(line))}).len;
@@ -106,10 +112,10 @@ pub const LintFileRenderer = struct {
         const lhs = std.fmt.bufPrint(&lhs_buffer, lhs_format, .{line + 1}) catch unreachable;
 
         // LHS of code
-        try writer.writeAll(ansi.get(&.{.cyan}));
+        try writer.writeAll(tty.ansiOrEmpty(&.{.cyan}));
         try writer.writeAll(lhs);
         try writer.writeAll("| ");
-        try writer.writeAll(ansi.get(&.{.reset}));
+        try writer.writeAll(tty.ansiOrEmpty(&.{.reset}));
 
         // Actual code
         try writer.writeAll(self.getLine(line));
@@ -117,16 +123,16 @@ pub const LintFileRenderer = struct {
 
         // LHS of arrows to impacted area
         lhs_buffer = @splat(' ');
-        try writer.writeAll(ansi.get(&.{.gray}));
+        try writer.writeAll(tty.ansiOrEmpty(&.{.gray}));
         try writer.writeAll(lhs_buffer[0..lhs.len]);
         try writer.writeAll("| ");
-        try writer.writeAll(ansi.get(&.{.reset}));
+        try writer.writeAll(tty.ansiOrEmpty(&.{.reset}));
 
         // Actual arrows
         for (0..column) |_| try writer.writeByte(' ');
-        try writer.writeAll(ansi.get(&.{.bold}));
+        try writer.writeAll(tty.ansiOrEmpty(&.{.bold}));
         for (column..end_column + 1) |_| try writer.writeByte('^');
-        try writer.writeAll(ansi.get(&.{.reset}));
+        try writer.writeAll(tty.ansiOrEmpty(&.{.reset}));
     }
 
     pub fn deinit(self: Self, allocator: std.mem.Allocator) void {
@@ -160,6 +166,7 @@ test "LintFileRenderer" {
                 1,
                 5,
                 output.writer(std.testing.allocator),
+                .no_color,
             );
 
             try std.testing.expectEqualStrings(
@@ -178,6 +185,7 @@ test "LintFileRenderer" {
                 1,
                 1,
                 output.writer(std.testing.allocator),
+                .no_color,
             );
 
             try std.testing.expectEqualStrings(
@@ -190,7 +198,7 @@ test "LintFileRenderer" {
     }
 }
 
-var printer_singleton: Printer = .{ .verbose = false };
+var printer_singleton: Printer = .empty;
 /// Singleton printer for use for the lifetime of the process
 pub var process_printer = &printer_singleton;
 
@@ -198,6 +206,36 @@ pub const Printer = struct {
     verbose: bool,
     stdout: ?Writer = null,
     stderr: ?Writer = null,
+    tty: ansi.Tty,
+
+    const empty: Printer = .{ .verbose = false, .tty = .no_color };
+
+    pub fn initAuto(self: *Printer, verbose: bool) void {
+        switch (version.zig) {
+            .@"0.14" => self.init(
+                .{ .context = .{ .file = std.io.getStdOut() } },
+                .{ .context = .{ .file = std.io.getStdErr() } },
+                .init(std.io.getStdOut()),
+                verbose,
+            ),
+            .@"0.15" => self.init(
+                .{ .context = .{ .file = std.fs.File.stdout() } },
+                .{ .context = .{ .file = std.fs.File.stderr() } },
+                .init(std.fs.File.stdout()),
+                verbose,
+            ),
+        }
+    }
+
+    pub fn init(self: *Printer, stdout: Writer, stderr: Writer, tty: ansi.Tty, verbose: bool) void {
+        std.debug.assert(self.stdout == null);
+        std.debug.assert(self.stderr == null);
+
+        self.stderr = stderr;
+        self.stdout = stdout;
+        self.tty = tty;
+        self.verbose = verbose;
+    }
 
     pub const Kind = enum {
         out,
@@ -218,11 +256,11 @@ pub const Printer = struct {
     pub fn print(self: Printer, kind: Kind, comptime fmt: []const u8, args: anytype) void {
         var writer: Writer = switch (kind) {
             .verbose => if (self.verbose)
-                self.stdout orelse .{ .context = .{ .file = std.io.getStdOut() } }
+                self.stdout orelse @panic("Requires initAuto or if testing attachFakeStdoutSink")
             else
                 return,
-            .err => self.stderr orelse .{ .context = .{ .file = std.io.getStdErr() } },
-            .out => self.stdout orelse .{ .context = .{ .file = std.io.getStdOut() } },
+            .err => self.stderr orelse @panic("Requires initAuto or if testing attachFakeStderrSink"),
+            .out => self.stdout orelse @panic("Requires initAuto or if testing attachFakeStdoutSink"),
         };
 
         return writer.print(fmt, args) catch |e| {
@@ -308,3 +346,4 @@ inline fn assertTestOnly() void {
 const std = @import("std");
 const ansi = @import("ansi.zig");
 const max_zig_file_size_bytes = @import("session.zig").max_zig_file_size_bytes;
+const version = @import("version.zig");

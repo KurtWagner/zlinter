@@ -178,18 +178,16 @@ pub const LintProblemSeverity = enum {
     pub inline fn name(
         self: LintProblemSeverity,
         buffer: *[32]u8,
-        options: struct { ansi: bool = false },
+        options: struct { tty: ansi.Tty = .no_color },
     ) []const u8 {
-        const prefix = if (options.ansi)
+        const prefix =
             switch (self) {
                 .off => unreachable,
-                .warning => ansi.get(&.{ .bold, .yellow }),
-                .@"error" => ansi.get(&.{ .bold, .red }),
-            }
-        else
-            "";
+                .warning => options.tty.ansiOrEmpty(&.{ .bold, .yellow }),
+                .@"error" => options.tty.ansiOrEmpty(&.{ .bold, .red }),
+            };
 
-        const suffix = if (options.ansi) ansi.get(&.{.reset}) else "";
+        const suffix = options.tty.ansiOrEmpty(&.{.reset});
 
         return switch (self) {
             .off => unreachable,
