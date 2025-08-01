@@ -52,7 +52,7 @@ pub fn main() !u8 {
     // Technically a chicken and egg problem as you can't rely on verbose stdout
     // while parsing args, so this would probably be better as a build option
     // but for now this should be fine and keeps args together at runtime...
-    zlinter.rendering.process_printer.verbose = args.verbose;
+    zlinter.rendering.process_printer.initAuto(args.verbose);
     var printer = zlinter.rendering.process_printer;
 
     if (args.unknown_args) |unknown_args| {
@@ -135,14 +135,25 @@ pub fn main() !u8 {
     // Print out results:
     // ------------------------------------------------------------------------
     {
-        const output_writer = std.fs.File.stdout().deprecatedWriter();
         if (args.fix) {
-            return try runFixes(gpa, dir, file_lint_problems, output_writer);
+            return try runFixes(
+                gpa,
+                dir,
+                file_lint_problems,
+                zlinter.rendering.process_printer.stdout.?,
+            );
         } else {
             const formatter = switch (args.format) {
                 .default => &default_formatter.formatter,
             };
-            return try runFormatter(gpa, dir, file_lint_problems, output_writer, formatter);
+            return try runFormatter(
+                gpa,
+                dir,
+                file_lint_problems,
+                zlinter.rendering.process_printer.stdout.?,
+                zlinter.rendering.process_printer.tty,
+                formatter,
+            );
         }
     }
 }
@@ -351,6 +362,7 @@ fn runFormatter(
     dir: std.fs.Dir,
     file_lint_problems: std.StringArrayHashMap([]zlinter.results.LintResult),
     output_writer: anytype,
+    output_tty: zlinter.ansi.Tty,
     formatter: *const zlinter.formatters.Formatter,
 ) !u8 {
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -377,6 +389,7 @@ fn runFormatter(
         .results = try flattened.toOwnedSlice(arena_allocator),
         .dir = dir,
         .arena = arena_allocator,
+        .tty = output_tty,
     }, &output_writer);
 
     return exit_code;
@@ -638,9 +651,9 @@ const SlowestItemQueue = struct {
         while (self.queue.removeMaxOrNull()) |item| {
             printer.println(.verbose, "  {d:02} -  {s}[{d}ms]{s} {s}", .{
                 i,
-                zlinter.ansi.get(&.{.bold}),
+                printer.tty.ansiOrEmpty(&.{.bold}),
                 item.elapsed_ns / std.time.ns_per_ms,
-                zlinter.ansi.get(&.{.reset}),
+                printer.tty.ansiOrEmpty(&.{.reset}),
                 item.name,
             });
             i += 1;

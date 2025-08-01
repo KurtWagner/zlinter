@@ -6,6 +6,8 @@ pub const FormatInput = struct {
     dir: std.fs.Dir,
     /// Arena allocator that is cleared after calling format.
     arena: std.mem.Allocator,
+
+    tty: zlinter.ansi.Tty = .no_color,
 };
 
 pub const Error = error{
