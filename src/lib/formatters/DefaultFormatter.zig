@@ -41,21 +41,21 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: any
 
             var severity_buffer: [32]u8 = undefined;
             writer.print("{s} {s} [{s}{s}:{d}:{d}{s}] {s}{s}{s}\n\n", .{
-                problem.severity.name(&severity_buffer, .{ .ansi = true }),
+                problem.severity.name(&severity_buffer, .{ .tty = input.tty }),
 
                 problem.message,
 
-                zlinter.ansi.get(&.{.underline}),
+                input.tty.ansiOrEmpty(&.{.underline}),
                 file_result.file_path,
                 // "+ 1" because line and column are zero indexed but
                 // when printing a link to a file it starts at 1.
                 problem.start.line + 1,
                 problem.start.column + 1,
-                zlinter.ansi.get(&.{.reset}),
+                input.tty.ansiOrEmpty(&.{.reset}),
 
-                zlinter.ansi.get(&.{.gray}),
+                input.tty.ansiOrEmpty(&.{.gray}),
                 problem.rule_id,
-                zlinter.ansi.get(&.{.reset}),
+                input.tty.ansiOrEmpty(&.{.reset}),
             }) catch |e| return logAndReturnWriteFailure("Problem title", e);
             file_renderer.render(
                 problem.start.line,
@@ -63,6 +63,7 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: any
                 problem.end.line,
                 problem.end.column,
                 writer,
+                input.tty,
             ) catch |e| return logAndReturnWriteFailure("Problem lint", e);
             writer.writeAll("\n\n") catch |e| return logAndReturnWriteFailure("Newline", e);
         }
@@ -70,17 +71,17 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: any
 
     if (error_count > 0) {
         writer.print("{s}x {d} errors{s}\n", .{
-            zlinter.ansi.get(&.{ .red, .bold }),
+            input.tty.ansiOrEmpty(&.{ .red, .bold }),
             error_count,
-            zlinter.ansi.get(&.{.reset}),
+            input.tty.ansiOrEmpty(&.{.reset}),
         }) catch |e| return logAndReturnWriteFailure("Errors", e);
     }
 
     if (warning_count > 0) {
         writer.print("{s}x {d} warnings{s}\n", .{
-            zlinter.ansi.get(&.{ .yellow, .bold }),
+            input.tty.ansiOrEmpty(&.{ .yellow, .bold }),
             warning_count,
-            zlinter.ansi.get(&.{.reset}),
+            input.tty.ansiOrEmpty(&.{.reset}),
         }) catch |e| return logAndReturnWriteFailure("Warnings", e);
     }
 
@@ -88,9 +89,9 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: any
         writer.print(
             "{s}x {d} skipped{s}\n",
             .{
-                zlinter.ansi.get(&.{ .bold, .gray }),
+                input.tty.ansiOrEmpty(&.{ .bold, .gray }),
                 total_disabled_by_comment,
-                zlinter.ansi.get(&.{.reset}),
+                input.tty.ansiOrEmpty(&.{.reset}),
             },
         ) catch |e| return logAndReturnWriteFailure("Skipped", e);
     }
@@ -99,8 +100,8 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: any
         writer.print(
             "{s}No issues!{s}\n",
             .{
-                zlinter.ansi.get(&.{ .bold, .green }),
-                zlinter.ansi.get(&.{.reset}),
+                input.tty.ansiOrEmpty(&.{ .bold, .green }),
+                input.tty.ansiOrEmpty(&.{.reset}),
             },
         ) catch |e| return logAndReturnWriteFailure("Summary", e);
     }
