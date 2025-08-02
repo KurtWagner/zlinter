@@ -42,7 +42,15 @@ pub fn main() !u8 {
         const raw_args = try std.process.argsAlloc(gpa);
         defer std.process.argsFree(gpa, raw_args);
 
-        break :args zlinter.Args.allocParse(raw_args, &rules, gpa) catch |e| switch (e) {
+        break :args zlinter.Args.allocParse(
+            raw_args,
+            &rules,
+            gpa,
+            switch (zlinter.version.zig) {
+                .@"0.14" => std.io.getStdIn().reader(),
+                .@"0.15" => std.fs.File.stdin().deprecatedReader(),
+            },
+        ) catch |e| switch (e) {
             error.InvalidArgs => return ExitCode.usage_error.int(),
             error.OutOfMemory => return e,
         };
@@ -90,7 +98,7 @@ pub fn main() !u8 {
         const lint_files = try zlinter.files.allocLintFiles(
             dir,
             // `--include` argument supersedes build defined includes and excludes
-            args.include_paths orelse args.build_include_paths orelse null,
+            args.include_paths orelse args.build_info.include_paths orelse null,
             gpa,
         );
         defer {
@@ -522,7 +530,7 @@ fn allocAstErrorMsg(
 
 /// Returns an index of files to exclude if exclude configuration is found in args
 fn buildExcludesIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Args) !?std.BufSet {
-    if (args.exclude_paths == null and args.build_exclude_paths == null) return null;
+    if (args.exclude_paths == null and args.build_info.exclude_paths == null) return null;
 
     const exclude_lint_paths: ?[]zlinter.files.LintFile = exclude: {
         if (args.exclude_paths) |p| {
@@ -541,7 +549,7 @@ fn buildExcludesIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Arg
         // `--include` argument supersedes build defined includes and excludes
         if (args.include_paths != null) break :exclude null;
 
-        if (args.build_exclude_paths) |p| {
+        if (args.build_info.exclude_paths) |p| {
             std.debug.assert(p.len > 0);
             break :exclude try zlinter.files.allocLintFiles(dir, p, gpa);
         } else break :exclude null;
