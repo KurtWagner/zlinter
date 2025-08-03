@@ -466,8 +466,8 @@ pub const LintContext = struct {
             std.fs.cwd().realpathAlloc(
                 fba.allocator(),
                 path,
-            ) catch {
-                std.log.err("Failed to create real path for: {s}", .{path});
+            ) catch |e| {
+                std.log.err("{s} - '{s}'", .{ @errorName(e), path });
                 return null;
             },
         );
