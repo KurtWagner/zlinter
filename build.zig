@@ -224,11 +224,11 @@ pub fn build(b: *std.Build) void {
 
     // Add directory and file inputs to ensure that we can watch and re-run tests
     // as these can't be resolved magicaly through the system call.
-    addWatchDirectoryInput(b, &run_integration_tests.step, b.path("./integration_tests/src")) catch @panic("OOM");
-    addWatchDirectoryInput(b, &run_integration_tests.step, b.path("./integration_tests/test_cases")) catch @panic("OOM");
-    addWatchDirectoryInput(b, &run_integration_tests.step, b.path("./src")) catch @panic("OOM");
-    run_integration_tests.step.addWatchInput(b.path("./integration_tests/build.zig")) catch @panic("OOM");
-    run_integration_tests.step.addWatchInput(b.path("./build_rules.zig")) catch @panic("OOM");
+    addWatchInput(b, &run_integration_tests.step, b.path("./integration_tests/src"), .none) catch @panic("OOM");
+    addWatchInput(b, &run_integration_tests.step, b.path("./integration_tests/test_cases"), .none) catch @panic("OOM");
+    addWatchInput(b, &run_integration_tests.step, b.path("./src"), .none) catch @panic("OOM");
+    addWatchInput(b, &run_integration_tests.step, b.path("./integration_tests/build.zig"), .none) catch @panic("OOM");
+    addWatchInput(b, &run_integration_tests.step, b.path("./build_rules.zig"), .none) catch @panic("OOM");
 
     const integration_test_step = b.step("integration-test", "Run integration tests");
     integration_test_step.dependOn(&run_integration_tests.step);
@@ -501,10 +501,11 @@ fn buildStep(
     if (options.include_paths) |include_paths| {
         include_path_added = include_paths.items.len > 0;
         for (include_paths.items) |path| {
-            zlinter_run.addIncludePath(path.getPath3(b, &zlinter_run.step).subPathOrDot());
+            zlinter_run.addIncludePath(b, path);
         }
     }
-    if (!include_path_added) zlinter_run.addIncludePath("./");
+    if (!include_path_added)
+        zlinter_run.addIncludePath(b, b.path("./"));
 
     if (options.exclude_paths) |exclude_paths| {
         for (exclude_paths.items) |path|
@@ -532,19 +533,30 @@ fn checkNoNameCollision(comptime name: []const u8) []const u8 {
     return name;
 }
 
-fn addWatchDirectoryInput(b: *std.Build, step: *std.Build.Step, dir: std.Build.LazyPath) !void {
-    const needs_dir_derived = try step.addDirectoryWatchInput(dir);
+fn addWatchInput(
+    b: *std.Build,
+    step: *std.Build.Step,
+    file_or_dir: std.Build.LazyPath,
+    kind: enum { none, lintable_file },
+) !void {
+    const src_dir_path = file_or_dir.getPath3(b, step);
 
-    const src_dir_path = dir.getPath3(b, step);
     var src_dir = src_dir_path.root_dir.handle.openDir(
         src_dir_path.subPathOrDot(),
         .{ .iterate = true },
-    ) catch |err| {
-        switch (version.zig) {
-            .@"0.14" => @panic(b.fmt("Unable to open directory '{}': {s}", .{ src_dir_path, @errorName(err) })),
-            .@"0.15" => @panic(b.fmt("Unable to open directory '{f}': {t}", .{ src_dir_path, err })),
-        }
+    ) catch |e| switch (e) {
+        error.NotDir => {
+            try step.addWatchInput(file_or_dir);
+            return;
+        },
+        else => switch (version.zig) {
+            .@"0.14" => @panic(b.fmt("Unable to open directory '{}': {s}", .{ src_dir_path, @errorName(e) })),
+            .@"0.15" => @panic(b.fmt("Unable to open directory '{f}': {t}", .{ src_dir_path, e })),
+        },
     };
+    defer src_dir.close();
+
+    const needs_dir_derived = try step.addDirectoryWatchInput(file_or_dir);
 
     var it = try src_dir.walk(b.allocator);
     defer it.deinit();
@@ -555,7 +567,14 @@ fn addWatchDirectoryInput(b: *std.Build, step: *std.Build.Step, dir: std.Build.L
                 const entry_path = try src_dir_path.join(b.allocator, entry.path);
                 try step.addDirectoryWatchInputFromPath(entry_path);
             },
-            .file => try step.addWatchInput(try dir.join(b.allocator, entry.path)),
+            .file => {
+                const entry_path = try src_dir_path.joinString(b.allocator, entry.path);
+                defer b.allocator.free(entry_path);
+
+                if (kind != .lintable_file or isLintableFilePath(entry_path) catch false) {
+                    try step.addWatchInput(try file_or_dir.join(b.allocator, entry.path));
+                }
+            },
             else => continue,
         }
     }
@@ -618,7 +637,10 @@ fn buildBuiltinRule(
             .import = .{
                 .name = @tagName(inline_rule),
                 .module = b.createModule(.{
-                    .root_source_file = if (options.zlinter_dependency) |d| d.path("src/rules/" ++ @tagName(inline_rule) ++ ".zig") else b.path("src/rules/" ++ @tagName(inline_rule) ++ ".zig"),
+                    .root_source_file = if (options.zlinter_dependency) |d|
+                        d.path("src/rules/" ++ @tagName(inline_rule) ++ ".zig")
+                    else
+                        b.path("src/rules/" ++ @tagName(inline_rule) ++ ".zig"),
                     .target = options.target,
                     .optimize = options.optimize,
                     .imports = &.{options.zlinter_import},
@@ -738,8 +760,9 @@ const ZlinterRun = struct {
             run.argv.append(.{ .bytes = b.dupe(arg) }) catch @panic("OOM");
     }
 
-    pub fn addIncludePath(run: *ZlinterRun, include_path: []const u8) void {
-        run.include_paths.append(run.step.owner.dupe(include_path)) catch @panic("OOM");
+    pub fn addIncludePath(run: *ZlinterRun, owner: *std.Build, path: std.Build.LazyPath) void {
+        addWatchInput(owner, &run.step, path, .lintable_file) catch @panic("OOM");
+        run.include_paths.append(run.step.owner.dupe(path.getPath3(owner, &run.step).subPathOrDot())) catch @panic("OOM");
     }
 
     pub fn addExcludePath(run: *ZlinterRun, exclude_path: []const u8) void {
@@ -927,5 +950,6 @@ fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
 
 const std = @import("std");
 const BuildInfo = @import("src/lib/BuildInfo.zig");
+const isLintableFilePath = @import("src/lib/files.zig").isLintableFilePath;
 
 pub const version = @import("./src/lib/version.zig");
