@@ -178,6 +178,7 @@ pub fn build(b: *std.Build) void {
     var rules: [@typeInfo(BuiltinLintRule).@"enum".fields.len]BuiltRule = undefined;
     // zlinter-disable-next-line no_undefined - immediately set in inline loop
     var rule_imports: [@typeInfo(BuiltinLintRule).@"enum".fields.len]std.Build.Module.Import = undefined;
+
     inline for (std.meta.fields(BuiltinLintRule), 0..) |enum_type, i| {
         const rule_module = b.createModule(.{
             .root_source_file = b.path("src/rules/" ++ enum_type.name ++ ".zig"),
@@ -185,12 +186,6 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{zlinter_import},
         });
-
-        // Rule unit tests:
-        const run_rule_unit_tests = b.addRunArtifact(b.addTest(.{
-            .root_module = rule_module,
-        }));
-        run_unit_tests.step.dependOn(&run_rule_unit_tests.step);
 
         // Rule as import:
         rule_imports[i] = .{
@@ -246,30 +241,23 @@ pub fn build(b: *std.Build) void {
         unit_test_step.dependOn(&run_unit_tests.step);
     }
 
-    {
-        inline for (std.meta.fields(BuiltinLintRule)) |field| {
-            var test_rule_exe = b.addTest(.{
-                // Setting name breaks coverage as it looks in the wrong spot.
-                // .name = field.name ++ " unit test",
-                .root_module = buildBuiltinRule(
-                    b,
-                    @enumFromInt(field.value),
-                    .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import },
-                    .{},
-                ).import.module,
-            });
+    for (rule_imports) |rule_import| {
+        const test_rule_exe = b.addTest(.{
+            .name = b.fmt("{s}_unit_test_coverage", .{rule_import.name}),
+            .root_module = rule_import.module,
+        });
+        const run_test_rule_exe = b.addRunArtifact(test_rule_exe);
 
-            if (coverage) {
-                const cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
-                cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only" });
-                cover_run.addPrefixedDirectoryArg("--include-pattern=", b.path("src"));
-                merge_coverage.addDirectoryArg(cover_run.addOutputDirectoryArg(field.name ++ "_unit_test_coverage"));
-                cover_run.addArtifactArg(test_rule_exe);
+        if (coverage) {
+            const cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
+            cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only" });
+            cover_run.addPrefixedDirectoryArg("--include-pattern=", b.path("src"));
+            merge_coverage.addDirectoryArg(cover_run.addOutputDirectoryArg(test_rule_exe.name));
+            cover_run.addArtifactArg(test_rule_exe);
 
-                unit_test_step.dependOn(&install_coverage.step);
-            } else {
-                unit_test_step.dependOn(&test_rule_exe.step);
-            }
+            unit_test_step.dependOn(&install_coverage.step);
+        } else {
+            unit_test_step.dependOn(&run_test_rule_exe.step);
         }
     }
 
