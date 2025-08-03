@@ -489,30 +489,28 @@ fn buildStep(
     // --------------------------------------------------------------------
     // Generate linter exe
     // --------------------------------------------------------------------
-    const exe = b.addExecutable(.{
+    const zlinter_exe = b.addExecutable(.{
         .name = "zlinter",
         .root_module = exe_module,
     });
 
-    const zlinter_run = ZlinterRun.create(b, exe);
+    const zlinter_run = ZlinterRun.create(b, zlinter_exe);
 
     if (b.args) |args| zlinter_run.addArgs(args);
     if (b.verbose) zlinter_run.addArgs(&.{"--verbose"});
 
-    var path_added = false;
+    var include_path_added = false;
     if (options.include_paths) |include_paths| {
+        include_path_added = include_paths.items.len > 0;
         for (include_paths.items) |path| {
-            zlinter_run.addIncludePaths(&.{path.getPath3(b, &zlinter_run.step).sub_path});
-            path_added = true;
+            zlinter_run.addIncludePath(path.getPath3(b, &zlinter_run.step).subPathOrDot());
         }
     }
-    if (!path_added) {
-        zlinter_run.addIncludePaths(&.{b.path("./").getPath3(b, &zlinter_run.step).sub_path});
-    }
+    if (!include_path_added) zlinter_run.addIncludePath("./");
 
     if (options.exclude_paths) |exclude_paths| {
         for (exclude_paths.items) |path|
-            zlinter_run.addExcludePaths(&.{path.getPath3(b, &zlinter_run.step).sub_path});
+            zlinter_run.addExcludePath(path.getPath3(b, &zlinter_run.step).subPathOrDot());
     }
 
     zlinter_run.addArgs(&.{ "--zig_exe", b.graph.zig_exe });
@@ -697,9 +695,14 @@ fn createRulesModule(
 
 const ZlinterRun = struct {
     step: std.Build.Step,
+
+    /// CLI arguments to be passed to zlinter when executed
     argv: std.ArrayList(Arg),
 
+    /// Include paths configured within the build file.
     include_paths: std.ArrayList([]const u8),
+
+    /// Exclude paths confiured within the build file.
     exclude_paths: std.ArrayList([]const u8),
 
     const Arg = union(enum) {
@@ -737,16 +740,12 @@ const ZlinterRun = struct {
             run.argv.append(.{ .bytes = b.dupe(arg) }) catch @panic("OOM");
     }
 
-    pub fn addIncludePaths(run: *ZlinterRun, include_paths: []const []const u8) void {
-        const b = run.step.owner;
-        for (include_paths) |arg|
-            run.include_paths.append(b.dupe(arg)) catch @panic("OOM");
+    pub fn addIncludePath(run: *ZlinterRun, include_path: []const u8) void {
+        run.include_paths.append(run.step.owner.dupe(include_path)) catch @panic("OOM");
     }
 
-    pub fn addExcludePaths(run: *ZlinterRun, exclude_paths: []const []const u8) void {
-        const b = run.step.owner;
-        for (exclude_paths) |arg|
-            run.exclude_paths.append(b.dupe(arg)) catch @panic("OOM");
+    pub fn addExcludePath(run: *ZlinterRun, exclude_path: []const u8) void {
+        run.exclude_paths.append(run.step.owner.dupe(exclude_path)) catch @panic("OOM");
     }
 
     fn make(step: *std.Build.Step, _: std.Build.Step.MakeOptions) !void {
@@ -754,14 +753,10 @@ const ZlinterRun = struct {
         const b = run.step.owner;
         const arena = b.allocator;
 
-        const maybe_build_arg_bytes: ?[]const u8 = build_arg_bytes: {
-            if (run.exclude_paths.items.len == 0 and run.include_paths.items.len == 0) break :build_arg_bytes null;
-
-            break :build_arg_bytes toZonString(BuildInfo{
-                .include_paths = if (run.include_paths.items.len > 0) run.include_paths.items else null,
-                .exclude_paths = if (run.exclude_paths.items.len > 0) run.exclude_paths.items else null,
-            }, b.allocator);
-        };
+        const build_info_zon_bytes: []const u8 = toZonString(BuildInfo{
+            .include_paths = if (run.include_paths.items.len > 0) run.include_paths.items else null,
+            .exclude_paths = if (run.exclude_paths.items.len > 0) run.exclude_paths.items else null,
+        }, b.allocator);
 
         const env_map = arena.create(std.process.EnvMap) catch @panic("OOM");
         env_map.* = std.process.getEnvMap(arena) catch @panic("unhandled error");
@@ -804,9 +799,8 @@ const ZlinterRun = struct {
             }
         }
 
-        if (maybe_build_arg_bytes != null) {
-            argv_list.append("--stdin") catch @panic("OOM");
-        }
+        // We're always sending "build_info_zon_bytes" in stdin
+        argv_list.append("--stdin") catch @panic("OOM");
 
         if (!std.process.can_spawn) {
             return run.step.fail("Host cannot spawn zlinter:\n\t{s}", .{
@@ -838,7 +832,7 @@ const ZlinterRun = struct {
         child.request_resource_usage_statistics = true;
         child.stdout_behavior = .Inherit;
         child.stderr_behavior = .Inherit;
-        child.stdin_behavior = if (maybe_build_arg_bytes == null) .Ignore else .Pipe;
+        child.stdin_behavior = .Pipe; // Otherwise, `.Ignore` if not sending stdin
 
         var timer = try std.time.Timer.start();
 
@@ -850,16 +844,16 @@ const ZlinterRun = struct {
         };
         errdefer _ = child.kill() catch {};
 
-        if (maybe_build_arg_bytes) |bytes| {
+        {
             if (b.verbose)
-                std.debug.print("Writing stdin: '{s}'\n", .{bytes});
+                std.debug.print("Writing stdin: '{s}'\n", .{build_info_zon_bytes});
 
             const writer = switch (version.zig) {
                 .@"0.14" => child.stdin.?.writer(),
                 .@"0.15" => child.stdin.?.deprecatedWriter(),
             };
-            writer.writeInt(usize, bytes.len, .little) catch @panic("stdin write failed");
-            writer.writeAll(bytes) catch @panic("stdin write failed");
+            writer.writeInt(usize, build_info_zon_bytes.len, .little) catch @panic("stdin write failed");
+            writer.writeAll(build_info_zon_bytes) catch @panic("stdin write failed");
         }
 
         const term = try child.wait();
