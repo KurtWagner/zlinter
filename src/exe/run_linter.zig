@@ -94,8 +94,11 @@ pub fn main() !u8 {
         // ------------------------------------------------------------------------
         // Resolve files then apply excludes and filters
         // ------------------------------------------------------------------------
+        const cwd = try std.process.getCwdAlloc(gpa);
+        defer gpa.free(cwd);
 
         const lint_files = try zlinter.files.allocLintFiles(
+            cwd,
             dir,
             // `--include` argument supersedes build defined includes and excludes
             args.include_paths orelse args.build_info.include_paths orelse null,
@@ -106,14 +109,14 @@ pub fn main() !u8 {
             gpa.free(lint_files);
         }
 
-        if (try buildExcludesIndex(gpa, dir, args)) |*index| {
+        if (try buildExcludesIndex(cwd, gpa, dir, args)) |*index| {
             defer @constCast(index).deinit();
 
             for (lint_files) |*file|
                 file.excluded = index.contains(file.pathname);
         }
 
-        if (try buildFilterIndex(gpa, dir, args)) |*index| {
+        if (try buildFilterIndex(cwd, gpa, dir, args)) |*index| {
             defer @constCast(index).deinit();
 
             for (lint_files) |*file|
@@ -527,13 +530,13 @@ fn allocAstErrorMsg(
 // TODO: Move buildExcludesIndex and buildFilterIndex to lib and write unit tests
 
 /// Returns an index of files to exclude if exclude configuration is found in args
-fn buildExcludesIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Args) !?std.BufSet {
+fn buildExcludesIndex(cwd: []const u8, gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Args) !?std.BufSet {
     if (args.exclude_paths == null and args.build_info.exclude_paths == null) return null;
 
     const exclude_lint_paths: ?[]zlinter.files.LintFile = exclude: {
         if (args.exclude_paths) |p| {
             std.debug.assert(p.len > 0);
-            break :exclude try zlinter.files.allocLintFiles(dir, p, gpa);
+            break :exclude try zlinter.files.allocLintFiles(cwd, dir, p, gpa);
         } else break :exclude null;
     };
     defer {
@@ -549,7 +552,7 @@ fn buildExcludesIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Arg
 
         if (args.build_info.exclude_paths) |p| {
             std.debug.assert(p.len > 0);
-            break :exclude try zlinter.files.allocLintFiles(dir, p, gpa);
+            break :exclude try zlinter.files.allocLintFiles(cwd, dir, p, gpa);
         } else break :exclude null;
     };
     defer {
@@ -574,11 +577,11 @@ fn buildExcludesIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Arg
 }
 
 /// Returns an index of files to only include if filter configuration is found in args
-fn buildFilterIndex(gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Args) !?std.BufSet {
+fn buildFilterIndex(cwd: []const u8, gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Args) !?std.BufSet {
     const filter_paths: []zlinter.files.LintFile = exclude: {
         if (args.filter_paths) |p| {
             std.debug.assert(p.len > 0);
-            break :exclude try zlinter.files.allocLintFiles(dir, p, gpa);
+            break :exclude try zlinter.files.allocLintFiles(cwd, dir, p, gpa);
         } else return null;
     };
     defer {
