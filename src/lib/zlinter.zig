@@ -2,6 +2,7 @@
 pub const ansi = @import("ansi.zig");
 pub const Args = @import("Args.zig");
 pub const ast = @import("ast.zig");
+pub const BuildInfo = @import("BuildInfo.zig");
 pub const comments = @import("comments.zig");
 pub const formatters = @import("formatters.zig");
 pub const files = @import("files.zig");
