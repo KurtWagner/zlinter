@@ -49,7 +49,18 @@ pub const BuilderOptions = struct {
     /// You should never need to set this. Defaults to native host.
     target: ?std.Build.ResolvedTarget = null,
 
-    /// You should never need to set this. Leave it to be managed by zlinter
+    /// You may configure depending on the size of your project and how it's run
+    ///
+    /// Release optimisations cost more upfront but once cached will offer faster
+    /// iterations. Typically preferred for development cycles, especially if
+    /// running with `--watch`.
+    ///
+    /// Debug optimisation is cheaper up-front but slower to run, which may make
+    /// it more suitable for average sized projects in cold environments (e.g.,
+    /// cacheless CI environments).
+    ///
+    /// If your project is tiny, then it's fine to not think too much about this
+    /// and to simply leave on debug.
     optimize: std.builtin.OptimizeMode = .Debug,
 };
 
@@ -690,10 +701,8 @@ fn createRulesModule(
     for (rules) |rule| {
         const wf = b.addWriteFiles();
         const import_name = b.fmt("{s}.zon", .{rule.import.name});
-        const path = wf.add(
-            import_name,
-            rule.zon_config_str,
-        );
+        const path = wf.add(import_name, rule.zon_config_str);
+
         module.addImport(
             import_name,
             b.createModule(.{ .root_source_file = path }),
