@@ -109,7 +109,7 @@ fn walkDirectory(
     }
 }
 
-fn isLintableFilePath(file_path: []const u8) !bool {
+pub fn isLintableFilePath(file_path: []const u8) !bool {
     const extension = ".zig";
 
     const basename = std.fs.path.basename(file_path);
