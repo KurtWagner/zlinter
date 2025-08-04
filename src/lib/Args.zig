@@ -140,40 +140,27 @@ pub fn allocParse(
         stdin_arg,
     };
 
+    const flags: std.StaticStringMap(State) = .initComptime(.{
+        .{ "", .parsing },
+        .{ "--fix", .fix_arg },
+        .{ "--verbose", .verbose_arg },
+        .{ "--rule", .rule_arg },
+        .{ "--include", .include_path_arg },
+        .{ "--exclude", .exclude_path_arg },
+        .{ "--filter", .filter_path_arg },
+        .{ "--zig_exe", .zig_exe_arg },
+        .{ "--zig_lib_directory", .zig_lib_directory_arg },
+        .{ "--global_cache_root", .global_cache_root_arg },
+        .{ "--format", .format_arg },
+        .{ "--rule-config", .rule_config_arg },
+        .{ "--stdin", .stdin_arg },
+    });
+
     state: switch (State.parsing) {
         .parsing => {
             index += 1; // ignore first arg as this is the binary.
-            if (index < args.len) {
-                const arg = args[index];
-                if (arg.len == 0)
-                    continue :state .parsing
-                else if (std.mem.eql(u8, arg, "--fix")) {
-                    continue :state State.fix_arg;
-                } else if (std.mem.eql(u8, arg, "--verbose")) {
-                    continue :state State.verbose_arg;
-                } else if (std.mem.eql(u8, arg, "--rule")) {
-                    continue :state State.rule_arg;
-                } else if (std.mem.eql(u8, arg, "--include")) {
-                    continue :state State.include_path_arg;
-                } else if (std.mem.eql(u8, arg, "--exclude")) {
-                    continue :state State.exclude_path_arg;
-                } else if (std.mem.eql(u8, arg, "--filter")) {
-                    continue :state State.filter_path_arg;
-                } else if (std.mem.eql(u8, arg, "--zig_exe")) {
-                    continue :state State.zig_exe_arg;
-                } else if (std.mem.eql(u8, arg, "--zig_lib_directory")) {
-                    continue :state State.zig_lib_directory_arg;
-                } else if (std.mem.eql(u8, arg, "--global_cache_root")) {
-                    continue :state State.global_cache_root_arg;
-                } else if (std.mem.eql(u8, arg, "--format")) {
-                    continue :state State.format_arg;
-                } else if (std.mem.eql(u8, arg, "--rule-config")) {
-                    continue :state State.rule_config_arg;
-                } else if (std.mem.eql(u8, arg, "--stdin")) {
-                    continue :state State.stdin_arg;
-                }
-                continue :state State.unknown_arg;
-            }
+            if (index < args.len)
+                continue :state flags.get(args[index]) orelse .unknown_arg;
         },
         .zig_exe_arg => {
             index += 1;
