@@ -53,6 +53,9 @@ rule_config_overrides: ?*std.BufMap = null,
 
 build_info: BuildInfo = .default,
 
+/// Whether user has passed in the `--help` flag.
+help: bool = false,
+
 pub fn deinit(self: Args, allocator: std.mem.Allocator) void {
     if (self.zig_exe) |zig_exe|
         allocator.free(zig_exe);
@@ -127,6 +130,7 @@ pub fn allocParse(
         parsing,
         fix_arg,
         verbose_arg,
+        help_arg,
         zig_exe_arg,
         zig_lib_directory_arg,
         global_cache_root_arg,
@@ -154,6 +158,8 @@ pub fn allocParse(
         .{ "--format", .format_arg },
         .{ "--rule-config", .rule_config_arg },
         .{ "--stdin", .stdin_arg },
+        .{ "--help", .help_arg },
+        .{ "-h", .help_arg },
     });
 
     state: switch (State.parsing) {
@@ -266,6 +272,10 @@ pub fn allocParse(
             lint_args.verbose = true;
             continue :state State.parsing;
         },
+        .help_arg => {
+            lint_args.help = true;
+            continue :state State.parsing;
+        },
         .stdin_arg => {
             build_info = try BuildInfo.consumeStdinAlloc(
                 stdin_reader,
@@ -343,6 +353,37 @@ pub fn allocParse(
     return lint_args;
 }
 
+pub fn printHelp(printer: *rendering.Printer) void {
+    const flags: []const struct { []const u8, []const u8 } = &.{
+        .{ "-h, --help", "Show help text" },
+        .{ "--verbose", "Print extra linting information" },
+        .{ "--rule", "Run only the specified rules" },
+        .{ "--include", "Only lint these paths, ignoring build.zig includes/excludes" },
+        .{ "--exclude", "Skip linting for these paths" },
+        .{ "--filter", "Limit linting to the specified resolved paths" },
+        .{ "--fix", "Automatically fix some issues (only use with source control)" },
+    };
+
+    comptime var width: usize = 0;
+    inline for (0..flags.len) |i| width = @max(flags[i][0].len, width);
+
+    printer.print(.out, "{s}Usage:{s} ", .{ printer.tty.ansiOrEmpty(&.{ .underline, .bold }), printer.tty.ansiOrEmpty(&.{.reset}) });
+    printer.print(.out, "zig build <lint step> -- [--include <path>...] [--exclude <path>...] [--filter <path>...] [--rule <name>...] [--fix]\n\n", .{});
+    printer.print(.out, "{s}Options:{s}\n", .{ printer.tty.ansiOrEmpty(&.{ .underline, .bold }), printer.tty.ansiOrEmpty(&.{.reset}) });
+    for (flags) |tuple| {
+        printer.print(
+            .out,
+            "  {s}{s: <" ++ std.fmt.comptimePrint("{d}", .{width + 2}) ++ "}{s}{s}\n",
+            .{
+                printer.tty.ansiOrEmpty(&.{.yellow}),
+                tuple[0],
+                printer.tty.ansiOrEmpty(&.{.reset}),
+                tuple[1],
+            },
+        );
+    }
+}
+
 fn notArgKey(arg: []const u8) bool {
     return arg.len > 0 and arg[0] != '-';
 }
@@ -359,7 +400,6 @@ test "allocParse with unknown args" {
 
     try std.testing.expectEqualDeep(Args{
         .fix = false,
-        .include_paths = null,
         .unknown_args = @constCast(&[_][]const u8{ "-", "-fix", "--a" }),
     }, args);
 }
@@ -376,8 +416,6 @@ test "allocParse with fix arg" {
 
     try std.testing.expectEqualDeep(Args{
         .fix = true,
-        .include_paths = null,
-        .unknown_args = null,
     }, args);
 }
 
@@ -394,8 +432,22 @@ test "allocParse with verbose arg" {
 
     try std.testing.expectEqualDeep(Args{
         .verbose = true,
-        .include_paths = null,
-        .unknown_args = null,
+    }, args);
+}
+
+test "allocParse with help arg" {
+    var stdin_fbs = std.io.fixedBufferStream("");
+
+    const args = try allocParse(
+        testing.cliArgs(&.{"--help"}),
+        &.{},
+        std.testing.allocator,
+        stdin_fbs.reader(),
+    );
+    defer args.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualDeep(Args{
+        .help = true,
     }, args);
 }
 
@@ -413,7 +465,6 @@ test "allocParse with fix arg and files" {
     try std.testing.expectEqualDeep(Args{
         .fix = true,
         .include_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig" }),
-        .unknown_args = null,
     }, args);
 }
 
@@ -437,7 +488,6 @@ test "allocParse with duplicate files files" {
         try std.testing.expectEqualDeep(Args{
             .fix = false,
             .include_paths = @constCast(&[_][]const u8{ "a/b.zig", "a/b.zig", "another.zig" }),
-            .unknown_args = null,
         }, args);
     }
 }
@@ -461,7 +511,6 @@ test "allocParse with files" {
         try std.testing.expectEqualDeep(Args{
             .fix = false,
             .include_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig", "another.zig" }),
-            .unknown_args = null,
         }, args);
     }
 }
@@ -485,7 +534,6 @@ test "allocParse with exclude files" {
         try std.testing.expectEqualDeep(Args{
             .fix = false,
             .exclude_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig", "another.zig" }),
-            .unknown_args = null,
         }, args);
     }
 }
@@ -509,7 +557,6 @@ test "allocParse with filter files" {
         try std.testing.expectEqualDeep(Args{
             .fix = false,
             .filter_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig", "d.zig" }),
-            .unknown_args = null,
         }, args);
     }
 }
@@ -620,7 +667,6 @@ test "allocParse with exclude and include files" {
         .fix = false,
         .exclude_paths = @constCast(&[_][]const u8{ "a/b.zig", "d.zig" }),
         .include_paths = @constCast(&[_][]const u8{"./c.zig"}),
-        .unknown_args = null,
     }, args);
 }
 
