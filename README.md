@@ -18,7 +18,6 @@ A **linter** is a tool that automatically checks source code for style issues, b
 
 ## Table of contents
 
-- [Background](#background)
 - [Getting Started](#getting-started)
 - [Autofix](#autofix)
 - [Custom Rules](#custom-rules)
@@ -56,18 +55,6 @@ A **linter** is a tool that automatically checks source code for style issues, b
   - [How to Contribute](#contributions)
   - [Run tests](#run-tests)
   - [Run on self](#run-lint-on-self)
-
-## Background
-
-`zlinter` was written to be used across my personal projects. The main motivation was to have it integrated from source through a build step so that it can be
-
-1. customized at build time (e.g., byo rules); and
-2. versioned with your projects source control (no separate binary to juggle)
-
-I'm opening it up incase it's more generally useful, and happy to let it
-organically evolve around needs, if there's value in doing so.
-
-It uses [`zls`](https://github.com/zigtools/zls) (an awesome project, go check it out if you haven't already) and `std.zig` to build and analyze zig source files.
 
 ## Getting started
 
@@ -319,10 +306,25 @@ This may change once zig hits `1.x`.
 
 ## Milestones
 
+### Background
+
+`zlinter` was written to be used across my personal projects. The main motivation was to have it integrated from source through a build step so that it can be
+
+1. customized at build time (e.g., byo rules); and
+2. versioned with your projects source control (no separate binary to juggle)
+
+I'm opening it up incase it's more generally useful, and happy to let it
+organically evolve around needs, if there's value in doing so.
+
+It uses [`zls`](https://github.com/zigtools/zls) (an awesome project, go check it out if you haven't already) and `std.zig` to build and analyze zig source files.
+
+### Current limitations
+
 `zlinter` currently analyzes the Zig AST, which has [limited context](https://github.com/KurtWagner/zlinter/issues/65) without trying to re-implement the Zig compiler (not doing).
 
 A more accurate approach could be to integrate more closely with the Zig build system and compiler (e.g., the proposed Zig compiler server), but for now, using the AST should be sufficient for most cases, and maybe one day `zlinter` can use newer Zig Compiler APIs as they become available. The [milestones](#milestones) will help inform this.
 
+---
 
 1. [done] **Rough implementaton of 20 diverse linter rules** - this is important to understanding limitations (e.g., [the AST](https://github.com/KurtWagner/zlinter/issues/65) and design patterns to a stable API.)
   
