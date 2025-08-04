@@ -62,47 +62,52 @@ A **linter** is a tool that automatically checks source code for style issues, b
 This makes it flexible to each projects needs. Simply add the dependency and
 hook it up to a build step, like `zig build lint`:
 
-1. Save dependency to your zig project:
+**1. Save dependency to your zig project:**
 
-    ```shell
-    # For 0.14.x
-    zig fetch --save git+https://github.com/kurtwagner/zlinter#0.14.x
+   ```shell
+   # For 0.14.x
+   zig fetch --save git+https://github.com/kurtwagner/zlinter#0.14.x
 
-    # OR
+   # OR
     
-    # For master (0.15.x-dev)
-    zig fetch --save git+https://github.com/kurtwagner/zlinter#master
-    ```
+   # For master (0.15.x-dev)
+   zig fetch --save git+https://github.com/kurtwagner/zlinter#master
+   ```
 
-1. Configure `lint` step in your `build.zig`:
+**2. Configure `lint` step in your `build.zig`:**
 
-    ```zig
-    const zlinter = @import("zlinter");
-    // ...
-    const lint_cmd = b.step("lint", "Lint source code.");
-    lint_cmd.dependOn(step: {
-        // Swap in and out whatever rules you see fit from RULES.md
-        var builder = zlinter.builder(b, .{});
-        builder.addRule(.{ .builtin = .field_naming }, .{});
-        builder.addRule(.{ .builtin = .declaration_naming }, .{});
-        builder.addRule(.{ .builtin = .function_naming }, .{});
-        builder.addRule(.{ .builtin = .file_naming }, .{});
-        builder.addRule(.{ .builtin = .switch_case_ordering }, .{});
-        builder.addRule(.{ .builtin = .no_unused }, .{});
-        builder.addRule(.{ .builtin = .no_deprecated }, .{});
-        builder.addRule(.{ .builtin = .no_orelse_unreachable }, .{});
-        break :step builder.build();
-    });
-    ```
+  ```zig
+   const zlinter = @import("zlinter");
+   // ...
+   const lint_cmd = b.step("lint", "Lint source code.");
+   lint_cmd.dependOn(step: {
+       // Swap in and out whatever rules you see fit from RULES.md
+       var builder = zlinter.builder(b, .{});
+       builder.addRule(.{ .builtin = .field_naming }, .{});
+       builder.addRule(.{ .builtin = .declaration_naming }, .{});
+       builder.addRule(.{ .builtin = .function_naming }, .{});
+       builder.addRule(.{ .builtin = .file_naming }, .{});
+       builder.addRule(.{ .builtin = .switch_case_ordering }, .{});
+       builder.addRule(.{ .builtin = .no_unused }, .{});
+       builder.addRule(.{ .builtin = .no_deprecated }, .{});
+       builder.addRule(.{ .builtin = .no_orelse_unreachable }, .{});
+       break :step builder.build();
+   });
+   ```
 
-1. Run linter:
+**3. Run linter:**
 
-    ```shell
-    zig build lint
-
-    // OR be specific with paths
-    zig build lint -- --include src/ file.zig
-    ```
+  Keep in mind the first run will be slower as the cache isn't warmed:
+  
+  ```shell
+  zig build lint
+  ```
+ 
+  You can also be specific with paths (see [command-line arguments](#command-line-arguments) for more options):
+  
+  ```shell
+  zig build lint -- --include src/ file.zig
+  ```
 
 ### Alternative: Enable all built in rules
 
