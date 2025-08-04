@@ -14,18 +14,6 @@ An extendable and customizable **Zig linter** (with [AST explorer](https://kurtw
 
 A **linter** is a tool that automatically checks source code for style issues, bugs, or patterns that may lead to errors, helping developers write cleaner and more reliable code.
 
-> [!IMPORTANT]
-> `zlinter` currently analyzes the Zig AST, which has [limited context](https://github.com/KurtWagner/zlinter/issues/65) without trying to re-implement the Zig compiler (not doing).
->
-> A more accurate approach could be to integrate more closely with the Zig build system and compiler (e.g., the proposed Zig compiler server), but for now, using the AST should be sufficient for most cases, and maybe one day `zlinter` can use newer Zig Compiler APIs as they become available. The [milestones](#milestones) will help inform this.
->
-> `zlinter` is **new**.
->
-> - Expect [breaking changes](https://github.com/KurtWagner/zlinter/pulls?q=is%3Apr+is%3Aclosed+label%3A%22breaking+change%22) between commits.
-> - Some features may not work as documented.  
->
-> Please [report issues](https://github.com/KurtWagner/zlinter/issues/new) and contribute fixes!
-
 ![Screenshot](./screenshot.png)
 
 ## Table of contents
@@ -330,6 +318,11 @@ Fixes and improvements to rules may be cherry-picked to older versions if there'
 This may change once zig hits `1.x`.
 
 ## Milestones
+
+`zlinter` currently analyzes the Zig AST, which has [limited context](https://github.com/KurtWagner/zlinter/issues/65) without trying to re-implement the Zig compiler (not doing).
+
+A more accurate approach could be to integrate more closely with the Zig build system and compiler (e.g., the proposed Zig compiler server), but for now, using the AST should be sufficient for most cases, and maybe one day `zlinter` can use newer Zig Compiler APIs as they become available. The [milestones](#milestones) will help inform this.
+
 
 1. [done] **Rough implementaton of 20 diverse linter rules** - this is important to understanding limitations (e.g., [the AST](https://github.com/KurtWagner/zlinter/issues/65) and design patterns to a stable API.)
   
