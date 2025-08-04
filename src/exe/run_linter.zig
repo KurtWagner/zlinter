@@ -24,6 +24,9 @@ pub const std_options: std.Options = .{
 };
 
 pub fn main() !u8 {
+    zlinter.rendering.process_printer.initAuto(false);
+    var printer = zlinter.rendering.process_printer;
+
     var timer = Timer.createStarted();
     var total_timer = Timer.createStarted();
 
@@ -51,7 +54,10 @@ pub fn main() !u8 {
                 .@"0.15" => std.fs.File.stdin().deprecatedReader(),
             },
         ) catch |e| switch (e) {
-            error.InvalidArgs => return ExitCode.usage_error.int(),
+            error.InvalidArgs => {
+                zlinter.Args.printHelp(printer);
+                return ExitCode.usage_error.int();
+            },
             error.OutOfMemory => return e,
         };
     };
@@ -60,12 +66,17 @@ pub fn main() !u8 {
     // Technically a chicken and egg problem as you can't rely on verbose stdout
     // while parsing args, so this would probably be better as a build option
     // but for now this should be fine and keeps args together at runtime...
-    zlinter.rendering.process_printer.initAuto(args.verbose);
-    var printer = zlinter.rendering.process_printer;
+    printer.verbose = args.verbose;
+
+    if (args.help) {
+        zlinter.Args.printHelp(printer);
+        return ExitCode.success.int();
+    }
 
     if (args.unknown_args) |unknown_args| {
         for (unknown_args) |arg|
             printer.println(.err, "Unknown argument: {s}", .{arg});
+        zlinter.Args.printHelp(printer);
         return ExitCode.usage_error.int();
     }
 
