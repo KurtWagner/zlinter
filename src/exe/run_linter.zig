@@ -19,16 +19,23 @@ const ExitCode = enum(u8) {
     }
 };
 
+const RunResult = struct {
+    exit_code: ExitCode,
+    fixes_applied: usize = 0,
+
+    const success: RunResult = .{ .exit_code = .success };
+    const tool_error: RunResult = .{ .exit_code = .tool_error };
+    const lint_error: RunResult = .{ .exit_code = .lint_error };
+    const usage_error: RunResult = .{ .exit_code = .usage_error };
+};
+
 pub const std_options: std.Options = .{
     .log_level = .err,
 };
 
 pub fn main() !u8 {
-    zlinter.rendering.process_printer.initAuto(false);
-    var printer = zlinter.rendering.process_printer;
-
-    var timer = Timer.createStarted();
-    var total_timer = Timer.createStarted();
+    var printer: *zlinter.rendering.Printer = zlinter.rendering.process_printer;
+    printer.initAuto(false);
 
     const gpa, const is_debug = gpa: {
         if (builtin.os.tag == .wasi) break :gpa .{ std.heap.wasm_allocator, false };
@@ -68,16 +75,61 @@ pub fn main() !u8 {
     // but for now this should be fine and keeps args together at runtime...
     printer.verbose = args.verbose;
 
+    var total_fixes: usize = 0;
+    const result = result: {
+        var remaining_fix_passes = @max(1, args.fix_passes);
+        while (remaining_fix_passes > 0) {
+            if (run(gpa, args, printer)) |r| {
+                total_fixes += r.fixes_applied;
+                if (r.fixes_applied == 0 or remaining_fix_passes == 1) {
+                    break :result r;
+                } else {
+                    remaining_fix_passes -= 1;
+                    printer.print(.out, "{s}{d} fix passes remaining{s}\n", .{
+                        printer.tty.ansiOrEmpty(&.{.bold}),
+                        remaining_fix_passes,
+                        printer.tty.ansiOrEmpty(&.{.reset}),
+                    });
+                }
+            } else |e| {
+                printer.print(.err, "{s}Error:{s} {s}\n", .{
+                    printer.tty.ansiOrEmpty(&.{ .bold, .red }),
+                    @errorName(e),
+                    printer.tty.ansiOrEmpty(&.{.reset}),
+                });
+                break :result RunResult.tool_error;
+            }
+        }
+        unreachable;
+    };
+    if (total_fixes > 0) {
+        printer.print(
+            .out,
+            "{s}Total of {d} issues fixed{s}\n",
+            .{
+                printer.tty.ansiOrEmpty(&.{ .bold, .underline }),
+                total_fixes,
+                printer.tty.ansiOrEmpty(&.{.reset}),
+            },
+        );
+    }
+    return result.exit_code.int();
+}
+
+fn run(gpa: std.mem.Allocator, args: zlinter.Args, printer: *zlinter.rendering.Printer) !RunResult {
+    var timer = Timer.createStarted();
+    var total_timer = Timer.createStarted();
+
     if (args.help) {
         zlinter.Args.printHelp(printer);
-        return ExitCode.success.int();
+        return .success;
     }
 
     if (args.unknown_args) |unknown_args| {
         for (unknown_args) |arg|
             printer.println(.err, "Unknown argument: {s}", .{arg});
         zlinter.Args.printHelp(printer);
-        return ExitCode.usage_error.int();
+        return .usage_error;
     }
 
     // Key is file path and value are errors for the file.
@@ -162,7 +214,7 @@ pub fn main() !u8 {
                 gpa,
                 dir,
                 file_lint_problems,
-                zlinter.rendering.process_printer.stdout.?,
+                printer,
             );
         } else {
             const formatter = switch (args.format) {
@@ -172,8 +224,8 @@ pub fn main() !u8 {
                 gpa,
                 dir,
                 file_lint_problems,
-                zlinter.rendering.process_printer.stdout.?,
-                zlinter.rendering.process_printer.tty,
+                printer.stdout.?,
+                printer.tty,
                 formatter,
             );
         }
@@ -386,7 +438,7 @@ fn runFormatter(
     output_writer: anytype,
     output_tty: zlinter.ansi.Tty,
     formatter: *const zlinter.formatters.Formatter,
-) !u8 {
+) !RunResult {
     var arena = std.heap.ArenaAllocator.init(gpa);
     defer arena.deinit();
     const arena_allocator = arena.allocator();
@@ -396,15 +448,15 @@ fn runFormatter(
         try flattened.appendSlice(arena_allocator, results);
     }
 
-    const exit_code = exit_code: {
+    const run_result: RunResult = run_result: {
         for (flattened.items) |result| {
             for (result.problems) |problem| {
                 if (problem.severity == .@"error" and !problem.disabled_by_comment) {
-                    break :exit_code ExitCode.lint_error.int();
+                    break :run_result .lint_error;
                 }
             }
         }
-        break :exit_code ExitCode.success.int();
+        break :run_result .success;
     };
 
     try formatter.format(.{
@@ -414,7 +466,7 @@ fn runFormatter(
         .tty = output_tty,
     }, &output_writer);
 
-    return exit_code;
+    return run_result;
 }
 
 fn cmpFix(context: void, a: zlinter.results.LintProblemFix, b: zlinter.results.LintProblemFix) bool {
@@ -425,8 +477,8 @@ fn runFixes(
     gpa: std.mem.Allocator,
     dir: std.fs.Dir,
     file_lint_problems: std.StringArrayHashMap([]zlinter.results.LintResult),
-    output_writer: anytype,
-) !u8 {
+    printer: *zlinter.rendering.Printer,
+) !RunResult {
     var total_fixes: usize = 0;
     var total_disabled_by_comment: usize = 0;
 
@@ -495,8 +547,10 @@ fn runFixes(
             try output_slices.append(gpa, file_content[content_index..file_content.len]);
         }
 
-        try output_writer.print("{d} fixes applied to: {s}\n", .{
+        printer.print(.out, "{s}{d} fixes{s} applied to: {s}\n", .{
+            printer.tty.ansiOrEmpty(&.{.bold}),
             file_fixes,
+            printer.tty.ansiOrEmpty(&.{.reset}),
             file_path,
         });
 
@@ -513,16 +567,21 @@ fn runFixes(
         }
     }
 
-    try output_writer.print(
-        "Fixed {d} issues in {d} files!\n{d} issues disabled by comments.\n",
+    printer.print(
+        .out,
+        "{s}Fixed {d} issues{s} in {s}{d} files!{s}\n{d} issues disabled by comments.\n",
         .{
+            printer.tty.ansiOrEmpty(&.{.bold}),
             total_fixes,
+            printer.tty.ansiOrEmpty(&.{.reset}),
+            printer.tty.ansiOrEmpty(&.{.bold}),
             file_lint_problems.count(),
+            printer.tty.ansiOrEmpty(&.{.reset}),
             total_disabled_by_comment,
         },
     );
 
-    return ExitCode.success.int();
+    return .{ .exit_code = .success, .fixes_applied = total_fixes };
 }
 
 /// Allocates an AST error into a string.

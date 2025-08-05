@@ -56,6 +56,12 @@ build_info: BuildInfo = .default,
 /// Whether user has passed in the `--help` flag.
 help: bool = false,
 
+/// When using `--fix` repeat the this many passes of the code until there's
+/// no more fixes being applied.
+fix_passes: u8 = default_fix_passes,
+
+const default_fix_passes = 20;
+
 pub fn deinit(self: Args, allocator: std.mem.Allocator) void {
     if (self.zig_exe) |zig_exe|
         allocator.free(zig_exe);
@@ -142,6 +148,7 @@ pub fn allocParse(
         exclude_path_arg,
         rule_config_arg,
         stdin_arg,
+        fix_passes_arg,
     };
 
     const flags: std.StaticStringMap(State) = .initComptime(.{
@@ -160,6 +167,7 @@ pub fn allocParse(
         .{ "--stdin", .stdin_arg },
         .{ "--help", .help_arg },
         .{ "-h", .help_arg },
+        .{ "--fix-passes", .fix_passes_arg },
     });
 
     state: switch (State.parsing) {
@@ -264,6 +272,25 @@ pub fn allocParse(
             }});
             return error.InvalidArgs;
         },
+        .fix_passes_arg => {
+            index += 1;
+            if (index == args.len) {
+                rendering.process_printer.println(.err, "--fix-passes missing value", .{});
+                return error.InvalidArgs;
+            }
+
+            const error_message = "--fix-passes expects an int between 1 and 255";
+            lint_args.fix_passes = std.fmt.parseInt(u8, args[index], 10) catch {
+                rendering.process_printer.println(.err, error_message, .{});
+                return error.InvalidArgs;
+            };
+            if (lint_args.fix_passes == 0) {
+                rendering.process_printer.println(.err, error_message, .{});
+                return error.InvalidArgs;
+            }
+
+            continue :state State.parsing;
+        },
         .fix_arg => {
             lint_args.fix = true;
             continue :state State.parsing;
@@ -362,6 +389,7 @@ pub fn printHelp(printer: *rendering.Printer) void {
         .{ "--exclude", "Skip linting for these paths" },
         .{ "--filter", "Limit linting to the specified resolved paths" },
         .{ "--fix", "Automatically fix some issues (only use with source control)" },
+        .{ "--fix-passes", std.fmt.comptimePrint("Repeat fix this many times or until no more fixes are applied (Default {d})", .{default_fix_passes}) },
     };
 
     comptime var width: usize = 0;
@@ -747,6 +775,70 @@ test "allocParse with format arg" {
     try std.testing.expectEqualDeep(Args{
         .format = .default,
     }, args);
+}
+
+test "allocParse with min fix passes arg" {
+    var stdin_fbs = std.io.fixedBufferStream("");
+    const args = try allocParse(
+        testing.cliArgs(&.{ "--fix-passes", "1" }),
+        &.{},
+        std.testing.allocator,
+        stdin_fbs.reader(),
+    );
+    defer args.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualDeep(Args{
+        .fix_passes = 1,
+    }, args);
+}
+
+test "allocParse with max fix passes arg" {
+    var stdin_fbs = std.io.fixedBufferStream("");
+    const args = try allocParse(
+        testing.cliArgs(&.{ "--fix-passes", "255" }),
+        &.{},
+        std.testing.allocator,
+        stdin_fbs.reader(),
+    );
+    defer args.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualDeep(Args{
+        .fix_passes = 255,
+    }, args);
+}
+
+test "allocParse with fix passes missing arg" {
+    var stdin_fbs = std.io.fixedBufferStream("");
+
+    var stderr_sink = try rendering.process_printer.attachFakeStderrSink(std.testing.allocator);
+    defer stderr_sink.deinit();
+
+    try std.testing.expectError(error.InvalidArgs, allocParse(
+        testing.cliArgs(&.{"--fix-passes"}),
+        &.{},
+        std.testing.allocator,
+        stdin_fbs.reader(),
+    ));
+
+    try std.testing.expectEqualStrings("--fix-passes missing value\n", stderr_sink.output());
+}
+
+test "allocParse with invalid fix passes arg" {
+    inline for (&.{ "-1", "256", "a" }) |arg| {
+        var stdin_fbs = std.io.fixedBufferStream("");
+
+        var stderr_sink = try rendering.process_printer.attachFakeStderrSink(std.testing.allocator);
+        defer stderr_sink.deinit();
+
+        try std.testing.expectError(error.InvalidArgs, allocParse(
+            testing.cliArgs(&.{ "--fix-passes", arg }),
+            &.{},
+            std.testing.allocator,
+            stdin_fbs.reader(),
+        ));
+
+        try std.testing.expectEqualStrings("--fix-passes expects an int between 1 and 255\n", stderr_sink.output());
+    }
 }
 
 test "allocParse with rule arg" {
