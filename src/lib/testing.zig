@@ -210,7 +210,7 @@ pub const LintProblemExpectation = struct {
         writer.print("  .severity = .@\"{s}\",\n", .{@tagName(self.severity)});
         writer.print("  .slice = \"{s}\",\n", .{self.slice});
         writer.print("  .message = \"{s}\",\n", .{self.message});
-        writer.print("  .disabled_by_comment = {?},\n", .{self.disabled_by_comment});
+        writer.print("  .disabled_by_comment = {},\n", .{self.disabled_by_comment});
 
         if (self.fix) |fix| {
             writer.print("  .fix =\n", .{});
