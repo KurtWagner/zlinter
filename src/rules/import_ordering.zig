@@ -1,4 +1,4 @@
-//! Enforces a consistent ordering of @import statements in Zig source files.
+//! Enforces a consistent ordering of `@import` declarations in Zig source files.
 //!
 //! Maintaining a standardized import order improves readability and reduces
 //! merge conflicts.
