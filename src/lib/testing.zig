@@ -152,6 +152,33 @@ pub fn expectProblemsEqual(expected: []const LintProblem, actual: []LintProblem)
     };
 }
 
+/// Expectation for problems with "pretty" printing on error that can be
+/// copied back into assertions (test only)
+pub fn expectDeepEquals(T: type, expected: []const T, actual: []const T) !void {
+    assertTestOnly();
+
+    // TODO: Once we're 0.15.x plus can we just implement fmt methods and use `{f}`?
+    if (!std.meta.hasMethod(T, "debugPrint")) @compileError("Type " ++ @typeName(T) + " requires debugPrint method");
+
+    std.testing.expectEqualDeep(expected, actual) catch |e| {
+        switch (e) {
+            error.TestExpectedEqual => {
+                std.debug.print(
+                    \\--------------------------------------------------
+                    \\ Actual:
+                    \\--------------------------------------------------
+                    \\
+                , .{});
+
+                for (actual) |problem| problem.debugPrint(std.debug);
+                std.debug.print("--------------------------------------------------\n", .{});
+
+                return e;
+            },
+        }
+    };
+}
+
 /// Create empty files (test only)
 pub fn createFiles(dir: std.fs.Dir, file_paths: [][]const u8) !void {
     assertTestOnly();
@@ -167,11 +194,81 @@ inline fn assertTestOnly() void {
     comptime if (!builtin.is_test) @compileError("Test only");
 }
 
+pub const LintProblemExpectation = struct {
+    const Self = @This();
+
+    rule_id: []const u8,
+    severity: LintProblemSeverity,
+    slice: []const u8,
+
+    message: []const u8,
+    disabled_by_comment: bool = false,
+    fix: ?LintProblemFix = null,
+
+    pub fn init(problem: LintProblem, source: [:0]const u8) Self {
+        return .{
+            .rule_id = problem.rule_id,
+            .severity = problem.severity,
+            .slice = problem.sliceSource(source),
+            .message = problem.message,
+            .disabled_by_comment = problem.disabled_by_comment,
+            .fix = problem.fix,
+        };
+    }
+
+    pub fn debugPrint(self: Self, writer: anytype) void {
+        writer.print(".{{\n", .{});
+        writer.print("  .rule_id = \"{s}\",\n", .{self.rule_id});
+        writer.print("  .severity = .@\"{s}\",\n", .{@tagName(self.severity)});
+        writer.print("  .slice = \"{s}\",\n", .{self.slice});
+        writer.print("  .message = \"{s}\",\n", .{self.message});
+        writer.print("  .disabled_by_comment = {?},\n", .{self.disabled_by_comment});
+
+        if (self.fix) |fix| {
+            writer.print("  .fix =\n", .{});
+            fix.debugPrintWithIndent(writer, 4);
+        } else {
+            writer.print("  .fix = null,\n", .{});
+        }
+
+        writer.print("}},\n", .{});
+    }
+};
+
+/// Runs a given rule with given source input and then expects the actual
+/// results to match the problem expectations.
+pub fn testRunRule(
+    rule: LintRule,
+    source: [:0]const u8,
+    config: anytype,
+    expected: []const LintProblemExpectation,
+) !void {
+    var local_config = config;
+    var result = (try runRule(
+        rule,
+        paths.posix("path/to/test.zig"),
+        source,
+        .{ .config = &local_config },
+    ));
+    defer if (result) |*r| r.deinit(std.testing.allocator);
+
+    var actual = std.ArrayList(LintProblemExpectation).init(std.testing.allocator);
+    defer actual.deinit();
+
+    for (if (result) |r| r.problems else &.{}) |problem| {
+        try actual.append(LintProblemExpectation.init(problem, source));
+    }
+
+    try expectDeepEquals(LintProblemExpectation, expected, actual.items);
+}
+
 const builtin = @import("builtin");
 const std = @import("std");
 const LintContext = @import("session.zig").LintContext;
 const LintDocument = @import("session.zig").LintDocument;
 const LintRule = @import("rules.zig").LintRule;
+const LintProblemSeverity = @import("rules.zig").LintProblemSeverity;
 const LintProblem = @import("results.zig").LintProblem;
 const LintResult = @import("results.zig").LintResult;
+const LintProblemFix = @import("results.zig").LintProblemFix;
 const LintOptions = @import("session.zig").LintOptions;
