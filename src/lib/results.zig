@@ -379,7 +379,7 @@ pub const LintProblemFix = struct {
         self.debugPrintWithIndent(writer, 0);
     }
 
-    fn debugPrintWithIndent(self: @This(), writer: anytype, indent: usize) void {
+    pub fn debugPrintWithIndent(self: @This(), writer: anytype, indent: usize) void {
         var spaces: [80]u8 = @splat(' ');
         const indent_str = spaces[0..indent];
 
