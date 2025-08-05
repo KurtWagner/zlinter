@@ -386,7 +386,12 @@ pub const LintProblemFix = struct {
         writer.print("{s}.{{\n", .{indent_str});
         writer.print("{s}  .start = {d},\n", .{ indent_str, self.start });
         writer.print("{s}  .end = {d},\n", .{ indent_str, self.end });
-        writer.print("{s}  .text = \"{s}\",\n", .{ indent_str, self.text });
+
+        writer.print("{s}  .text = \n", .{
+            indent_str,
+        });
+        strings.debugPrintMultilineString(self.text, writer, indent + 2);
+        writer.print("\n{s},\n", .{indent_str});
         writer.print("{s}}},\n", .{indent_str});
     }
 };
@@ -394,3 +399,4 @@ pub const LintProblemFix = struct {
 const std = @import("std");
 const rules = @import("rules.zig");
 const comments = @import("comments.zig");
+const strings = @import("strings.zig");

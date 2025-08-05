@@ -220,7 +220,11 @@ pub const LintProblemExpectation = struct {
         writer.print(".{{\n", .{});
         writer.print("  .rule_id = \"{s}\",\n", .{self.rule_id});
         writer.print("  .severity = .@\"{s}\",\n", .{@tagName(self.severity)});
-        writer.print("  .slice = \"{s}\",\n", .{self.slice});
+
+        writer.print("  .slice = \n", .{});
+        strings.debugPrintMultilineString(self.slice, writer, 2);
+        writer.print("\n,\n", .{});
+
         writer.print("  .message = \"{s}\",\n", .{self.message});
         writer.print("  .disabled_by_comment = {},\n", .{self.disabled_by_comment});
 
@@ -272,3 +276,4 @@ const LintProblem = @import("results.zig").LintProblem;
 const LintResult = @import("results.zig").LintResult;
 const LintProblemFix = @import("results.zig").LintProblemFix;
 const LintOptions = @import("session.zig").LintOptions;
+const strings = @import("strings.zig");

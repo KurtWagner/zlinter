@@ -1,0 +1,5 @@
+.{
+    .order = .alphabetical_descending,
+    .severity = .@"error",
+    .allow_line_separated_chunks = false,
+}
