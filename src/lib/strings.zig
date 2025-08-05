@@ -71,4 +71,15 @@ test "normalizeIdentifierName" {
     }
 }
 
+pub fn debugPrintMultilineString(source: []const u8, writer: anytype, indent: usize) void {
+    var spaces: [80]u8 = @splat(' ');
+    const indent_str = spaces[0..indent];
+
+    var it = std.mem.splitScalar(u8, source, '\n');
+    if (it.next()) |first_line|
+        writer.print("{s}\\\\{s}", .{ indent_str, first_line });
+    while (it.next()) |line|
+        writer.print("\n{s}\\\\{s}", .{ indent_str, line });
+}
+
 const std = @import("std");

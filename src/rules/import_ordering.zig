@@ -6,6 +6,9 @@
 //! > [!WARNING]
 //! > The `import_ordering` rule is still under testing and development.
 
+// TODO: Add guard code for declarations appearing on same line - just prevent it
+// from crashing the lint process, really it shouldn't be happening.
+
 /// Config for import_ordering rule.
 pub const Config = struct {
     /// The severity (off, warning, error).
@@ -68,29 +71,32 @@ fn run(
         while (imports.removeMinOrNull()) |import| {
             if (previous) |p| {
                 const is_same_chunk = (p.last_line + 1) == import.first_line;
-                if (config.allow_line_separated_chunks) {
-                    if (is_same_chunk) {
-                        const order = config.order.cmp(import.decl_name, p.decl_name);
-                        if (order == .lt) {
-                            try lint_problems.append(.{
-                                .rule_id = rule.rule_id,
-                                .severity = config.severity,
-                                .start = .startOfNode(tree, import.decl_node),
-                                .end = .endOfNode(tree, import.decl_node),
-                                .message = try std.fmt.allocPrint(allocator, "Import '{s}' is not in {s} order", .{ import.decl_name, config.order.name() }),
-                            });
-                            continue :scopes;
-                        }
-                    }
-                } else if (!is_same_chunk) {
+
+                if (!config.allow_line_separated_chunks and !is_same_chunk) {
                     try lint_problems.append(.{
                         .rule_id = rule.rule_id,
                         .severity = config.severity,
                         .start = .startOfNode(tree, import.decl_node),
                         .end = .endOfNode(tree, import.decl_node),
                         .message = try std.fmt.allocPrint(allocator, "Import '{s}' should grouped with other imports", .{import.decl_name}),
+                        .fix = try swapNodesFix(doc, p.decl_node, import.decl_node, allocator),
                     });
                     continue :scopes;
+                }
+
+                if (is_same_chunk) {
+                    const order = config.order.cmp(import.decl_name, p.decl_name);
+                    if (order == .lt) {
+                        try lint_problems.append(.{
+                            .rule_id = rule.rule_id,
+                            .severity = config.severity,
+                            .start = .startOfNode(tree, import.decl_node),
+                            .end = .endOfNode(tree, import.decl_node),
+                            .message = try std.fmt.allocPrint(allocator, "Import '{s}' is not in {s} order", .{ import.decl_name, config.order.name() }),
+                            .fix = try swapNodesFix(doc, p.decl_node, import.decl_node, allocator),
+                        });
+                        continue :scopes;
+                    }
                 }
             }
             previous = import;
@@ -130,6 +136,38 @@ const ImportDecl = struct {
 fn deinitScopedImports(scoped_imports: *std.AutoArrayHashMap(std.zig.Ast.Node.Index, ImportsQueueLinesAscending)) void {
     for (scoped_imports.values()) |v| v.deinit();
     scoped_imports.deinit();
+}
+
+fn swapNodesFix(
+    doc: zlinter.session.LintDocument,
+    first: std.zig.Ast.Node.Index,
+    second: std.zig.Ast.Node.Index,
+    allocator: std.mem.Allocator,
+) error{OutOfMemory}!zlinter.results.LintProblemFix {
+    const tree = doc.handle.tree;
+    const source = tree.source;
+
+    const first_line_start = tree.tokenLocation(0, tree.firstToken(first)).line_start;
+    const second_line_start = tree.tokenLocation(0, tree.firstToken(second)).line_start;
+    const second_line_end = tree.tokenLocation(0, tree.lastToken(second)).line_end;
+
+    var text = try std.ArrayList(u8).initCapacity(allocator, second_line_start - first_line_start);
+    errdefer text.deinit();
+
+    if (source[second_line_end] == 0) {
+        try text.appendSlice(source[second_line_start..second_line_end]);
+        try text.append('\n');
+        try text.appendSlice(source[first_line_start .. second_line_start - 1]);
+    } else {
+        try text.appendSlice(source[second_line_start .. second_line_end + 1]);
+        try text.appendSlice(source[first_line_start..second_line_start]);
+    }
+
+    return .{
+        .text = try text.toOwnedSlice(),
+        .start = first_line_start,
+        .end = second_line_end + 1,
+    };
 }
 
 /// Returns declarations initialised as imports grouped by their parent (i.e., their scope).
@@ -258,15 +296,28 @@ test "order" {
         \\ const b = @import("b");
         \\ const c = @import("c");
     ,
-        Config{ .order = .alphabetical_descending },
+        Config{
+            .order = .alphabetical_descending,
+            .allow_line_separated_chunks = false,
+        },
         &.{
             .{
                 .rule_id = "import_ordering",
                 .severity = .warning,
-                .slice = "const b = @import(\"b\");",
+                .slice =
+                \\const b = @import("b");
+                ,
                 .message = "Import 'b' is not in reverse alphabetical order",
                 .disabled_by_comment = false,
-                .fix = null,
+                .fix = .{
+                    .start = 0,
+                    .end = 50,
+                    .text =
+                    \\ const b = @import("b");
+                    \\ const a = @import("a");
+                    \\
+                    ,
+                },
             },
         },
     );
@@ -278,16 +329,23 @@ test "order" {
         \\ const b = @import("b");
     ,
         Config{ .order = .alphabetical_ascending, .severity = .@"error" },
-        &.{
-            .{
-                .rule_id = "import_ordering",
-                .severity = .@"error",
-                .slice = "const b = @import(\"b\");",
-                .message = "Import 'b' is not in alphabetical order",
-                .disabled_by_comment = false,
-                .fix = null,
+        &.{.{
+            .rule_id = "import_ordering",
+            .severity = .@"error",
+            .slice =
+            \\const b = @import("b");
+            ,
+            .message = "Import 'b' is not in alphabetical order",
+            .disabled_by_comment = false,
+            .fix = .{
+                .start = 25,
+                .end = 75,
+                .text =
+                \\ const b = @import("b");
+                \\ const c = @import("c");
+                ,
             },
-        },
+        }},
     );
 
     try zlinter.testing.testRunRule(
@@ -315,10 +373,19 @@ test "order" {
             .{
                 .rule_id = "import_ordering",
                 .severity = .warning,
-                .slice = "const c = @import(\"c\");",
+                .slice =
+                \\const c = @import("c");
+                ,
                 .message = "Import 'c' is not in alphabetical order",
                 .disabled_by_comment = false,
-                .fix = null,
+                .fix = .{
+                    .start = 51,
+                    .end = 101,
+                    .text =
+                    \\ const c = @import("c");
+                    \\ const d = @import("d");
+                    ,
+                },
             },
         },
     );
@@ -335,10 +402,21 @@ test "order" {
             .{
                 .rule_id = "import_ordering",
                 .severity = .warning,
-                .slice = "const a = @import(\"a\");",
+                .slice =
+                \\const a = @import("a");
+                ,
                 .message = "Import 'a' is not in alphabetical order",
                 .disabled_by_comment = false,
-                .fix = null,
+                .fix = .{
+                    .start = 0,
+                    .end = 57,
+                    .text =
+                    \\ const a = @import("a");
+                    \\ const b = @import(
+                    \\   "b",
+                    \\ );
+                    ,
+                },
             },
         },
     );
@@ -363,26 +441,56 @@ test "order" {
             .{
                 .rule_id = "import_ordering",
                 .severity = .warning,
-                .slice = "const a_main = @import(\"a\");",
+                .slice =
+                \\const a_main = @import("a");
+                ,
                 .message = "Import 'a_main' is not in alphabetical order",
                 .disabled_by_comment = false,
-                .fix = null,
+                .fix = .{
+                    .start = 168,
+                    .end = 232,
+                    .text =
+                    \\   const a_main = @import("a");
+                    \\   const b_main = @import("b");
+                    \\
+                    ,
+                },
             },
             .{
                 .rule_id = "import_ordering",
                 .severity = .warning,
-                .slice = "const a_inner = @import(\"a\");",
+                .slice =
+                \\const a_inner = @import("a");
+                ,
                 .message = "Import 'a_inner' is not in alphabetical order",
                 .disabled_by_comment = false,
-                .fix = null,
+                .fix = .{
+                    .start = 79,
+                    .end = 145,
+                    .text =
+                    \\   const a_inner = @import("a");
+                    \\   const b_inner = @import("b");
+                    \\
+                    ,
+                },
             },
             .{
                 .rule_id = "import_ordering",
                 .severity = .warning,
-                .slice = "const a = @import(\"a\");",
+                .slice =
+                \\const a = @import("a");
+                ,
                 .message = "Import 'a' is not in alphabetical order",
                 .disabled_by_comment = false,
-                .fix = null,
+                .fix = .{
+                    .start = 0,
+                    .end = 50,
+                    .text =
+                    \\ const a = @import("a");
+                    \\ const b = @import("b");
+                    \\
+                    ,
+                },
             },
         },
     );
@@ -439,10 +547,22 @@ test "allow_line_separated_chunks" {
             .{
                 .rule_id = "import_ordering",
                 .severity = .warning,
-                .slice = "const a = @import(\"a\");",
+                .slice =
+                \\const a = @import("a");
+                ,
                 .message = "Import 'a' should grouped with other imports",
                 .disabled_by_comment = false,
-                .fix = null,
+                .fix = .{
+                    .start = 0,
+                    .end = 58,
+                    .text =
+                    \\ const a = @import("a");
+                    \\ const b = @import(
+                    \\   "b",
+                    \\ );
+                    \\
+                    ,
+                },
             },
         },
     );
@@ -458,10 +578,20 @@ test "allow_line_separated_chunks" {
             .{
                 .rule_id = "import_ordering",
                 .severity = .@"error",
-                .slice = "const b = @import(\"b\");",
+                .slice =
+                \\const b = @import("b");
+                ,
                 .message = "Import 'b' should grouped with other imports",
                 .disabled_by_comment = false,
-                .fix = null,
+                .fix = .{
+                    .start = 0,
+                    .end = 51,
+                    .text =
+                    \\ const b = @import("b");
+                    \\ const a = @import("a");
+                    \\
+                    ,
+                },
             },
         },
     );
