@@ -27,6 +27,7 @@ A **linter** is a tool that automatically checks source code for style issues, b
   - [field_naming](RULES.md#field_naming)
   - [file_naming](RULES.md#file_naming)
   - [function_naming](RULES.md#function_naming)
+  - [import_ordering](RULES.md#import_ordering)
   - [max_positional_args](RULES.md#max_positional_args)
   - [no_comment_out_code](RULES.md#no_comment_out_code)
   - [no_deprecated](RULES.md#no_deprecated)
@@ -102,7 +103,7 @@ hook it up to a build step, like `zig build lint`:
   ```shell
   zig build lint
   ```
- 
+
   You can also be specific with paths (see [command-line arguments](#command-line-arguments) for more options):
   
   ```shell

@@ -230,6 +230,36 @@ that return types and `camelCase` for others.
 
   * **Default:** `.{ .style = .title_case, .severity = .@"error", }`
 
+## `import_ordering`
+
+Enforces a consistent ordering of `@import` declarations in Zig source files.
+
+Maintaining a standardized import order improves readability and reduces
+merge conflicts.
+
+> [!WARNING]
+> The `import_ordering` rule is still under testing and development.
+
+**Config options:**
+
+* `severity`
+
+  * The severity (off, warning, error).
+
+  * **Default:** `.warning`
+
+* `order`
+
+  * The order that the imports appear in.
+
+  * **Default:** `.alphabetical_ascending`
+
+* `allow_line_separated_chunks`
+
+  * Whether or not the linter allows imports to be separated by blank lines (i.e., separate blocks), where each chunk needs to follow the linter rules or whether they must all follow as a single chunk.
+
+  * **Default:** `true`
+
 ## `max_positional_args`
 
 Enforces that a function does not define too many positional arguments.
