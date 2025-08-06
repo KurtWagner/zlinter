@@ -1,8 +1,8 @@
+<div align=center>
 
-<div>
-  <img align=left width="40" height="40" src="icon_128.png" alt="Zlinter icon">
-  <h1>Zlinter - Linter for Zig</h1>
-</div>
+<img width="64" height="64" src="icon_128.png" alt="Zlinter icon">
+
+# Zlinter - Linter for Zig
 
 [![Zig support](https://img.shields.io/badge/Zig-0.14.x%20%7C%20master-color?logo=zig&color=%23f3ab20)](http://github.com/kurtwagner/what-the-zig)
 [![linux](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml/badge.svg?branch=0.14.x)](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml)
@@ -10,11 +10,14 @@
 [![Coverage Status](https://coveralls.io/repos/github/KurtWagner/zlinter/badge.svg?branch=0.14.x)](https://coveralls.io/github/KurtWagner/zlinter?branch=0.14.x)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An extendable and customizable **Zig linter** (with [AST explorer](https://kurtwagner.github.io/zlinter/explorer/)) that is integrated from source into your `build.zig`.
+An extendable and customizable **Zig linter** (with [AST explorer](https://kurtwagner.github.io/zlinter/explorer/)) that is integrated from source into your`build.zig`.
 
-A **linter** is a tool that automatically checks source code for style issues, bugs, or patterns that may lead to errors, helping developers write cleaner and more reliable code.
+A **linter** is a tool that automatically checks source code for style issues, bugs, or patterns that may lead to errors,<br/> helping developers write cleaner and more reliable code.
+
+<br/>
 
 ![Screenshot](./screenshot.png)
+</div>
 
 ## Table of contents
 
