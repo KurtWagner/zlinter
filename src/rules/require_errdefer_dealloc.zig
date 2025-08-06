@@ -1,15 +1,26 @@
-//! Ensure that any allocation made within a function that can return an error
-//! is paired with errdefer, unless the resource is already being released in a
-//! defer block.
+//! > [!WARNING]
+//! > The `require_errdefer_dealloc` rule is still under testing and development.
+//! > It may not work as expected and may change without notice.
 //!
-//! This rule is not exhaustive. It makes a best-effort attempt to detect known
-//! object declarations that require cleanup, but a complete check is
-//! impractical at this level.
+//! Ensure that any allocation made within a function that can return an error
+//! is paired with `errdefer`, unless the resource is already being released in
+//! a `defer` block.
+//!
+//! **Why?**
+//!
+//! If a function returns an error, it's signaling a recoverable condition
+//! within the application's normal control flow. Failing to perform cleanup
+//! in these cases can lead to memory leaks.
 //!
 //! Caveats:
 //!
+//! * This rule is not exhaustive. It makes a best-effort attempt to detect known
+//!   object declarations that require cleanup, but a complete check is
+//!   impractical at this level. It currently only looks at std library containers
+//!   like `ArrayList` and `HashMap`.
+//!
 //! * This rule cannot reliably detect usage of fixed buffer allocators or
-//!   arenas; however, using errdefer blah.deinit(arena); in these cases is
+//!   arenas; however, using errdefer `array.deinit(arena);` in these cases is
 //!   generally harmless.
 //!
 
@@ -120,6 +131,8 @@ fn processBlock(
     }
 }
 
+// TODO: Write unit tests for helpers and consider whether some should be moved to ast
+
 const FieldCall = struct {
     symbol: []const u8,
 };
@@ -203,7 +216,8 @@ fn declRef(doc: zlinter.session.LintDocument, var_decl_node: std.zig.Ast.Node.In
 
     const init_node = zlinter.shims.NodeIndexShim.initOptional(var_decl.ast.init_node) orelse return null;
 
-    // TODO: Also allow ".empty" for unmanaged
+    // TODO: Cleanup this hackfest which is tightly coupled to std containers
+    // that are unmanaged (for empty) and managed calls with init(allocator).
     if (zlinter.shims.nodeTag(doc.handle.tree, init_node.toNodeIndex()) == .field_access) {
         const value = doc.handle.tree.tokenSlice(doc.handle.tree.lastToken(init_node.toNodeIndex()));
         if (!std.mem.eql(u8, value, "empty")) {
@@ -260,13 +274,17 @@ fn declRef(doc: zlinter.session.LintDocument, var_decl_node: std.zig.Ast.Node.In
                     } else if (first_token > 0 and tree.tokens.items(.tag)[first_token - 1] == .keyword_return) {
                         const doc_scope = try scope_handle.handle.getDocumentScope();
 
-                        // 0.15
-                        // const function_scope = zlinter.zls.Analyser.innermostFunctionScopeAtIndex(doc_scope, tree.tokenStart(first_token - 1), .initOne(.function)).unwrap() orelse return null;
-
-                        const function_scope = zlinter.zls.Analyser.innermostFunctionScopeAtIndex(
-                            doc_scope,
-                            tree.tokens.items(.start)[first_token - 1],
-                        ).unwrap() orelse return null;
+                        const function_scope = switch (zlinter.version.zig) {
+                            .@"0.14" => zlinter.zls.Analyser.innermostFunctionScopeAtIndex(
+                                doc_scope,
+                                tree.tokens.items(.start)[first_token - 1],
+                            ).unwrap(),
+                            .@"0.15" => zlinter.zls.Analyser.innermostScopeAtIndexWithTag(
+                                doc_scope,
+                                tree.tokenStart(first_token - 1),
+                                .initOne(.function),
+                            ).unwrap(),
+                        } orelse return null;
 
                         var fn_proto_buffer: [1]std.zig.Ast.Node.Index = undefined;
                         const func = tree.fullFnProto(&fn_proto_buffer, doc_scope.getScopeAstNode(function_scope).?).?;

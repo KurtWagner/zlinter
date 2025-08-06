@@ -1,3 +1,7 @@
+//! > [!WARNING]
+//! > The `import_ordering` rule is still under testing and development. It may
+//! > not work as expected and may change without notice.
+//!
 //! Enforces a consistent ordering of `@import` declarations in Zig source files.
 //!
 //! Maintaining a standardized import order improves readability and reduces
@@ -7,8 +11,6 @@
 //!
 //! **Auto fixing is an experimental feature so only use it if you use source control - always back up your code first!**
 //!
-//! > [!WARNING]
-//! > The `import_ordering` rule is still under testing and development.
 
 // TODO: Add guard code for declarations appearing on same line - just prevent it
 // from crashing the lint process, really it shouldn't be happening.
@@ -117,6 +119,8 @@ fn run(
     else
         null;
 }
+
+// TODO: Write unit tests for helpers and consider whether some should be moved to ast
 
 const ImportsQueueLinesAscending = std.PriorityDequeue(
     ImportDecl,
