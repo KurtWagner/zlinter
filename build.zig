@@ -27,6 +27,7 @@ pub const BuiltinLintRule = enum {
     no_swallow_error,
     no_panic,
     require_doc_comment,
+    require_errdefer_dealloc,
 };
 
 const BuildRuleSource = union(enum) {
@@ -347,6 +348,7 @@ pub fn build(b: *std.Build) void {
                 buildBuiltinRule(b, .no_undefined, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .no_literal_only_bool_expression, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .require_doc_comment, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+                buildBuiltinRule(b, .require_errdefer_dealloc, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .no_hidden_allocations, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .no_swallow_error, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .no_comment_out_code, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
