@@ -5,6 +5,13 @@
 //! This rule is not exhaustive. It makes a best-effort attempt to detect known
 //! object declarations that require cleanup, but a complete check is
 //! impractical at this level.
+//!
+//! Caveats:
+//!
+//! * This rule cannot reliably detect usage of fixed buffer allocators or
+//!   arenas; however, using errdefer blah.deinit(arena); in these cases is
+//!   generally harmless.
+//!
 
 /// Config for require_errdefer_dealloc rule.
 pub const Config = struct {
@@ -95,9 +102,11 @@ fn processBlock(
         if (try declRef(doc, child_node)) |decl_ref| {
             if (decl_ref.hasDeinit())
                 try cleanup_symbols.put(try gpa.dupe(u8, decl_ref.var_name), child_node);
-        } else if (deferBlock(doc, child_node)) |defer_block| {
+        } else if (try deferBlock(doc, child_node, gpa)) |defer_block| {
+            defer defer_block.deinit(gpa);
+
             for (defer_block.children) |defer_block_child| {
-                const cleanup_call = isCall(doc, defer_block_child, &.{"deinit"}) orelse continue;
+                const cleanup_call = isFieldCall(doc, defer_block_child, &.{"deinit"}) orelse continue;
                 if (cleanup_symbols.fetchRemove(cleanup_call.symbol)) |e| gpa.free(e.key);
             }
         } else if (isBlock(tree, child_node)) {
@@ -111,17 +120,21 @@ fn processBlock(
     }
 }
 
-const Call = struct {
+const FieldCall = struct {
     symbol: []const u8,
 };
 
-fn isCall(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index, comptime names: []const []const u8) ?Call {
+fn isFieldCall(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index, comptime names: []const []const u8) ?FieldCall {
     const tree = doc.handle.tree;
 
     var call_buffer: [1]std.zig.Ast.Node.Index = undefined;
     const call = tree.fullCall(&call_buffer, node) orelse return null;
 
     const data = zlinter.shims.nodeData(tree, call.ast.fn_expr);
+
+    // We only care about field access calls (e.g., calling `deinit` on an object)
+    // Otherwise calls can also be identifiers!
+    if (zlinter.shims.nodeTag(tree, call.ast.fn_expr) != .field_access) return null;
 
     const field_node, const field_name = switch (zlinter.version.zig) {
         .@"0.14" => .{ data.lhs, data.rhs },
@@ -308,9 +321,13 @@ fn fnProtoReturnsError(tree: std.zig.Ast, fn_proto: std.zig.Ast.full.FnProto) bo
 /// `errdefer` and `defer` calls
 const DeferBlock = struct {
     children: []const std.zig.Ast.Node.Index,
+
+    fn deinit(self: DeferBlock, allocator: std.mem.Allocator) void {
+        allocator.free(self.children);
+    }
 };
 
-fn deferBlock(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index) ?DeferBlock {
+fn deferBlock(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index, allocator: std.mem.Allocator) !?DeferBlock {
     const tree = doc.handle.tree;
     if (!isDeferBlock(tree, node)) return null;
 
@@ -321,9 +338,9 @@ fn deferBlock(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index) ?
     };
 
     if (isBlock(tree, exp_node)) {
-        return .{ .children = doc.lineage.items(.children)[exp_node] orelse &.{} };
+        return .{ .children = try allocator.dupe(std.zig.Ast.Node.Index, doc.lineage.items(.children)[exp_node] orelse &.{}) };
     } else {
-        return .{ .children = &.{exp_node} };
+        return .{ .children = try allocator.dupe(std.zig.Ast.Node.Index, &.{exp_node}) };
     }
 }
 
