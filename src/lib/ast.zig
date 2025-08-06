@@ -112,7 +112,137 @@ pub fn iterateChildren(
     }
 }
 
+/// `errdefer` and `defer` calls
+pub const DeferBlock = struct {
+    children: []const std.zig.Ast.Node.Index,
+
+    pub fn deinit(self: DeferBlock, allocator: std.mem.Allocator) void {
+        allocator.free(self.children);
+    }
+};
+
+pub fn deferBlock(doc: session.LintDocument, node: std.zig.Ast.Node.Index, allocator: std.mem.Allocator) !?DeferBlock {
+    const tree = doc.handle.tree;
+
+    const data = shims.nodeData(tree, node);
+    const exp_node =
+        switch (shims.nodeTag(tree, node)) {
+            .@"errdefer" => switch (version.zig) {
+                .@"0.14" => data.rhs,
+                .@"0.15" => data.opt_token_and_node[1],
+            },
+            .@"defer" => switch (version.zig) {
+                .@"0.14" => data.rhs,
+                .@"0.15" => data.node,
+            },
+            else => return null,
+        };
+
+    if (isBlock(tree, exp_node)) {
+        return .{ .children = try allocator.dupe(std.zig.Ast.Node.Index, doc.lineage.items(.children)[shims.NodeIndexShim.init(exp_node).index] orelse &.{}) };
+    } else {
+        return .{ .children = try allocator.dupe(std.zig.Ast.Node.Index, &.{exp_node}) };
+    }
+}
+
+pub fn isBlock(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) bool {
+    return switch (shims.nodeTag(tree, node)) {
+        .block_two, .block_two_semicolon, .block, .block_semicolon => true,
+        else => false,
+    };
+}
+
+test "deferBlock - has expected children" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    inline for (&.{
+        .{
+            \\defer {}
+            ,
+            &.{},
+        },
+        .{
+            \\errdefer {}
+            ,
+            &.{},
+        },
+        .{
+            \\defer me.deinit();
+            ,
+            &.{"me.deinit()"},
+        },
+        .{
+            \\defer {
+            \\  me.run();
+            \\  me.deinit(arena);
+            \\}
+            ,
+            &.{ "me.run()", "me.deinit(arena)" },
+        },
+        .{
+            \\errdefer me.deinit();
+            ,
+            &.{"me.deinit()"},
+        },
+        .{
+            \\errdefer {
+            \\  me.run();
+            \\  me.deinit(arena);
+            \\}
+            ,
+            &.{ "me.run()", "me.deinit(arena)" },
+        },
+        .{
+            \\errdefer |e| me.deinit();
+            ,
+            &.{"me.deinit()"},
+        },
+        .{
+            \\errdefer |err| {
+            \\  me.run();
+            \\  me.deinit(arena);
+            \\}
+            ,
+            &.{ "me.run()", "me.deinit(arena)" },
+        },
+    }) |tuple| {
+        const source, const expected = tuple;
+        defer _ = arena.reset(.retain_capacity);
+
+        var ctx: session.LintContext = undefined;
+        try ctx.init(.{}, std.testing.allocator);
+        defer ctx.deinit();
+
+        var tmp = std.testing.tmpDir(.{});
+        defer tmp.cleanup();
+
+        var doc = (try testing.loadFakeDocument(
+            &ctx,
+            tmp.dir,
+            "test.zig",
+            "fn main() void {\n" ++ source ++ "\n}",
+            arena.allocator(),
+        )).?;
+        defer doc.deinit(ctx.gpa);
+
+        const decl_ref = try deferBlock(
+            doc,
+            try testing.expectSingleNodeOfTag(doc.handle.tree, &.{ .@"defer", .@"errdefer" }),
+            std.testing.allocator,
+        );
+        defer if (decl_ref) |d| d.deinit(std.testing.allocator);
+
+        testing.expectNodeSlices(expected, doc.handle.tree, decl_ref.?.children) catch |e| {
+            std.debug.print("Failed source: '{s}'\n", .{source});
+            return e;
+        };
+    }
+}
+
 const std = @import("std");
 const zls = @import("zls");
 const shims = @import("shims.zig");
 const version = @import("version.zig");
+const testing = @import("testing.zig");
+const session = @import("session.zig");
