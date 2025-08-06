@@ -622,7 +622,7 @@ in your issue tracker so it's visible, prioritized and won't be forgotten.
 
 * `exclude_if_contains_issue_number`
 
-  * Exclude todo comments that contain a `#[0-9]+` in a word token or nested in the todo suffix. For example, `// TODO(http://my-issue-tracker.com/10): <info>` or `// TODO: Fix http://my-issue-tracker.com/10`
+  * Exclude todo comments that contain a `#[0-9]+` in a word token or nested in the todo suffix. For example, `// TODO(#10): <info>` or `// TODO: Fix #10`
 
   * **Default:** `true`
 
@@ -737,7 +737,7 @@ Caveats:
   like `ArrayList` and `HashMap`.
 
 * This rule cannot reliably detect usage of fixed buffer allocators or
-  arenas; however, using errdefer `array.deinit(arena);` in these cases is
+  arenas; however, using `errdefer array.deinit(arena);` in these cases is
   generally harmless.
 
 **Config options:**
