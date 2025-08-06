@@ -1,6 +1,6 @@
 <div align=center>
 
-<img width="64" height="64" src="icon_128.png" alt="Zlinter icon">
+<img width="128" height="128" src="icon_512.png" alt="Zlinter icon">
 
 # Zlinter - Linter for Zig
 
