@@ -13,8 +13,7 @@ pub const Config = struct {
     severity: zlinter.rules.LintProblemSeverity = .warning,
 
     /// Exclude todo comments that contain a `#[0-9]+` in a word token or nested in
-    /// the todo suffix. For example, `// TODO(http://my-issue-tracker.com/10): <info>`
-    /// or `// TODO: Fix http://my-issue-tracker.com/10`
+    /// the todo suffix. For example, `// TODO(#10): <info>` or `// TODO: Fix #10`
     exclude_if_contains_issue_number: bool = true,
 
     /// Exclude todo comments that contain a url in a word token or nested in

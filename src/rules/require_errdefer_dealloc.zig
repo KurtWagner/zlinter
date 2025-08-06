@@ -20,7 +20,7 @@
 //!   like `ArrayList` and `HashMap`.
 //!
 //! * This rule cannot reliably detect usage of fixed buffer allocators or
-//!   arenas; however, using errdefer `array.deinit(arena);` in these cases is
+//!   arenas; however, using `errdefer array.deinit(arena);` in these cases is
 //!   generally harmless.
 //!
 
