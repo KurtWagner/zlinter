@@ -31,13 +31,11 @@ fn run(
     options: zlinter.session.LintOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
-    _ = config;
-    _ = rule;
-
-    var lint_problems = std.ArrayList(zlinter.results.LintProblem).init(allocator);
-    defer lint_problems.deinit();
 
     const tree = doc.handle.tree;
+
+    var problem_nodes = std.ArrayList(std.zig.Ast.Node.Index).init(allocator);
+    defer problem_nodes.deinit();
 
     const root: zlinter.shims.NodeIndexShim = .root;
     var it = try doc.nodeLineageIterator(root, allocator);
@@ -51,23 +49,20 @@ fn run(
 
         if (!fnProtoReturnsError(tree, fn_decl.proto)) continue :nodes;
 
-        for (doc.lineage.items(.children)[fn_decl.block] orelse &.{}) |child_node| {
-            // TODO: Nested block
-            if (try declRef(doc, child_node)) |decl_ref| {
-                if (decl_ref.hasDeinit())
-                    std.debug.print("Reference: {s} {s}\n", .{ decl_ref.name, decl_ref.uri });
-            } else if (deferBlock(doc, child_node)) |defer_block| {
-                for (defer_block.children) |defer_block_child| {
-                    std.debug.print("Defer - {s}\n", .{tree.getNodeSource(defer_block_child)});
-                }
-            } else {
-                const tag = zlinter.shims.nodeTag(tree, child_node);
-                switch (tag) {
-                    .@"errdefer", .@"defer" => {},
-                    else => {},
-                }
-            }
-        }
+        try processBlock(doc, fn_decl.block, &problem_nodes, allocator);
+    }
+
+    var lint_problems = std.ArrayList(zlinter.results.LintProblem).init(allocator);
+    defer lint_problems.deinit();
+
+    for (problem_nodes.items) |node| {
+        try lint_problems.append(.{
+            .rule_id = rule.rule_id,
+            .severity = config.severity,
+            .start = .startOfNode(tree, node),
+            .end = .endOfNode(tree, node),
+            .message = try std.fmt.allocPrint(allocator, "Missing `errdefer` cleanup", .{}),
+        });
     }
 
     return if (lint_problems.items.len > 0)
@@ -80,7 +75,75 @@ fn run(
         null;
 }
 
+fn processBlock(
+    doc: zlinter.session.LintDocument,
+    block_node: std.zig.Ast.Node.Index,
+    problems: *std.ArrayList(std.zig.Ast.Node.Index),
+    gpa: std.mem.Allocator,
+) !void {
+    const tree = doc.handle.tree;
+
+    var cleanup_symbols: std.StringHashMap(std.zig.Ast.Node.Index) = .init(gpa);
+    defer {
+        var it = cleanup_symbols.keyIterator();
+        while (it.next()) |k| gpa.free(k.*);
+        cleanup_symbols.deinit();
+    }
+
+    for (doc.lineage.items(.children)[block_node] orelse &.{}) |child_node| {
+        if (try declRef(doc, child_node)) |decl_ref| {
+            if (decl_ref.hasDeinit())
+                try cleanup_symbols.put(try gpa.dupe(u8, decl_ref.var_name), child_node);
+        } else if (deferBlock(doc, child_node)) |defer_block| {
+            for (defer_block.children) |defer_block_child| {
+                const cleanup_call = isCall(doc, defer_block_child, &.{"deinit"}) orelse continue;
+                if (cleanup_symbols.fetchRemove(cleanup_call.symbol)) |e| gpa.free(e.key);
+            }
+        } else if (isBlock(tree, child_node)) {
+            try processBlock(doc, child_node, problems, gpa);
+        }
+    }
+
+    var leftover_it = cleanup_symbols.valueIterator();
+    while (leftover_it.next()) |node| {
+        try problems.append(node.*);
+    }
+}
+
+const Call = struct {
+    symbol: []const u8,
+};
+
+fn isCall(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index, comptime names: []const []const u8) ?Call {
+    const tree = doc.handle.tree;
+
+    var call_buffer: [1]std.zig.Ast.Node.Index = undefined;
+    const call = tree.fullCall(&call_buffer, node) orelse return null;
+
+    const data = zlinter.shims.nodeData(tree, call.ast.fn_expr);
+
+    const field_node, const field_name = switch (zlinter.version.zig) {
+        .@"0.14" => .{ data.lhs, data.rhs },
+        .@"0.15" => .{ data.node_and_token[0], data.node_and_token[1] },
+    };
+
+    if (zlinter.shims.nodeTag(tree, field_node) != .identifier) return null;
+
+    const field_name_slice = tree.tokenSlice(field_name);
+    var matches = false;
+    for (names) |name| {
+        if (std.mem.eql(u8, name, field_name_slice)) {
+            matches = true;
+            break;
+        }
+    }
+    if (!matches) return null;
+
+    return .{ .symbol = tree.tokenSlice(zlinter.shims.nodeMainToken(tree, field_node)) };
+}
+
 const DeclRef = struct {
+    var_name: []const u8,
     name: []const u8,
     uri: []const u8,
 
@@ -122,13 +185,37 @@ const DeclRef = struct {
 };
 
 fn declRef(doc: zlinter.session.LintDocument, var_decl_node: std.zig.Ast.Node.Index) !?DeclRef {
-    switch (doc.handle.tree.nodes.items(.tag)[var_decl_node]) {
-        .global_var_decl, .local_var_decl, .aligned_var_decl, .simple_var_decl => {},
-        else => return null,
+    const var_decl = doc.handle.tree.fullVarDecl(var_decl_node) orelse return null;
+
+    const init_node = zlinter.shims.NodeIndexShim.initOptional(var_decl.ast.init_node) orelse return null;
+
+    // TODO: Also allow ".empty" for unmanaged
+    if (zlinter.shims.nodeTag(doc.handle.tree, init_node.toNodeIndex()) == .field_access) {
+        const value = doc.handle.tree.tokenSlice(doc.handle.tree.lastToken(init_node.toNodeIndex()));
+        if (!std.mem.eql(u8, value, "empty")) {
+            return null;
+        }
+    } else if (zlinter.shims.nodeTag(doc.handle.tree, init_node.toNodeIndex()) == .enum_literal) {
+        const value = doc.handle.tree.tokenSlice(zlinter.shims.nodeMainToken(doc.handle.tree, init_node.toNodeIndex()));
+        if (!std.mem.eql(u8, value, "empty")) {
+            return null;
+        }
+    } else {
+        var call_buffer: [1]std.zig.Ast.Node.Index = undefined;
+        if (doc.handle.tree.fullCall(&call_buffer, init_node.toNodeIndex())) |call_fn| {
+            if (zlinter.shims.nodeTag(doc.handle.tree, call_fn.ast.fn_expr) == .field_access) {
+                if (!std.mem.eql(u8, doc.handle.tree.tokenSlice(doc.handle.tree.lastToken(call_fn.ast.fn_expr)), "init")) {
+                    return null;
+                }
+            } else {
+                return null;
+            }
+        } else {
+            return null;
+        }
     }
 
     const var_decl_type = try doc.analyser.resolveTypeOfNode(.{ .handle = doc.handle, .node = var_decl_node }) orelse return null;
-
     switch (var_decl_type.data) {
         .container => |scope_handle| {
             const node = scope_handle.toNode();
@@ -152,6 +239,7 @@ fn declRef(doc: zlinter.session.LintDocument, var_decl_node: std.zig.Ast.Node.In
                             str_token = first_token - 4;
                         }
                         return .{
+                            .var_name = doc.handle.tree.tokenSlice(var_decl.ast.mut_token + 1),
                             .name = tree.tokenSlice(str_token),
                             .uri = scope_handle.handle.uri,
                         };
@@ -170,6 +258,7 @@ fn declRef(doc: zlinter.session.LintDocument, var_decl_node: std.zig.Ast.Node.In
                         const func = tree.fullFnProto(&fn_proto_buffer, doc_scope.getScopeAstNode(function_scope).?).?;
 
                         return .{
+                            .var_name = doc.handle.tree.tokenSlice(var_decl.ast.mut_token + 1),
                             .name = tree.tokenSlice(func.name_token orelse return null),
                             .uri = scope_handle.handle.uri,
                         };
