@@ -31,6 +31,7 @@ fn run(
     options: zlinter.session.LintOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+    if (config.severity == .off) return null;
 
     const tree = doc.handle.tree;
 
