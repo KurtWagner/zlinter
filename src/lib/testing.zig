@@ -84,6 +84,58 @@ pub fn expectContainsExactlyStrings(expected: []const []const u8, actual: []cons
     }
 }
 
+/// Test that asserts an array of node indexes match another by using node source
+/// slices to make the assertion more human readable.
+///
+/// This assumes that node sources are unique, which should be the case for unit
+/// tests.
+pub fn expectNodeSlices(
+    expected: []const []const u8,
+    tree: std.zig.Ast,
+    actual: []const std.zig.Ast.Node.Index,
+) !void {
+    assertTestOnly();
+
+    if (expected.len != actual.len) {
+        std.debug.print("Expected {d} nodes, got {d}\n", .{ expected.len, actual.len });
+        return error.TestExpectedEqual;
+    }
+
+    for (expected, 0..) |expected_slice, i| {
+        const actual_slice = tree.getNodeSource(actual[i]);
+
+        if (!std.mem.eql(u8, actual_slice, expected_slice)) {
+            std.debug.print("Mismatch at index {d}:\n", .{i});
+            std.debug.print("  Expected: \"{s}\"\n", .{expected_slice});
+            std.debug.print("    Actual: \"{s}\"\n", .{actual_slice});
+            return error.TestExpectedEqual;
+        }
+    }
+}
+
+/// Expects and returns a the single node matching given tag(s)
+///
+/// This is to encourage smaller unit tests and to ensure that the order does
+/// not matter when asserting. Alternatively we add a method that returns the
+/// first, which would walk the tree to ensure it finds them in the most logical
+/// order.
+pub fn expectSingleNodeOfTag(tree: std.zig.Ast, comptime tags: []const std.zig.Ast.Node.Tag) !std.zig.Ast.Node.Index {
+    assertTestOnly();
+
+    var found: ?std.zig.Ast.Node.Index = null;
+    var i = NodeIndexShim.root;
+    while (i.index < tree.nodes.len) : (i.index += 1) {
+        inline for (tags) |tag| {
+            if (nodeTag(tree, i.toNodeIndex()) == tag) {
+                if (found != null) return error.TestExpectedSingleNodeTag;
+                found = i.toNodeIndex();
+            }
+        }
+    }
+
+    return found orelse error.TestExpectedSingleNodeTag;
+}
+
 /// Builds and runs a rule with fake file name and content (test only)
 pub fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8, options: LintOptions) !?LintResult {
     assertTestOnly();
@@ -276,4 +328,6 @@ const LintProblem = @import("results.zig").LintProblem;
 const LintResult = @import("results.zig").LintResult;
 const LintProblemFix = @import("results.zig").LintProblemFix;
 const LintOptions = @import("session.zig").LintOptions;
+const NodeIndexShim = @import("shims.zig").NodeIndexShim;
+const nodeTag = @import("shims.zig").nodeTag;
 const strings = @import("strings.zig");

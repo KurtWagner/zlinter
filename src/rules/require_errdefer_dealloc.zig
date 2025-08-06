@@ -115,14 +115,14 @@ fn processBlock(
         if (try declRef(doc, child_node)) |decl_ref| {
             if (decl_ref.hasDeinit())
                 try cleanup_symbols.put(try gpa.dupe(u8, decl_ref.var_name), child_node);
-        } else if (try deferBlock(doc, child_node, gpa)) |defer_block| {
+        } else if (try zlinter.ast.deferBlock(doc, child_node, gpa)) |defer_block| {
             defer defer_block.deinit(gpa);
 
             for (defer_block.children) |defer_block_child| {
                 const cleanup_call = isFieldCall(doc, defer_block_child, &.{"deinit"}) orelse continue;
                 if (cleanup_symbols.fetchRemove(cleanup_call.symbol)) |e| gpa.free(e.key);
             }
-        } else if (isBlock(tree, child_node)) {
+        } else if (zlinter.ast.isBlock(tree, child_node)) {
             try processBlock(doc, child_node, problems, gpa);
         }
     }
@@ -339,46 +339,6 @@ fn fnProtoReturnsError(tree: std.zig.Ast, fn_proto: std.zig.Ast.full.FnProto) bo
     return switch (tag) {
         .error_union => true,
         else => tree.tokens.items(.tag)[tree.firstToken(return_node.toNodeIndex()) - 1] == .bang,
-    };
-}
-
-/// `errdefer` and `defer` calls
-const DeferBlock = struct {
-    children: []const std.zig.Ast.Node.Index,
-
-    fn deinit(self: DeferBlock, allocator: std.mem.Allocator) void {
-        allocator.free(self.children);
-    }
-};
-
-fn deferBlock(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index, allocator: std.mem.Allocator) !?DeferBlock {
-    const tree = doc.handle.tree;
-
-    const data = zlinter.shims.nodeData(tree, node);
-    const exp_node =
-        switch (zlinter.shims.nodeTag(tree, node)) {
-            .@"errdefer" => switch (zlinter.version.zig) {
-                .@"0.14" => data.rhs,
-                .@"0.15" => data.opt_token_and_node[1],
-            },
-            .@"defer" => switch (zlinter.version.zig) {
-                .@"0.14" => data.rhs,
-                .@"0.15" => data.node,
-            },
-            else => return null,
-        };
-
-    if (isBlock(tree, exp_node)) {
-        return .{ .children = try allocator.dupe(std.zig.Ast.Node.Index, doc.lineage.items(.children)[zlinter.shims.NodeIndexShim.init(exp_node).index] orelse &.{}) };
-    } else {
-        return .{ .children = try allocator.dupe(std.zig.Ast.Node.Index, &.{exp_node}) };
-    }
-}
-
-fn isBlock(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) bool {
-    return switch (zlinter.shims.nodeTag(tree, node)) {
-        .block_two, .block_two_semicolon, .block, .block_semicolon => true,
-        else => false,
     };
 }
 
