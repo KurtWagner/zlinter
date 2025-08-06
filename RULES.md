@@ -232,6 +232,10 @@ that return types and `camelCase` for others.
 
 ## `import_ordering`
 
+> [!WARNING]
+> The `import_ordering` rule is still under testing and development. It may
+> not work as expected and may change without notice.
+
 Enforces a consistent ordering of `@import` declarations in Zig source files.
 
 Maintaining a standardized import order improves readability and reduces
@@ -240,9 +244,6 @@ merge conflicts.
 `import_ordering` supports auto fixes with the `--fix` flag. It may take multiple runs with `--fix` to fix all places.
 
 **Auto fixing is an experimental feature so only use it if you use source control - always back up your code first!**
-
-> [!WARNING]
-> The `import_ordering` rule is still under testing and development.
 
 **Config options:**
 
@@ -717,6 +718,41 @@ otherwise simple APIs.
   * The severity when missing doc comments on top of the file (off, warning, error).
 
   * **Default:** `.off`
+
+## `require_errdefer_dealloc`
+
+> [!WARNING]
+> The `require_errdefer_dealloc` rule is still under testing and development.
+> It may not work as expected and may change without notice.
+
+Ensure that any allocation made within a function that can return an error
+is paired with `errdefer`, unless the resource is already being released in
+a `defer` block.
+
+**Why?**
+
+If a function returns an error, it's signaling a recoverable condition
+within the application's normal control flow. Failing to perform cleanup
+in these cases can lead to memory leaks.
+
+Caveats:
+
+* This rule is not exhaustive. It makes a best-effort attempt to detect known
+  object declarations that require cleanup, but a complete check is
+  impractical at this level. It currently only looks at std library containers
+  like `ArrayList` and `HashMap`.
+
+* This rule cannot reliably detect usage of fixed buffer allocators or
+  arenas; however, using errdefer `array.deinit(arena);` in these cases is
+  generally harmless.
+
+**Config options:**
+
+* `severity`
+
+  * The severity (off, warning, error).
+
+  * **Default:** `.warning`
 
 ## `switch_case_ordering`
 
