@@ -24,6 +24,8 @@
 //!   generally harmless.
 //!
 
+// TODO(#48): Add integration tests
+
 /// Config for require_errdefer_dealloc rule.
 pub const Config = struct {
     /// The severity (off, warning, error).
@@ -131,7 +133,7 @@ fn processBlock(
     }
 }
 
-// TODO: Write unit tests for helpers and consider whether some should be moved to ast
+// TODO(#48): Write unit tests for helpers and consider whether some should be moved to ast
 
 const FieldCall = struct {
     symbol: []const u8,
@@ -216,7 +218,7 @@ fn declRef(doc: zlinter.session.LintDocument, var_decl_node: std.zig.Ast.Node.In
 
     const init_node = zlinter.shims.NodeIndexShim.initOptional(var_decl.ast.init_node) orelse return null;
 
-    // TODO: Cleanup this hackfest which is tightly coupled to std containers
+    // TODO(#48): Cleanup this hackfest which is tightly coupled to std containers
     // that are unmanaged (for empty) and managed calls with init(allocator).
     if (zlinter.shims.nodeTag(doc.handle.tree, init_node.toNodeIndex()) == .field_access) {
         const value = doc.handle.tree.tokenSlice(doc.handle.tree.lastToken(init_node.toNodeIndex()));

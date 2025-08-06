@@ -12,7 +12,7 @@
 //! **Auto fixing is an experimental feature so only use it if you use source control - always back up your code first!**
 //!
 
-// TODO: Add guard code for declarations appearing on same line - just prevent it
+// TODO(#52): Add guard code for declarations appearing on same line - just prevent it
 // from crashing the lint process, really it shouldn't be happening.
 
 /// Config for import_ordering rule.
@@ -28,11 +28,11 @@ pub const Config = struct {
     /// linter rules or whether they must all follow as a single chunk.
     allow_line_separated_chunks: bool = true,
 
-    // TODO: Decide whether or not to implement this:
+    // TODO(#52): Decide whether or not to implement this:
     // /// Whether imports should be at the bottom or top of their parent scope.
     // location: enum { top, bottom, off } = .off,
 
-    // TODO: Decide whether of not to implement this
+    // TODO(#52): Decide whether of not to implement this
     // /// Whether or not to group the imports by their visibility or source.
     // group: struct {
     //     /// public and private separately.
@@ -120,7 +120,7 @@ fn run(
         null;
 }
 
-// TODO: Write unit tests for helpers and consider whether some should be moved to ast
+// TODO(#52): Write unit tests for helpers and consider whether some should be moved to ast
 
 const ImportsQueueLinesAscending = std.PriorityDequeue(
     ImportDecl,
@@ -261,7 +261,7 @@ fn classifyImportPath(path: []const u8) ImportDecl.Classification {
     return .external;
 }
 
-// TODO: Move to ast module
+// TODO(#52): Move to ast module
 // zlinter-disable-next-line
 // fn getScopedNode(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index) std.zig.Ast.Node.Index {
 //     var parent = doc.lineage.items(.parent)[node];
