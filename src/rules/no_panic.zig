@@ -69,6 +69,7 @@ fn run(
     options: zlinter.session.LintOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+    if (config.severity == .off) return null;
 
     var lint_problems = std.ArrayListUnmanaged(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(allocator);
