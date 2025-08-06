@@ -30,6 +30,7 @@ fn run(
     options: zlinter.session.LintOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+    if (config.severity == .off) return null;
 
     var lint_problems = std.ArrayListUnmanaged(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
@@ -37,13 +38,13 @@ fn run(
     const handle = doc.handle;
     const tree = doc.handle.tree;
 
-    var arena_mem: [32 * 1024]u8 = undefined;
-    var arena_buffer = std.heap.FixedBufferAllocator.init(&arena_mem);
-    const arena = arena_buffer.allocator();
+    var arena_allocator = std.heap.ArenaAllocator.init(gpa);
+    defer arena_allocator.deinit();
+    const arena = arena_allocator.allocator();
 
     var node: zlinter.shims.NodeIndexShim = .root;
     while (node.index < handle.tree.nodes.len) : (node.index += 1) {
-        defer arena_buffer.reset();
+        defer _ = arena_allocator.reset(.retain_capacity);
 
         const tag = zlinter.shims.nodeTag(tree, node.toNodeIndex());
         switch (tag) {
