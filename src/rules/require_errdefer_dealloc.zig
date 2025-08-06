@@ -111,7 +111,7 @@ fn processBlock(
         cleanup_symbols.deinit();
     }
 
-    for (doc.lineage.items(.children)[block_node] orelse &.{}) |child_node| {
+    for (doc.lineage.items(.children)[zlinter.shims.NodeIndexShim.init(block_node).index] orelse &.{}) |child_node| {
         if (try declRef(doc, child_node)) |decl_ref| {
             if (decl_ref.hasDeinit())
                 try cleanup_symbols.put(try gpa.dupe(u8, decl_ref.var_name), child_node);
@@ -245,9 +245,13 @@ fn declRef(doc: zlinter.session.LintDocument, var_decl_node: std.zig.Ast.Node.In
         }
     }
 
-    const var_decl_type = try doc.analyser.resolveTypeOfNode(.{ .handle = doc.handle, .node = var_decl_node }) orelse return null;
+    const var_decl_type = try doc.resolveTypeOfNode(var_decl_node) orelse return null;
     switch (var_decl_type.data) {
-        .container => |scope_handle| {
+        .container => |container| {
+            const scope_handle = switch (zlinter.version.zig) {
+                .@"0.14" => container,
+                .@"0.15" => container.scope_handle,
+            };
             const node = scope_handle.toNode();
             const tag = zlinter.shims.nodeTag(scope_handle.handle.tree, node);
             switch (tag) {
@@ -317,7 +321,7 @@ const FnDecl = struct {
 fn fnDecl(tree: std.zig.Ast, node: std.zig.Ast.Node.Index, fn_proto_buffer: *[1]std.zig.Ast.Node.Index) ?FnDecl {
     switch (zlinter.shims.nodeTag(tree, node)) {
         .fn_decl => {
-            const data = tree.nodes.items(.data)[node];
+            const data = zlinter.shims.nodeData(tree, node);
             const lhs, const rhs = switch (zlinter.version.zig) {
                 .@"0.14" => .{ data.lhs, data.rhs },
                 .@"0.15" => .{ data.node_and_node[0], data.node_and_node[1] },
@@ -330,11 +334,11 @@ fn fnDecl(tree: std.zig.Ast, node: std.zig.Ast.Node.Index, fn_proto_buffer: *[1]
 
 /// Returns true if return type is `!type` or `error{ErrorName}!type` or `ErrorName!type`
 fn fnProtoReturnsError(tree: std.zig.Ast, fn_proto: std.zig.Ast.full.FnProto) bool {
-    const return_node = fn_proto.ast.return_type;
-    const tag = zlinter.shims.nodeTag(tree, return_node);
+    const return_node = zlinter.shims.NodeIndexShim.initOptional(fn_proto.ast.return_type) orelse return false;
+    const tag = zlinter.shims.nodeTag(tree, return_node.toNodeIndex());
     return switch (tag) {
         .error_union => true,
-        else => tree.tokens.items(.tag)[tree.firstToken(return_node) - 1] == .bang,
+        else => tree.tokens.items(.tag)[tree.firstToken(return_node.toNodeIndex()) - 1] == .bang,
     };
 }
 
@@ -349,26 +353,26 @@ const DeferBlock = struct {
 
 fn deferBlock(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index, allocator: std.mem.Allocator) !?DeferBlock {
     const tree = doc.handle.tree;
-    if (!isDeferBlock(tree, node)) return null;
 
     const data = zlinter.shims.nodeData(tree, node);
-    const exp_node = switch (zlinter.version.zig) {
-        .@"0.14" => data.rhs,
-        .@"0.15" => data.opt_token_and_node[1],
-    };
+    const exp_node =
+        switch (zlinter.shims.nodeTag(tree, node)) {
+            .@"errdefer" => switch (zlinter.version.zig) {
+                .@"0.14" => data.rhs,
+                .@"0.15" => data.opt_token_and_node[1],
+            },
+            .@"defer" => switch (zlinter.version.zig) {
+                .@"0.14" => data.rhs,
+                .@"0.15" => data.node,
+            },
+            else => return null,
+        };
 
     if (isBlock(tree, exp_node)) {
-        return .{ .children = try allocator.dupe(std.zig.Ast.Node.Index, doc.lineage.items(.children)[exp_node] orelse &.{}) };
+        return .{ .children = try allocator.dupe(std.zig.Ast.Node.Index, doc.lineage.items(.children)[zlinter.shims.NodeIndexShim.init(exp_node).index] orelse &.{}) };
     } else {
         return .{ .children = try allocator.dupe(std.zig.Ast.Node.Index, &.{exp_node}) };
     }
-}
-
-fn isDeferBlock(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) bool {
-    return switch (zlinter.shims.nodeTag(tree, node)) {
-        .@"errdefer", .@"defer" => true,
-        else => false,
-    };
 }
 
 fn isBlock(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) bool {
