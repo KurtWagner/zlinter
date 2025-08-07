@@ -119,8 +119,13 @@ fn processBlock(
             defer defer_block.deinit(gpa);
 
             for (defer_block.children) |defer_block_child| {
-                const cleanup_call = isFieldCall(doc, defer_block_child, &.{"deinit"}) orelse continue;
-                if (cleanup_symbols.fetchRemove(cleanup_call.symbol)) |e| gpa.free(e.key);
+                const cleanup_call = callWithName(doc, defer_block_child, &.{"deinit"}) orelse continue;
+                switch (cleanup_call) {
+                    .single_field => |info| {
+                        if (cleanup_symbols.fetchRemove(tree.tokenSlice(info.field_main_token))) |e| gpa.free(e.key);
+                    },
+                    .enum_literal, .other => {},
+                }
             }
         } else if (zlinter.ast.isBlock(tree, child_node)) {
             try processBlock(doc, child_node, problems, gpa);
@@ -135,40 +140,100 @@ fn processBlock(
 
 // TODO(#48): Write unit tests for helpers and consider whether some should be moved to ast
 
-const FieldCall = struct {
-    symbol: []const u8,
+const Call = union(enum) {
+    /// e.g., `parent.call()` not `parent.child.call()`
+    single_field: struct {
+        /// e.g., `parent.call()` would have `parent` as the main token here.
+        field_main_token: std.zig.Ast.TokenIndex,
+        /// e.g., `parent.call()` would have `call` as the identifier token here.
+        call_identifier_token: std.zig.Ast.TokenIndex,
+    },
+    /// array_access, unwrap_optional, nested field_access
+    ///
+    /// e.g., `parent.child.call()`, `optional.?.call()` and `array[0].call()`
+    ///
+    /// If there's value this can be broken up in the future but for now we do
+    /// not need the separation.
+    other: struct {
+        /// e.g., `parent.child.call()` would have `call` as the identifier token here.
+        call_identifier_token: std.zig.Ast.TokenIndex,
+    },
+    /// e.g., `.init()`
+    enum_literal: struct {
+        /// e.g., `.init()` would have `init` here
+        call_identifier_token: std.zig.Ast.TokenIndex,
+    },
 };
 
-fn isFieldCall(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index, comptime names: []const []const u8) ?FieldCall {
+/// Returns call information for cases handled by the `require_errdefer_dealloc`
+/// Not all calls are handled so this method is not generally useful
+fn callWithName(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index, comptime names: []const []const u8) ?Call {
     const tree = doc.handle.tree;
 
     var call_buffer: [1]std.zig.Ast.Node.Index = undefined;
     const call = tree.fullCall(&call_buffer, node) orelse return null;
 
-    const data = zlinter.shims.nodeData(tree, call.ast.fn_expr);
+    const fn_expr_node = call.ast.fn_expr;
+    const fn_expr_node_data = zlinter.shims.nodeData(tree, fn_expr_node);
+    const fn_expr_node_tag = zlinter.shims.nodeTag(tree, fn_expr_node);
 
-    // We only care about field access calls (e.g., calling `deinit` on an object)
-    // Otherwise calls can also be identifiers!
-    if (zlinter.shims.nodeTag(tree, call.ast.fn_expr) != .field_access) return null;
+    switch (fn_expr_node_tag) {
+        // e.g., `parent.*`
+        .field_access => {
+            const field_node, const fn_name = switch (zlinter.version.zig) {
+                .@"0.14" => .{ fn_expr_node_data.lhs, fn_expr_node_data.rhs },
+                .@"0.15" => .{ fn_expr_node_data.node_and_token[0], fn_expr_node_data.node_and_token[1] },
+            };
+            std.debug.assert(zlinter.shims.tokenTag(tree, fn_name) == .identifier);
 
-    const field_node, const field_name = switch (zlinter.version.zig) {
-        .@"0.14" => .{ data.lhs, data.rhs },
-        .@"0.15" => .{ data.node_and_token[0], data.node_and_token[1] },
-    };
+            var match: bool = false;
+            const fn_name_slice = tree.tokenSlice(fn_name);
+            for (names) |name| {
+                if (std.mem.eql(u8, name, fn_name_slice)) {
+                    match = true;
+                    break;
+                }
+            }
+            if (!match) return null;
 
-    if (zlinter.shims.nodeTag(tree, field_node) != .identifier) return null;
+            const field_node_tag = zlinter.shims.nodeTag(tree, field_node);
+            if (field_node_tag != .identifier) {
+                // e.g, array_access, unwrap_optional, field_access
+                return .{
+                    .other = .{
+                        .call_identifier_token = fn_name,
+                    },
+                };
+            }
+            // e.g., `parent.call()` not `parent.child.call()`
+            return .{
+                .single_field = .{
+                    .field_main_token = zlinter.shims.nodeMainToken(tree, field_node),
+                    .call_identifier_token = fn_name,
+                },
+            };
+        },
+        // e.g., `.init()`
+        .enum_literal => {
+            const fn_name = zlinter.shims.nodeMainToken(tree, fn_expr_node);
+            std.debug.assert(zlinter.shims.tokenTag(tree, fn_name) == .identifier);
 
-    const field_name_slice = tree.tokenSlice(field_name);
-    var matches = false;
-    for (names) |name| {
-        if (std.mem.eql(u8, name, field_name_slice)) {
-            matches = true;
-            break;
-        }
+            const identfier_slice = tree.tokenSlice(fn_name);
+            for (names) |name| {
+                if (std.mem.eql(u8, name, identfier_slice)) {
+                    return .{
+                        .enum_literal = .{
+                            .call_identifier_token = fn_name,
+                        },
+                    };
+                }
+            }
+        },
+        // .identifier => {},
+        else => std.log.debug("callWithName does not handle fn_expr of tag {s}", .{@tagName(fn_expr_node_tag)}),
     }
-    if (!matches) return null;
 
-    return .{ .symbol = tree.tokenSlice(zlinter.shims.nodeMainToken(tree, field_node)) };
+    return null;
 }
 
 const DeclRef = struct {
@@ -230,19 +295,13 @@ fn declRef(doc: zlinter.session.LintDocument, var_decl_node: std.zig.Ast.Node.In
         if (!std.mem.eql(u8, value, "empty")) {
             return null;
         }
-    } else {
-        var call_buffer: [1]std.zig.Ast.Node.Index = undefined;
-        if (doc.handle.tree.fullCall(&call_buffer, init_node.toNodeIndex())) |call_fn| {
-            if (zlinter.shims.nodeTag(doc.handle.tree, call_fn.ast.fn_expr) == .field_access) {
-                if (!std.mem.eql(u8, doc.handle.tree.tokenSlice(doc.handle.tree.lastToken(call_fn.ast.fn_expr)), "init")) {
-                    return null;
-                }
-            } else {
-                return null;
-            }
-        } else {
-            return null;
-        }
+    } else if (callWithName(doc, init_node.toNodeIndex(), &.{"init"}) == null) {
+        // This will also handle optional and array accesses, which shouldn't occur
+        // but shouldn't be a problem to us anyway as we do strict checks on the
+        // type anyway.
+        //
+        // e.g., `array[0].init()` and `optional.?.init()`
+        return null;
     }
 
     const var_decl_type = try doc.resolveTypeOfNode(var_decl_node) orelse return null;
