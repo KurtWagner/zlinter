@@ -66,9 +66,9 @@ fn run(
         const node, _ = tuple;
 
         var fn_proto_buffer: [1]std.zig.Ast.Node.Index = undefined;
-        const fn_decl = fnDecl(tree, node.toNodeIndex(), &fn_proto_buffer) orelse continue :nodes;
+        const fn_decl = zlinter.ast.fnDecl(tree, node.toNodeIndex(), &fn_proto_buffer) orelse continue :nodes;
 
-        if (!fnProtoReturnsError(tree, fn_decl.proto)) continue :nodes;
+        if (!zlinter.ast.fnProtoReturnsError(tree, fn_decl.proto)) continue :nodes;
 
         try processBlock(doc, fn_decl.block, &problem_nodes, allocator);
     }
@@ -309,37 +309,6 @@ fn declRef(doc: zlinter.session.LintDocument, var_decl_node: std.zig.Ast.Node.In
     }
 
     return null;
-}
-
-const FnDecl = struct {
-    proto: std.zig.Ast.full.FnProto,
-    block: std.zig.Ast.Node.Index,
-};
-
-/// Returns the function declaration (proto and block) if node is a function declaration,
-/// otherwise returns null.
-fn fnDecl(tree: std.zig.Ast, node: std.zig.Ast.Node.Index, fn_proto_buffer: *[1]std.zig.Ast.Node.Index) ?FnDecl {
-    switch (zlinter.shims.nodeTag(tree, node)) {
-        .fn_decl => {
-            const data = zlinter.shims.nodeData(tree, node);
-            const lhs, const rhs = switch (zlinter.version.zig) {
-                .@"0.14" => .{ data.lhs, data.rhs },
-                .@"0.15" => .{ data.node_and_node[0], data.node_and_node[1] },
-            };
-            return .{ .proto = tree.fullFnProto(fn_proto_buffer, lhs).?, .block = rhs };
-        },
-        else => return null,
-    }
-}
-
-/// Returns true if return type is `!type` or `error{ErrorName}!type` or `ErrorName!type`
-fn fnProtoReturnsError(tree: std.zig.Ast, fn_proto: std.zig.Ast.full.FnProto) bool {
-    const return_node = zlinter.shims.NodeIndexShim.initOptional(fn_proto.ast.return_type) orelse return false;
-    const tag = zlinter.shims.nodeTag(tree, return_node.toNodeIndex());
-    return switch (tag) {
-        .error_union => true,
-        else => tree.tokens.items(.tag)[tree.firstToken(return_node.toNodeIndex()) - 1] == .bang,
-    };
 }
 
 test {

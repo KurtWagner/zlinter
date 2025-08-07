@@ -208,6 +208,8 @@ test "deferBlock - has expected children" {
         },
     }) |tuple| {
         const source, const expected = tuple;
+        errdefer std.debug.print("Failed source: '{s}'\n", .{source});
+
         defer _ = arena.reset(.retain_capacity);
 
         var ctx: session.LintContext = undefined;
@@ -233,10 +235,113 @@ test "deferBlock - has expected children" {
         );
         defer if (decl_ref) |d| d.deinit(std.testing.allocator);
 
-        testing.expectNodeSlices(expected, doc.handle.tree, decl_ref.?.children) catch |e| {
-            std.debug.print("Failed source: '{s}'\n", .{source});
-            return e;
-        };
+        try testing.expectNodeSlices(expected, doc.handle.tree, decl_ref.?.children);
+    }
+}
+
+/// Returns true if return type is `!type` or `error{ErrorName}!type` or `ErrorName!type`
+pub fn fnProtoReturnsError(tree: std.zig.Ast, fn_proto: std.zig.Ast.full.FnProto) bool {
+    const return_node = shims.NodeIndexShim.initOptional(fn_proto.ast.return_type) orelse return false;
+    const tag = shims.nodeTag(tree, return_node.toNodeIndex());
+    return switch (tag) {
+        .error_union => true,
+        else => tree.tokens.items(.tag)[tree.firstToken(return_node.toNodeIndex()) - 1] == .bang,
+    };
+}
+
+test "fnProtoReturnsError" {
+    var buffer: [1]std.zig.Ast.Node.Index = undefined;
+    inline for (&.{
+        .{
+            \\ fn func() !void;
+            ,
+            true,
+        },
+        .{
+            \\ fn func() !u32;
+            ,
+            true,
+        },
+        .{
+            \\ fn func() !?u32;
+            ,
+            true,
+        },
+        .{
+            \\ fn func() u32;
+            ,
+            false,
+        },
+        .{
+            \\ fn func() void;
+            ,
+            false,
+        },
+        .{
+            \\ fn func() error{ErrA, ErrB}!void;
+            ,
+            true,
+        },
+        .{
+            \\ fn func() errors!void;
+            ,
+            true,
+        },
+        .{
+            \\ fn func() errors!u32;
+            ,
+            true,
+        },
+        .{
+            \\ fn func() errors!?u32;
+            ,
+            true,
+        },
+    }) |tuple| {
+        const source, const expected = tuple;
+        errdefer std.debug.print("Failed source: '{s}'\n", .{source});
+
+        var ast = try std.zig.Ast.parse(std.testing.allocator, source, .zig);
+        defer ast.deinit(std.testing.allocator);
+
+        const actual = fnProtoReturnsError(
+            ast,
+            ast.fullFnProto(
+                &buffer,
+                try testing.expectSingleNodeOfTag(
+                    ast,
+                    &.{
+                        .fn_proto,
+                        .fn_proto_multi,
+                        .fn_proto_one,
+                        .fn_proto_simple,
+                        .fn_decl,
+                    },
+                ),
+            ).?,
+        );
+        try std.testing.expectEqual(expected, actual);
+    }
+}
+
+pub const FnDecl = struct {
+    proto: std.zig.Ast.full.FnProto,
+    block: std.zig.Ast.Node.Index,
+};
+
+/// Returns the function declaration (proto and block) if node is a function declaration,
+/// otherwise returns null.
+pub fn fnDecl(tree: std.zig.Ast, node: std.zig.Ast.Node.Index, fn_proto_buffer: *[1]std.zig.Ast.Node.Index) ?FnDecl {
+    switch (shims.nodeTag(tree, node)) {
+        .fn_decl => {
+            const data = shims.nodeData(tree, node);
+            const lhs, const rhs = switch (version.zig) {
+                .@"0.14" => .{ data.lhs, data.rhs },
+                .@"0.15" => .{ data.node_and_node[0], data.node_and_node[1] },
+            };
+            return .{ .proto = tree.fullFnProto(fn_proto_buffer, lhs).?, .block = rhs };
+        },
+        else => return null,
     }
 }
 
