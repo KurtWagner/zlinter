@@ -116,6 +116,13 @@ pub fn unwrapNode(
     return current;
 }
 
+pub fn tokenTag(tree: std.zig.Ast, token: std.zig.Ast.TokenIndex) std.zig.Token.Tag {
+    return if (std.meta.hasMethod(@TypeOf(tree), "tokenTag"))
+        tree.tokenTag(token)
+    else
+        tree.tokens.items(.tag)[token]; // 0.14.x
+}
+
 pub fn nodeTag(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) std.zig.Ast.Node.Tag {
     return if (std.meta.hasMethod(@TypeOf(tree), "nodeTag"))
         tree.nodeTag(node)
