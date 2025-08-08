@@ -473,6 +473,12 @@ test "isEnumLiteral" {
             true,
         },
         .{
+            \\ var var_name = .enum_name;
+            ,
+            &.{"other"},
+            false,
+        },
+        .{
             \\ var var_name = not.literal;
             ,
             &.{"literal"},
