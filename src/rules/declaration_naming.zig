@@ -84,20 +84,20 @@ fn run(
     const tree = doc.handle.tree;
 
     var node: zlinter.shims.NodeIndexShim = .init(1); // Skip root node at 0
-    skip: while (node.index < tree.nodes.len) : (node.index += 1) {
-        const var_decl = tree.fullVarDecl(node.toNodeIndex()) orelse continue :skip;
+    nodes: while (node.index < tree.nodes.len) : (node.index += 1) {
+        const var_decl = tree.fullVarDecl(node.toNodeIndex()) orelse continue :nodes;
 
         if (config.exclude_extern and var_decl.extern_export_token != null) {
             const token_tag = tree.tokens.items(.tag)[var_decl.extern_export_token.?];
-            if (token_tag == .keyword_extern) continue :skip;
+            if (token_tag == .keyword_extern) continue :nodes;
         }
 
         if (config.exclude_export and var_decl.extern_export_token != null) {
             const token_tag = tree.tokens.items(.tag)[var_decl.extern_export_token.?];
-            if (token_tag == .keyword_export) continue :skip;
+            if (token_tag == .keyword_export) continue :nodes;
         }
 
-        const type_kind = try doc.resolveTypeKind(.{ .var_decl = var_decl }) orelse continue :skip;
+        const type_kind = try doc.resolveTypeKind(.{ .var_decl = var_decl }) orelse continue :nodes;
         const name_token = var_decl.ast.mut_token + 1;
         const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
 
@@ -106,7 +106,7 @@ fn run(
                 if (zlinter.shims.nodeTag(tree, init_node.toNodeIndex()) == .field_access) {
                     const last_token = tree.lastToken(init_node.toNodeIndex());
                     const field_name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(last_token));
-                    if (std.mem.eql(u8, field_name, name)) continue :skip;
+                    if (std.mem.eql(u8, field_name, name)) continue :nodes;
                 }
             }
         }

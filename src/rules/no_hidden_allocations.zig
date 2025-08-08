@@ -67,15 +67,15 @@ fn run(
     var it = try doc.nodeLineageIterator(root, allocator);
     defer it.deinit();
 
-    skip: while (try it.next()) |tuple| {
+    nodes: while (try it.next()) |tuple| {
         const node, const connections = tuple;
         _ = connections;
 
-        if (zlinter.shims.nodeTag(tree, node.toNodeIndex()) != .field_access) continue :skip;
+        if (zlinter.shims.nodeTag(tree, node.toNodeIndex()) != .field_access) continue :nodes;
 
         // if configured, skip if a parent is a test block
         if (config.exclude_tests and doc.isEnclosedInTestBlock(node)) {
-            continue :skip;
+            continue :nodes;
         }
 
         // unwrap field access lhs and identifier (e.g., lhs.identifier)
@@ -95,7 +95,7 @@ fn run(
             }
             break :is_allocator_method false;
         };
-        if (!is_allocator_method) continue :skip;
+        if (!is_allocator_method) continue :nodes;
 
         const decl_name, const uri = decl_name_and_uri: {
             if (try doc.analyser.resolveVarDeclAlias(switch (zlinter.version.zig) {
@@ -122,9 +122,9 @@ fn run(
                         break :name null;
                     },
                     else => break :name null,
-                } orelse continue :skip;
+                } orelse continue :nodes;
                 break :decl_name_and_uri .{ name, uri };
-            } else continue :skip;
+            } else continue :nodes;
         };
 
         var is_problem: bool = false;
@@ -135,7 +135,7 @@ fn run(
             is_problem = true;
             break;
         }
-        if (!is_problem) continue :skip;
+        if (!is_problem) continue :nodes;
 
         try lint_problems.append(allocator, .{
             .rule_id = rule.rule_id,

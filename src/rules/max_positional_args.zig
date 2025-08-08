@@ -57,20 +57,20 @@ fn run(
     var fn_buffer: [1]std.zig.Ast.Node.Index = undefined;
 
     var node: zlinter.shims.NodeIndexShim = .init(1);
-    skip: while (node.index < tree.nodes.len) : (node.index += 1) {
-        const fn_proto = fnProto(tree, &fn_buffer, node.toNodeIndex()) orelse continue :skip;
+    nodes: while (node.index < tree.nodes.len) : (node.index += 1) {
+        const fn_proto = fnProto(tree, &fn_buffer, node.toNodeIndex()) orelse continue :nodes;
 
         if (config.exclude_extern and fn_proto.extern_export_inline_token != null) {
             const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
-            if (token_tag == .keyword_extern) continue :skip;
+            if (token_tag == .keyword_extern) continue :nodes;
         }
 
         if (config.exclude_export and fn_proto.extern_export_inline_token != null) {
             const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
-            if (token_tag == .keyword_export) continue :skip;
+            if (token_tag == .keyword_export) continue :nodes;
         }
 
-        if (fn_proto.ast.params.len <= config.max) continue :skip;
+        if (fn_proto.ast.params.len <= config.max) continue :nodes;
 
         try lint_problems.append(allocator, .{
             .rule_id = rule.rule_id,

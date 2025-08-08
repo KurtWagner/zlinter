@@ -66,7 +66,7 @@ fn run(
 
     var container_decl_buffer: [2]std.zig.Ast.Node.Index = undefined;
 
-    skip: while (try it.next()) |tuple| {
+    nodes: while (try it.next()) |tuple| {
         const node, const connections = tuple;
 
         const order_with_severity: zlinter.rules.LintTextOrderWithSeverity, const container_kind_name: []const u8 = kind: {
@@ -92,10 +92,10 @@ fn run(
                 };
             }
             break :kind null;
-        } orelse continue :skip;
+        } orelse continue :nodes;
 
         if (order_with_severity.order == .off or order_with_severity.severity == .off) {
-            continue :skip;
+            continue :nodes;
         }
 
         var actual_order = std.ArrayList(std.zig.Ast.Node.Index).init(allocator);

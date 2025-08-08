@@ -55,28 +55,28 @@ fn run(
     defer it.deinit();
 
     var fn_decl_buffer: [1]std.zig.Ast.Node.Index = undefined;
-    skip: while (try it.next()) |tuple| {
+    nodes: while (try it.next()) |tuple| {
         const node, const connections = tuple;
         _ = connections;
 
         const tag = zlinter.shims.nodeTag(tree, node.toNodeIndex());
-        if (tag != .fn_decl) continue :skip;
+        if (tag != .fn_decl) continue :nodes;
 
-        const fn_decl = tree.fullFnProto(&fn_decl_buffer, node.toNodeIndex()) orelse continue :skip;
-        if (config.allow_private and isFnPrivate(tree, fn_decl)) continue :skip;
+        const fn_decl = tree.fullFnProto(&fn_decl_buffer, node.toNodeIndex()) orelse continue :nodes;
+        if (config.allow_private and isFnPrivate(tree, fn_decl)) continue :nodes;
 
-        const return_type = zlinter.shims.NodeIndexShim.initOptional(fn_decl.ast.return_type) orelse continue :skip;
+        const return_type = zlinter.shims.NodeIndexShim.initOptional(fn_decl.ast.return_type) orelse continue :nodes;
 
         const return_type_tag = zlinter.shims.nodeTag(tree, return_type.toNodeIndex());
         switch (return_type_tag) {
             .error_union => if (config.allow_anyerror or
                 !std.mem.eql(u8, tree.tokenSlice(tree.firstToken(return_type.toNodeIndex())), "anyerror"))
-                continue :skip,
+                continue :nodes,
             .identifier => switch (tree.tokens.items(.tag)[tree.firstToken(return_type.toNodeIndex()) - 1]) {
                 .bang => {},
-                else => continue :skip,
+                else => continue :nodes,
             },
-            else => continue :skip,
+            else => continue :nodes,
         }
 
         try lint_problems.append(allocator, .{

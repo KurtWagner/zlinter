@@ -74,7 +74,7 @@ fn run(
     var it = try doc.nodeLineageIterator(root, allocator);
     defer it.deinit();
 
-    skip: while (try it.next()) |tuple| {
+    nodes: while (try it.next()) |tuple| {
         const node, const connections = tuple;
         _ = connections;
 
@@ -86,14 +86,14 @@ fn run(
             .builtin_call_comma,
             => {
                 const main_token = zlinter.shims.nodeMainToken(tree, node.toNodeIndex());
-                if (!std.mem.eql(u8, tree.tokenSlice(main_token), "@panic")) continue :skip;
+                if (!std.mem.eql(u8, tree.tokenSlice(main_token), "@panic")) continue :nodes;
             },
-            else => continue :skip,
+            else => continue :nodes,
         }
 
         // if configured, skip if a parent is a test block
         if (config.exclude_tests and doc.isEnclosedInTestBlock(node)) {
-            continue :skip;
+            continue :nodes;
         }
 
         try lint_problems.append(allocator, .{

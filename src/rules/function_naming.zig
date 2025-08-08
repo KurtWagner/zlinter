@@ -78,16 +78,16 @@ fn run(
     const tree = doc.handle.tree;
 
     var node: zlinter.shims.NodeIndexShim = .init(1); // Skip root node at 0
-    skip: while (node.index < tree.nodes.len) : (node.index += 1) {
+    nodes: while (node.index < tree.nodes.len) : (node.index += 1) {
         var buffer: [1]std.zig.Ast.Node.Index = undefined;
         if (namedFnProto(tree, &buffer, node.toNodeIndex())) |fn_proto| {
             if (config.exclude_extern and fn_proto.extern_export_inline_token != null) {
                 const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
-                if (token_tag == .keyword_extern) continue :skip;
+                if (token_tag == .keyword_extern) continue :nodes;
             }
             if (config.exclude_export and fn_proto.extern_export_inline_token != null) {
                 const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
-                if (token_tag == .keyword_export) continue :skip;
+                if (token_tag == .keyword_export) continue :nodes;
             }
 
             const fn_name_token = fn_proto.name_token.?;
@@ -98,7 +98,7 @@ fn run(
                     .@"0.14" => fn_proto.ast.return_type,
                     .@"0.15" => fn_proto.ast.return_type.unwrap().?,
                 },
-            )) orelse continue :skip;
+            )) orelse continue :nodes;
 
             const error_message: ?[]const u8, const severity: ?zlinter.rules.LintProblemSeverity = msg: {
                 if (return_type.isMetaType()) {
@@ -137,11 +137,11 @@ fn run(
         if (fnProto(tree, &buffer, node.toNodeIndex())) |fn_proto| {
             if (config.exclude_extern and fn_proto.extern_export_inline_token != null) {
                 const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
-                if (token_tag == .keyword_extern) continue :skip;
+                if (token_tag == .keyword_extern) continue :nodes;
             }
             if (config.exclude_export and fn_proto.extern_export_inline_token != null) {
                 const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
-                if (token_tag == .keyword_export) continue :skip;
+                if (token_tag == .keyword_export) continue :nodes;
             }
 
             for (fn_proto.ast.params) |param| {

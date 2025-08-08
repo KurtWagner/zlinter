@@ -57,11 +57,11 @@ fn run(
 
     var fn_proto_buffer: [1]std.zig.Ast.Node.Index = undefined;
 
-    skip: while (try it.next()) |tuple| {
+    nodes: while (try it.next()) |tuple| {
         const node, const connections = tuple;
 
-        if (zlinter.shims.nodeTag(tree, node.toNodeIndex()) != .identifier) continue :skip;
-        if (!std.mem.eql(u8, tree.getNodeSource(node.toNodeIndex()), "undefined")) continue :skip;
+        if (zlinter.shims.nodeTag(tree, node.toNodeIndex()) != .identifier) continue :nodes;
+        if (!std.mem.eql(u8, tree.getNodeSource(node.toNodeIndex()), "undefined")) continue :nodes;
 
         var decl_var_name: ?[]const u8 = null;
         if (doc.lineage.items(.parent)[node.index]) |parent| {
@@ -72,10 +72,10 @@ fn run(
                     decl_var_name = name;
 
                     for (config.exclude_var_decl_name_equals) |var_name| {
-                        if (std.ascii.eqlIgnoreCase(name, var_name)) continue :skip;
+                        if (std.ascii.eqlIgnoreCase(name, var_name)) continue :nodes;
                     }
                     for (config.exclude_var_decl_name_ends_with) |var_name| {
-                        if (std.ascii.endsWithIgnoreCase(name, var_name)) continue :skip;
+                        if (std.ascii.endsWithIgnoreCase(name, var_name)) continue :nodes;
                     }
                 }
             }
@@ -85,7 +85,7 @@ fn run(
         while (next_parent) |parent| {
             // We expect any undefined with a test to simply be ignored as really we expect
             // the test to fail if there's issues
-            if (config.exclude_tests and zlinter.shims.nodeTag(tree, parent) == .test_decl) continue :skip;
+            if (config.exclude_tests and zlinter.shims.nodeTag(tree, parent) == .test_decl) continue :nodes;
 
             // If assigned undefined in a deinit, ignore as it's a common pattern
             // assign undefined after freeing memory
@@ -93,7 +93,7 @@ fn run(
                 if (tree.fullFnProto(&fn_proto_buffer, parent)) |fn_proto| {
                     if (fn_proto.name_token) |name_token| {
                         for (config.exclude_in_fn) |skip_fn_name| {
-                            if (std.ascii.endsWithIgnoreCase(tree.tokenSlice(name_token), skip_fn_name)) continue :skip;
+                            if (std.ascii.endsWithIgnoreCase(tree.tokenSlice(name_token), skip_fn_name)) continue :nodes;
                         }
                     }
                 }
@@ -126,7 +126,7 @@ fn run(
                             if (std.mem.eql(u8, lhs_source, var_name)) {
                                 const identifier_name = tree.tokenSlice(identifier_token);
                                 if (std.mem.eql(u8, identifier_name, "init")) {
-                                    continue :skip;
+                                    continue :nodes;
                                 }
                             }
                         }
