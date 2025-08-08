@@ -12,7 +12,7 @@
 //! within the application's normal control flow. Failing to perform cleanup
 //! in these cases can lead to memory leaks.
 //!
-//! Caveats:
+//! **Caveats:**
 //!
 //! * This rule is not exhaustive. It makes a best-effort attempt to detect known
 //!   object declarations that require cleanup, but a complete check is
@@ -22,6 +22,25 @@
 //! * This rule cannot always reliably detect usage of fixed buffer allocators or
 //!   arenas; however, using `errdefer array.deinit(arena);` in these cases is
 //!   generally harmless. It will do its best to ignore the most obvious cases.
+//!
+//! **Example:**
+//!
+//! ```zig
+//! // Bad: On success, returns an owned slice the caller must free; on error, memory is leaked.
+//! pub fn message(age: u8, allocator: std.mem.Allocator) error{ OutOfMemory, InvalidAge }![]const u8 {
+//!     var parts = std.ArrayList(u8).init(allocator);
+//!
+//!     try parts.appendSlice("You are ");
+//!     if (age > 18)
+//!         try parts.appendSlice("an adult")
+//!     else if (age > 0)
+//!         try parts.appendSlice("not an adult")
+//!     else
+//!         return error.InvalidAge;
+//!
+//!     return parts.toOwnedSlice();
+//! }
+//! ```
 //!
 
 /// Config for require_errdefer_dealloc rule.
