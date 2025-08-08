@@ -76,7 +76,7 @@ fn run(
     defer lint_problems.deinit(allocator);
 
     const tree = doc.handle.tree;
-    var buffer: [2]std.zig.Ast.Node.Index = undefined;
+    var buffer: [2]Ast.Node.Index = undefined;
 
     var node: NodeIndexShim = .root;
     while (node.index < tree.nodes.len) : (node.index += 1) {
@@ -346,3 +346,4 @@ const std = @import("std");
 const zlinter = @import("zlinter");
 const shims = zlinter.shims;
 const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;

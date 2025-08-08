@@ -142,7 +142,7 @@ fn run(
         null;
 }
 
-fn isEmptyOrUnreachableBlock(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) enum { none, empty, @"unreachable" } {
+fn isEmptyOrUnreachableBlock(tree: Ast, node: Ast.Node.Index) enum { none, empty, @"unreachable" } {
     const tag = shims.nodeTag(tree, node);
     std.debug.assert(tag == .block_two or tag == .block_two_semicolon);
 
@@ -295,3 +295,4 @@ const std = @import("std");
 const zlinter = @import("zlinter");
 const shims = zlinter.shims;
 const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;

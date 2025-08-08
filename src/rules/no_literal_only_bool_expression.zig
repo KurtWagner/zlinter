@@ -136,7 +136,7 @@ const Literal = enum {
 };
 
 /// Does not consider string literals, only booleans, numbers and chars
-fn isLiteral(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) ?Literal {
+fn isLiteral(tree: Ast, node: Ast.Node.Index) ?Literal {
     return switch (shims.nodeTag(tree, node)) {
         .number_literal => .number,
         .char_literal => .char,
@@ -214,3 +214,4 @@ const std = @import("std");
 const zlinter = @import("zlinter");
 const shims = zlinter.shims;
 const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;

@@ -36,14 +36,14 @@ pub const LintDocument = struct {
         return self.skipper.shouldSkip(problem);
     }
 
-    pub inline fn resolveTypeOfNode(self: @This(), node: std.zig.Ast.Node.Index) !?zls.Analyser.Type {
+    pub inline fn resolveTypeOfNode(self: @This(), node: Ast.Node.Index) !?zls.Analyser.Type {
         return switch (version.zig) {
             .@"0.15" => self.analyser.resolveTypeOfNode(.of(node, self.handle)),
             .@"0.14" => self.analyser.resolveTypeOfNode(.{ .handle = self.handle, .node = node }),
         };
     }
 
-    pub inline fn resolveTypeOfTypeNode(self: @This(), node: std.zig.Ast.Node.Index) !?zls.Analyser.Type {
+    pub inline fn resolveTypeOfTypeNode(self: @This(), node: Ast.Node.Index) !?zls.Analyser.Type {
         const resolved_type = try self.resolveTypeOfNode(node) orelse return null;
         const instance_type = if (resolved_type.isMetaType()) resolved_type else switch (version.zig) {
             .@"0.14" => resolved_type.instanceTypeVal(self.analyser) orelse resolved_type,
@@ -115,8 +115,8 @@ pub const LintDocument = struct {
     /// This will return null if the kind could not be resolved, usually indicating
     /// that the input was unexpected / invalid.
     pub fn resolveTypeKind(self: @This(), input: union(enum) {
-        var_decl: std.zig.Ast.full.VarDecl,
-        container_field: std.zig.Ast.full.ContainerField,
+        var_decl: Ast.full.VarDecl,
+        container_field: Ast.full.ContainerField,
     }) !?TypeKind {
         const maybe_type_node, const maybe_value_node = inputs: {
             const t, const v = switch (input) {
@@ -135,8 +135,8 @@ pub const LintDocument = struct {
             };
         };
 
-        var container_decl_buffer: [2]std.zig.Ast.Node.Index = undefined;
-        var fn_proto_buffer: [1]std.zig.Ast.Node.Index = undefined;
+        var container_decl_buffer: [2]Ast.Node.Index = undefined;
+        var fn_proto_buffer: [1]Ast.Node.Index = undefined;
 
         const tree = self.handle.tree;
 
@@ -304,7 +304,7 @@ pub const LintDocument = struct {
     /// This will not include the given node, only its ancestors.
     pub fn nodeAncestorIterator(
         self: LintDocument,
-        node: std.zig.Ast.Node.Index,
+        node: Ast.Node.Index,
     ) ast.NodeAncestorIterator {
         return .{
             .current = NodeIndexShim.init(node),
@@ -883,3 +883,4 @@ const ast = @import("ast.zig");
 const comments = @import("comments.zig");
 const LintProblem = @import("results.zig").LintProblem;
 const NodeIndexShim = shims.NodeIndexShim;
+const Ast = std.zig.Ast;

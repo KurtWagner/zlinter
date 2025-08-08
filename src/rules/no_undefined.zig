@@ -55,7 +55,7 @@ fn run(
     var it = try doc.nodeLineageIterator(root, allocator);
     defer it.deinit();
 
-    var fn_proto_buffer: [1]std.zig.Ast.Node.Index = undefined;
+    var fn_proto_buffer: [1]Ast.Node.Index = undefined;
 
     nodes: while (try it.next()) |tuple| {
         const node, const connections = tuple;
@@ -215,3 +215,4 @@ const std = @import("std");
 const zlinter = @import("zlinter");
 const shims = zlinter.shims;
 const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;

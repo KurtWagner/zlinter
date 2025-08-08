@@ -588,8 +588,8 @@ fn runFixes(
 ///
 /// The returned string must be freed by the caller. i.e., `allocator.free(error_message);`
 fn allocAstErrorMsg(
-    ast: std.zig.Ast,
-    err: std.zig.Ast.Error,
+    ast: Ast,
+    err: Ast.Error,
     allocator: std.mem.Allocator,
 ) error{ OutOfMemory, WriteFailed }![]const u8 {
     var aw = std.io.Writer.Allocating.init(allocator);
@@ -792,3 +792,4 @@ const builtin = @import("builtin");
 const zlinter = @import("zlinter");
 const rules = @import("rules").rules; // Generated in build.zig
 const configs = @import("rules").configs; // Generated in build.zig
+const Ast = std.zig.Ast;

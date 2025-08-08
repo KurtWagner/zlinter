@@ -135,7 +135,7 @@ fn looksLikeCode(content: []const u8, gpa: std.mem.Allocator) !bool {
 
     const looks_like_statement = looks_like_statement: {
         const container_code = std.fmt.bufPrintZ(buffer, statement_container_fmt, .{content}) catch unreachable;
-        var ast = try std.zig.Ast.parse(gpa, container_code, .zig);
+        var ast = try Ast.parse(gpa, container_code, .zig);
         defer ast.deinit(gpa);
 
         const root_and_wrap_fn_nodes = 5;
@@ -147,7 +147,7 @@ fn looksLikeCode(content: []const u8, gpa: std.mem.Allocator) !bool {
 
     const looks_like_declaration = looks_like_declaration: {
         const root_code = std.fmt.bufPrintZ(buffer, declaration_container_fmt, .{content}) catch unreachable;
-        var ast = try std.zig.Ast.parse(gpa, root_code, .zig);
+        var ast = try Ast.parse(gpa, root_code, .zig);
         defer ast.deinit(gpa);
 
         const root_node = 1;
@@ -237,3 +237,4 @@ const std = @import("std");
 const zlinter = @import("zlinter");
 const shims = zlinter.shims;
 const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;

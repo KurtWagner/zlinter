@@ -150,7 +150,7 @@ fn run(
         null;
 }
 
-fn getLintProblemLocationStart(doc: zlinter.session.LintDocument, node_index: std.zig.Ast.Node.Index) zlinter.results.LintProblemLocation {
+fn getLintProblemLocationStart(doc: zlinter.session.LintDocument, node_index: Ast.Node.Index) zlinter.results.LintProblemLocation {
     const first_token = doc.handle.tree.firstToken(node_index);
     const first_token_loc = doc.handle.tree.tokenLocation(0, first_token);
     return .{
@@ -160,7 +160,7 @@ fn getLintProblemLocationStart(doc: zlinter.session.LintDocument, node_index: st
     };
 }
 
-fn getLintProblemLocationEnd(doc: zlinter.session.LintDocument, node_index: std.zig.Ast.Node.Index) zlinter.results.LintProblemLocation {
+fn getLintProblemLocationEnd(doc: zlinter.session.LintDocument, node_index: Ast.Node.Index) zlinter.results.LintProblemLocation {
     const last_token = doc.handle.tree.lastToken(node_index);
     const last_token_loc = doc.handle.tree.tokenLocation(0, last_token);
     return .{
@@ -175,8 +175,8 @@ fn handleIdentifierAccess(
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
     doc: zlinter.session.LintDocument,
-    node_index: std.zig.Ast.Node.Index,
-    identifier_token: std.zig.Ast.TokenIndex,
+    node_index: Ast.Node.Index,
+    identifier_token: Ast.TokenIndex,
     lint_problems: *std.ArrayListUnmanaged(zlinter.results.LintProblem),
     config: Config,
 ) !void {
@@ -228,8 +228,8 @@ fn handleEnumLiteral(
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
     doc: zlinter.session.LintDocument,
-    node_index: std.zig.Ast.Node.Index,
-    identifier_token: std.zig.Ast.TokenIndex,
+    node_index: Ast.Node.Index,
+    identifier_token: Ast.TokenIndex,
     lint_problems: *std.ArrayListUnmanaged(zlinter.results.LintProblem),
     config: Config,
 ) !void {
@@ -254,13 +254,13 @@ fn handleEnumLiteral(
 
 fn getSymbolEnumLiteral(
     doc: zlinter.session.LintDocument,
-    node: std.zig.Ast.Node.Index,
+    node: Ast.Node.Index,
     name: []const u8,
     gpa: std.mem.Allocator,
 ) error{OutOfMemory}!?zlinter.zls.Analyser.DeclWithHandle {
     std.debug.assert(shims.nodeTag(doc.handle.tree, node) == .enum_literal);
 
-    var ancestors = std.ArrayList(std.zig.Ast.Node.Index).init(gpa);
+    var ancestors = std.ArrayList(Ast.Node.Index).init(gpa);
     defer ancestors.deinit();
 
     var current = node;
@@ -297,8 +297,8 @@ fn handleFieldAccess(
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
     doc: zlinter.session.LintDocument,
-    node_index: std.zig.Ast.Node.Index,
-    identifier_token: std.zig.Ast.TokenIndex,
+    node_index: Ast.Node.Index,
+    identifier_token: Ast.TokenIndex,
     lint_problems: *std.ArrayListUnmanaged(zlinter.results.LintProblem),
     config: Config,
 ) !void {
@@ -541,3 +541,4 @@ const std = @import("std");
 const zlinter = @import("zlinter");
 const shims = zlinter.shims;
 const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;

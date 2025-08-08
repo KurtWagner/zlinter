@@ -128,13 +128,13 @@ fn run(
 /// given contents. e.g., `@panic("OOM")` would match `&.{"OOM"}`.
 /// Contents are case sensitive
 fn builtinHasParamContent(
-    tree: std.zig.Ast,
-    node: std.zig.Ast.Node.Index,
+    tree: Ast,
+    node: Ast.Node.Index,
     contents: []const []const u8,
 ) bool {
     if (contents.len == 0) return false;
 
-    var buffer: [2]std.zig.Ast.Node.Index = undefined;
+    var buffer: [2]Ast.Node.Index = undefined;
     const params = tree.builtinCallParams(&buffer, node) orelse return false;
     if (params.len != 1) return false;
 
@@ -251,3 +251,4 @@ const std = @import("std");
 const zlinter = @import("zlinter");
 const shims = zlinter.shims;
 const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;

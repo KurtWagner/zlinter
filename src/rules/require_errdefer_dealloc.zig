@@ -72,7 +72,7 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    var problem_nodes = std.ArrayList(std.zig.Ast.Node.Index).init(allocator);
+    var problem_nodes = std.ArrayList(Ast.Node.Index).init(allocator);
     defer problem_nodes.deinit();
 
     const root: NodeIndexShim = .root;
@@ -82,7 +82,7 @@ fn run(
     nodes: while (try it.next()) |tuple| {
         const node, _ = tuple;
 
-        var fn_proto_buffer: [1]std.zig.Ast.Node.Index = undefined;
+        var fn_proto_buffer: [1]Ast.Node.Index = undefined;
         const fn_decl = zlinter.ast.fnDecl(tree, node.toNodeIndex(), &fn_proto_buffer) orelse continue :nodes;
 
         if (!zlinter.ast.fnProtoReturnsError(tree, fn_decl.proto)) continue :nodes;
@@ -115,20 +115,20 @@ fn run(
 
 fn processBlock(
     doc: zlinter.session.LintDocument,
-    block_node: std.zig.Ast.Node.Index,
-    problems: *std.ArrayList(std.zig.Ast.Node.Index),
+    block_node: Ast.Node.Index,
+    problems: *std.ArrayList(Ast.Node.Index),
     gpa: std.mem.Allocator,
 ) !void {
     const tree = doc.handle.tree;
 
-    var cleanup_symbols: std.StringHashMap(std.zig.Ast.Node.Index) = .init(gpa);
+    var cleanup_symbols: std.StringHashMap(Ast.Node.Index) = .init(gpa);
     defer {
         var it = cleanup_symbols.keyIterator();
         while (it.next()) |k| gpa.free(k.*);
         cleanup_symbols.deinit();
     }
 
-    var call_buffer: [1]std.zig.Ast.Node.Index = undefined;
+    var call_buffer: [1]Ast.Node.Index = undefined;
     for (doc.lineage.items(.children)[NodeIndexShim.init(block_node).index] orelse &.{}) |child_node| {
         if (try declRef(doc, child_node)) |decl_ref| {
             if (decl_ref.hasDeinit())
@@ -159,15 +159,15 @@ fn processBlock(
 // TODO(#48): Write unit tests for helpers and consider whether some should be moved to ast
 
 const Call = struct {
-    params: []const std.zig.Ast.Node.Index,
+    params: []const Ast.Node.Index,
 
     kind: union(enum) {
         /// e.g., `parent.call()` not `parent.child.call()`
         single_field: struct {
             /// e.g., `parent.call()` would have `parent` as the main token here.
-            field_main_token: std.zig.Ast.TokenIndex,
+            field_main_token: Ast.TokenIndex,
             /// e.g., `parent.call()` would have `call` as the identifier token here.
-            call_identifier_token: std.zig.Ast.TokenIndex,
+            call_identifier_token: Ast.TokenIndex,
         },
         /// array_access, unwrap_optional, nested field_access
         ///
@@ -177,19 +177,19 @@ const Call = struct {
         /// not need the separation.
         other: struct {
             /// e.g., `parent.child.call()` would have `call` as the identifier token here.
-            call_identifier_token: std.zig.Ast.TokenIndex,
+            call_identifier_token: Ast.TokenIndex,
         },
         /// e.g., `.init()`
         enum_literal: struct {
             /// e.g., `.init()` would have `init` here
-            call_identifier_token: std.zig.Ast.TokenIndex,
+            call_identifier_token: Ast.TokenIndex,
         },
     },
 };
 
 /// Returns call information for cases handled by the `require_errdefer_dealloc`
 /// Not all calls are handled so this method is not generally useful
-fn callWithName(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index, buffer: *[1]std.zig.Ast.Node.Index, comptime names: []const []const u8) ?Call {
+fn callWithName(doc: zlinter.session.LintDocument, node: Ast.Node.Index, buffer: *[1]Ast.Node.Index, comptime names: []const []const u8) ?Call {
     const tree = doc.handle.tree;
 
     const call = tree.fullCall(buffer, node) orelse return null;
@@ -308,12 +308,12 @@ const DeclRef = struct {
     }
 };
 
-fn declRef(doc: zlinter.session.LintDocument, var_decl_node: std.zig.Ast.Node.Index) !?DeclRef {
+fn declRef(doc: zlinter.session.LintDocument, var_decl_node: Ast.Node.Index) !?DeclRef {
     const var_decl = doc.handle.tree.fullVarDecl(var_decl_node) orelse return null;
 
     const init_node = NodeIndexShim.initOptional(var_decl.ast.init_node) orelse return null;
 
-    var call_buffer: [1]std.zig.Ast.Node.Index = undefined;
+    var call_buffer: [1]Ast.Node.Index = undefined;
     if (!switch (shims.nodeTag(doc.handle.tree, init_node.toNodeIndex())) {
         .field_access => zlinter.ast.isFieldVarAccess(doc.handle.tree, init_node.toNodeIndex(), &.{"empty"}),
         .enum_literal => zlinter.ast.isEnumLiteral(doc.handle.tree, init_node.toNodeIndex(), &.{"empty"}),
@@ -376,7 +376,7 @@ fn declRef(doc: zlinter.session.LintDocument, var_decl_node: std.zig.Ast.Node.In
                             ).unwrap(),
                         } orelse return null;
 
-                        var fn_proto_buffer: [1]std.zig.Ast.Node.Index = undefined;
+                        var fn_proto_buffer: [1]Ast.Node.Index = undefined;
                         const func = tree.fullFnProto(&fn_proto_buffer, doc_scope.getScopeAstNode(function_scope).?).?;
 
                         return .{
@@ -405,7 +405,7 @@ fn declRef(doc: zlinter.session.LintDocument, var_decl_node: std.zig.Ast.Node.In
 ///
 /// Where as `.init(allocator)` or `.init(std.heap.c_allocator)` should be checked
 /// for stricter cleanup on error as it won't automatically clear itself.
-fn hasArenaParam(doc: zlinter.session.LintDocument, params: []const std.zig.Ast.Node.Index) bool {
+fn hasArenaParam(doc: zlinter.session.LintDocument, params: []const Ast.Node.Index) bool {
     const tree = doc.handle.tree;
     const skip_var_and_field_names: []const []const u8 = &.{
         "arena",
@@ -413,7 +413,7 @@ fn hasArenaParam(doc: zlinter.session.LintDocument, params: []const std.zig.Ast.
         "fixed_buffer_allocator",
         "arena_allocator",
     };
-    var call_buffer: [1]std.zig.Ast.Node.Index = undefined;
+    var call_buffer: [1]Ast.Node.Index = undefined;
     for (params) |param_node| {
         const tag = shims.nodeTag(tree, param_node);
         switch (tag) {
@@ -445,7 +445,7 @@ test "hasArenaParam" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var buffer: [1]std.zig.Ast.Node.Index = undefined;
+    var buffer: [1]Ast.Node.Index = undefined;
     inline for (&.{
         .{
             \\ var a = .init();
@@ -549,3 +549,4 @@ const std = @import("std");
 const zlinter = @import("zlinter");
 const shims = zlinter.shims;
 const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;

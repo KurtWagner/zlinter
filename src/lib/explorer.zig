@@ -9,12 +9,12 @@ pub fn parseToJsonStringAlloc(source: [:0]const u8, gpa: std.mem.Allocator) ![]c
 }
 
 pub fn parseToJsonTree(source: [:0]const u8, arena: std.mem.Allocator) !std.json.Value {
-    const tree = try std.zig.Ast.parse(arena, source, .zig);
+    const tree = try Ast.parse(arena, source, .zig);
     return jsonTree(tree, arena);
 }
 
 pub fn jsonTree(
-    tree: std.zig.Ast,
+    tree: Ast,
     arena: std.mem.Allocator,
 ) !std.json.Value {
     var root_json_object = std.json.ObjectMap.init(arena);
@@ -45,7 +45,7 @@ pub fn jsonTree(
         indent: u32 = 0,
         node_children: *std.json.Array,
 
-        fn callback(self: @This(), context_tree: std.zig.Ast, child_node: std.zig.Ast.Node.Index) error{OutOfMemory}!void {
+        fn callback(self: @This(), context_tree: Ast, child_node: Ast.Node.Index) error{OutOfMemory}!void {
             if (NodeIndexShim.init(child_node).isRoot()) return;
 
             var node_object = std.json.ObjectMap.init(self.arena);
@@ -114,7 +114,7 @@ pub fn jsonTree(
     return std.json.Value{ .object = root_json_object };
 }
 
-fn errorsToJson(tree: std.zig.Ast, arena: std.mem.Allocator) !std.json.Array {
+fn errorsToJson(tree: Ast, arena: std.mem.Allocator) !std.json.Array {
     var json_errors = std.json.Array.init(arena);
 
     for (tree.errors) |e| {
@@ -144,10 +144,10 @@ fn errorsToJson(tree: std.zig.Ast, arena: std.mem.Allocator) !std.json.Array {
     return json_errors;
 }
 
-fn tokensToJson(tree: std.zig.Ast, arena: std.mem.Allocator) !std.json.Array {
+fn tokensToJson(tree: Ast, arena: std.mem.Allocator) !std.json.Array {
     var json_tokens = std.json.Array.init(arena);
 
-    var token_index: std.zig.Ast.TokenIndex = 0;
+    var token_index: Ast.TokenIndex = 0;
     while (token_index < tree.tokens.len) : (token_index += 1) {
         const loc = tree.tokenLocation(
             0,
@@ -178,3 +178,4 @@ const shims = @import("shims.zig");
 const version = @import("version.zig");
 const ast = @import("ast.zig");
 const NodeIndexShim = shims.NodeIndexShim;
+const Ast = std.zig.Ast;

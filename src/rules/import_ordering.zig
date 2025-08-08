@@ -129,7 +129,7 @@ const ImportsQueueLinesAscending = std.PriorityDequeue(
 );
 
 const ImportDecl = struct {
-    decl_node: std.zig.Ast.Node.Index,
+    decl_node: Ast.Node.Index,
     decl_name: []const u8,
     classification: Classification,
     first_line: usize,
@@ -142,15 +142,15 @@ const ImportDecl = struct {
     }
 };
 
-fn deinitScopedImports(scoped_imports: *std.AutoArrayHashMap(std.zig.Ast.Node.Index, ImportsQueueLinesAscending)) void {
+fn deinitScopedImports(scoped_imports: *std.AutoArrayHashMap(Ast.Node.Index, ImportsQueueLinesAscending)) void {
     for (scoped_imports.values()) |v| v.deinit();
     scoped_imports.deinit();
 }
 
 fn swapNodesFix(
     doc: zlinter.session.LintDocument,
-    first: std.zig.Ast.Node.Index,
-    second: std.zig.Ast.Node.Index,
+    first: Ast.Node.Index,
+    second: Ast.Node.Index,
     allocator: std.mem.Allocator,
 ) error{OutOfMemory}!zlinter.results.LintProblemFix {
     const tree = doc.handle.tree;
@@ -183,14 +183,14 @@ fn swapNodesFix(
 fn resolveScopedImports(
     doc: zlinter.session.LintDocument,
     allocator: std.mem.Allocator,
-) !std.AutoArrayHashMap(std.zig.Ast.Node.Index, ImportsQueueLinesAscending) {
+) !std.AutoArrayHashMap(Ast.Node.Index, ImportsQueueLinesAscending) {
     const tree = doc.handle.tree;
 
     const root: NodeIndexShim = .root;
     var node_it = try doc.nodeLineageIterator(root, allocator);
     defer node_it.deinit();
 
-    var scoped_imports: std.AutoArrayHashMap(std.zig.Ast.Node.Index, ImportsQueueLinesAscending) = .init(allocator);
+    var scoped_imports: std.AutoArrayHashMap(Ast.Node.Index, ImportsQueueLinesAscending) = .init(allocator);
     while (try node_it.next()) |tuple| {
         const node, const connections = tuple;
 
@@ -229,7 +229,7 @@ fn resolveScopedImports(
 }
 
 /// Returns the import path if `@import` built in call.
-fn isImportCall(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) ?[]const u8 {
+fn isImportCall(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
     switch (shims.nodeTag(tree, node)) {
         .builtin_call_two,
         .builtin_call_two_comma,
@@ -263,7 +263,7 @@ fn classifyImportPath(path: []const u8) ImportDecl.Classification {
 
 // TODO(#52): Move to ast module
 // zlinter-disable-next-line
-// fn getScopedNode(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index) std.zig.Ast.Node.Index {
+// fn getScopedNode(doc: zlinter.session.LintDocument, node: Ast.Node.Index) Ast.Node.Index {
 //     var parent = doc.lineage.items(.parent)[node];
 //     while (parent) |parent_node| {
 //         switch (shims.nodeTag(doc.handle.tree, parent_node)) {
@@ -610,3 +610,4 @@ const std = @import("std");
 const zlinter = @import("zlinter");
 const shims = zlinter.shims;
 const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;

@@ -61,7 +61,7 @@ fn run(
     defer container_references.deinit(allocator);
 
     for (tree.rootDecls()) |decl| {
-        const problem: ?struct { first: std.zig.Ast.TokenIndex, last: std.zig.Ast.TokenIndex } = problem: {
+        const problem: ?struct { first: Ast.TokenIndex, last: Ast.TokenIndex } = problem: {
             if (tree.fullVarDecl(decl)) |var_decl| {
                 if (var_decl.visib_token) |visib_token|
                     if (token_tags[visib_token] == .keyword_pub)
@@ -78,7 +78,7 @@ fn run(
                     };
                 }
             } else {
-                var buffer: [1]std.zig.Ast.Node.Index = undefined;
+                var buffer: [1]Ast.Node.Index = undefined;
                 if (namedFnDeclProto(tree, &buffer, decl)) |fn_proto| {
                     if (fn_proto.visib_token) |token|
                         if (token_tags[token] == .keyword_pub)
@@ -137,10 +137,10 @@ fn run(
 
 /// Returns fn proto if node is fn declaration and has a name token.
 fn namedFnDeclProto(
-    tree: std.zig.Ast,
-    buffer: *[1]std.zig.Ast.Node.Index,
-    node: std.zig.Ast.Node.Index,
-) ?std.zig.Ast.full.FnProto {
+    tree: Ast,
+    buffer: *[1]Ast.Node.Index,
+    node: Ast.Node.Index,
+) ?Ast.full.FnProto {
     if (switch (shims.nodeTag(tree, node)) {
         .fn_decl => tree.fullFnProto(buffer, switch (zlinter.version.zig) {
             .@"0.14" => shims.nodeData(tree, node).lhs,
@@ -153,7 +153,7 @@ fn namedFnDeclProto(
     return null;
 }
 
-fn isFieldAccessOfRootContainer(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index) error{OutOfMemory}!bool {
+fn isFieldAccessOfRootContainer(doc: zlinter.session.LintDocument, node: Ast.Node.Index) error{OutOfMemory}!bool {
     std.debug.assert(shims.nodeTag(doc.handle.tree, node) == .field_access);
 
     const tree = doc.handle.tree;
@@ -282,3 +282,4 @@ const std = @import("std");
 const zlinter = @import("zlinter");
 const shims = zlinter.shims;
 const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;

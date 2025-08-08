@@ -65,7 +65,7 @@ fn run(
     defer lint_problems.deinit(allocator);
 
     const tree = doc.handle.tree;
-    var call_buffer: [1]std.zig.Ast.Node.Index = undefined;
+    var call_buffer: [1]Ast.Node.Index = undefined;
 
     const root: NodeIndexShim = .root;
     var it = try doc.nodeLineageIterator(root, allocator);
@@ -264,3 +264,4 @@ const std = @import("std");
 const zlinter = @import("zlinter");
 const shims = zlinter.shims;
 const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;

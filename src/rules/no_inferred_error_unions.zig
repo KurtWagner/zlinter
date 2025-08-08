@@ -54,7 +54,7 @@ fn run(
     var it = try doc.nodeLineageIterator(root, allocator);
     defer it.deinit();
 
-    var fn_decl_buffer: [1]std.zig.Ast.Node.Index = undefined;
+    var fn_decl_buffer: [1]Ast.Node.Index = undefined;
     nodes: while (try it.next()) |tuple| {
         const node, const connections = tuple;
         _ = connections;
@@ -98,7 +98,7 @@ fn run(
         null;
 }
 
-fn isFnPrivate(tree: std.zig.Ast, fn_decl: std.zig.Ast.full.FnProto) bool {
+fn isFnPrivate(tree: Ast, fn_decl: Ast.full.FnProto) bool {
     const visibility_token = fn_decl.visib_token orelse return true;
     return switch (tree.tokens.items(.tag)[visibility_token]) {
         .keyword_pub => false,
@@ -269,3 +269,4 @@ const std = @import("std");
 const zlinter = @import("zlinter");
 const shims = zlinter.shims;
 const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;
