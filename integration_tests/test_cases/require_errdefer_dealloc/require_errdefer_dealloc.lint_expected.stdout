@@ -1,3 +1,33 @@
+warning Missing `errdefer` cleanup [test_cases/require_errdefer_dealloc/require_errdefer_dealloc.input.zig:54:5] require_errdefer_dealloc
+
+ 54 |     var bad_a = MyArray.init(std.heap.page_allocator);
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Missing `errdefer` cleanup [test_cases/require_errdefer_dealloc/require_errdefer_dealloc.input.zig:56:5] require_errdefer_dealloc
+
+ 56 |     var bad_c: MyArrayUmanaged = .empty;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Missing `errdefer` cleanup [test_cases/require_errdefer_dealloc/require_errdefer_dealloc.input.zig:60:5] require_errdefer_dealloc
+
+ 60 |     var bad_e: MyBufSet = .init(ambiguous_name);
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Missing `errdefer` cleanup [test_cases/require_errdefer_dealloc/require_errdefer_dealloc.input.zig:55:5] require_errdefer_dealloc
+
+ 55 |     var bad_b: MyArray = .init(std.heap.page_allocator);
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Missing `errdefer` cleanup [test_cases/require_errdefer_dealloc/require_errdefer_dealloc.input.zig:61:5] require_errdefer_dealloc
+
+ 61 |     var bad_f = MyBufSet.init(ambiguous_name);
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Missing `errdefer` cleanup [test_cases/require_errdefer_dealloc/require_errdefer_dealloc.input.zig:57:5] require_errdefer_dealloc
+
+ 57 |     var bad_d = MyArrayUmanaged.empty;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 warning Missing `errdefer` cleanup [test_cases/require_errdefer_dealloc/require_errdefer_dealloc.input.zig:36:5] require_errdefer_dealloc
 
  36 |     var bad_a = std.ArrayList(u8).init(std.heap.page_allocator);
@@ -18,4 +48,4 @@ warning Missing `errdefer` cleanup [test_cases/require_errdefer_dealloc/require_
  39 |     var bad_d = std.AutoHashMapUnmanaged(u8, void).empty;
     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-x 4 warnings
+x 10 warnings

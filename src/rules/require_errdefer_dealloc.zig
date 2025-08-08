@@ -19,12 +19,10 @@
 //!   impractical at this level. It currently only looks at std library containers
 //!   like `ArrayList` and `HashMap`.
 //!
-//! * This rule cannot reliably detect usage of fixed buffer allocators or
+//! * This rule cannot always reliably detect usage of fixed buffer allocators or
 //!   arenas; however, using `errdefer array.deinit(arena);` in these cases is
-//!   generally harmless.
+//!   generally harmless. It will do its best to ignore the most obvious cases.
 //!
-
-// TODO(#48): Add integration tests
 
 /// Config for require_errdefer_dealloc rule.
 pub const Config = struct {
@@ -111,6 +109,7 @@ fn processBlock(
         cleanup_symbols.deinit();
     }
 
+    var call_buffer: [1]std.zig.Ast.Node.Index = undefined;
     for (doc.lineage.items(.children)[zlinter.shims.NodeIndexShim.init(block_node).index] orelse &.{}) |child_node| {
         if (try declRef(doc, child_node)) |decl_ref| {
             if (decl_ref.hasDeinit())
@@ -119,8 +118,8 @@ fn processBlock(
             defer defer_block.deinit(gpa);
 
             for (defer_block.children) |defer_block_child| {
-                const cleanup_call = callWithName(doc, defer_block_child, &.{"deinit"}) orelse continue;
-                switch (cleanup_call) {
+                const cleanup_call = callWithName(doc, defer_block_child, &call_buffer, &.{"deinit"}) orelse continue;
+                switch (cleanup_call.kind) {
                     .single_field => |info| {
                         if (cleanup_symbols.fetchRemove(tree.tokenSlice(info.field_main_token))) |e| gpa.free(e.key);
                     },
@@ -140,38 +139,41 @@ fn processBlock(
 
 // TODO(#48): Write unit tests for helpers and consider whether some should be moved to ast
 
-const Call = union(enum) {
-    /// e.g., `parent.call()` not `parent.child.call()`
-    single_field: struct {
-        /// e.g., `parent.call()` would have `parent` as the main token here.
-        field_main_token: std.zig.Ast.TokenIndex,
-        /// e.g., `parent.call()` would have `call` as the identifier token here.
-        call_identifier_token: std.zig.Ast.TokenIndex,
-    },
-    /// array_access, unwrap_optional, nested field_access
-    ///
-    /// e.g., `parent.child.call()`, `optional.?.call()` and `array[0].call()`
-    ///
-    /// If there's value this can be broken up in the future but for now we do
-    /// not need the separation.
-    other: struct {
-        /// e.g., `parent.child.call()` would have `call` as the identifier token here.
-        call_identifier_token: std.zig.Ast.TokenIndex,
-    },
-    /// e.g., `.init()`
-    enum_literal: struct {
-        /// e.g., `.init()` would have `init` here
-        call_identifier_token: std.zig.Ast.TokenIndex,
+const Call = struct {
+    params: []const std.zig.Ast.Node.Index,
+
+    kind: union(enum) {
+        /// e.g., `parent.call()` not `parent.child.call()`
+        single_field: struct {
+            /// e.g., `parent.call()` would have `parent` as the main token here.
+            field_main_token: std.zig.Ast.TokenIndex,
+            /// e.g., `parent.call()` would have `call` as the identifier token here.
+            call_identifier_token: std.zig.Ast.TokenIndex,
+        },
+        /// array_access, unwrap_optional, nested field_access
+        ///
+        /// e.g., `parent.child.call()`, `optional.?.call()` and `array[0].call()`
+        ///
+        /// If there's value this can be broken up in the future but for now we do
+        /// not need the separation.
+        other: struct {
+            /// e.g., `parent.child.call()` would have `call` as the identifier token here.
+            call_identifier_token: std.zig.Ast.TokenIndex,
+        },
+        /// e.g., `.init()`
+        enum_literal: struct {
+            /// e.g., `.init()` would have `init` here
+            call_identifier_token: std.zig.Ast.TokenIndex,
+        },
     },
 };
 
 /// Returns call information for cases handled by the `require_errdefer_dealloc`
 /// Not all calls are handled so this method is not generally useful
-fn callWithName(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index, comptime names: []const []const u8) ?Call {
+fn callWithName(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index, buffer: *[1]std.zig.Ast.Node.Index, comptime names: []const []const u8) ?Call {
     const tree = doc.handle.tree;
 
-    var call_buffer: [1]std.zig.Ast.Node.Index = undefined;
-    const call = tree.fullCall(&call_buffer, node) orelse return null;
+    const call = tree.fullCall(buffer, node) orelse return null;
 
     const fn_expr_node = call.ast.fn_expr;
     const fn_expr_node_data = zlinter.shims.nodeData(tree, fn_expr_node);
@@ -200,16 +202,22 @@ fn callWithName(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index,
             if (field_node_tag != .identifier) {
                 // e.g, array_access, unwrap_optional, field_access
                 return .{
-                    .other = .{
-                        .call_identifier_token = fn_name,
+                    .params = call.ast.params,
+                    .kind = .{
+                        .other = .{
+                            .call_identifier_token = fn_name,
+                        },
                     },
                 };
             }
             // e.g., `parent.call()` not `parent.child.call()`
             return .{
-                .single_field = .{
-                    .field_main_token = zlinter.shims.nodeMainToken(tree, field_node),
-                    .call_identifier_token = fn_name,
+                .params = call.ast.params,
+                .kind = .{
+                    .single_field = .{
+                        .field_main_token = zlinter.shims.nodeMainToken(tree, field_node),
+                        .call_identifier_token = fn_name,
+                    },
                 },
             };
         },
@@ -222,8 +230,11 @@ fn callWithName(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index,
             for (names) |name| {
                 if (std.mem.eql(u8, name, identfier_slice)) {
                     return .{
-                        .enum_literal = .{
-                            .call_identifier_token = fn_name,
+                        .params = call.ast.params,
+                        .kind = .{
+                            .enum_literal = .{
+                                .call_identifier_token = fn_name,
+                            },
                         },
                     };
                 }
@@ -283,6 +294,7 @@ fn declRef(doc: zlinter.session.LintDocument, var_decl_node: std.zig.Ast.Node.In
 
     const init_node = zlinter.shims.NodeIndexShim.initOptional(var_decl.ast.init_node) orelse return null;
 
+    var call_buffer: [1]std.zig.Ast.Node.Index = undefined;
     if (!switch (zlinter.shims.nodeTag(doc.handle.tree, init_node.toNodeIndex())) {
         .field_access => zlinter.ast.isFieldVarAccess(doc.handle.tree, init_node.toNodeIndex(), &.{"empty"}),
         .enum_literal => zlinter.ast.isEnumLiteral(doc.handle.tree, init_node.toNodeIndex(), &.{"empty"}),
@@ -292,7 +304,10 @@ fn declRef(doc: zlinter.session.LintDocument, var_decl_node: std.zig.Ast.Node.In
         // type anyway.
         //
         // e.g., `array[0].init()` and `optional.?.init()`
-        callWithName(doc, init_node.toNodeIndex(), &.{"init"}) != null,
+        if (callWithName(doc, init_node.toNodeIndex(), &call_buffer, &.{"init"})) |call|
+            !hasArenaParam(doc, call.params)
+        else
+            false,
     }) return null;
 
     const var_decl_type = try doc.resolveTypeOfNode(var_decl_node) orelse return null;
@@ -359,6 +374,152 @@ fn declRef(doc: zlinter.session.LintDocument, var_decl_node: std.zig.Ast.Node.In
     }
 
     return null;
+}
+
+/// Returns true if it looks like based on parameters that the given call use
+/// leveraging an arena like allocator and thus should be excluded from checks
+/// by `require_errdefer_dealloc`.
+///
+/// For example, `.init(arena.allocator())` or `.init(arena)` look like they're
+/// accepting an arena so requiring cleanup in `errdefer` is not strictly necessary
+/// and may even cause confuion.
+///
+/// Where as `.init(allocator)` or `.init(std.heap.c_allocator)` should be checked
+/// for stricter cleanup on error as it won't automatically clear itself.
+fn hasArenaParam(doc: zlinter.session.LintDocument, params: []const std.zig.Ast.Node.Index) bool {
+    const tree = doc.handle.tree;
+    const skip_var_and_field_names: []const []const u8 = &.{
+        "arena",
+        "fba",
+        "fixed_buffer_allocator",
+        "arena_allocator",
+    };
+    var call_buffer: [1]std.zig.Ast.Node.Index = undefined;
+    for (params) |param_node| {
+        const tag = zlinter.shims.nodeTag(tree, param_node);
+        switch (tag) {
+            .identifier => {
+                const slice = tree.tokenSlice(zlinter.shims.nodeMainToken(tree, param_node));
+                for (skip_var_and_field_names) |str| {
+                    if (std.mem.eql(u8, slice, str)) return true;
+                }
+            },
+            .field_access => if (zlinter.ast.isFieldVarAccess(tree, param_node, skip_var_and_field_names)) return true,
+            else => if (callWithName(doc, param_node, &call_buffer, &.{"allocator"})) |call| {
+                switch (call.kind) {
+                    // e.g., checking for `arena.allocator()` call. Unfortunately
+                    // currently won't capture deeply nested, like `parent.arena.allocator()`
+                    // but this seems super unlikely so who cares for a linter...
+                    .single_field => |info| {
+                        for (skip_var_and_field_names) |str|
+                            if (std.mem.eql(u8, tree.tokenSlice(info.field_main_token), str)) return true;
+                    },
+                    .enum_literal, .other => {},
+                }
+            },
+        }
+    }
+    return false;
+}
+
+test "hasArenaParam" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    var buffer: [1]std.zig.Ast.Node.Index = undefined;
+    inline for (&.{
+        .{
+            \\ var a = .init();
+            ,
+            false,
+        },
+        .{
+            \\ var a = .init(allocator);
+            ,
+            false,
+        },
+        .{
+            \\ var a = .init(std.heap.c_allocator);
+            ,
+            false,
+        },
+        .{
+            \\ var a = .init(gpa);
+            ,
+            false,
+        },
+        .{
+            \\ var a = .init(arena);
+            ,
+            true,
+        },
+        .{
+            \\ var a = .init(arena_allocator);
+            ,
+            true,
+        },
+        .{
+            \\ var a = .init(fixed_buffer_allocator);
+            ,
+            true,
+        },
+        .{
+            \\ var a = .init(fba);
+            ,
+            true,
+        },
+        .{
+            \\ var a = .init(arena.allocator());
+            ,
+            true,
+        },
+        .{
+            \\ var a = .init(fba.allocator());
+            ,
+            true,
+        },
+        .{
+            \\ var a = .init(fixed_buffer_allocator.allocator());
+            ,
+            true,
+        },
+    }) |tuple| {
+        const source, const expected = tuple;
+        errdefer std.debug.print("Failed source: '{s}' expected {?}\n", .{ source, expected });
+
+        defer _ = arena.reset(.retain_capacity);
+
+        var ctx: zlinter.session.LintContext = undefined;
+        try ctx.init(.{}, std.testing.allocator);
+        defer ctx.deinit();
+
+        var tmp = std.testing.tmpDir(.{});
+        defer tmp.cleanup();
+
+        var doc = (try zlinter.testing.loadFakeDocument(
+            &ctx,
+            tmp.dir,
+            "test.zig",
+            "fn main() void {\n" ++ source ++ "\n}",
+            arena.allocator(),
+        )).?;
+        defer doc.deinit(ctx.gpa);
+
+        const tree = doc.handle.tree;
+        const actual = hasArenaParam(
+            doc,
+            tree.fullCall(&buffer, try zlinter.testing.expectNodeOfTagFirst(
+                doc,
+                &.{
+                    .call,
+                    .call_comma,
+                    .call_one,
+                    .call_one_comma,
+                },
+            )).?.ast.params,
+        );
+        try std.testing.expectEqual(expected, actual);
+    }
 }
 
 test {

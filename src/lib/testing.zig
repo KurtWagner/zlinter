@@ -107,9 +107,7 @@ pub fn expectNodeSlices(
 /// Expects and returns a the single node matching given tag(s)
 ///
 /// This is to encourage smaller unit tests and to ensure that the order does
-/// not matter when asserting. Alternatively we add a method that returns the
-/// first, which would walk the tree to ensure it finds them in the most logical
-/// order.
+/// not matter when asserting. Alternatively use `expectNodeOfTagFirst`
 pub fn expectSingleNodeOfTag(tree: std.zig.Ast, comptime tags: []const std.zig.Ast.Node.Tag) !std.zig.Ast.Node.Index {
     assertTestOnly();
 
@@ -125,6 +123,24 @@ pub fn expectSingleNodeOfTag(tree: std.zig.Ast, comptime tags: []const std.zig.A
     }
 
     return found orelse error.TestExpectedSingleNodeTag;
+}
+
+/// Expects at least one node and returns it matching a set of tags
+pub fn expectNodeOfTagFirst(doc: LintDocument, comptime tags: []const std.zig.Ast.Node.Tag) !std.zig.Ast.Node.Index {
+    assertTestOnly();
+
+    var it = try doc.nodeLineageIterator(.root, std.testing.allocator);
+    defer it.deinit();
+
+    while (try it.next()) |node_and_children| {
+        const node = node_and_children[0].toNodeIndex();
+        inline for (tags) |tag| {
+            if (nodeTag(doc.handle.tree, node) == tag) {
+                return node;
+            }
+        }
+    }
+    return error.TestExpectedSingleNodeTag;
 }
 
 /// Builds and runs a rule with fake file name and content (test only)
