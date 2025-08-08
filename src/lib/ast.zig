@@ -345,6 +345,179 @@ pub fn fnDecl(tree: std.zig.Ast, node: std.zig.Ast.Node.Index, fn_proto_buffer: 
     }
 }
 
+/// Returns a token of an identifier for the field access of a node if the
+/// node is in fact a field access node.
+///
+/// For example `parent.ok` and `parent.child.ok` would return a token index
+/// pointing to `ok`.
+pub fn fieldVarAccess(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) ?std.zig.Ast.TokenIndex {
+    if (shims.nodeTag(tree, node) != .field_access) return null;
+
+    const last_token = tree.lastToken(node);
+    const last_token_tag = shims.tokenTag(tree, last_token);
+
+    return switch (last_token_tag) {
+        .identifier => last_token,
+        else => null,
+    };
+}
+
+/// Returns true if the node is a field access and is accessing a given var name
+/// as the final access.
+///
+/// For example, `parent.ok` and `parent.child.ok` would match var name `ok` but
+/// not `child` (even though it is a field access above `ok`).
+pub fn isFieldVarAccess(tree: std.zig.Ast, node: std.zig.Ast.Node.Index, var_names: []const []const u8) bool {
+    const identifier_token = fieldVarAccess(tree, node) orelse return false;
+    const actual_var_name = tree.tokenSlice(identifier_token);
+
+    for (var_names) |var_name| {
+        if (std.mem.eql(u8, actual_var_name, var_name)) return true;
+    }
+    return false;
+}
+
+test "isFieldVarAccess" {
+    inline for (&.{
+        .{
+            \\ var var_name = .not_field_access;
+            ,
+            &.{"not_field_access"},
+            false,
+        },
+        .{
+            \\ var var_name = parent.notVarButCall();
+            ,
+            &.{ "parent", "notVarButCall" },
+            false,
+        },
+        .{
+            \\ var var_name = parent.good;
+            ,
+            &.{"good"},
+            true,
+        },
+        .{
+            \\ var var_name = parent.also.good;
+            ,
+            &.{ "other", "good" },
+            true,
+        },
+        .{
+            \\ var var_name = parent.also.good;
+            ,
+            &.{
+                "other",
+            },
+            false,
+        },
+        .{
+            \\ var var_name = parent.also.good;
+            ,
+            &.{
+                "parent", "also",
+            },
+            false,
+        },
+    }) |tuple| {
+        const source, const names, const expected = tuple;
+        errdefer std.debug.print("Failed source: '{s}'\n", .{source});
+
+        var ast = try std.zig.Ast.parse(
+            std.testing.allocator,
+            source,
+            .zig,
+        );
+        defer ast.deinit(std.testing.allocator);
+
+        const actual = isFieldVarAccess(
+            ast,
+            shims.NodeIndexShim.initOptional(ast.fullVarDecl(try testing.expectSingleNodeOfTag(
+                ast,
+                &.{
+                    .local_var_decl,
+                    .global_var_decl,
+                    .simple_var_decl,
+                    .aligned_var_decl,
+                },
+            )).?.ast.init_node).?.toNodeIndex(),
+            names,
+        );
+        try std.testing.expectEqual(expected, actual);
+    }
+}
+
+/// Returns true if enum literal matching a given var name
+pub fn isEnumLiteral(tree: std.zig.Ast, node: std.zig.Ast.Node.Index, enum_names: []const []const u8) bool {
+    if (shims.nodeTag(tree, node) != .enum_literal) return false;
+
+    const actual_enum_name = tree.tokenSlice(shims.nodeMainToken(tree, node));
+    for (enum_names) |enum_name| {
+        if (std.mem.eql(u8, actual_enum_name, enum_name)) return true;
+    }
+    return false;
+}
+
+test "isEnumLiteral" {
+    inline for (&.{
+        .{
+            \\ var var_name = .enum_name;
+            ,
+            &.{"enum_name"},
+            true,
+        },
+        .{
+            \\ var var_name = .enum_name;
+            ,
+            &.{ "other", "enum_name" },
+            true,
+        },
+        .{
+            \\ var var_name = not.literal;
+            ,
+            &.{"literal"},
+            false,
+        },
+        .{
+            \\ var var_name = not.literal();
+            ,
+            &.{"literal"},
+            false,
+        },
+        .{
+            \\ var var_name = notLiteral();
+            ,
+            &.{"notLiteral"},
+            false,
+        },
+    }) |tuple| {
+        const source, const names, const expected = tuple;
+        errdefer std.debug.print("Failed source: '{s}'\n", .{source});
+
+        var ast = try std.zig.Ast.parse(
+            std.testing.allocator,
+            source,
+            .zig,
+        );
+        defer ast.deinit(std.testing.allocator);
+
+        const actual = isEnumLiteral(
+            ast,
+            shims.NodeIndexShim.initOptional(ast.fullVarDecl(try testing.expectSingleNodeOfTag(
+                ast,
+                &.{
+                    .local_var_decl,
+                    .global_var_decl,
+                    .simple_var_decl,
+                    .aligned_var_decl,
+                },
+            )).?.ast.init_node).?.toNodeIndex(),
+            names,
+        );
+        try std.testing.expectEqual(expected, actual);
+    }
+}
+
 const std = @import("std");
 const zls = @import("zls");
 const shims = @import("shims.zig");

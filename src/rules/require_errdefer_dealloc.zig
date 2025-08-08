@@ -283,26 +283,17 @@ fn declRef(doc: zlinter.session.LintDocument, var_decl_node: std.zig.Ast.Node.In
 
     const init_node = zlinter.shims.NodeIndexShim.initOptional(var_decl.ast.init_node) orelse return null;
 
-    // TODO(#48): Cleanup this hackfest which is tightly coupled to std containers
-    // that are unmanaged (for empty) and managed calls with init(allocator).
-    if (zlinter.shims.nodeTag(doc.handle.tree, init_node.toNodeIndex()) == .field_access) {
-        const value = doc.handle.tree.tokenSlice(doc.handle.tree.lastToken(init_node.toNodeIndex()));
-        if (!std.mem.eql(u8, value, "empty")) {
-            return null;
-        }
-    } else if (zlinter.shims.nodeTag(doc.handle.tree, init_node.toNodeIndex()) == .enum_literal) {
-        const value = doc.handle.tree.tokenSlice(zlinter.shims.nodeMainToken(doc.handle.tree, init_node.toNodeIndex()));
-        if (!std.mem.eql(u8, value, "empty")) {
-            return null;
-        }
-    } else if (callWithName(doc, init_node.toNodeIndex(), &.{"init"}) == null) {
+    if (!switch (zlinter.shims.nodeTag(doc.handle.tree, init_node.toNodeIndex())) {
+        .field_access => zlinter.ast.isFieldVarAccess(doc.handle.tree, init_node.toNodeIndex(), &.{"empty"}),
+        .enum_literal => zlinter.ast.isEnumLiteral(doc.handle.tree, init_node.toNodeIndex(), &.{"empty"}),
+        else =>
         // This will also handle optional and array accesses, which shouldn't occur
         // but shouldn't be a problem to us anyway as we do strict checks on the
         // type anyway.
         //
         // e.g., `array[0].init()` and `optional.?.init()`
-        return null;
-    }
+        callWithName(doc, init_node.toNodeIndex(), &.{"init"}) != null,
+    }) return null;
 
     const var_decl_type = try doc.resolveTypeOfNode(var_decl_node) orelse return null;
     switch (var_decl_type.data) {
