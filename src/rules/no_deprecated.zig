@@ -195,25 +195,19 @@ fn handleIdentifierAccess(
     // Check whether the identifier is itself the declaration, in which case
     // we should skip as its not the usage but the declaration of it and we
     // dont want to list the declaration as deprecated only its usages
-    out: {
-        if (std.mem.eql(u8, decl_with_handle.handle.uri, handle.uri)) {
-            switch (decl_with_handle.decl) {
-                .ast_node => |decl_node| {
-                    const decl_identifier_token = switch (zlinter.shims.nodeTag(decl_with_handle.handle.tree, decl_node)) {
-                        .container_field_init,
-                        .container_field_align,
-                        .container_field,
-                        => zlinter.shims.nodeMainToken(decl_with_handle.handle.tree, decl_node),
-                        else => break :out,
-                    };
-                    if (decl_identifier_token == identifier_token) return;
-                },
-                .error_token => |err_token| {
-                    if (err_token == identifier_token) return;
-                },
-                else => {},
-            }
-        }
+    if (std.mem.eql(u8, decl_with_handle.handle.uri, handle.uri)) {
+        const is_identifier = switch (decl_with_handle.decl) {
+            .ast_node => |decl_node| switch (zlinter.shims.nodeTag(decl_with_handle.handle.tree, decl_node)) {
+                .container_field_init,
+                .container_field_align,
+                .container_field,
+                => zlinter.shims.nodeMainToken(decl_with_handle.handle.tree, decl_node) == identifier_token,
+                else => false,
+            },
+            .error_token => |err_token| err_token == identifier_token,
+            else => false,
+        };
+        if (is_identifier) return;
     }
 
     if (try decl_with_handle.docComments(arena)) |comment| {
@@ -246,17 +240,16 @@ fn handleEnumLiteral(
         gpa,
     ) orelse return;
 
-    if (try decl_with_handle.docComments(arena)) |doc_comment| {
-        if (getDeprecationFromDoc(doc_comment)) |message| {
-            try lint_problems.append(gpa, .{
-                .start = getLintProblemLocationStart(doc, node_index),
-                .end = getLintProblemLocationEnd(doc, node_index),
-                .message = try std.fmt.allocPrint(gpa, "Deprecated: {s}", .{message}),
-                .rule_id = rule.rule_id,
-                .severity = config.severity,
-            });
-        }
-    }
+    const doc_comment = try decl_with_handle.docComments(arena) orelse return;
+    const deprecated_message = getDeprecationFromDoc(doc_comment) orelse return;
+
+    try lint_problems.append(gpa, .{
+        .start = getLintProblemLocationStart(doc, node_index),
+        .end = getLintProblemLocationEnd(doc, node_index),
+        .message = try std.fmt.allocPrint(gpa, "Deprecated: {s}", .{deprecated_message}),
+        .rule_id = rule.rule_id,
+        .severity = config.severity,
+    });
 }
 
 fn getSymbolEnumLiteral(
@@ -332,17 +325,16 @@ fn handleFieldAccess(
         tree.tokenSlice(identifier_token),
     )) |decls| {
         for (decls) |decl| {
-            if (try decl.docComments(arena)) |doc_comment| {
-                if (getDeprecationFromDoc(doc_comment)) |message| {
-                    try lint_problems.append(gpa, .{
-                        .start = getLintProblemLocationStart(doc, node_index),
-                        .end = getLintProblemLocationEnd(doc, node_index),
-                        .message = try std.fmt.allocPrint(gpa, "Deprecated: {s}", .{message}),
-                        .rule_id = rule.rule_id,
-                        .severity = config.severity,
-                    });
-                }
-            }
+            const doc_comment = try decl.docComments(arena) orelse continue;
+            const deprecated_message = getDeprecationFromDoc(doc_comment) orelse continue;
+
+            try lint_problems.append(gpa, .{
+                .start = getLintProblemLocationStart(doc, node_index),
+                .end = getLintProblemLocationEnd(doc, node_index),
+                .message = try std.fmt.allocPrint(gpa, "Deprecated: {s}", .{deprecated_message}),
+                .rule_id = rule.rule_id,
+                .severity = config.severity,
+            });
         }
     }
 }
@@ -368,14 +360,13 @@ fn getDeprecationFromDoc(doc: []const u8) ?[]const u8 {
             "deprecated-",
         }) |line_prefix| {
             if (doc.len < line_prefix.len) continue;
+            if (!std.ascii.startsWithIgnoreCase(trimmed, line_prefix)) continue;
 
-            if (std.ascii.startsWithIgnoreCase(trimmed, line_prefix)) {
-                return std.mem.trim(
-                    u8,
-                    trimmed[line_prefix.len..],
-                    &std.ascii.whitespace,
-                );
-            }
+            return std.mem.trim(
+                u8,
+                trimmed[line_prefix.len..],
+                &std.ascii.whitespace,
+            );
         }
     }
     return null;
