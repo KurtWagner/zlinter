@@ -208,7 +208,7 @@ test "deferBlock - has expected children" {
         },
     }) |tuple| {
         const source, const expected = tuple;
-        errdefer std.debug.print("Failed source: '{s}' expected {?}\n", .{ source, expected });
+        errdefer std.debug.print("Failed source: '{s}' expected {}\n", .{ source, expected });
 
         defer _ = arena.reset(.retain_capacity);
 
@@ -299,7 +299,7 @@ test "fnProtoReturnsError" {
         },
     }) |tuple| {
         const source, const expected = tuple;
-        errdefer std.debug.print("Failed source: '{s}' expected {?}\n", .{ source, expected });
+        errdefer std.debug.print("Failed source: '{s}' expected {}\n", .{ source, expected });
 
         var ast = try std.zig.Ast.parse(std.testing.allocator, source, .zig);
         defer ast.deinit(std.testing.allocator);
@@ -421,7 +421,7 @@ test "isFieldVarAccess" {
         },
     }) |tuple| {
         const source, const names, const expected = tuple;
-        errdefer std.debug.print("Failed source: '{s}' expected {?}\n", .{ source, expected });
+        errdefer std.debug.print("Failed source: '{s}' expected {}\n", .{ source, expected });
 
         var ast = try std.zig.Ast.parse(
             std.testing.allocator,
@@ -498,7 +498,7 @@ test "isEnumLiteral" {
         },
     }) |tuple| {
         const source, const names, const expected = tuple;
-        errdefer std.debug.print("Failed source: '{s}' expected {?}\n", .{ source, expected });
+        errdefer std.debug.print("Failed source: '{s}' expected {}\n", .{ source, expected });
 
         var ast = try std.zig.Ast.parse(
             std.testing.allocator,

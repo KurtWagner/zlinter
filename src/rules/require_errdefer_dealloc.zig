@@ -485,7 +485,7 @@ test "hasArenaParam" {
         },
     }) |tuple| {
         const source, const expected = tuple;
-        errdefer std.debug.print("Failed source: '{s}' expected {?}\n", .{ source, expected });
+        errdefer std.debug.print("Failed source: '{s}' expected {}\n", .{ source, expected });
 
         defer _ = arena.reset(.retain_capacity);
 
