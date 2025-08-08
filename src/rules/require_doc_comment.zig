@@ -66,7 +66,7 @@ fn run(
 
     var fn_decl_buffer: [1]std.zig.Ast.Node.Index = undefined;
 
-    skip: while (try it.next()) |tuple| {
+    nodes: while (try it.next()) |tuple| {
         defer arena_buffer.reset();
 
         const node, const connections = tuple;
@@ -80,9 +80,9 @@ fn run(
                     .{ config.private_severity, "Private" }
                 else
                     .{ config.public_severity, "Public" };
-                if (severity == .off) continue :skip;
+                if (severity == .off) continue :nodes;
 
-                if (try hasDocComments(arena, tree, node.toNodeIndex())) continue :skip;
+                if (try hasDocComments(arena, tree, node.toNodeIndex())) continue :nodes;
 
                 try lint_problems.append(allocator, .{
                     .rule_id = rule.rule_id,
@@ -97,9 +97,9 @@ fn run(
                     .{ config.private_severity, "Private" }
                 else
                     .{ config.public_severity, "Public" };
-                if (severity == .off) continue :skip;
+                if (severity == .off) continue :nodes;
 
-                if (try hasDocComments(arena, tree, node.toNodeIndex())) continue :skip;
+                if (try hasDocComments(arena, tree, node.toNodeIndex())) continue :nodes;
 
                 try lint_problems.append(allocator, .{
                     .rule_id = rule.rule_id,
@@ -111,7 +111,7 @@ fn run(
             },
         }
 
-        continue :skip;
+        continue :nodes;
     }
 
     return if (lint_problems.items.len > 0)

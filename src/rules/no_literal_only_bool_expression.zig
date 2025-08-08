@@ -59,7 +59,7 @@ fn run(
     var it = try doc.nodeLineageIterator(root, allocator);
     defer it.deinit();
 
-    skip: while (try it.next()) |tuple| {
+    nodes: while (try it.next()) |tuple| {
         const node, const connections = tuple;
         _ = connections;
 
@@ -98,7 +98,7 @@ fn run(
                 }
             } else if (tree.fullWhile(node.toNodeIndex())) |full_while| {
                 if (isLiteral(tree, full_while.ast.cond_expr)) |literal| {
-                    if (literal == .true) continue :skip;
+                    if (literal == .true) continue :nodes;
 
                     try lint_problems.append(allocator, .{
                         .rule_id = rule.rule_id,
@@ -110,10 +110,10 @@ fn run(
                 }
             },
             // else if (tree.fullVarDecl(node.toNodeIndex())) |var_decl| {
-            //     if (tree.tokens.items(.tag)[var_decl.ast.mut_token] != .keyword_const) continue :skip;
+            //     if (tree.tokens.items(.tag)[var_decl.ast.mut_token] != .keyword_const) continue :nodes;
 
-            //     const init_node = zlinter.shims.NodeIndexShim.initOptional(var_decl.ast.init_node) orelse continue :skip;
-            //     if (!isLiteral(tree, init_node.toNodeIndex())) continue :skip;
+            //     const init_node = zlinter.shims.NodeIndexShim.initOptional(var_decl.ast.init_node) orelse continue :nodes;
+            //     if (!isLiteral(tree, init_node.toNodeIndex())) continue :nodes;
             // },
         }
     }

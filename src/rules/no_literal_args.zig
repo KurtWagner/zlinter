@@ -71,11 +71,11 @@ fn run(
     var it = try doc.nodeLineageIterator(root, allocator);
     defer it.deinit();
 
-    skip: while (try it.next()) |tuple| {
+    nodes: while (try it.next()) |tuple| {
         const node, const connections = tuple;
         _ = connections;
 
-        const call = tree.fullCall(&call_buffer, node.toNodeIndex()) orelse continue :skip;
+        const call = tree.fullCall(&call_buffer, node.toNodeIndex()) orelse continue :nodes;
 
         for (call.ast.params) |param_node| {
             const kind: LiteralKind = switch (zlinter.shims.nodeTag(tree, param_node)) {
@@ -99,12 +99,12 @@ fn run(
 
             // if configured, skip if a parent is a test block
             if (config.exclude_tests and doc.isEnclosedInTestBlock(node)) {
-                continue :skip;
+                continue :nodes;
             }
 
             const fn_name = tree.tokenSlice(tree.lastToken(call.ast.fn_expr));
             for (config.exclude_fn_names) |exclude_fn_name| {
-                if (std.mem.eql(u8, exclude_fn_name, fn_name)) continue :skip;
+                if (std.mem.eql(u8, exclude_fn_name, fn_name)) continue :nodes;
             }
 
             switch (kind) {

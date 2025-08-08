@@ -52,8 +52,8 @@ fn run(
     const tree = doc.handle.tree;
     const source = tree.source;
 
-    skip: for (doc.comments.comments) |comment| {
-        if (comment.kind != .todo) continue :skip;
+    nodes: for (doc.comments.comments) |comment| {
+        if (comment.kind != .todo) continue :nodes;
 
         const todo = comment.kind.todo;
 
@@ -65,7 +65,7 @@ fn run(
                     doc.comments.getRangeContent(inner_content, source),
                     config,
                 ))
-                    continue :skip;
+                    continue :nodes;
             }
 
             if (todo.content) |content| {
@@ -73,7 +73,7 @@ fn run(
                     doc.comments.getRangeContent(content, source),
                     config,
                 ))
-                    continue :skip;
+                    continue :nodes;
             }
         }
 

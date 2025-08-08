@@ -49,7 +49,7 @@ fn run(
     var it = try doc.nodeLineageIterator(root, allocator);
     defer it.deinit();
 
-    skip: while (try it.next()) |tuple| {
+    nodes: while (try it.next()) |tuple| {
         const node, const connections = tuple;
         _ = connections;
 
@@ -119,7 +119,7 @@ fn run(
         if (maybe_problem) |problem| {
             // if configured, skip if a parent is a test block
             if (config.exclude_tests and doc.isEnclosedInTestBlock(node)) {
-                continue :skip;
+                continue :nodes;
             }
 
             try lint_problems.append(allocator, .{
