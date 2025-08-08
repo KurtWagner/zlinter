@@ -30,7 +30,7 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    var node: zlinter.shims.NodeIndexShim = .root;
+    var node: NodeIndexShim = .root;
     while (node.index < tree.nodes.len) : (node.index += 1) {
         const switch_info = tree.fullSwitch(node.toNodeIndex()) orelse continue;
 
@@ -68,3 +68,5 @@ test {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const shims = zlinter.shims;
+const NodeIndexShim = zlinter.shims.NodeIndexShim;

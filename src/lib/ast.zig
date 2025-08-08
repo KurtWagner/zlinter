@@ -15,7 +15,7 @@ pub const NodeConnections = struct {
 pub const NodeAncestorIterator = struct {
     const Self = @This();
 
-    current: shims.NodeIndexShim,
+    current: NodeIndexShim,
     lineage: *NodeLineage,
     done: bool = false,
 
@@ -24,7 +24,7 @@ pub const NodeAncestorIterator = struct {
 
         const parent = self.lineage.items(.parent)[self.current.index];
         if (parent) |p| {
-            self.current = shims.NodeIndexShim.init(p);
+            self.current = NodeIndexShim.init(p);
             return p;
         } else {
             self.done = true;
@@ -36,7 +36,7 @@ pub const NodeAncestorIterator = struct {
 pub const NodeLineageIterator = struct {
     const Self = @This();
 
-    queue: std.ArrayListUnmanaged(shims.NodeIndexShim) = .empty,
+    queue: std.ArrayListUnmanaged(NodeIndexShim) = .empty,
     lineage: *NodeLineage,
     gpa: std.mem.Allocator,
 
@@ -45,7 +45,7 @@ pub const NodeLineageIterator = struct {
         self.* = undefined;
     }
 
-    pub fn next(self: *Self) error{OutOfMemory}!?struct { shims.NodeIndexShim, NodeConnections } {
+    pub fn next(self: *Self) error{OutOfMemory}!?struct { NodeIndexShim, NodeConnections } {
         if (self.queue.pop()) |node_shim| {
             const connections = self.lineage.get(node_shim.index);
             for (connections.children orelse &.{}) |child| {
@@ -67,7 +67,7 @@ pub fn nodeChildrenAlloc(
         children: *std.ArrayListUnmanaged(std.zig.Ast.Node.Index),
 
         fn callback(self: @This(), _: std.zig.Ast, child_node: std.zig.Ast.Node.Index) error{OutOfMemory}!void {
-            if (shims.NodeIndexShim.init(child_node).isRoot()) return;
+            if (NodeIndexShim.init(child_node).isRoot()) return;
             try self.children.append(self.gpa, child_node);
         }
     };
@@ -139,7 +139,7 @@ pub fn deferBlock(doc: session.LintDocument, node: std.zig.Ast.Node.Index, alloc
         };
 
     if (isBlock(tree, exp_node)) {
-        return .{ .children = try allocator.dupe(std.zig.Ast.Node.Index, doc.lineage.items(.children)[shims.NodeIndexShim.init(exp_node).index] orelse &.{}) };
+        return .{ .children = try allocator.dupe(std.zig.Ast.Node.Index, doc.lineage.items(.children)[NodeIndexShim.init(exp_node).index] orelse &.{}) };
     } else {
         return .{ .children = try allocator.dupe(std.zig.Ast.Node.Index, &.{exp_node}) };
     }
@@ -241,7 +241,7 @@ test "deferBlock - has expected children" {
 
 /// Returns true if return type is `!type` or `error{ErrorName}!type` or `ErrorName!type`
 pub fn fnProtoReturnsError(tree: std.zig.Ast, fn_proto: std.zig.Ast.full.FnProto) bool {
-    const return_node = shims.NodeIndexShim.initOptional(fn_proto.ast.return_type) orelse return false;
+    const return_node = NodeIndexShim.initOptional(fn_proto.ast.return_type) orelse return false;
     const tag = shims.nodeTag(tree, return_node.toNodeIndex());
     return switch (tag) {
         .error_union => true,
@@ -432,7 +432,7 @@ test "isFieldVarAccess" {
 
         const actual = isFieldVarAccess(
             ast,
-            shims.NodeIndexShim.initOptional(ast.fullVarDecl(try testing.expectSingleNodeOfTag(
+            NodeIndexShim.initOptional(ast.fullVarDecl(try testing.expectSingleNodeOfTag(
                 ast,
                 &.{
                     .local_var_decl,
@@ -509,7 +509,7 @@ test "isEnumLiteral" {
 
         const actual = isEnumLiteral(
             ast,
-            shims.NodeIndexShim.initOptional(ast.fullVarDecl(try testing.expectSingleNodeOfTag(
+            NodeIndexShim.initOptional(ast.fullVarDecl(try testing.expectSingleNodeOfTag(
                 ast,
                 &.{
                     .local_var_decl,
@@ -530,3 +530,4 @@ const shims = @import("shims.zig");
 const version = @import("version.zig");
 const testing = @import("testing.zig");
 const session = @import("session.zig");
+const NodeIndexShim = shims.NodeIndexShim;

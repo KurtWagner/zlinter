@@ -42,11 +42,11 @@ fn run(
     defer arena_allocator.deinit();
     const arena = arena_allocator.allocator();
 
-    var node: zlinter.shims.NodeIndexShim = .root;
+    var node: NodeIndexShim = .root;
     while (node.index < handle.tree.nodes.len) : (node.index += 1) {
         defer _ = arena_allocator.reset(.retain_capacity);
 
-        const tag = zlinter.shims.nodeTag(tree, node.toNodeIndex());
+        const tag = shims.nodeTag(tree, node.toNodeIndex());
         switch (tag) {
             .enum_literal => try handleEnumLiteral(
                 rule,
@@ -54,7 +54,7 @@ fn run(
                 arena,
                 doc,
                 node.toNodeIndex(),
-                zlinter.shims.nodeMainToken(tree, node.toNodeIndex()),
+                shims.nodeMainToken(tree, node.toNodeIndex()),
                 &lint_problems,
                 config,
             ),
@@ -65,8 +65,8 @@ fn run(
                 doc,
                 node.toNodeIndex(),
                 switch (zlinter.version.zig) {
-                    .@"0.14" => zlinter.shims.nodeData(tree, node.toNodeIndex()).rhs,
-                    .@"0.15" => zlinter.shims.nodeData(tree, node.toNodeIndex()).node_and_token.@"1",
+                    .@"0.14" => shims.nodeData(tree, node.toNodeIndex()).rhs,
+                    .@"0.15" => shims.nodeData(tree, node.toNodeIndex()).node_and_token.@"1",
                 },
                 &lint_problems,
                 config,
@@ -77,7 +77,7 @@ fn run(
                 arena,
                 doc,
                 node.toNodeIndex(),
-                zlinter.shims.nodeMainToken(tree, node.toNodeIndex()),
+                shims.nodeMainToken(tree, node.toNodeIndex()),
                 &lint_problems,
                 config,
             ),
@@ -88,16 +88,16 @@ fn run(
                 // -----------------------------------------------------------------
                 // 0.15 breaking changes - Add explicit breaking changes here:
                 // -----------------------------------------------------------------
-                .@"usingnamespace" => try lint_problems.append(gpa, .{
-                    .start = .startOfToken(tree, zlinter.shims.nodeMainToken(tree, node.toNodeIndex())),
-                    .end = .endOfToken(tree, zlinter.shims.nodeMainToken(tree, node.toNodeIndex())),
+                .usingnamespace => try lint_problems.append(gpa, .{
+                    .start = .startOfToken(tree, shims.nodeMainToken(tree, node.toNodeIndex())),
+                    .end = .endOfToken(tree, shims.nodeMainToken(tree, node.toNodeIndex())),
                     .message = try std.fmt.allocPrint(gpa, "Deprecated - `usingnamespace` keyword is removed in 0.15", .{}),
                     .rule_id = rule.rule_id,
                     .severity = config.severity,
                 }),
                 // I don't think await and async were in used in the compiler
                 // but for completeness lets include as they were in the AST:
-                .@"await" => try lint_problems.append(gpa, .{
+                .await => try lint_problems.append(gpa, .{
                     .start = .startOfNode(tree, node.toNodeIndex()),
                     .end = .endOfNode(tree, node.toNodeIndex()),
                     .message = try std.fmt.allocPrint(gpa, "Deprecated - `await` keyword is removed in 0.15", .{}),
@@ -120,7 +120,7 @@ fn run(
                 .builtin_call,
                 .builtin_call_comma,
                 => {
-                    const main_token = zlinter.shims.nodeMainToken(tree, node.toNodeIndex());
+                    const main_token = shims.nodeMainToken(tree, node.toNodeIndex());
                     if (std.mem.eql(u8, tree.tokenSlice(main_token), "@frameSize")) {
                         try lint_problems.append(gpa, .{
                             .start = .startOfNode(tree, node.toNodeIndex()),
@@ -197,11 +197,11 @@ fn handleIdentifierAccess(
     // dont want to list the declaration as deprecated only its usages
     if (std.mem.eql(u8, decl_with_handle.handle.uri, handle.uri)) {
         const is_identifier = switch (decl_with_handle.decl) {
-            .ast_node => |decl_node| switch (zlinter.shims.nodeTag(decl_with_handle.handle.tree, decl_node)) {
+            .ast_node => |decl_node| switch (shims.nodeTag(decl_with_handle.handle.tree, decl_node)) {
                 .container_field_init,
                 .container_field_align,
                 .container_field,
-                => zlinter.shims.nodeMainToken(decl_with_handle.handle.tree, decl_node) == identifier_token,
+                => shims.nodeMainToken(decl_with_handle.handle.tree, decl_node) == identifier_token,
                 else => false,
             },
             .error_token => |err_token| err_token == identifier_token,
@@ -258,7 +258,7 @@ fn getSymbolEnumLiteral(
     name: []const u8,
     gpa: std.mem.Allocator,
 ) error{OutOfMemory}!?zlinter.zls.Analyser.DeclWithHandle {
-    std.debug.assert(zlinter.shims.nodeTag(doc.handle.tree, node) == .enum_literal);
+    std.debug.assert(shims.nodeTag(doc.handle.tree, node) == .enum_literal);
 
     var ancestors = std.ArrayList(std.zig.Ast.Node.Index).init(gpa);
     defer ancestors.deinit();
@@ -268,8 +268,8 @@ fn getSymbolEnumLiteral(
 
     var it = doc.nodeAncestorIterator(current);
     while (it.next()) |ancestor| {
-        if (zlinter.shims.NodeIndexShim.init(ancestor).isRoot()) break;
-        if (zlinter.shims.isNodeOverlapping(doc.handle.tree, current, ancestor)) {
+        if (NodeIndexShim.init(ancestor).isRoot()) break;
+        if (shims.isNodeOverlapping(doc.handle.tree, current, ancestor)) {
             try ancestors.append(ancestor);
             current = ancestor;
         } else {
@@ -539,3 +539,5 @@ test "no_deprecated - explicit 0.15.x breaking changes" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const shims = zlinter.shims;
+const NodeIndexShim = zlinter.shims.NodeIndexShim;

@@ -67,7 +67,7 @@ fn run(
     const tree = doc.handle.tree;
     var call_buffer: [1]std.zig.Ast.Node.Index = undefined;
 
-    const root: zlinter.shims.NodeIndexShim = .root;
+    const root: NodeIndexShim = .root;
     var it = try doc.nodeLineageIterator(root, allocator);
     defer it.deinit();
 
@@ -78,11 +78,11 @@ fn run(
         const call = tree.fullCall(&call_buffer, node.toNodeIndex()) orelse continue :nodes;
 
         for (call.ast.params) |param_node| {
-            const kind: LiteralKind = switch (zlinter.shims.nodeTag(tree, param_node)) {
+            const kind: LiteralKind = switch (shims.nodeTag(tree, param_node)) {
                 .number_literal => .number,
                 .string_literal, .multiline_string_literal => .string,
                 .char_literal => .char,
-                .identifier => switch (tree.tokens.items(.tag)[zlinter.shims.nodeMainToken(tree, param_node)]) {
+                .identifier => switch (tree.tokens.items(.tag)[shims.nodeMainToken(tree, param_node)]) {
                     .string_literal, .multiline_string_literal_line => .string,
                     .char_literal => .char,
                     .number_literal => .number,
@@ -262,3 +262,5 @@ test "no_literal_args" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const shims = zlinter.shims;
+const NodeIndexShim = zlinter.shims.NodeIndexShim;

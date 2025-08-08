@@ -78,10 +78,10 @@ fn run(
     const tree = doc.handle.tree;
     var buffer: [2]std.zig.Ast.Node.Index = undefined;
 
-    var node: zlinter.shims.NodeIndexShim = .root;
+    var node: NodeIndexShim = .root;
     while (node.index < tree.nodes.len) : (node.index += 1) {
-        if (zlinter.shims.nodeTag(tree, node.toNodeIndex()) == .error_set_decl) {
-            const node_data = zlinter.shims.nodeData(tree, node.toNodeIndex());
+        if (shims.nodeTag(tree, node.toNodeIndex()) == .error_set_decl) {
+            const node_data = shims.nodeData(tree, node.toNodeIndex());
 
             const rbrace = switch (zlinter.version.zig) {
                 .@"0.14" => node_data.rhs,
@@ -344,3 +344,5 @@ test "run - error container" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const shims = zlinter.shims;
+const NodeIndexShim = zlinter.shims.NodeIndexShim;

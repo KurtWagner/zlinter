@@ -45,7 +45,7 @@ fn run(
     var arena_buffer = std.heap.FixedBufferAllocator.init(&arena_mem);
     const arena = arena_buffer.allocator();
 
-    const root: zlinter.shims.NodeIndexShim = .root;
+    const root: NodeIndexShim = .root;
 
     if (config.file_severity != .off) {
         defer arena_buffer.reset();
@@ -72,7 +72,7 @@ fn run(
         const node, const connections = tuple;
         _ = connections;
 
-        const tag = zlinter.shims.nodeTag(tree, node.toNodeIndex());
+        const tag = shims.nodeTag(tree, node.toNodeIndex());
 
         switch (tag) {
             .fn_decl => if (tree.fullFnProto(&fn_decl_buffer, node.toNodeIndex())) |fn_decl| {
@@ -366,3 +366,5 @@ test "require_doc_comment - file" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const shims = zlinter.shims;
+const NodeIndexShim = zlinter.shims.NodeIndexShim;

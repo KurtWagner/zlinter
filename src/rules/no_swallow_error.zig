@@ -45,7 +45,7 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    const root: zlinter.shims.NodeIndexShim = .root;
+    const root: NodeIndexShim = .root;
     var it = try doc.nodeLineageIterator(root, allocator);
     defer it.deinit();
 
@@ -57,15 +57,15 @@ fn run(
             severity: zlinter.rules.LintProblemSeverity,
             message: []const u8,
         } = problem: {
-            switch (zlinter.shims.nodeTag(tree, node.toNodeIndex())) {
+            switch (shims.nodeTag(tree, node.toNodeIndex())) {
                 .@"catch" => {
-                    const data = zlinter.shims.nodeData(tree, node.toNodeIndex());
+                    const data = shims.nodeData(tree, node.toNodeIndex());
                     const rhs = switch (zlinter.version.zig) {
                         .@"0.14" => data.rhs,
                         .@"0.15" => data.node_and_node.@"1",
                     };
 
-                    switch (zlinter.shims.nodeTag(tree, rhs)) {
+                    switch (shims.nodeTag(tree, rhs)) {
                         .unreachable_literal => if (config.detect_catch_unreachable != .off)
                             break :problem .{
                                 .severity = config.detect_catch_unreachable,
@@ -88,8 +88,8 @@ fn run(
                     }
                 },
                 else => if (tree.fullIf(node.toNodeIndex())) |if_info| {
-                    if (zlinter.shims.NodeIndexShim.initOptional(if_info.ast.else_expr)) |else_node| {
-                        switch (zlinter.shims.nodeTag(tree, else_node.toNodeIndex())) {
+                    if (NodeIndexShim.initOptional(if_info.ast.else_expr)) |else_node| {
+                        switch (shims.nodeTag(tree, else_node.toNodeIndex())) {
                             .unreachable_literal => if (config.detect_else_unreachable != .off)
                                 break :problem .{
                                     .severity = config.detect_else_unreachable,
@@ -143,23 +143,23 @@ fn run(
 }
 
 fn isEmptyOrUnreachableBlock(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) enum { none, empty, @"unreachable" } {
-    const tag = zlinter.shims.nodeTag(tree, node);
+    const tag = shims.nodeTag(tree, node);
     std.debug.assert(tag == .block_two or tag == .block_two_semicolon);
 
-    const data = zlinter.shims.nodeData(tree, node);
+    const data = shims.nodeData(tree, node);
     const lhs, const rhs = switch (zlinter.version.zig) {
         .@"0.14" => .{
-            zlinter.shims.NodeIndexShim.initOptional(data.lhs),
-            zlinter.shims.NodeIndexShim.initOptional(data.rhs),
+            NodeIndexShim.initOptional(data.lhs),
+            NodeIndexShim.initOptional(data.rhs),
         },
         .@"0.15" => .{
-            zlinter.shims.NodeIndexShim.initOptional(data.opt_node_and_opt_node.@"0"),
-            zlinter.shims.NodeIndexShim.initOptional(data.opt_node_and_opt_node.@"1"),
+            NodeIndexShim.initOptional(data.opt_node_and_opt_node.@"0"),
+            NodeIndexShim.initOptional(data.opt_node_and_opt_node.@"1"),
         },
     };
 
     if (lhs == null and rhs == null) return .empty;
-    if (lhs != null and zlinter.shims.nodeTag(tree, lhs.?.toNodeIndex()) == .unreachable_literal) return .@"unreachable";
+    if (lhs != null and shims.nodeTag(tree, lhs.?.toNodeIndex()) == .unreachable_literal) return .@"unreachable";
     return .none;
 }
 
@@ -293,3 +293,5 @@ test "no_swallow_error" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const shims = zlinter.shims;
+const NodeIndexShim = zlinter.shims.NodeIndexShim;

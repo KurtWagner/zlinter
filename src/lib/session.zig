@@ -130,8 +130,8 @@ pub const LintDocument = struct {
                 },
             };
             break :inputs .{
-                shims.NodeIndexShim.initOptional(t),
-                shims.NodeIndexShim.initOptional(v),
+                NodeIndexShim.initOptional(t),
+                NodeIndexShim.initOptional(v),
             };
         };
 
@@ -150,7 +150,7 @@ pub const LintDocument = struct {
             // std.debug.print("TypeNode - Tag After: {}\n", .{shims.nodeTag(tree, node)});
 
             if (tree.fullFnProto(&fn_proto_buffer, node)) |fn_proto| {
-                if (shims.NodeIndexShim.initOptional(fn_proto.ast.return_type)) |return_node_shim| {
+                if (NodeIndexShim.initOptional(fn_proto.ast.return_type)) |return_node_shim| {
                     const return_node = shims.unwrapNode(tree, return_node_shim.toNodeIndex(), .{});
 
                     // std.debug.print("TypeNode - Return unwrapped: {s}\n", .{tree.getNodeSource(return_node)});
@@ -250,7 +250,7 @@ pub const LintDocument = struct {
                                 .@"0.15" => .{ container.scope_handle.toNode(), container.scope_handle.handle.tree },
                             };
 
-                            if (!shims.NodeIndexShim.init(container_node).isRoot()) {
+                            if (!NodeIndexShim.init(container_node).isRoot()) {
                                 switch (shims.nodeTag(container_tree, container_node)) {
                                     .error_set_decl => break :result true,
                                     else => {},
@@ -307,14 +307,14 @@ pub const LintDocument = struct {
         node: std.zig.Ast.Node.Index,
     ) ast.NodeAncestorIterator {
         return .{
-            .current = shims.NodeIndexShim.init(node),
+            .current = NodeIndexShim.init(node),
             .lineage = self.lineage,
         };
     }
 
     pub fn nodeLineageIterator(
         self: LintDocument,
-        node: shims.NodeIndexShim,
+        node: NodeIndexShim,
         gpa: std.mem.Allocator,
     ) error{OutOfMemory}!ast.NodeLineageIterator {
         var it = ast.NodeLineageIterator{
@@ -328,12 +328,12 @@ pub const LintDocument = struct {
 
     /// Returns true if the given node appears within a `test {..}` declaration
     /// block.
-    pub fn isEnclosedInTestBlock(self: LintDocument, node: shims.NodeIndexShim) bool {
+    pub fn isEnclosedInTestBlock(self: LintDocument, node: NodeIndexShim) bool {
         var next = node;
         while (self.lineage.items(.parent)[next.index]) |parent| {
             switch (shims.nodeTag(self.handle.tree, parent)) {
                 .test_decl => return true,
-                else => next = shims.NodeIndexShim.init(parent),
+                else => next = NodeIndexShim.init(parent),
             }
         }
         return false;
@@ -507,14 +507,14 @@ pub const LintContext = struct {
             }
 
             const QueueItem = struct {
-                parent: ?shims.NodeIndexShim = null,
-                node: shims.NodeIndexShim,
+                parent: ?NodeIndexShim = null,
+                node: NodeIndexShim,
             };
 
             var queue = std.ArrayList(QueueItem).init(gpa);
             defer queue.deinit();
 
-            try queue.append(.{ .node = shims.NodeIndexShim.root });
+            try queue.append(.{ .node = NodeIndexShim.root });
 
             while (queue.pop()) |item| {
                 const children = try ast.nodeChildrenAlloc(
@@ -539,7 +539,7 @@ pub const LintContext = struct {
                 for (children) |child| {
                     try queue.append(.{
                         .parent = item.node,
-                        .node = shims.NodeIndexShim.init(child),
+                        .node = NodeIndexShim.init(child),
                     });
                 }
             }
@@ -882,3 +882,4 @@ const testing = @import("testing.zig");
 const ast = @import("ast.zig");
 const comments = @import("comments.zig");
 const LintProblem = @import("results.zig").LintProblem;
+const NodeIndexShim = shims.NodeIndexShim;

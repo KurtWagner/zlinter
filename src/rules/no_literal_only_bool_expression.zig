@@ -55,7 +55,7 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    const root: zlinter.shims.NodeIndexShim = .root;
+    const root: NodeIndexShim = .root;
     var it = try doc.nodeLineageIterator(root, allocator);
     defer it.deinit();
 
@@ -63,7 +63,7 @@ fn run(
         const node, const connections = tuple;
         _ = connections;
 
-        switch (zlinter.shims.nodeTag(tree, node.toNodeIndex())) {
+        switch (shims.nodeTag(tree, node.toNodeIndex())) {
             .equal_equal,
             .bang_equal,
             .less_than,
@@ -71,7 +71,7 @@ fn run(
             .less_or_equal,
             .greater_or_equal,
             => {
-                const data = zlinter.shims.nodeData(tree, node.toNodeIndex());
+                const data = shims.nodeData(tree, node.toNodeIndex());
                 const lhs, const rhs = switch (zlinter.version.zig) {
                     .@"0.14" => .{ data.lhs, data.rhs },
                     .@"0.15" => .{ data.node_and_node[0], data.node_and_node[1] },
@@ -112,7 +112,7 @@ fn run(
             // else if (tree.fullVarDecl(node.toNodeIndex())) |var_decl| {
             //     if (tree.tokens.items(.tag)[var_decl.ast.mut_token] != .keyword_const) continue :nodes;
 
-            //     const init_node = zlinter.shims.NodeIndexShim.initOptional(var_decl.ast.init_node) orelse continue :nodes;
+            //     const init_node = NodeIndexShim.initOptional(var_decl.ast.init_node) orelse continue :nodes;
             //     if (!isLiteral(tree, init_node.toNodeIndex())) continue :nodes;
             // },
         }
@@ -137,11 +137,11 @@ const Literal = enum {
 
 /// Does not consider string literals, only booleans, numbers and chars
 fn isLiteral(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) ?Literal {
-    return switch (zlinter.shims.nodeTag(tree, node)) {
+    return switch (shims.nodeTag(tree, node)) {
         .number_literal => .number,
         .char_literal => .char,
         .identifier => id: {
-            const token = zlinter.shims.nodeMainToken(tree, node);
+            const token = shims.nodeMainToken(tree, node);
             break :id switch (tree.tokens.items(.tag)[token]) {
                 .number_literal => .number,
                 .char_literal => .char,
@@ -212,3 +212,5 @@ test {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const shims = zlinter.shims;
+const NodeIndexShim = zlinter.shims.NodeIndexShim;
