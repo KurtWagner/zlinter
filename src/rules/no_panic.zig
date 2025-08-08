@@ -103,7 +103,7 @@ fn run(
         }
 
         // if configured, skip if panic has case sensitive string content matching
-        if (builtinHasParamContent(tree, node.toNodeIndex(), config.exclude_panic_with_content)) continue :skip;
+        if (builtinHasParamContent(tree, node.toNodeIndex(), config.exclude_panic_with_content)) continue :nodes;
 
         try lint_problems.append(allocator, .{
             .rule_id = rule.rule_id,
