@@ -83,13 +83,13 @@ fn writeFileRuleConfig(content: []const u8, gpa: std.mem.Allocator, writer: anyt
     const sentinel = try gpa.dupeZ(u8, content);
     defer gpa.free(sentinel);
 
-    var tree = try std.zig.Ast.parse(gpa, sentinel, .zig);
+    var tree = try Ast.parse(gpa, sentinel, .zig);
     defer tree.deinit(gpa);
 
     try writer.writeAll("**Config options:**\n\n");
 
     var config_written: bool = false;
-    var struct_buffer: [2]std.zig.Ast.Node.Index = undefined;
+    var struct_buffer: [2]Ast.Node.Index = undefined;
     for (tree.rootDecls()) |decl| {
         if (tree.fullVarDecl(decl)) |var_decl| {
             const name = tree.tokenSlice(var_decl.ast.mut_token + 1);
@@ -156,3 +156,4 @@ fn writeWithoutDuplicateWhiteSpace(content: []const u8, writer: anytype) !void {
 
 const std = @import("std");
 const zig_version = @import("src/lib/version.zig").zig;
+const Ast = std.zig.Ast;

@@ -50,24 +50,24 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    const root: zlinter.shims.NodeIndexShim = .root;
+    const root: NodeIndexShim = .root;
     var it = try doc.nodeLineageIterator(root, allocator);
     defer it.deinit();
 
-    var fn_decl_buffer: [1]std.zig.Ast.Node.Index = undefined;
+    var fn_decl_buffer: [1]Ast.Node.Index = undefined;
     nodes: while (try it.next()) |tuple| {
         const node, const connections = tuple;
         _ = connections;
 
-        const tag = zlinter.shims.nodeTag(tree, node.toNodeIndex());
+        const tag = shims.nodeTag(tree, node.toNodeIndex());
         if (tag != .fn_decl) continue :nodes;
 
         const fn_decl = tree.fullFnProto(&fn_decl_buffer, node.toNodeIndex()) orelse continue :nodes;
         if (config.allow_private and isFnPrivate(tree, fn_decl)) continue :nodes;
 
-        const return_type = zlinter.shims.NodeIndexShim.initOptional(fn_decl.ast.return_type) orelse continue :nodes;
+        const return_type = NodeIndexShim.initOptional(fn_decl.ast.return_type) orelse continue :nodes;
 
-        const return_type_tag = zlinter.shims.nodeTag(tree, return_type.toNodeIndex());
+        const return_type_tag = shims.nodeTag(tree, return_type.toNodeIndex());
         switch (return_type_tag) {
             .error_union => if (config.allow_anyerror or
                 !std.mem.eql(u8, tree.tokenSlice(tree.firstToken(return_type.toNodeIndex())), "anyerror"))
@@ -98,7 +98,7 @@ fn run(
         null;
 }
 
-fn isFnPrivate(tree: std.zig.Ast, fn_decl: std.zig.Ast.full.FnProto) bool {
+fn isFnPrivate(tree: Ast, fn_decl: Ast.full.FnProto) bool {
     const visibility_token = fn_decl.visib_token orelse return true;
     return switch (tree.tokens.items(.tag)[visibility_token]) {
         .keyword_pub => false,
@@ -267,3 +267,6 @@ test "no_inferred_error_unions - Invalid function declarations - allow_anyerror 
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const shims = zlinter.shims;
+const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;

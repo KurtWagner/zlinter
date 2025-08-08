@@ -42,7 +42,7 @@ pub const LintProblemLocation = struct {
         .column = 0,
     };
 
-    pub fn startOfNode(tree: std.zig.Ast, index: std.zig.Ast.Node.Index) LintProblemLocation {
+    pub fn startOfNode(tree: Ast, index: Ast.Node.Index) LintProblemLocation {
         const first_token_loc = tree.tokenLocation(0, tree.firstToken(index));
         return .{
             .byte_offset = first_token_loc.line_start + first_token_loc.column,
@@ -52,7 +52,7 @@ pub const LintProblemLocation = struct {
     }
 
     test startOfNode {
-        var ast = try std.zig.Ast.parse(std.testing.allocator,
+        var ast = try Ast.parse(std.testing.allocator,
             \\pub const a = 1;
             \\pub const b = 2;
         , .zig);
@@ -74,7 +74,7 @@ pub const LintProblemLocation = struct {
         }, LintProblemLocation.startOfNode(ast, b_decl));
     }
 
-    pub fn endOfNode(tree: std.zig.Ast, index: std.zig.Ast.Node.Index) LintProblemLocation {
+    pub fn endOfNode(tree: Ast, index: Ast.Node.Index) LintProblemLocation {
         const last_token = tree.lastToken(index);
         const last_token_loc = tree.tokenLocation(0, last_token);
         const column = last_token_loc.column + tree.tokenSlice(last_token).len;
@@ -86,7 +86,7 @@ pub const LintProblemLocation = struct {
     }
 
     test endOfNode {
-        var ast = try std.zig.Ast.parse(std.testing.allocator,
+        var ast = try Ast.parse(std.testing.allocator,
             \\pub const a = 1;
             \\pub const b = 2;
         , .zig);
@@ -108,7 +108,7 @@ pub const LintProblemLocation = struct {
         }, LintProblemLocation.endOfNode(ast, b_decl));
     }
 
-    pub fn startOfToken(tree: std.zig.Ast, index: std.zig.Ast.TokenIndex) LintProblemLocation {
+    pub fn startOfToken(tree: Ast, index: Ast.TokenIndex) LintProblemLocation {
         const loc = tree.tokenLocation(0, index);
         return .{
             .byte_offset = loc.line_start + loc.column,
@@ -118,7 +118,7 @@ pub const LintProblemLocation = struct {
     }
 
     test startOfToken {
-        var ast = try std.zig.Ast.parse(std.testing.allocator,
+        var ast = try Ast.parse(std.testing.allocator,
             \\pub const a = 1;
             \\pub const b = 2;
         , .zig);
@@ -153,7 +153,7 @@ pub const LintProblemLocation = struct {
         }, LintProblemLocation.startOfToken(ast, 7));
     }
 
-    pub fn endOfToken(tree: std.zig.Ast, index: std.zig.Ast.TokenIndex) LintProblemLocation {
+    pub fn endOfToken(tree: Ast, index: Ast.TokenIndex) LintProblemLocation {
         const loc = tree.tokenLocation(0, index);
         const column = loc.column + tree.tokenSlice(index).len - 1;
         return .{
@@ -164,7 +164,7 @@ pub const LintProblemLocation = struct {
     }
 
     test endOfToken {
-        var ast = try std.zig.Ast.parse(std.testing.allocator,
+        var ast = try Ast.parse(std.testing.allocator,
             \\pub const a = 1;
             \\pub const b = 2;
         , .zig);
@@ -400,3 +400,4 @@ const std = @import("std");
 const rules = @import("rules.zig");
 const comments = @import("comments.zig");
 const strings = @import("strings.zig");
+const Ast = std.zig.Ast;

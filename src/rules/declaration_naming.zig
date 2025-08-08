@@ -83,7 +83,7 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    var node: zlinter.shims.NodeIndexShim = .init(1); // Skip root node at 0
+    var node: NodeIndexShim = .init(1); // Skip root node at 0
     nodes: while (node.index < tree.nodes.len) : (node.index += 1) {
         const var_decl = tree.fullVarDecl(node.toNodeIndex()) orelse continue :nodes;
 
@@ -102,8 +102,8 @@ fn run(
         const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
 
         if (config.exclude_aliases) {
-            if (zlinter.shims.NodeIndexShim.initOptional(var_decl.ast.init_node)) |init_node| {
-                if (zlinter.shims.nodeTag(tree, init_node.toNodeIndex()) == .field_access) {
+            if (NodeIndexShim.initOptional(var_decl.ast.init_node)) |init_node| {
+                if (shims.nodeTag(tree, init_node.toNodeIndex()) == .field_access) {
                     const last_token = tree.lastToken(init_node.toNodeIndex());
                     const field_name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(last_token));
                     if (std.mem.eql(u8, field_name, name)) continue :nodes;
@@ -387,3 +387,5 @@ test "extern excluded" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const shims = zlinter.shims;
+const NodeIndexShim = zlinter.shims.NodeIndexShim;

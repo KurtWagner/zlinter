@@ -129,7 +129,7 @@ const ImportsQueueLinesAscending = std.PriorityDequeue(
 );
 
 const ImportDecl = struct {
-    decl_node: std.zig.Ast.Node.Index,
+    decl_node: Ast.Node.Index,
     decl_name: []const u8,
     classification: Classification,
     first_line: usize,
@@ -142,15 +142,15 @@ const ImportDecl = struct {
     }
 };
 
-fn deinitScopedImports(scoped_imports: *std.AutoArrayHashMap(std.zig.Ast.Node.Index, ImportsQueueLinesAscending)) void {
+fn deinitScopedImports(scoped_imports: *std.AutoArrayHashMap(Ast.Node.Index, ImportsQueueLinesAscending)) void {
     for (scoped_imports.values()) |v| v.deinit();
     scoped_imports.deinit();
 }
 
 fn swapNodesFix(
     doc: zlinter.session.LintDocument,
-    first: std.zig.Ast.Node.Index,
-    second: std.zig.Ast.Node.Index,
+    first: Ast.Node.Index,
+    second: Ast.Node.Index,
     allocator: std.mem.Allocator,
 ) error{OutOfMemory}!zlinter.results.LintProblemFix {
     const tree = doc.handle.tree;
@@ -183,20 +183,20 @@ fn swapNodesFix(
 fn resolveScopedImports(
     doc: zlinter.session.LintDocument,
     allocator: std.mem.Allocator,
-) !std.AutoArrayHashMap(std.zig.Ast.Node.Index, ImportsQueueLinesAscending) {
+) !std.AutoArrayHashMap(Ast.Node.Index, ImportsQueueLinesAscending) {
     const tree = doc.handle.tree;
 
-    const root: zlinter.shims.NodeIndexShim = .root;
+    const root: NodeIndexShim = .root;
     var node_it = try doc.nodeLineageIterator(root, allocator);
     defer node_it.deinit();
 
-    var scoped_imports: std.AutoArrayHashMap(std.zig.Ast.Node.Index, ImportsQueueLinesAscending) = .init(allocator);
+    var scoped_imports: std.AutoArrayHashMap(Ast.Node.Index, ImportsQueueLinesAscending) = .init(allocator);
     while (try node_it.next()) |tuple| {
         const node, const connections = tuple;
 
         const var_decl = tree.fullVarDecl(node.toNodeIndex()) orelse continue;
 
-        const init_node = zlinter.shims.NodeIndexShim.initOptional(var_decl.ast.init_node) orelse continue;
+        const init_node = NodeIndexShim.initOptional(var_decl.ast.init_node) orelse continue;
         const import_path = isImportCall(tree, init_node.toNodeIndex()) orelse continue;
         const parent = connections.parent orelse continue;
 
@@ -229,23 +229,23 @@ fn resolveScopedImports(
 }
 
 /// Returns the import path if `@import` built in call.
-fn isImportCall(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) ?[]const u8 {
-    switch (zlinter.shims.nodeTag(tree, node)) {
+fn isImportCall(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
+    switch (shims.nodeTag(tree, node)) {
         .builtin_call_two,
         .builtin_call_two_comma,
         => {
-            const main_token = zlinter.shims.nodeMainToken(tree, node);
+            const main_token = shims.nodeMainToken(tree, node);
             if (!std.mem.eql(u8, "@import", tree.tokenSlice(main_token))) return null;
 
-            const data = zlinter.shims.nodeData(tree, node);
-            const lhs_node = zlinter.shims.NodeIndexShim.initOptional(switch (zlinter.version.zig) {
+            const data = shims.nodeData(tree, node);
+            const lhs_node = NodeIndexShim.initOptional(switch (zlinter.version.zig) {
                 .@"0.14" => data.lhs,
                 .@"0.15" => data.opt_node_and_opt_node[0],
             }) orelse return null;
 
-            std.debug.assert(zlinter.shims.nodeTag(tree, lhs_node.toNodeIndex()) == .string_literal);
+            std.debug.assert(shims.nodeTag(tree, lhs_node.toNodeIndex()) == .string_literal);
 
-            const lhs_content = tree.tokenSlice(zlinter.shims.nodeMainToken(tree, lhs_node.toNodeIndex()));
+            const lhs_content = tree.tokenSlice(shims.nodeMainToken(tree, lhs_node.toNodeIndex()));
             std.debug.assert(lhs_content.len > 2);
             return lhs_content[1 .. lhs_content.len - 1];
         },
@@ -263,10 +263,10 @@ fn classifyImportPath(path: []const u8) ImportDecl.Classification {
 
 // TODO(#52): Move to ast module
 // zlinter-disable-next-line
-// fn getScopedNode(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index) std.zig.Ast.Node.Index {
+// fn getScopedNode(doc: zlinter.session.LintDocument, node: Ast.Node.Index) Ast.Node.Index {
 //     var parent = doc.lineage.items(.parent)[node];
 //     while (parent) |parent_node| {
-//         switch (zlinter.shims.nodeTag(doc.handle.tree, parent_node)) {
+//         switch (shims.nodeTag(doc.handle.tree, parent_node)) {
 //             .block_two,
 //             .block_two_semicolon,
 //             .block,
@@ -281,7 +281,7 @@ fn classifyImportPath(path: []const u8) ImportDecl.Classification {
 //             else => parent = doc.lineage.items(.parent)[parent_node],
 //         }
 //     }
-//     return zlinter.shims.NodeIndexShim.root.toNodeIndex();
+//     return NodeIndexShim.root.toNodeIndex();
 // }
 
 test {
@@ -608,3 +608,6 @@ test "allow_line_separated_chunks" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const shims = zlinter.shims;
+const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;

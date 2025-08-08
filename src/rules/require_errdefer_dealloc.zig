@@ -72,17 +72,17 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    var problem_nodes = std.ArrayList(std.zig.Ast.Node.Index).init(allocator);
+    var problem_nodes = std.ArrayList(Ast.Node.Index).init(allocator);
     defer problem_nodes.deinit();
 
-    const root: zlinter.shims.NodeIndexShim = .root;
+    const root: NodeIndexShim = .root;
     var it = try doc.nodeLineageIterator(root, allocator);
     defer it.deinit();
 
     nodes: while (try it.next()) |tuple| {
         const node, _ = tuple;
 
-        var fn_proto_buffer: [1]std.zig.Ast.Node.Index = undefined;
+        var fn_proto_buffer: [1]Ast.Node.Index = undefined;
         const fn_decl = zlinter.ast.fnDecl(tree, node.toNodeIndex(), &fn_proto_buffer) orelse continue :nodes;
 
         if (!zlinter.ast.fnProtoReturnsError(tree, fn_decl.proto)) continue :nodes;
@@ -115,21 +115,21 @@ fn run(
 
 fn processBlock(
     doc: zlinter.session.LintDocument,
-    block_node: std.zig.Ast.Node.Index,
-    problems: *std.ArrayList(std.zig.Ast.Node.Index),
+    block_node: Ast.Node.Index,
+    problems: *std.ArrayList(Ast.Node.Index),
     gpa: std.mem.Allocator,
 ) !void {
     const tree = doc.handle.tree;
 
-    var cleanup_symbols: std.StringHashMap(std.zig.Ast.Node.Index) = .init(gpa);
+    var cleanup_symbols: std.StringHashMap(Ast.Node.Index) = .init(gpa);
     defer {
         var it = cleanup_symbols.keyIterator();
         while (it.next()) |k| gpa.free(k.*);
         cleanup_symbols.deinit();
     }
 
-    var call_buffer: [1]std.zig.Ast.Node.Index = undefined;
-    for (doc.lineage.items(.children)[zlinter.shims.NodeIndexShim.init(block_node).index] orelse &.{}) |child_node| {
+    var call_buffer: [1]Ast.Node.Index = undefined;
+    for (doc.lineage.items(.children)[NodeIndexShim.init(block_node).index] orelse &.{}) |child_node| {
         if (try declRef(doc, child_node)) |decl_ref| {
             if (decl_ref.hasDeinit())
                 try cleanup_symbols.put(try gpa.dupe(u8, decl_ref.var_name), child_node);
@@ -159,15 +159,15 @@ fn processBlock(
 // TODO(#48): Write unit tests for helpers and consider whether some should be moved to ast
 
 const Call = struct {
-    params: []const std.zig.Ast.Node.Index,
+    params: []const Ast.Node.Index,
 
     kind: union(enum) {
         /// e.g., `parent.call()` not `parent.child.call()`
         single_field: struct {
             /// e.g., `parent.call()` would have `parent` as the main token here.
-            field_main_token: std.zig.Ast.TokenIndex,
+            field_main_token: Ast.TokenIndex,
             /// e.g., `parent.call()` would have `call` as the identifier token here.
-            call_identifier_token: std.zig.Ast.TokenIndex,
+            call_identifier_token: Ast.TokenIndex,
         },
         /// array_access, unwrap_optional, nested field_access
         ///
@@ -177,26 +177,26 @@ const Call = struct {
         /// not need the separation.
         other: struct {
             /// e.g., `parent.child.call()` would have `call` as the identifier token here.
-            call_identifier_token: std.zig.Ast.TokenIndex,
+            call_identifier_token: Ast.TokenIndex,
         },
         /// e.g., `.init()`
         enum_literal: struct {
             /// e.g., `.init()` would have `init` here
-            call_identifier_token: std.zig.Ast.TokenIndex,
+            call_identifier_token: Ast.TokenIndex,
         },
     },
 };
 
 /// Returns call information for cases handled by the `require_errdefer_dealloc`
 /// Not all calls are handled so this method is not generally useful
-fn callWithName(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index, buffer: *[1]std.zig.Ast.Node.Index, comptime names: []const []const u8) ?Call {
+fn callWithName(doc: zlinter.session.LintDocument, node: Ast.Node.Index, buffer: *[1]Ast.Node.Index, comptime names: []const []const u8) ?Call {
     const tree = doc.handle.tree;
 
     const call = tree.fullCall(buffer, node) orelse return null;
 
     const fn_expr_node = call.ast.fn_expr;
-    const fn_expr_node_data = zlinter.shims.nodeData(tree, fn_expr_node);
-    const fn_expr_node_tag = zlinter.shims.nodeTag(tree, fn_expr_node);
+    const fn_expr_node_data = shims.nodeData(tree, fn_expr_node);
+    const fn_expr_node_tag = shims.nodeTag(tree, fn_expr_node);
 
     switch (fn_expr_node_tag) {
         // e.g., `parent.*`
@@ -205,7 +205,7 @@ fn callWithName(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index,
                 .@"0.14" => .{ fn_expr_node_data.lhs, fn_expr_node_data.rhs },
                 .@"0.15" => .{ fn_expr_node_data.node_and_token[0], fn_expr_node_data.node_and_token[1] },
             };
-            std.debug.assert(zlinter.shims.tokenTag(tree, fn_name) == .identifier);
+            std.debug.assert(shims.tokenTag(tree, fn_name) == .identifier);
 
             var match: bool = false;
             const fn_name_slice = tree.tokenSlice(fn_name);
@@ -217,7 +217,7 @@ fn callWithName(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index,
             }
             if (!match) return null;
 
-            const field_node_tag = zlinter.shims.nodeTag(tree, field_node);
+            const field_node_tag = shims.nodeTag(tree, field_node);
             if (field_node_tag != .identifier) {
                 // e.g, array_access, unwrap_optional, field_access
                 return .{
@@ -234,7 +234,7 @@ fn callWithName(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index,
                 .params = call.ast.params,
                 .kind = .{
                     .single_field = .{
-                        .field_main_token = zlinter.shims.nodeMainToken(tree, field_node),
+                        .field_main_token = shims.nodeMainToken(tree, field_node),
                         .call_identifier_token = fn_name,
                     },
                 },
@@ -242,8 +242,8 @@ fn callWithName(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index,
         },
         // e.g., `.init()`
         .enum_literal => {
-            const fn_name = zlinter.shims.nodeMainToken(tree, fn_expr_node);
-            std.debug.assert(zlinter.shims.tokenTag(tree, fn_name) == .identifier);
+            const fn_name = shims.nodeMainToken(tree, fn_expr_node);
+            std.debug.assert(shims.tokenTag(tree, fn_name) == .identifier);
 
             const identfier_slice = tree.tokenSlice(fn_name);
             for (names) |name| {
@@ -308,13 +308,13 @@ const DeclRef = struct {
     }
 };
 
-fn declRef(doc: zlinter.session.LintDocument, var_decl_node: std.zig.Ast.Node.Index) !?DeclRef {
+fn declRef(doc: zlinter.session.LintDocument, var_decl_node: Ast.Node.Index) !?DeclRef {
     const var_decl = doc.handle.tree.fullVarDecl(var_decl_node) orelse return null;
 
-    const init_node = zlinter.shims.NodeIndexShim.initOptional(var_decl.ast.init_node) orelse return null;
+    const init_node = NodeIndexShim.initOptional(var_decl.ast.init_node) orelse return null;
 
-    var call_buffer: [1]std.zig.Ast.Node.Index = undefined;
-    if (!switch (zlinter.shims.nodeTag(doc.handle.tree, init_node.toNodeIndex())) {
+    var call_buffer: [1]Ast.Node.Index = undefined;
+    if (!switch (shims.nodeTag(doc.handle.tree, init_node.toNodeIndex())) {
         .field_access => zlinter.ast.isFieldVarAccess(doc.handle.tree, init_node.toNodeIndex(), &.{"empty"}),
         .enum_literal => zlinter.ast.isEnumLiteral(doc.handle.tree, init_node.toNodeIndex(), &.{"empty"}),
         else =>
@@ -337,7 +337,7 @@ fn declRef(doc: zlinter.session.LintDocument, var_decl_node: std.zig.Ast.Node.In
                 .@"0.15" => container.scope_handle,
             };
             const node = scope_handle.toNode();
-            const tag = zlinter.shims.nodeTag(scope_handle.handle.tree, node);
+            const tag = shims.nodeTag(scope_handle.handle.tree, node);
             switch (tag) {
                 .container_decl,
                 .container_decl_arg,
@@ -376,7 +376,7 @@ fn declRef(doc: zlinter.session.LintDocument, var_decl_node: std.zig.Ast.Node.In
                             ).unwrap(),
                         } orelse return null;
 
-                        var fn_proto_buffer: [1]std.zig.Ast.Node.Index = undefined;
+                        var fn_proto_buffer: [1]Ast.Node.Index = undefined;
                         const func = tree.fullFnProto(&fn_proto_buffer, doc_scope.getScopeAstNode(function_scope).?).?;
 
                         return .{
@@ -405,7 +405,7 @@ fn declRef(doc: zlinter.session.LintDocument, var_decl_node: std.zig.Ast.Node.In
 ///
 /// Where as `.init(allocator)` or `.init(std.heap.c_allocator)` should be checked
 /// for stricter cleanup on error as it won't automatically clear itself.
-fn hasArenaParam(doc: zlinter.session.LintDocument, params: []const std.zig.Ast.Node.Index) bool {
+fn hasArenaParam(doc: zlinter.session.LintDocument, params: []const Ast.Node.Index) bool {
     const tree = doc.handle.tree;
     const skip_var_and_field_names: []const []const u8 = &.{
         "arena",
@@ -413,12 +413,12 @@ fn hasArenaParam(doc: zlinter.session.LintDocument, params: []const std.zig.Ast.
         "fixed_buffer_allocator",
         "arena_allocator",
     };
-    var call_buffer: [1]std.zig.Ast.Node.Index = undefined;
+    var call_buffer: [1]Ast.Node.Index = undefined;
     for (params) |param_node| {
-        const tag = zlinter.shims.nodeTag(tree, param_node);
+        const tag = shims.nodeTag(tree, param_node);
         switch (tag) {
             .identifier => {
-                const slice = tree.tokenSlice(zlinter.shims.nodeMainToken(tree, param_node));
+                const slice = tree.tokenSlice(shims.nodeMainToken(tree, param_node));
                 for (skip_var_and_field_names) |str| {
                     if (std.mem.eql(u8, slice, str)) return true;
                 }
@@ -445,7 +445,7 @@ test "hasArenaParam" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var buffer: [1]std.zig.Ast.Node.Index = undefined;
+    var buffer: [1]Ast.Node.Index = undefined;
     inline for (&.{
         .{
             \\ var a = .init();
@@ -547,3 +547,6 @@ test {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const shims = zlinter.shims;
+const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;

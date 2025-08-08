@@ -1,8 +1,5 @@
 //! Example rule for those that don't like cats
 
-const std = @import("std");
-const zlinter = @import("zlinter");
-
 pub const Config = struct {
     severity: zlinter.rules.LintProblemSeverity = .warning,
     message: ?[]const u8 = null,
@@ -31,7 +28,7 @@ fn run(
     defer lint_problems.deinit(allocator);
 
     const tree = doc.handle.tree;
-    var token: std.zig.Ast.TokenIndex = 0;
+    var token: Ast.TokenIndex = 0;
     while (token < tree.tokens.len) : (token += 1) {
         if (tree.tokens.items(.tag)[token] == .identifier) {
             const name = tree.tokenSlice(token);
@@ -56,3 +53,7 @@ fn run(
     else
         null;
 }
+
+const std = @import("std");
+const zlinter = @import("zlinter");
+const Ast = std.zig.Ast;

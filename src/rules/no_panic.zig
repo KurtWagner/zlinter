@@ -70,7 +70,7 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    const root: zlinter.shims.NodeIndexShim = .root;
+    const root: NodeIndexShim = .root;
     var it = try doc.nodeLineageIterator(root, allocator);
     defer it.deinit();
 
@@ -78,14 +78,14 @@ fn run(
         const node, const connections = tuple;
         _ = connections;
 
-        const tag = zlinter.shims.nodeTag(tree, node.toNodeIndex());
+        const tag = shims.nodeTag(tree, node.toNodeIndex());
         switch (tag) {
             .builtin_call_two,
             .builtin_call_two_comma,
             .builtin_call,
             .builtin_call_comma,
             => {
-                const main_token = zlinter.shims.nodeMainToken(tree, node.toNodeIndex());
+                const main_token = shims.nodeMainToken(tree, node.toNodeIndex());
                 if (!std.mem.eql(u8, tree.tokenSlice(main_token), "@panic")) continue :nodes;
             },
             else => continue :nodes,
@@ -165,3 +165,6 @@ test "no_panic" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const shims = zlinter.shims;
+const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;

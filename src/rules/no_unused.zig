@@ -42,12 +42,12 @@ fn run(
     var container_references = map: {
         var map = std.StringHashMapUnmanaged(void).empty;
 
-        var node: zlinter.shims.NodeIndexShim = .root;
+        var node: NodeIndexShim = .root;
         while (node.index < tree.nodes.len) : (node.index += 1) {
-            switch (zlinter.shims.nodeTag(tree, node.toNodeIndex())) {
-                .identifier => try map.put(allocator, tree.tokenSlice(zlinter.shims.nodeMainToken(tree, node.toNodeIndex())), {}),
+            switch (shims.nodeTag(tree, node.toNodeIndex())) {
+                .identifier => try map.put(allocator, tree.tokenSlice(shims.nodeMainToken(tree, node.toNodeIndex())), {}),
                 .field_access => if (try isFieldAccessOfRootContainer(doc, node.toNodeIndex())) {
-                    const node_data = zlinter.shims.nodeData(tree, node.toNodeIndex());
+                    const node_data = shims.nodeData(tree, node.toNodeIndex());
                     try map.put(allocator, tree.tokenSlice(switch (zlinter.version.zig) {
                         .@"0.14" => node_data.rhs,
                         .@"0.15" => node_data.node_and_token.@"1",
@@ -61,7 +61,7 @@ fn run(
     defer container_references.deinit(allocator);
 
     for (tree.rootDecls()) |decl| {
-        const problem: ?struct { first: std.zig.Ast.TokenIndex, last: std.zig.Ast.TokenIndex } = problem: {
+        const problem: ?struct { first: Ast.TokenIndex, last: Ast.TokenIndex } = problem: {
             if (tree.fullVarDecl(decl)) |var_decl| {
                 if (var_decl.visib_token) |visib_token|
                     if (token_tags[visib_token] == .keyword_pub)
@@ -78,7 +78,7 @@ fn run(
                     };
                 }
             } else {
-                var buffer: [1]std.zig.Ast.Node.Index = undefined;
+                var buffer: [1]Ast.Node.Index = undefined;
                 if (namedFnDeclProto(tree, &buffer, decl)) |fn_proto| {
                     if (fn_proto.visib_token) |token|
                         if (token_tags[token] == .keyword_pub)
@@ -137,14 +137,14 @@ fn run(
 
 /// Returns fn proto if node is fn declaration and has a name token.
 fn namedFnDeclProto(
-    tree: std.zig.Ast,
-    buffer: *[1]std.zig.Ast.Node.Index,
-    node: std.zig.Ast.Node.Index,
-) ?std.zig.Ast.full.FnProto {
-    if (switch (zlinter.shims.nodeTag(tree, node)) {
+    tree: Ast,
+    buffer: *[1]Ast.Node.Index,
+    node: Ast.Node.Index,
+) ?Ast.full.FnProto {
+    if (switch (shims.nodeTag(tree, node)) {
         .fn_decl => tree.fullFnProto(buffer, switch (zlinter.version.zig) {
-            .@"0.14" => zlinter.shims.nodeData(tree, node).lhs,
-            .@"0.15" => zlinter.shims.nodeData(tree, node).node_and_node.@"0",
+            .@"0.14" => shims.nodeData(tree, node).lhs,
+            .@"0.15" => shims.nodeData(tree, node).node_and_node.@"0",
         }),
         else => null,
     }) |fn_proto| {
@@ -153,12 +153,12 @@ fn namedFnDeclProto(
     return null;
 }
 
-fn isFieldAccessOfRootContainer(doc: zlinter.session.LintDocument, node: std.zig.Ast.Node.Index) error{OutOfMemory}!bool {
-    std.debug.assert(zlinter.shims.nodeTag(doc.handle.tree, node) == .field_access);
+fn isFieldAccessOfRootContainer(doc: zlinter.session.LintDocument, node: Ast.Node.Index) error{OutOfMemory}!bool {
+    std.debug.assert(shims.nodeTag(doc.handle.tree, node) == .field_access);
 
     const tree = doc.handle.tree;
 
-    const node_data = zlinter.shims.nodeData(tree, node);
+    const node_data = shims.nodeData(tree, node);
     const lhs = switch (zlinter.version.zig) {
         .@"0.14" => node_data.lhs,
         .@"0.15" => node_data.node_and_token.@"0",
@@ -280,3 +280,6 @@ test "no_unused" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const shims = zlinter.shims;
+const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;
