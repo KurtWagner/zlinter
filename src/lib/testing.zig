@@ -91,8 +91,8 @@ pub fn expectContainsExactlyStrings(expected: []const []const u8, actual: []cons
 /// tests.
 pub fn expectNodeSlices(
     expected: []const []const u8,
-    tree: std.zig.Ast,
-    actual: []const std.zig.Ast.Node.Index,
+    tree: Ast,
+    actual: []const Ast.Node.Index,
 ) !void {
     assertTestOnly();
 
@@ -117,10 +117,10 @@ pub fn expectNodeSlices(
 ///
 /// This is to encourage smaller unit tests and to ensure that the order does
 /// not matter when asserting. Alternatively use `expectNodeOfTagFirst`
-pub fn expectSingleNodeOfTag(tree: std.zig.Ast, comptime tags: []const std.zig.Ast.Node.Tag) !std.zig.Ast.Node.Index {
+pub fn expectSingleNodeOfTag(tree: Ast, comptime tags: []const Ast.Node.Tag) !Ast.Node.Index {
     assertTestOnly();
 
-    var found: ?std.zig.Ast.Node.Index = null;
+    var found: ?Ast.Node.Index = null;
     var i = NodeIndexShim.root;
     while (i.index < tree.nodes.len) : (i.index += 1) {
         inline for (tags) |tag| {
@@ -135,7 +135,7 @@ pub fn expectSingleNodeOfTag(tree: std.zig.Ast, comptime tags: []const std.zig.A
 }
 
 /// Expects at least one node and returns it matching a set of tags
-pub fn expectNodeOfTagFirst(doc: LintDocument, comptime tags: []const std.zig.Ast.Node.Tag) !std.zig.Ast.Node.Index {
+pub fn expectNodeOfTagFirst(doc: LintDocument, comptime tags: []const Ast.Node.Tag) !Ast.Node.Index {
     assertTestOnly();
 
     var it = try doc.nodeLineageIterator(.root, std.testing.allocator);
@@ -347,3 +347,4 @@ const LintOptions = @import("session.zig").LintOptions;
 const NodeIndexShim = @import("shims.zig").NodeIndexShim;
 const nodeTag = @import("shims.zig").nodeTag;
 const strings = @import("strings.zig");
+const Ast = std.zig.Ast;

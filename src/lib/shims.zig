@@ -45,8 +45,8 @@ pub const NodeIndexShim = struct {
         };
     }
 
-    pub inline fn toNodeIndex(self: NodeIndexShim) std.zig.Ast.Node.Index {
-        return switch (@typeInfo(std.zig.Ast.Node.Index)) {
+    pub inline fn toNodeIndex(self: NodeIndexShim) Ast.Node.Index {
+        return switch (@typeInfo(Ast.Node.Index)) {
             .@"enum" => @enumFromInt(self.index), // >= 0.15.x
             else => self.index, // == 0.14.x
         };
@@ -59,8 +59,8 @@ pub const NodeIndexShim = struct {
 
 /// Returns true if identifier node and itentifier node has the given kind.
 pub fn isIdentiferKind(
-    tree: std.zig.Ast,
-    node: std.zig.Ast.Node.Index,
+    tree: Ast,
+    node: Ast.Node.Index,
     kind: enum { type },
 ) bool {
     return switch (nodeTag(tree, node)) {
@@ -76,8 +76,8 @@ pub fn isIdentiferKind(
 ///
 /// For example if you want `?StructType` to be treated the same as `StructType`.
 pub fn unwrapNode(
-    tree: std.zig.Ast,
-    node: std.zig.Ast.Node.Index,
+    tree: Ast,
+    node: Ast.Node.Index,
     options: struct {
         /// i.e., ?T => T
         unwrap_optional: bool = true,
@@ -86,7 +86,7 @@ pub fn unwrapNode(
         /// i.e., T.? => T
         unwrap_optional_unwrap: bool = true,
     },
-) std.zig.Ast.Node.Index {
+) Ast.Node.Index {
     var current = node;
 
     while (true) {
@@ -116,28 +116,28 @@ pub fn unwrapNode(
     return current;
 }
 
-pub fn tokenTag(tree: std.zig.Ast, token: std.zig.Ast.TokenIndex) std.zig.Token.Tag {
+pub fn tokenTag(tree: Ast, token: Ast.TokenIndex) std.zig.Token.Tag {
     return if (std.meta.hasMethod(@TypeOf(tree), "tokenTag"))
         tree.tokenTag(token)
     else
         tree.tokens.items(.tag)[token]; // 0.14.x
 }
 
-pub fn nodeTag(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) std.zig.Ast.Node.Tag {
+pub fn nodeTag(tree: Ast, node: Ast.Node.Index) Ast.Node.Tag {
     return if (std.meta.hasMethod(@TypeOf(tree), "nodeTag"))
         tree.nodeTag(node)
     else
         tree.nodes.items(.tag)[node]; // 0.14.x
 }
 
-pub fn nodeMainToken(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) std.zig.Ast.TokenIndex {
+pub fn nodeMainToken(tree: Ast, node: Ast.Node.Index) Ast.TokenIndex {
     return if (std.meta.hasMethod(@TypeOf(tree), "nodeMainToken"))
         tree.nodeMainToken(node)
     else
         tree.nodes.items(.main_token)[node]; // 0.14.x
 }
 
-pub fn nodeData(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) std.zig.Ast.Node.Data {
+pub fn nodeData(tree: Ast, node: Ast.Node.Index) Ast.Node.Data {
     return if (std.meta.hasMethod(@TypeOf(tree), "nodeData"))
         tree.nodeData(node)
     else
@@ -150,9 +150,9 @@ pub fn nodeData(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) std.zig.Ast.Nod
 /// This can be useful if you have a node and want to work out where it's
 /// contained (e.g., within a struct).
 pub fn isNodeOverlapping(
-    tree: std.zig.Ast,
-    a: std.zig.Ast.Node.Index,
-    b: std.zig.Ast.Node.Index,
+    tree: Ast,
+    a: Ast.Node.Index,
+    b: Ast.Node.Index,
 ) bool {
     const node_a = NodeIndexShim.init(a);
     const node_b = NodeIndexShim.init(b);
@@ -169,12 +169,12 @@ pub fn isNodeOverlapping(
 
 /// Returns true if the tree is of a file that's an implicit struct with fields
 /// and not namespace
-pub fn isRootImplicitStruct(tree: std.zig.Ast) bool {
+pub fn isRootImplicitStruct(tree: Ast) bool {
     return !isContainerNamespace(tree, tree.containerDeclRoot());
 }
 
 /// Returns true if the container is a namespace (i.e., no fields just declarations)
-pub fn isContainerNamespace(tree: std.zig.Ast, container_decl: std.zig.Ast.full.ContainerDecl) bool {
+pub fn isContainerNamespace(tree: Ast, container_decl: Ast.full.ContainerDecl) bool {
     for (container_decl.ast.members) |member| {
         if (nodeTag(tree, member).isContainerField()) return false;
     }
@@ -183,3 +183,4 @@ pub fn isContainerNamespace(tree: std.zig.Ast, container_decl: std.zig.Ast.full.
 
 const std = @import("std");
 const version = @import("version.zig");
+const Ast = std.zig.Ast;

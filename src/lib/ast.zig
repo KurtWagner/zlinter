@@ -4,8 +4,8 @@ pub const NodeLineage = std.MultiArrayList(NodeConnections);
 
 pub const NodeConnections = struct {
     /// Null if root
-    parent: ?std.zig.Ast.Node.Index = null,
-    children: ?[]const std.zig.Ast.Node.Index = null,
+    parent: ?Ast.Node.Index = null,
+    children: ?[]const Ast.Node.Index = null,
 
     pub fn deinit(self: NodeConnections, allocator: std.mem.Allocator) void {
         if (self.children) |c| allocator.free(c);
@@ -15,16 +15,16 @@ pub const NodeConnections = struct {
 pub const NodeAncestorIterator = struct {
     const Self = @This();
 
-    current: shims.NodeIndexShim,
+    current: NodeIndexShim,
     lineage: *NodeLineage,
     done: bool = false,
 
-    pub fn next(self: *Self) ?std.zig.Ast.Node.Index {
+    pub fn next(self: *Self) ?Ast.Node.Index {
         if (self.done or self.current.isRoot()) return null;
 
         const parent = self.lineage.items(.parent)[self.current.index];
         if (parent) |p| {
-            self.current = shims.NodeIndexShim.init(p);
+            self.current = NodeIndexShim.init(p);
             return p;
         } else {
             self.done = true;
@@ -36,7 +36,7 @@ pub const NodeAncestorIterator = struct {
 pub const NodeLineageIterator = struct {
     const Self = @This();
 
-    queue: std.ArrayListUnmanaged(shims.NodeIndexShim) = .empty,
+    queue: std.ArrayListUnmanaged(NodeIndexShim) = .empty,
     lineage: *NodeLineage,
     gpa: std.mem.Allocator,
 
@@ -45,7 +45,7 @@ pub const NodeLineageIterator = struct {
         self.* = undefined;
     }
 
-    pub fn next(self: *Self) error{OutOfMemory}!?struct { shims.NodeIndexShim, NodeConnections } {
+    pub fn next(self: *Self) error{OutOfMemory}!?struct { NodeIndexShim, NodeConnections } {
         if (self.queue.pop()) |node_shim| {
             const connections = self.lineage.get(node_shim.index);
             for (connections.children orelse &.{}) |child| {
@@ -59,20 +59,20 @@ pub const NodeLineageIterator = struct {
 
 pub fn nodeChildrenAlloc(
     gpa: std.mem.Allocator,
-    tree: std.zig.Ast,
-    node: std.zig.Ast.Node.Index,
-) error{OutOfMemory}![]std.zig.Ast.Node.Index {
+    tree: Ast,
+    node: Ast.Node.Index,
+) error{OutOfMemory}![]Ast.Node.Index {
     const Context = struct {
         gpa: std.mem.Allocator,
-        children: *std.ArrayListUnmanaged(std.zig.Ast.Node.Index),
+        children: *std.ArrayListUnmanaged(Ast.Node.Index),
 
-        fn callback(self: @This(), _: std.zig.Ast, child_node: std.zig.Ast.Node.Index) error{OutOfMemory}!void {
-            if (shims.NodeIndexShim.init(child_node).isRoot()) return;
+        fn callback(self: @This(), _: Ast, child_node: Ast.Node.Index) error{OutOfMemory}!void {
+            if (NodeIndexShim.init(child_node).isRoot()) return;
             try self.children.append(self.gpa, child_node);
         }
     };
 
-    var children: std.ArrayListUnmanaged(std.zig.Ast.Node.Index) = .empty;
+    var children: std.ArrayListUnmanaged(Ast.Node.Index) = .empty;
     defer children.deinit(gpa);
 
     try iterateChildren(
@@ -93,11 +93,11 @@ pub fn nodeChildrenAlloc(
 /// leaving this simple work around in place while we support 0.14 and then it
 /// can be deleted.
 pub fn iterateChildren(
-    tree: std.zig.Ast,
-    node: std.zig.Ast.Node.Index,
+    tree: Ast,
+    node: Ast.Node.Index,
     context: anytype,
     comptime Error: type,
-    comptime callback: fn (@TypeOf(context), std.zig.Ast, std.zig.Ast.Node.Index) Error!void,
+    comptime callback: fn (@TypeOf(context), Ast, Ast.Node.Index) Error!void,
 ) Error!void {
     switch (version.zig) {
         .@"0.14" => {
@@ -114,14 +114,14 @@ pub fn iterateChildren(
 
 /// `errdefer` and `defer` calls
 pub const DeferBlock = struct {
-    children: []const std.zig.Ast.Node.Index,
+    children: []const Ast.Node.Index,
 
     pub fn deinit(self: DeferBlock, allocator: std.mem.Allocator) void {
         allocator.free(self.children);
     }
 };
 
-pub fn deferBlock(doc: session.LintDocument, node: std.zig.Ast.Node.Index, allocator: std.mem.Allocator) !?DeferBlock {
+pub fn deferBlock(doc: session.LintDocument, node: Ast.Node.Index, allocator: std.mem.Allocator) !?DeferBlock {
     const tree = doc.handle.tree;
 
     const data = shims.nodeData(tree, node);
@@ -139,13 +139,13 @@ pub fn deferBlock(doc: session.LintDocument, node: std.zig.Ast.Node.Index, alloc
         };
 
     if (isBlock(tree, exp_node)) {
-        return .{ .children = try allocator.dupe(std.zig.Ast.Node.Index, doc.lineage.items(.children)[shims.NodeIndexShim.init(exp_node).index] orelse &.{}) };
+        return .{ .children = try allocator.dupe(Ast.Node.Index, doc.lineage.items(.children)[NodeIndexShim.init(exp_node).index] orelse &.{}) };
     } else {
-        return .{ .children = try allocator.dupe(std.zig.Ast.Node.Index, &.{exp_node}) };
+        return .{ .children = try allocator.dupe(Ast.Node.Index, &.{exp_node}) };
     }
 }
 
-pub fn isBlock(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) bool {
+pub fn isBlock(tree: Ast, node: Ast.Node.Index) bool {
     return switch (shims.nodeTag(tree, node)) {
         .block_two, .block_two_semicolon, .block, .block_semicolon => true,
         else => false,
@@ -240,8 +240,8 @@ test "deferBlock - has expected children" {
 }
 
 /// Returns true if return type is `!type` or `error{ErrorName}!type` or `ErrorName!type`
-pub fn fnProtoReturnsError(tree: std.zig.Ast, fn_proto: std.zig.Ast.full.FnProto) bool {
-    const return_node = shims.NodeIndexShim.initOptional(fn_proto.ast.return_type) orelse return false;
+pub fn fnProtoReturnsError(tree: Ast, fn_proto: Ast.full.FnProto) bool {
+    const return_node = NodeIndexShim.initOptional(fn_proto.ast.return_type) orelse return false;
     const tag = shims.nodeTag(tree, return_node.toNodeIndex());
     return switch (tag) {
         .error_union => true,
@@ -250,7 +250,7 @@ pub fn fnProtoReturnsError(tree: std.zig.Ast, fn_proto: std.zig.Ast.full.FnProto
 }
 
 test "fnProtoReturnsError" {
-    var buffer: [1]std.zig.Ast.Node.Index = undefined;
+    var buffer: [1]Ast.Node.Index = undefined;
     inline for (&.{
         .{
             \\ fn func() !void;
@@ -301,7 +301,7 @@ test "fnProtoReturnsError" {
         const source, const expected = tuple;
         errdefer std.debug.print("Failed source: '{s}' expected {}\n", .{ source, expected });
 
-        var ast = try std.zig.Ast.parse(std.testing.allocator, source, .zig);
+        var ast = try Ast.parse(std.testing.allocator, source, .zig);
         defer ast.deinit(std.testing.allocator);
 
         const actual = fnProtoReturnsError(
@@ -325,13 +325,13 @@ test "fnProtoReturnsError" {
 }
 
 pub const FnDecl = struct {
-    proto: std.zig.Ast.full.FnProto,
-    block: std.zig.Ast.Node.Index,
+    proto: Ast.full.FnProto,
+    block: Ast.Node.Index,
 };
 
 /// Returns the function declaration (proto and block) if node is a function declaration,
 /// otherwise returns null.
-pub fn fnDecl(tree: std.zig.Ast, node: std.zig.Ast.Node.Index, fn_proto_buffer: *[1]std.zig.Ast.Node.Index) ?FnDecl {
+pub fn fnDecl(tree: Ast, node: Ast.Node.Index, fn_proto_buffer: *[1]Ast.Node.Index) ?FnDecl {
     switch (shims.nodeTag(tree, node)) {
         .fn_decl => {
             const data = shims.nodeData(tree, node);
@@ -350,7 +350,7 @@ pub fn fnDecl(tree: std.zig.Ast, node: std.zig.Ast.Node.Index, fn_proto_buffer: 
 ///
 /// For example `parent.ok` and `parent.child.ok` would return a token index
 /// pointing to `ok`.
-pub fn fieldVarAccess(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) ?std.zig.Ast.TokenIndex {
+pub fn fieldVarAccess(tree: Ast, node: Ast.Node.Index) ?Ast.TokenIndex {
     if (shims.nodeTag(tree, node) != .field_access) return null;
 
     const last_token = tree.lastToken(node);
@@ -367,7 +367,7 @@ pub fn fieldVarAccess(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) ?std.zig.
 ///
 /// For example, `parent.ok` and `parent.child.ok` would match var name `ok` but
 /// not `child` (even though it is a field access above `ok`).
-pub fn isFieldVarAccess(tree: std.zig.Ast, node: std.zig.Ast.Node.Index, var_names: []const []const u8) bool {
+pub fn isFieldVarAccess(tree: Ast, node: Ast.Node.Index, var_names: []const []const u8) bool {
     const identifier_token = fieldVarAccess(tree, node) orelse return false;
     const actual_var_name = tree.tokenSlice(identifier_token);
 
@@ -423,7 +423,7 @@ test "isFieldVarAccess" {
         const source, const names, const expected = tuple;
         errdefer std.debug.print("Failed source: '{s}' expected {}\n", .{ source, expected });
 
-        var ast = try std.zig.Ast.parse(
+        var ast = try Ast.parse(
             std.testing.allocator,
             source,
             .zig,
@@ -432,7 +432,7 @@ test "isFieldVarAccess" {
 
         const actual = isFieldVarAccess(
             ast,
-            shims.NodeIndexShim.initOptional(ast.fullVarDecl(try testing.expectSingleNodeOfTag(
+            NodeIndexShim.initOptional(ast.fullVarDecl(try testing.expectSingleNodeOfTag(
                 ast,
                 &.{
                     .local_var_decl,
@@ -448,7 +448,7 @@ test "isFieldVarAccess" {
 }
 
 /// Returns true if enum literal matching a given var name
-pub fn isEnumLiteral(tree: std.zig.Ast, node: std.zig.Ast.Node.Index, enum_names: []const []const u8) bool {
+pub fn isEnumLiteral(tree: Ast, node: Ast.Node.Index, enum_names: []const []const u8) bool {
     if (shims.nodeTag(tree, node) != .enum_literal) return false;
 
     const actual_enum_name = tree.tokenSlice(shims.nodeMainToken(tree, node));
@@ -500,7 +500,7 @@ test "isEnumLiteral" {
         const source, const names, const expected = tuple;
         errdefer std.debug.print("Failed source: '{s}' expected {}\n", .{ source, expected });
 
-        var ast = try std.zig.Ast.parse(
+        var ast = try Ast.parse(
             std.testing.allocator,
             source,
             .zig,
@@ -509,7 +509,7 @@ test "isEnumLiteral" {
 
         const actual = isEnumLiteral(
             ast,
-            shims.NodeIndexShim.initOptional(ast.fullVarDecl(try testing.expectSingleNodeOfTag(
+            NodeIndexShim.initOptional(ast.fullVarDecl(try testing.expectSingleNodeOfTag(
                 ast,
                 &.{
                     .local_var_decl,
@@ -530,3 +530,5 @@ const shims = @import("shims.zig");
 const version = @import("version.zig");
 const testing = @import("testing.zig");
 const session = @import("session.zig");
+const NodeIndexShim = shims.NodeIndexShim;
+const Ast = std.zig.Ast;

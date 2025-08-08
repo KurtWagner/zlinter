@@ -45,7 +45,7 @@ fn run(
     var arena_buffer = std.heap.FixedBufferAllocator.init(&arena_mem);
     const arena = arena_buffer.allocator();
 
-    const root: zlinter.shims.NodeIndexShim = .root;
+    const root: NodeIndexShim = .root;
 
     if (config.file_severity != .off) {
         defer arena_buffer.reset();
@@ -64,7 +64,7 @@ fn run(
     var it = try doc.nodeLineageIterator(root, allocator);
     defer it.deinit();
 
-    var fn_decl_buffer: [1]std.zig.Ast.Node.Index = undefined;
+    var fn_decl_buffer: [1]Ast.Node.Index = undefined;
 
     nodes: while (try it.next()) |tuple| {
         defer arena_buffer.reset();
@@ -72,7 +72,7 @@ fn run(
         const node, const connections = tuple;
         _ = connections;
 
-        const tag = zlinter.shims.nodeTag(tree, node.toNodeIndex());
+        const tag = shims.nodeTag(tree, node.toNodeIndex());
 
         switch (tag) {
             .fn_decl => if (tree.fullFnProto(&fn_decl_buffer, node.toNodeIndex())) |fn_decl| {
@@ -124,7 +124,7 @@ fn run(
         null;
 }
 
-fn hasDocComments(arena: std.mem.Allocator, tree: std.zig.Ast, node: std.zig.Ast.Node.Index) !bool {
+fn hasDocComments(arena: std.mem.Allocator, tree: Ast, node: Ast.Node.Index) !bool {
     const comments = try zlinter.zls.Analyser.getDocComments(
         arena,
         tree,
@@ -133,7 +133,7 @@ fn hasDocComments(arena: std.mem.Allocator, tree: std.zig.Ast, node: std.zig.Ast
     return comments.len > 0;
 }
 
-fn isFnPrivate(tree: std.zig.Ast, fn_decl: std.zig.Ast.full.FnProto) bool {
+fn isFnPrivate(tree: Ast, fn_decl: Ast.full.FnProto) bool {
     const visibility_token = fn_decl.visib_token orelse return true;
     return switch (tree.tokens.items(.tag)[visibility_token]) {
         .keyword_pub => false,
@@ -141,7 +141,7 @@ fn isFnPrivate(tree: std.zig.Ast, fn_decl: std.zig.Ast.full.FnProto) bool {
     };
 }
 
-fn isVarPrivate(tree: std.zig.Ast, var_decl: std.zig.Ast.full.VarDecl) bool {
+fn isVarPrivate(tree: Ast, var_decl: Ast.full.VarDecl) bool {
     const visibility_token = var_decl.visib_token orelse return true;
     return switch (tree.tokens.items(.tag)[visibility_token]) {
         .keyword_pub => false,
@@ -366,3 +366,6 @@ test "require_doc_comment - file" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const shims = zlinter.shims;
+const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;

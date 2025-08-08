@@ -63,7 +63,7 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    const root: zlinter.shims.NodeIndexShim = .root;
+    const root: NodeIndexShim = .root;
     var it = try doc.nodeLineageIterator(root, allocator);
     defer it.deinit();
 
@@ -71,7 +71,7 @@ fn run(
         const node, const connections = tuple;
         _ = connections;
 
-        if (zlinter.shims.nodeTag(tree, node.toNodeIndex()) != .field_access) continue :nodes;
+        if (shims.nodeTag(tree, node.toNodeIndex()) != .field_access) continue :nodes;
 
         // if configured, skip if a parent is a test block
         if (config.exclude_tests and doc.isEnclosedInTestBlock(node)) {
@@ -79,7 +79,7 @@ fn run(
         }
 
         // unwrap field access lhs and identifier (e.g., lhs.identifier)
-        const node_data = zlinter.shims.nodeData(tree, node.toNodeIndex());
+        const node_data = shims.nodeData(tree, node.toNodeIndex());
         const lhs, const identifier = switch (zlinter.version.zig) {
             .@"0.14" => .{ node_data.lhs, node_data.rhs },
             .@"0.15" => .{ node_data.node_and_token.@"0", node_data.node_and_token.@"1" },
@@ -107,11 +107,11 @@ fn run(
                 const name: []const u8 = name: switch (decl_handle.decl) {
                     .ast_node => |ast_node| {
                         if (decl_handle.handle.tree.fullVarDecl(ast_node)) |var_decl| {
-                            if (zlinter.shims.NodeIndexShim.initOptional(var_decl.ast.init_node)) |init_node| {
+                            if (NodeIndexShim.initOptional(var_decl.ast.init_node)) |init_node| {
                                 _ = init_node;
                                 // TODO: If .call_one then check return value
                                 // std.debug.print("{} - {s}\n", .{
-                                //     zlinter.shims.nodeTag(decl_handle.handle.tree, init_node.toNodeIndex()),
+                                //     shims.nodeTag(decl_handle.handle.tree, init_node.toNodeIndex()),
                                 //     decl_handle.handle.tree.getNodeSource(init_node.toNodeIndex()),
                                 // });
                             }
@@ -162,3 +162,5 @@ test {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const shims = zlinter.shims;
+const NodeIndexShim = zlinter.shims.NodeIndexShim;

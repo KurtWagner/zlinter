@@ -35,17 +35,17 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    var node: zlinter.shims.NodeIndexShim = .root;
+    var node: NodeIndexShim = .root;
     while (node.index < tree.nodes.len) : (node.index += 1) {
-        if (zlinter.shims.nodeTag(tree, node.toNodeIndex()) != .@"orelse") continue;
+        if (shims.nodeTag(tree, node.toNodeIndex()) != .@"orelse") continue;
 
-        const data = zlinter.shims.nodeData(tree, node.toNodeIndex());
+        const data = shims.nodeData(tree, node.toNodeIndex());
         const rhs = switch (zlinter.version.zig) {
             .@"0.14" => data.rhs,
             .@"0.15" => data.node_and_node.@"1",
         };
 
-        if (zlinter.shims.nodeTag(tree, rhs) != .unreachable_literal) continue;
+        if (shims.nodeTag(tree, rhs) != .unreachable_literal) continue;
 
         try lint_problems.append(allocator, .{
             .rule_id = rule.rule_id,
@@ -120,3 +120,5 @@ test "no_orelse_unreachable" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const shims = zlinter.shims;
+const NodeIndexShim = zlinter.shims.NodeIndexShim;

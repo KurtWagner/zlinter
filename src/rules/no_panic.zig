@@ -76,7 +76,7 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    const root: zlinter.shims.NodeIndexShim = .root;
+    const root: NodeIndexShim = .root;
     var it = try doc.nodeLineageIterator(root, allocator);
     defer it.deinit();
 
@@ -84,14 +84,14 @@ fn run(
         const node, const connections = tuple;
         _ = connections;
 
-        const tag = zlinter.shims.nodeTag(tree, node.toNodeIndex());
+        const tag = shims.nodeTag(tree, node.toNodeIndex());
         switch (tag) {
             .builtin_call_two,
             .builtin_call_two_comma,
             .builtin_call,
             .builtin_call_comma,
             => {
-                const main_token = zlinter.shims.nodeMainToken(tree, node.toNodeIndex());
+                const main_token = shims.nodeMainToken(tree, node.toNodeIndex());
                 if (!std.mem.eql(u8, tree.tokenSlice(main_token), "@panic")) continue :nodes;
             },
             else => continue :nodes,
@@ -128,21 +128,21 @@ fn run(
 /// given contents. e.g., `@panic("OOM")` would match `&.{"OOM"}`.
 /// Contents are case sensitive
 fn builtinHasParamContent(
-    tree: std.zig.Ast,
-    node: std.zig.Ast.Node.Index,
+    tree: Ast,
+    node: Ast.Node.Index,
     contents: []const []const u8,
 ) bool {
     if (contents.len == 0) return false;
 
-    var buffer: [2]std.zig.Ast.Node.Index = undefined;
+    var buffer: [2]Ast.Node.Index = undefined;
     const params = tree.builtinCallParams(&buffer, node) orelse return false;
     if (params.len != 1) return false;
 
     const param = params[0];
-    const tag = zlinter.shims.nodeTag(tree, param);
+    const tag = shims.nodeTag(tree, param);
     if (tag != .string_literal) return false;
 
-    const param_slice = tree.tokenSlice(zlinter.shims.nodeMainToken(tree, param));
+    const param_slice = tree.tokenSlice(shims.nodeMainToken(tree, param));
     for (contents) |c| {
         // offset 1 on either side to factor in quotes
         if (std.mem.eql(u8, param_slice[1 .. param_slice.len - 1], c)) return true;
@@ -249,3 +249,6 @@ test "no_panic" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const shims = zlinter.shims;
+const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;

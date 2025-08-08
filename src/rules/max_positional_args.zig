@@ -54,9 +54,9 @@ fn run(
     defer lint_problems.deinit(allocator);
 
     const tree = doc.handle.tree;
-    var fn_buffer: [1]std.zig.Ast.Node.Index = undefined;
+    var fn_buffer: [1]Ast.Node.Index = undefined;
 
-    var node: zlinter.shims.NodeIndexShim = .init(1);
+    var node: NodeIndexShim = .init(1);
     nodes: while (node.index < tree.nodes.len) : (node.index += 1) {
         const fn_proto = fnProto(tree, &fn_buffer, node.toNodeIndex()) orelse continue :nodes;
 
@@ -91,8 +91,8 @@ fn run(
         null;
 }
 
-inline fn fnProto(tree: std.zig.Ast, buffer: *[1]std.zig.Ast.Node.Index, node: std.zig.Ast.Node.Index) ?std.zig.Ast.full.FnProto {
-    return switch (zlinter.shims.nodeTag(tree, node)) {
+inline fn fnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?Ast.full.FnProto {
+    return switch (shims.nodeTag(tree, node)) {
         .fn_proto => tree.fnProto(node),
         .fn_proto_multi => tree.fnProtoMulti(node),
         .fn_proto_one => tree.fnProtoOne(buffer, node),
@@ -241,3 +241,6 @@ test "general" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const shims = zlinter.shims;
+const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;

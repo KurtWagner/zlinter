@@ -51,16 +51,16 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    const root: zlinter.shims.NodeIndexShim = .root;
+    const root: NodeIndexShim = .root;
     var it = try doc.nodeLineageIterator(root, allocator);
     defer it.deinit();
 
-    var fn_proto_buffer: [1]std.zig.Ast.Node.Index = undefined;
+    var fn_proto_buffer: [1]Ast.Node.Index = undefined;
 
     nodes: while (try it.next()) |tuple| {
         const node, const connections = tuple;
 
-        if (zlinter.shims.nodeTag(tree, node.toNodeIndex()) != .identifier) continue :nodes;
+        if (shims.nodeTag(tree, node.toNodeIndex()) != .identifier) continue :nodes;
         if (!std.mem.eql(u8, tree.getNodeSource(node.toNodeIndex()), "undefined")) continue :nodes;
 
         var decl_var_name: ?[]const u8 = null;
@@ -85,7 +85,7 @@ fn run(
         while (next_parent) |parent| {
             // We expect any undefined with a test to simply be ignored as really we expect
             // the test to fail if there's issues
-            if (config.exclude_tests and zlinter.shims.nodeTag(tree, parent) == .test_decl) continue :nodes;
+            if (config.exclude_tests and shims.nodeTag(tree, parent) == .test_decl) continue :nodes;
 
             // If assigned undefined in a deinit, ignore as it's a common pattern
             // assign undefined after freeing memory
@@ -103,7 +103,7 @@ fn run(
             // configured method) is called on the var declaration set to
             // undefined. e.g., `this_was_undefined.init()`
             if (decl_var_name) |var_name| {
-                if (switch (zlinter.shims.nodeTag(tree, parent)) {
+                if (switch (shims.nodeTag(tree, parent)) {
                     .block_two,
                     .block_two_semicolon,
                     .block,
@@ -111,13 +111,13 @@ fn run(
                     => true,
                     else => false,
                 }) {
-                    var block_it = try doc.nodeLineageIterator(zlinter.shims.NodeIndexShim.init(parent), allocator);
+                    var block_it = try doc.nodeLineageIterator(NodeIndexShim.init(parent), allocator);
                     defer block_it.deinit();
 
                     while (try block_it.next()) |block_tuple| {
                         const block_node, _ = block_tuple;
-                        if (zlinter.shims.nodeTag(tree, block_node.toNodeIndex()) == .field_access) {
-                            const node_data = zlinter.shims.nodeData(tree, block_node.toNodeIndex());
+                        if (shims.nodeTag(tree, block_node.toNodeIndex()) == .field_access) {
+                            const node_data = shims.nodeData(tree, block_node.toNodeIndex());
                             const lhs_node, const identifier_token = switch (zlinter.version.zig) {
                                 .@"0.14" => .{ node_data.lhs, node_data.rhs },
                                 .@"0.15" => .{ node_data.node_and_token.@"0", node_data.node_and_token.@"1" },
@@ -134,7 +134,7 @@ fn run(
                 }
             }
 
-            next_parent = doc.lineage.items(.parent)[zlinter.shims.NodeIndexShim.init(parent).index];
+            next_parent = doc.lineage.items(.parent)[NodeIndexShim.init(parent).index];
         }
 
         try lint_problems.append(allocator, .{
@@ -213,3 +213,6 @@ test "no_literal_args" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const shims = zlinter.shims;
+const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;

@@ -60,11 +60,11 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    const root: zlinter.shims.NodeIndexShim = .root;
+    const root: NodeIndexShim = .root;
     var it = try doc.nodeLineageIterator(root, allocator);
     defer it.deinit();
 
-    var container_decl_buffer: [2]std.zig.Ast.Node.Index = undefined;
+    var container_decl_buffer: [2]Ast.Node.Index = undefined;
 
     nodes: while (try it.next()) |tuple| {
         const node, const connections = tuple;
@@ -74,7 +74,7 @@ fn run(
                 &container_decl_buffer,
                 node.toNodeIndex(),
             )) |container_decl| {
-                break :kind switch (tree.tokens.items(.tag)[zlinter.shims.nodeMainToken(tree, node.toNodeIndex())]) {
+                break :kind switch (tree.tokens.items(.tag)[shims.nodeMainToken(tree, node.toNodeIndex())]) {
                     .keyword_union => .{ config.union_field_order, "Union" },
                     .keyword_struct => {
                         if (container_decl.layout_token) |layout_token| {
@@ -98,10 +98,10 @@ fn run(
             continue :nodes;
         }
 
-        var actual_order = std.ArrayList(std.zig.Ast.Node.Index).init(allocator);
+        var actual_order = std.ArrayList(Ast.Node.Index).init(allocator);
         defer actual_order.deinit();
 
-        var expected_order = std.ArrayList(std.zig.Ast.Node.Index).init(allocator);
+        var expected_order = std.ArrayList(Ast.Node.Index).init(allocator);
         defer expected_order.deinit();
 
         var sorted_queue = std.PriorityQueue(
@@ -116,13 +116,13 @@ fn run(
             // Declarations cannot appear between fields so once we see a field
             // simply read until we see something else to identify the chunk of
             // fields in source:
-            const name_token = token: switch (zlinter.shims.nodeTag(tree, container_child)) {
+            const name_token = token: switch (shims.nodeTag(tree, container_child)) {
                 .container_field_init,
                 .container_field_align,
                 .container_field,
                 => {
                     seen_field = true;
-                    break :token zlinter.shims.nodeMainToken(tree, container_child);
+                    break :token shims.nodeMainToken(tree, container_child);
                 },
                 else => if (seen_field) break :children else continue :children,
             };
@@ -212,9 +212,9 @@ fn run(
 /// Span between two nodes (or the same node) including comments and leading
 /// whitespace like newlines.
 fn nodeSpanIncludingComments(
-    tree: std.zig.Ast,
-    first_node: std.zig.Ast.Node.Index,
-    last_node: std.zig.Ast.Node.Index,
+    tree: Ast,
+    first_node: Ast.Node.Index,
+    last_node: Ast.Node.Index,
     options: struct { consume_trailing_comma: bool = false },
 ) struct {
     zlinter.results.LintProblemLocation,
@@ -235,7 +235,7 @@ fn nodeSpanIncludingComments(
     return .{ start, end };
 }
 
-fn firstTokenIncludingComments(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) std.zig.Ast.TokenIndex {
+fn firstTokenIncludingComments(tree: Ast, node: Ast.Node.Index) Ast.TokenIndex {
     var token = tree.firstToken(node);
     while (tree.tokens.items(.tag)[token - 1] == .doc_comment) token -= 1;
     return token;
@@ -243,7 +243,7 @@ fn firstTokenIncludingComments(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) 
 
 const Field = struct {
     name: []const u8,
-    node: std.zig.Ast.Node.Index,
+    node: Ast.Node.Index,
 
     fn cmp(context: struct { zlinter.rules.LintTextOrder }, lhs: Field, rhs: Field) std.math.Order {
         const order = context.@"0";
@@ -257,3 +257,6 @@ test {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const shims = zlinter.shims;
+const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;
