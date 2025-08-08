@@ -326,9 +326,9 @@ fn runLinterRules(
         var results = std.ArrayListUnmanaged(zlinter.results.LintResult).empty;
         defer results.deinit(gpa);
 
-        const ast = doc.handle.tree;
-        for (ast.errors) |err| {
-            const position = ast.tokenLocation(
+        const tree = doc.handle.tree;
+        for (tree.errors) |err| {
+            const position = tree.tokenLocation(
                 0,
                 err.token,
             );
@@ -346,11 +346,11 @@ fn runLinterRules(
                             .column = position.column,
                         },
                         .end = .{
-                            .byte_offset = position.line_start + position.column + ast.tokenSlice(err.token).len - 1,
+                            .byte_offset = position.line_start + position.column + tree.tokenSlice(err.token).len - 1,
                             .line = position.line,
-                            .column = position.column + ast.tokenSlice(err.token).len - 1,
+                            .column = position.column + tree.tokenSlice(err.token).len - 1,
                         },
-                        .message = try allocAstErrorMsg(ast, err, gpa),
+                        .message = try allocAstErrorMsg(tree, err, gpa),
                     }}),
                 },
             );
@@ -588,14 +588,14 @@ fn runFixes(
 ///
 /// The returned string must be freed by the caller. i.e., `allocator.free(error_message);`
 fn allocAstErrorMsg(
-    ast: Ast,
+    tree: Ast,
     err: Ast.Error,
     allocator: std.mem.Allocator,
 ) error{OutOfMemory}![]const u8 {
     var error_message = std.ArrayListUnmanaged(u8).empty;
     defer error_message.deinit(allocator);
 
-    try ast.renderError(err, error_message.writer(allocator));
+    try tree.renderError(err, error_message.writer(allocator));
     return error_message.toOwnedSlice(allocator);
 }
 

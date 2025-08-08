@@ -166,11 +166,11 @@ pub fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8, op
     )).?;
     defer doc.deinit(ctx.gpa);
 
-    const ast = doc.handle.tree;
-    std.testing.expectEqual(ast.errors.len, 0) catch |err| {
+    const tree = doc.handle.tree;
+    std.testing.expectEqual(tree.errors.len, 0) catch |err| {
         std.debug.print("Failed to parse AST:\n", .{});
-        for (ast.errors) |ast_err| {
-            try ast.renderError(ast_err, std.io.getStdErr().writer());
+        for (tree.errors) |ast_err| {
+            try tree.renderError(ast_err, std.io.getStdErr().writer());
         }
         return err;
     };

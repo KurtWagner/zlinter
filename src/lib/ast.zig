@@ -301,15 +301,15 @@ test "fnProtoReturnsError" {
         const source, const expected = tuple;
         errdefer std.debug.print("Failed source: '{s}' expected {?}\n", .{ source, expected });
 
-        var ast = try Ast.parse(std.testing.allocator, source, .zig);
-        defer ast.deinit(std.testing.allocator);
+        var tree = try Ast.parse(std.testing.allocator, source, .zig);
+        defer tree.deinit(std.testing.allocator);
 
         const actual = fnProtoReturnsError(
-            ast,
-            ast.fullFnProto(
+            tree,
+            tree.fullFnProto(
                 &buffer,
                 try testing.expectSingleNodeOfTag(
-                    ast,
+                    tree,
                     &.{
                         .fn_proto,
                         .fn_proto_multi,
@@ -423,17 +423,17 @@ test "isFieldVarAccess" {
         const source, const names, const expected = tuple;
         errdefer std.debug.print("Failed source: '{s}' expected {?}\n", .{ source, expected });
 
-        var ast = try Ast.parse(
+        var tree = try Ast.parse(
             std.testing.allocator,
             source,
             .zig,
         );
-        defer ast.deinit(std.testing.allocator);
+        defer tree.deinit(std.testing.allocator);
 
         const actual = isFieldVarAccess(
-            ast,
-            NodeIndexShim.initOptional(ast.fullVarDecl(try testing.expectSingleNodeOfTag(
-                ast,
+            tree,
+            NodeIndexShim.initOptional(tree.fullVarDecl(try testing.expectSingleNodeOfTag(
+                tree,
                 &.{
                     .local_var_decl,
                     .global_var_decl,
@@ -500,17 +500,17 @@ test "isEnumLiteral" {
         const source, const names, const expected = tuple;
         errdefer std.debug.print("Failed source: '{s}' expected {?}\n", .{ source, expected });
 
-        var ast = try Ast.parse(
+        var tree = try Ast.parse(
             std.testing.allocator,
             source,
             .zig,
         );
-        defer ast.deinit(std.testing.allocator);
+        defer tree.deinit(std.testing.allocator);
 
         const actual = isEnumLiteral(
-            ast,
-            NodeIndexShim.initOptional(ast.fullVarDecl(try testing.expectSingleNodeOfTag(
-                ast,
+            tree,
+            NodeIndexShim.initOptional(tree.fullVarDecl(try testing.expectSingleNodeOfTag(
+                tree,
                 &.{
                     .local_var_decl,
                     .global_var_decl,

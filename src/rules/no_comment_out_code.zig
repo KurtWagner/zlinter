@@ -135,28 +135,28 @@ fn looksLikeCode(content: []const u8, gpa: std.mem.Allocator) !bool {
 
     const looks_like_statement = looks_like_statement: {
         const container_code = std.fmt.bufPrintZ(buffer, statement_container_fmt, .{content}) catch unreachable;
-        var ast = try Ast.parse(gpa, container_code, .zig);
-        defer ast.deinit(gpa);
+        var tree = try Ast.parse(gpa, container_code, .zig);
+        defer tree.deinit(gpa);
 
         const root_and_wrap_fn_nodes = 5;
-        if (ast.nodes.len <= root_and_wrap_fn_nodes) break :looks_like_statement false;
-        if (ast.errors.len > 0) break :looks_like_statement false;
+        if (tree.nodes.len <= root_and_wrap_fn_nodes) break :looks_like_statement false;
+        if (tree.errors.len > 0) break :looks_like_statement false;
         break :looks_like_statement true;
     };
     if (looks_like_statement) return true;
 
     const looks_like_declaration = looks_like_declaration: {
         const root_code = std.fmt.bufPrintZ(buffer, declaration_container_fmt, .{content}) catch unreachable;
-        var ast = try Ast.parse(gpa, root_code, .zig);
-        defer ast.deinit(gpa);
+        var tree = try Ast.parse(gpa, root_code, .zig);
+        defer tree.deinit(gpa);
 
         const root_node = 1;
-        if (ast.nodes.len <= root_node) break :looks_like_declaration false;
-        if (ast.errors.len > 0) break :looks_like_declaration false;
+        if (tree.nodes.len <= root_node) break :looks_like_declaration false;
+        if (tree.errors.len > 0) break :looks_like_declaration false;
 
         var node = NodeIndexShim.init(0);
-        while (node.index < ast.nodes.len) : (node.index += 1) {
-            switch (shims.nodeTag(ast, node.toNodeIndex())) {
+        while (node.index < tree.nodes.len) : (node.index += 1) {
+            switch (shims.nodeTag(tree, node.toNodeIndex())) {
                 .test_decl,
                 .global_var_decl,
                 .local_var_decl,
@@ -171,10 +171,10 @@ fn looksLikeCode(content: []const u8, gpa: std.mem.Allocator) !bool {
                     // appears to not be behaving how it is documented.
                     // zlinter-disable-next-line no_comment_out_code
                     // if (ast.fullContainerField(node.toNodeIndex())) |container_field| {
-                    //     std.debug.print("{} - '{s}'\n", .{ container_field.ast, ast.tokenSlice(container_field.ast.main_token) });
+                    //     std.debug.print("{} - '{s}'\n", .{ container_field.tree, tree.tokenSlice(container_field.ast.main_token) });
                     //     if (NodeIndexShim.initOptional(container_field.ast.type_expr) != null and
-                    //         ast.lastToken(node.toNodeIndex()) + 1 < ast.tokens.len and
-                    //         ast.tokens.items(.tag)[ast.lastToken(node.toNodeIndex()) + 1] == .comma)
+                    //         tree.lastToken(node.toNodeIndex()) + 1 < tree.tokens.len and
+                    //         tree.tokens.items(.tag)[ast.lastToken(node.toNodeIndex()) + 1] == .comma)
                     //     {
                     //         break :looks_like_declaration true;
                     //     }
