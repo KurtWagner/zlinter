@@ -76,13 +76,13 @@ example, `struct`, `enum`, `union`, `opaque` and `error`.
 
 * `error_field_min_len`
 
-  * Minimum length of a `error` field name. To exclude names from this check see `error_field_exclude_len` option. Set to `.off` to disable this check.
+  * Minimum length of an `error` field name. To exclude names from this check see `error_field_exclude_len` option. Set to `.off` to disable this check.
 
   * **Default:** `.{ .len = 3, .severity = .warning, }`
 
 * `error_field_max_len`
 
-  * Maximum length of a `error` field name. To exclude names from this check see `error_field_exclude_len` option. Set to `.off` to disable this check.
+  * Maximum length of an `error` field name. To exclude names from this check see `error_field_exclude_len` option. Set to `.off` to disable this check.
 
   * **Default:** `.{ .len = 30, .severity = .warning, }`
 
@@ -100,13 +100,13 @@ example, `struct`, `enum`, `union`, `opaque` and `error`.
 
 * `enum_field_min_len`
 
-  * Minimum length of a `enum` field name. To exclude names from this check see `enum_field_exclude_len` option. Set to `.off` to disable this check.
+  * Minimum length of an `enum` field name. To exclude names from this check see `enum_field_exclude_len` option. Set to `.off` to disable this check.
 
   * **Default:** `.{ .len = 3, .severity = .warning, }`
 
 * `enum_field_max_len`
 
-  * Maximum length of a `enum` field name. To exclude names from this check see `enum_field_exclude_len` option. Set to `.off` to disable this check.
+  * Maximum length of an `enum` field name. To exclude names from this check see `enum_field_exclude_len` option. Set to `.off` to disable this check.
 
   * **Default:** `.{ .len = 30, .severity = .warning, }`
 

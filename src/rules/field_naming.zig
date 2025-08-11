@@ -9,7 +9,7 @@ pub const Config = struct {
         .severity = .@"error",
     },
 
-    /// Minimum length of a `error` field name. To exclude names from this check
+    /// Minimum length of an `error` field name. To exclude names from this check
     /// see `error_field_exclude_len` option. Set to `.off` to disable this
     /// check.
     error_field_min_len: zlinter.rules.LenAndSeverity = .{
@@ -17,7 +17,7 @@ pub const Config = struct {
         .severity = .warning,
     },
 
-    /// Maximum length of a `error` field name. To exclude names from this check
+    /// Maximum length of an `error` field name. To exclude names from this check
     /// see `error_field_exclude_len` option. Set to `.off` to disable this
     /// check.
     error_field_max_len: zlinter.rules.LenAndSeverity = .{
@@ -34,7 +34,7 @@ pub const Config = struct {
         .severity = .@"error",
     },
 
-    /// Minimum length of a `enum` field name. To exclude names from this check
+    /// Minimum length of an `enum` field name. To exclude names from this check
     /// see `enum_field_exclude_len` option. Set to `.off` to disable this
     /// check.
     enum_field_min_len: zlinter.rules.LenAndSeverity = .{
@@ -42,7 +42,7 @@ pub const Config = struct {
         .severity = .warning,
     },
 
-    /// Maximum length of a `enum` field name. To exclude names from this check
+    /// Maximum length of an `enum` field name. To exclude names from this check
     /// see `enum_field_exclude_len` option. Set to `.off` to disable this
     /// check.
     enum_field_max_len: zlinter.rules.LenAndSeverity = .{
