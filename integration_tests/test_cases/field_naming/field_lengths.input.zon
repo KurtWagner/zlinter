@@ -1,0 +1,41 @@
+.{
+    .struct_field_min_len = .{
+        .severity = .warning,
+        .len = 3,
+    },
+    .struct_field_max_len = .{
+        .severity = .@"error",
+        .len = 7,
+    },
+    .struct_field_exclude_len = .{ "x", "xxxxxxxx" },
+
+    .union_field_min_len = .{
+        .severity = .warning,
+        .len = 2,
+    },
+    .union_field_max_len = .{
+        .severity = .@"error",
+        .len = 3,
+    },
+    .union_field_exclude_len = .{ "x", "xxxx" },
+
+    .enum_field_min_len = .{
+        .severity = .warning,
+        .len = 3,
+    },
+    .enum_field_max_len = .{
+        .severity = .warning,
+        .len = 5,
+    },
+    .enum_field_exclude_len = .{ "x", "xxxxxx" },
+
+    .error_field_min_len = .{
+        .severity = .@"error",
+        .len = 2,
+    },
+    .error_field_max_len = .{
+        .severity = .@"error",
+        .len = 2,
+    },
+    .error_field_exclude_len = .{ "X", "XXX" },
+}
