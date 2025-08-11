@@ -80,18 +80,7 @@ pub const Config = struct {
     // structure more appropriate for these checks).
 
     /// Exclude these `struct` field names from min and max `struct` field name checks.
-    struct_field_exclude_len: []const []const u8 = &.{
-        // Rationale: x-coordinate
-        "x",
-        // Rationale: y-coordinate
-        "y",
-        // Rationale: z-coordinate
-        "z",
-        // Rationale: `i` for index
-        "i",
-        // Rationale: `b` for `std.Build`
-        "b",
-    },
+    struct_field_exclude_len: []const []const u8 = &.{ "x", "y", "z", "i", "b" },
 
     /// Like `struct_field` but for fields with type `type`
     struct_field_that_is_type: zlinter.rules.LintTextStyleWithSeverity = .{
@@ -140,18 +129,7 @@ pub const Config = struct {
     },
 
     /// Exclude these `union` field names from min and max `union` field name checks.
-    union_field_exclude_len: []const []const u8 = &.{
-        // Rationale: x-coordinate
-        "x",
-        // Rationale: y-coordinate
-        "y",
-        // Rationale: z-coordinate
-        "z",
-        // Rationale: `i` for index
-        "i",
-        // Rationale: `b` for `std.Build`
-        "b",
-    },
+    union_field_exclude_len: []const []const u8 = &.{ "x", "y", "z", "i", "b" },
 };
 
 /// Builds and returns the field_naming rule.

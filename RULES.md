@@ -74,17 +74,71 @@ example, `struct`, `enum`, `union`, `opaque` and `error`.
 
   * **Default:** `.{ .style = .title_case, .severity = .@"error", }`
 
+* `error_field_min_len`
+
+  * Minimum length of a `error` field name. To exclude names from this check see `error_field_exclude_len` option. Set to `.off` to disable this check.
+
+  * **Default:** `.{ .len = 3, .severity = .warning, }`
+
+* `error_field_max_len`
+
+  * Maximum length of a `error` field name. To exclude names from this check see `error_field_exclude_len` option. Set to `.off` to disable this check.
+
+  * **Default:** `.{ .len = 30, .severity = .warning, }`
+
+* `error_field_exclude_len`
+
+  * Exclude these `error` field names from min and max `error` field name checks.
+
+  * **Default:** `&.{}`
+
 * `enum_field`
 
   * Style and severity for enum values defined within an `enum { ... }` container
 
   * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
 
+* `enum_field_min_len`
+
+  * Minimum length of a `enum` field name. To exclude names from this check see `enum_field_exclude_len` option. Set to `.off` to disable this check.
+
+  * **Default:** `.{ .len = 3, .severity = .warning, }`
+
+* `enum_field_max_len`
+
+  * Maximum length of a `enum` field name. To exclude names from this check see `enum_field_exclude_len` option. Set to `.off` to disable this check.
+
+  * **Default:** `.{ .len = 30, .severity = .warning, }`
+
+* `enum_field_exclude_len`
+
+  * Exclude these `enum` field names from min and max `enum` field name checks.
+
+  * **Default:** `&.{}`
+
 * `struct_field`
 
   * Style and severity for struct fields defined within a `struct { ... }` container
 
   * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
+
+* `struct_field_min_len`
+
+  * Minimum length of a `struct` field name. To exclude names from this check see `struct_field_exclude_len` option. Set to `.off` to disable this check.
+
+  * **Default:** `.{ .len = 3, .severity = .warning, }`
+
+* `struct_field_max_len`
+
+  * Maximum length of a `struct` field name. To exclude names from this check see `struct_field_exclude_len` option. Set to `.off` to disable this check.
+
+  * **Default:** `.{ .len = 30, .severity = .warning, }`
+
+* `struct_field_exclude_len`
+
+  * Exclude these `struct` field names from min and max `struct` field name checks.
+
+  * **Default:** `&.{ "x", "y", "z", "i", "b" }`
 
 * `struct_field_that_is_type`
 
@@ -115,6 +169,24 @@ example, `struct`, `enum`, `union`, `opaque` and `error`.
   * Style and severity for union fields defined within a `union { ... }` block
 
   * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
+
+* `union_field_min_len`
+
+  * Minimum length of a `union` field name. To exclude names from this check see `union_field_exclude_len` option. Set to `.off` to disable this check.
+
+  * **Default:** `.{ .len = 3, .severity = .warning, }`
+
+* `union_field_max_len`
+
+  * Maximum length of a `union` field name. To exclude names from this check see `union_field_exclude_len` option. Set to `.off` to disable this check.
+
+  * **Default:** `.{ .len = 30, .severity = .warning, }`
+
+* `union_field_exclude_len`
+
+  * Exclude these `union` field names from min and max `union` field name checks.
+
+  * **Default:** `&.{ "x", "y", "z", "i", "b" }`
 
 ## `field_ordering`
 
