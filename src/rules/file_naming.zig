@@ -17,7 +17,7 @@ pub const Config = struct {
 };
 
 /// Builds and returns the file_naming rule.
-pub fn buildRule(options: zlinter.rules.LintRuleOptions) zlinter.rules.LintRule {
+pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
     _ = options;
 
     return zlinter.rules.LintRule{
@@ -29,12 +29,10 @@ pub fn buildRule(options: zlinter.rules.LintRuleOptions) zlinter.rules.LintRule 
 /// Runs the file_naming rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    ctx: zlinter.session.LintContext,
     doc: zlinter.session.LintDocument,
     allocator: std.mem.Allocator,
-    options: zlinter.session.LintOptions,
+    options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
-    _ = ctx;
     const config = options.getConfig(Config);
 
     const error_message: ?[]const u8, const severity: ?zlinter.rules.LintProblemSeverity = msg: {

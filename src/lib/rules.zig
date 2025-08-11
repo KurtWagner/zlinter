@@ -3,15 +3,23 @@ pub const LintRule = struct {
     rule_id: []const u8,
     run: *const fn (
         self: LintRule,
-        ctx: session.LintContext,
         doc: session.LintDocument,
         allocator: std.mem.Allocator,
-        options: session.LintOptions,
+        options: RunOptions,
     ) error{OutOfMemory}!?results.LintResult,
 };
 
+pub const RunOptions = struct {
+    /// Configuration for the rule. See `getConfig`.
+    config: ?*anyopaque = null,
+
+    pub inline fn getConfig(self: @This(), T: type) T {
+        return if (self.config) |config| @as(*T, @ptrCast(@alignCast(config))).* else T{};
+    }
+};
+
 /// Rules the modify the execution of rules.
-pub const LintRuleOptions = struct {}; // zlinter-disable-current-line
+pub const RuleOptions = struct {}; // zlinter-disable-current-line
 
 pub const LintTextOrder = enum {
     /// Any order

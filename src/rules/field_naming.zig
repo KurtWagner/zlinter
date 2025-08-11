@@ -75,10 +75,6 @@ pub const Config = struct {
         .severity = .warning,
     },
 
-    // TODO: Add capability for rules to have Context and before all hooks
-    // to precompute information (e.g., for this to become a set or some other
-    // structure more appropriate for these checks).
-
     /// Exclude these `struct` field names from min and max `struct` field name checks.
     struct_field_exclude_len: []const []const u8 = &.{ "x", "y", "z", "i", "b" },
 
@@ -133,7 +129,7 @@ pub const Config = struct {
 };
 
 /// Builds and returns the field_naming rule.
-pub fn buildRule(options: zlinter.rules.LintRuleOptions) zlinter.rules.LintRule {
+pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
     _ = options;
 
     return zlinter.rules.LintRule{
@@ -145,10 +141,9 @@ pub fn buildRule(options: zlinter.rules.LintRuleOptions) zlinter.rules.LintRule 
 /// Runs the field_naming rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    _: zlinter.session.LintContext,
     doc: zlinter.session.LintDocument,
     allocator: std.mem.Allocator,
-    options: zlinter.session.LintOptions,
+    options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
