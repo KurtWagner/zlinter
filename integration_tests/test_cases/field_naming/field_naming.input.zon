@@ -1,0 +1,34 @@
+.{
+    .struct_field_min_len = .{
+        .len = 0,
+        .severity = .off,
+    },
+    .struct_field_max_len = .{
+        .len = 0,
+        .severity = .off,
+    },
+    .union_field_min_len = .{
+        .len = 0,
+        .severity = .off,
+    },
+    .union_field_max_len = .{
+        .len = 0,
+        .severity = .off,
+    },
+    .enum_field_min_len = .{
+        .len = 0,
+        .severity = .off,
+    },
+    .enum_field_max_len = .{
+        .len = 0,
+        .severity = .off,
+    },
+    .error_field_min_len = .{
+        .len = 0,
+        .severity = .off,
+    },
+    .error_field_max_len = .{
+        .len = 0,
+        .severity = .off,
+    },
+}

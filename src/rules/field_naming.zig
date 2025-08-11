@@ -589,7 +589,7 @@ test "name lengths" {
     // Tuples not included in length checks:
     try zlinter.testing.testRunRule(
         buildRule(.{}),
-        \\ const Struct = struct {
+        \\ const Tuple = struct {
         \\  u32,
         \\  f32,
         \\  i32,
