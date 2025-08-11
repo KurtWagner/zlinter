@@ -5,7 +5,7 @@ pub const Config = struct {
     message: ?[]const u8 = null,
 };
 
-pub fn buildRule(options: zlinter.rules.LintRuleOptions) zlinter.rules.LintRule {
+pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
     _ = options;
 
     return zlinter.rules.LintRule{
@@ -16,10 +16,9 @@ pub fn buildRule(options: zlinter.rules.LintRuleOptions) zlinter.rules.LintRule 
 
 fn run(
     rule: zlinter.rules.LintRule,
-    _: zlinter.session.LintContext,
     doc: zlinter.session.LintDocument,
     allocator: std.mem.Allocator,
-    options: zlinter.session.LintOptions,
+    options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
