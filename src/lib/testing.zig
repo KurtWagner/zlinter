@@ -153,7 +153,7 @@ pub fn expectNodeOfTagFirst(doc: LintDocument, comptime tags: []const Ast.Node.T
 }
 
 /// Builds and runs a rule with fake file name and content (test only)
-pub fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8, options: LintOptions) !?LintResult {
+pub fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8, options: RunOptions) !?LintResult {
     assertTestOnly();
 
     var ctx: LintContext = undefined;
@@ -189,7 +189,6 @@ pub fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8, op
 
     return try rule.run(
         rule,
-        ctx,
         doc,
         std.testing.allocator,
         options,
@@ -343,7 +342,7 @@ const LintProblemSeverity = @import("rules.zig").LintProblemSeverity;
 const LintProblem = @import("results.zig").LintProblem;
 const LintResult = @import("results.zig").LintResult;
 const LintProblemFix = @import("results.zig").LintProblemFix;
-const LintOptions = @import("session.zig").LintOptions;
+const RunOptions = @import("rules.zig").RunOptions;
 const NodeIndexShim = @import("shims.zig").NodeIndexShim;
 const nodeTag = @import("shims.zig").nodeTag;
 const strings = @import("strings.zig");

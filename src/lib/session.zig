@@ -548,14 +548,6 @@ pub const LintContext = struct {
     }
 };
 
-pub const LintOptions = struct {
-    config: ?*anyopaque = null,
-
-    pub inline fn getConfig(self: @This(), T: type) T {
-        return if (self.config) |config| @as(*T, @ptrCast(@alignCast(config))).* else T{};
-    }
-};
-
 test "LintDocument.resolveTypeKind" {
     const TestCase = struct {
         contents: [:0]const u8,

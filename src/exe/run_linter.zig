@@ -370,7 +370,6 @@ fn runLinterRules(
 
             const rule_result = try rule.run(
                 rule,
-                ctx,
                 doc,
                 gpa,
                 .{
