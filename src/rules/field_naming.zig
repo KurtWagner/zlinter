@@ -9,17 +9,78 @@ pub const Config = struct {
         .severity = .@"error",
     },
 
+    /// Minimum length of an `error` field name. To exclude names from this check
+    /// see `error_field_exclude_len` option. Set to `.off` to disable this
+    /// check.
+    error_field_min_len: zlinter.rules.LenAndSeverity = .{
+        .len = 3,
+        .severity = .warning,
+    },
+
+    /// Maximum length of an `error` field name. To exclude names from this check
+    /// see `error_field_exclude_len` option. Set to `.off` to disable this
+    /// check.
+    error_field_max_len: zlinter.rules.LenAndSeverity = .{
+        .len = 30,
+        .severity = .warning,
+    },
+
+    /// Exclude these `error` field names from min and max `error` field name checks.
+    error_field_exclude_len: []const []const u8 = &.{},
+
     /// Style and severity for enum values defined within an `enum { ... }` container
     enum_field: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .snake_case,
         .severity = .@"error",
     },
 
+    /// Minimum length of an `enum` field name. To exclude names from this check
+    /// see `enum_field_exclude_len` option. Set to `.off` to disable this
+    /// check.
+    enum_field_min_len: zlinter.rules.LenAndSeverity = .{
+        .len = 3,
+        .severity = .warning,
+    },
+
+    /// Maximum length of an `enum` field name. To exclude names from this check
+    /// see `enum_field_exclude_len` option. Set to `.off` to disable this
+    /// check.
+    enum_field_max_len: zlinter.rules.LenAndSeverity = .{
+        .len = 30,
+        .severity = .warning,
+    },
+
+    /// Exclude these `enum` field names from min and max `enum` field name checks.
+    enum_field_exclude_len: []const []const u8 = &.{},
+
     /// Style and severity for struct fields defined within a `struct { ... }` container
     struct_field: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .snake_case,
         .severity = .@"error",
     },
+
+    /// Minimum length of a `struct` field name. To exclude names from this check
+    /// see `struct_field_exclude_len` option. Set to `.off` to disable this
+    /// check.
+    struct_field_min_len: zlinter.rules.LenAndSeverity = .{
+        .len = 3,
+        .severity = .warning,
+    },
+
+    /// Maximum length of a `struct` field name. To exclude names from this check
+    /// see `struct_field_exclude_len` option. Set to `.off` to disable this
+    /// check.
+    struct_field_max_len: zlinter.rules.LenAndSeverity = .{
+        .len = 30,
+        .severity = .warning,
+    },
+
+    // TODO: Add capability for rules to have Context and before all hooks
+    // to precompute information (e.g., for this to become a set or some other
+    // structure more appropriate for these checks).
+
+    /// Exclude these `struct` field names from min and max `struct` field name checks.
+    struct_field_exclude_len: []const []const u8 = &.{ "x", "y", "z", "i", "b" },
 
     /// Like `struct_field` but for fields with type `type`
     struct_field_that_is_type: zlinter.rules.LintTextStyleWithSeverity = .{
@@ -50,6 +111,25 @@ pub const Config = struct {
         .style = .snake_case,
         .severity = .@"error",
     },
+
+    /// Minimum length of a `union` field name. To exclude names from this check
+    /// see `union_field_exclude_len` option. Set to `.off` to disable this
+    /// check.
+    union_field_min_len: zlinter.rules.LenAndSeverity = .{
+        .len = 3,
+        .severity = .warning,
+    },
+
+    /// Maximum length of a `union` field name. To exclude names from this check
+    /// see `union_field_exclude_len` option. Set to `.off` to disable this
+    /// check.
+    union_field_max_len: zlinter.rules.LenAndSeverity = .{
+        .len = 30,
+        .severity = .warning,
+    },
+
+    /// Exclude these `union` field names from min and max `union` field name checks.
+    union_field_exclude_len: []const []const u8 = &.{ "x", "y", "z", "i", "b" },
 };
 
 /// Builds and returns the field_naming rule.
@@ -72,15 +152,16 @@ fn run(
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
-    var lint_problems = std.ArrayListUnmanaged(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(allocator);
+    var lint_problems = std.ArrayList(zlinter.results.LintProblem).init(allocator);
+    defer lint_problems.deinit();
 
     const tree = doc.handle.tree;
     var buffer: [2]Ast.Node.Index = undefined;
 
     var node: NodeIndexShim = .root;
     while (node.index < tree.nodes.len) : (node.index += 1) {
-        if (shims.nodeTag(tree, node.toNodeIndex()) == .error_set_decl) {
+        const tag = shims.nodeTag(tree, node.toNodeIndex());
+        if (tag == .error_set_decl) {
             const node_data = shims.nodeData(tree, node.toNodeIndex());
 
             const rbrace = switch (zlinter.version.zig) {
@@ -89,16 +170,51 @@ fn run(
             };
 
             var token = rbrace - 1;
-            while (token >= tree.firstToken(node.toNodeIndex())) : (token -= 1) {
+            tokens: while (token >= tree.firstToken(node.toNodeIndex())) : (token -= 1) {
                 switch (tree.tokens.items(.tag)[token]) {
-                    .identifier => if (!config.error_field.style.check(zlinter.strings.normalizeIdentifierName(tree.tokenSlice(token)))) {
-                        try lint_problems.append(allocator, .{
-                            .rule_id = rule.rule_id,
-                            .severity = config.error_field.severity,
-                            .start = .startOfToken(tree, token),
-                            .end = .endOfToken(tree, token),
-                            .message = try std.fmt.allocPrint(allocator, "Error fields should be {s}", .{config.error_field.style.name()}),
-                        });
+                    .identifier => {
+                        const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(token));
+                        const name_len = name.len;
+
+                        const min_len = config.error_field_min_len;
+                        const max_len = config.error_field_max_len;
+                        const exclude_len = config.error_field_exclude_len;
+
+                        if (min_len.severity != .off and name_len < min_len.len) {
+                            for (exclude_len) |exclude_name| {
+                                if (std.mem.eql(u8, name, exclude_name)) continue :tokens;
+                            }
+
+                            try lint_problems.append(.{
+                                .rule_id = rule.rule_id,
+                                .severity = min_len.severity,
+                                .start = .startOfToken(tree, token),
+                                .end = .endOfToken(tree, token),
+                                .message = try std.fmt.allocPrint(allocator, "Error field names should have a length greater or equal to {d}", .{min_len.len}),
+                            });
+                        } else if (max_len.severity != .off and name_len > max_len.len) {
+                            for (exclude_len) |exclude_name| {
+                                if (std.mem.eql(u8, name, exclude_name)) continue :tokens;
+                            }
+
+                            try lint_problems.append(.{
+                                .rule_id = rule.rule_id,
+                                .severity = max_len.severity,
+                                .start = .startOfToken(tree, token),
+                                .end = .endOfToken(tree, token),
+                                .message = try std.fmt.allocPrint(allocator, "Error field names should have a length less or equal to {d}", .{max_len.len}),
+                            });
+                        }
+
+                        if (!config.error_field.style.check(name)) {
+                            try lint_problems.append(.{
+                                .rule_id = rule.rule_id,
+                                .severity = config.error_field.severity,
+                                .start = .startOfToken(tree, token),
+                                .end = .endOfToken(tree, token),
+                                .message = try std.fmt.allocPrint(allocator, "Error fields should be {s}", .{config.error_field.style.name()}),
+                            });
+                        }
                     },
                     else => {},
                 }
@@ -133,9 +249,45 @@ fn run(
 
                     const name_token = container_field.ast.main_token;
                     const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
+                    const name_len = name.len;
+
+                    const min_len, const max_len, const exclude_len = switch (container_tag) {
+                        .keyword_struct => .{ config.struct_field_min_len, config.struct_field_max_len, config.struct_field_exclude_len },
+                        .keyword_enum => .{ config.enum_field_min_len, config.enum_field_max_len, config.enum_field_exclude_len },
+                        .keyword_union => .{ config.union_field_min_len, config.union_field_max_len, config.union_field_exclude_len },
+                        // Already skipped in previous switch. We could combine but
+                        // the tuple may become way too noisy and less cohesive
+                        else => unreachable,
+                    };
+
+                    if (min_len.severity != .off and name_len < min_len.len) {
+                        for (exclude_len) |exclude_name| {
+                            if (std.mem.eql(u8, name, exclude_name)) continue :fields;
+                        }
+
+                        try lint_problems.append(.{
+                            .rule_id = rule.rule_id,
+                            .severity = min_len.severity,
+                            .start = .startOfToken(tree, name_token),
+                            .end = .endOfToken(tree, name_token),
+                            .message = try std.fmt.allocPrint(allocator, "{s} field names should have a length greater or equal to {d}", .{ container_kind.name(), min_len.len }),
+                        });
+                    } else if (max_len.severity != .off and name_len > max_len.len) {
+                        for (exclude_len) |exclude_name| {
+                            if (std.mem.eql(u8, name, exclude_name)) continue :fields;
+                        }
+
+                        try lint_problems.append(.{
+                            .rule_id = rule.rule_id,
+                            .severity = max_len.severity,
+                            .start = .startOfToken(tree, name_token),
+                            .end = .endOfToken(tree, name_token),
+                            .message = try std.fmt.allocPrint(allocator, "{s} field names should have a length less or equal to {d}", .{ container_kind.name(), max_len.len }),
+                        });
+                    }
 
                     if (!style_with_severity.style.check(name)) {
-                        try lint_problems.append(allocator, .{
+                        try lint_problems.append(.{
                             .rule_id = rule.rule_id,
                             .severity = style_with_severity.severity,
                             .start = .startOfToken(tree, name_token),
@@ -152,10 +304,57 @@ fn run(
         try zlinter.results.LintResult.init(
             allocator,
             doc.path,
-            try lint_problems.toOwnedSlice(allocator),
+            try lint_problems.toOwnedSlice(),
         )
     else
         null;
+}
+
+fn handleNameLenCheck(
+    rule: zlinter.rules.LintRule,
+    tree: Ast,
+    node: Ast.Node.Index,
+    config: Config,
+    lint_problems: *std.ArrayList(zlinter.results.LintProblem),
+    allocator: std.mem.Allocator,
+) !void {
+    const min = config.struct_field_min_len;
+    const max = config.struct_field_max_len;
+
+    if (min.severity == .off and max.severity == .off) return;
+
+    const container_field = tree.fullContainerField(node) orelse return;
+    if (container_field.ast.tuple_like) return;
+
+    const name_token = container_field.ast.main_token;
+    const name_slice = tree.tokenSlice(name_token);
+    const name_len = name_slice.len;
+
+    if (min.severity != .off and name_len < min.len) {
+        for (config.struct_field_exclude_len) |exclude_name| {
+            if (std.mem.eql(u8, name_slice, exclude_name)) return;
+        }
+
+        try lint_problems.append(.{
+            .rule_id = rule.rule_id,
+            .severity = min.severity,
+            .start = .startOfToken(tree, name_token),
+            .end = .endOfToken(tree, name_token),
+            .message = try std.fmt.allocPrint(allocator, "Field names should have a length greater or equal to {d}", .{min.len}),
+        });
+    } else if (max.severity != .off and name_len > max.len) {
+        for (config.struct_field_exclude_len) |exclude_name| {
+            if (std.mem.eql(u8, name_slice, exclude_name)) return;
+        }
+
+        try lint_problems.append(.{
+            .rule_id = rule.rule_id,
+            .severity = max.severity,
+            .start = .startOfToken(tree, name_token),
+            .end = .endOfToken(tree, name_token),
+            .message = try std.fmt.allocPrint(allocator, "Field names should have a length less or equal to {d}", .{max.len}),
+        });
+    }
 }
 
 test {
@@ -340,6 +539,202 @@ test "run - error container" {
 
     try std.testing.expectEqualStrings("notGood", result.problems[0].sliceSource(source));
     try std.testing.expectEqualStrings("not_good", result.problems[1].sliceSource(source));
+}
+
+test "name lengths" {
+    // Struct fields are included:
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const Struct = struct {
+        \\  s: u8,
+        \\  ssss: u8,
+        \\
+        \\  a: u32,
+        \\  ab: f32,
+        \\  abc: i32,
+        \\  abcd: []const u8,
+        \\};
+    ,
+        Config{
+            .struct_field_max_len = .{
+                .severity = .warning,
+                .len = 3,
+            },
+            .struct_field_min_len = .{
+                .severity = .@"error",
+                .len = 2,
+            },
+            .struct_field_exclude_len = &.{ "s", "ssss" },
+        },
+        &.{
+            .{
+                .rule_id = "field_naming",
+                .severity = .@"error",
+                .slice =
+                \\a
+                ,
+                .message = "Struct field names should have a length greater or equal to 2",
+            },
+            .{
+                .rule_id = "field_naming",
+                .severity = .warning,
+                .slice =
+                \\abcd
+                ,
+                .message = "Struct field names should have a length less or equal to 3",
+            },
+        },
+    );
+
+    // Tuples not included in length checks:
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const Tuple = struct {
+        \\  u32,
+        \\  f32,
+        \\  i32,
+        \\  []const u8,
+        \\};
+    ,
+        Config{
+            .struct_field_max_len = .{
+                .severity = .warning,
+                .len = 3,
+            },
+            .struct_field_min_len = .{
+                .severity = .@"error",
+                .len = 2,
+            },
+        },
+        &.{},
+    );
+
+    // Union are included in length checks:
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const Union = union {
+        \\  s: u8,
+        \\  ssss: u8,
+        \\
+        \\  a: u32,
+        \\  ab: f32,
+        \\  abc: i32,
+        \\  abcd: []const u8,
+        \\};
+    ,
+        Config{
+            .union_field_max_len = .{
+                .severity = .warning,
+                .len = 3,
+            },
+            .union_field_min_len = .{
+                .severity = .@"error",
+                .len = 2,
+            },
+            .union_field_exclude_len = &.{ "s", "ssss" },
+        },
+        &.{
+            .{
+                .rule_id = "field_naming",
+                .severity = .@"error",
+                .slice =
+                \\a
+                ,
+                .message = "Union field names should have a length greater or equal to 2",
+            },
+            .{
+                .rule_id = "field_naming",
+                .severity = .warning,
+                .slice =
+                \\abcd
+                ,
+                .message = "Union field names should have a length less or equal to 3",
+            },
+        },
+    );
+
+    // Union are included in length checks:
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const Enum = enum {
+        \\  s,
+        \\  ssss,
+        \\
+        \\  a,
+        \\  ab,
+        \\  abc,
+        \\  abcd,
+        \\};
+    ,
+        Config{
+            .enum_field_max_len = .{
+                .severity = .warning,
+                .len = 3,
+            },
+            .enum_field_min_len = .{
+                .severity = .@"error",
+                .len = 2,
+            },
+            .enum_field_exclude_len = &.{ "s", "ssss" },
+        },
+        &.{
+            .{
+                .rule_id = "field_naming",
+                .severity = .@"error",
+                .slice =
+                \\a
+                ,
+                .message = "Enum field names should have a length greater or equal to 2",
+            },
+            .{
+                .rule_id = "field_naming",
+                .severity = .warning,
+                .slice =
+                \\abcd
+                ,
+                .message = "Enum field names should have a length less or equal to 3",
+            },
+        },
+    );
+
+    // Errors are included in length checks:
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const Errors = error {
+        \\  Z,
+        \\  ZZZZ,
+        \\  A,
+        \\  AB,
+        \\  ABC,
+        \\  ADBC,
+        \\};
+    ,
+        Config{ .error_field_max_len = .{
+            .severity = .warning,
+            .len = 3,
+        }, .error_field_min_len = .{
+            .severity = .@"error",
+            .len = 2,
+        }, .error_field_exclude_len = &.{ "Z", "ZZZZ" } },
+        &.{
+            .{
+                .rule_id = "field_naming",
+                .severity = .warning,
+                .slice =
+                \\ADBC
+                ,
+                .message = "Error field names should have a length less or equal to 3",
+            },
+            .{
+                .rule_id = "field_naming",
+                .severity = .@"error",
+                .slice =
+                \\A
+                ,
+                .message = "Error field names should have a length greater or equal to 2",
+            },
+        },
+    );
 }
 
 const std = @import("std");

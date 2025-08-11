@@ -1,0 +1,52 @@
+warning Struct field names should have a length greater or equal to 3 [test_cases/field_naming/field_lengths.input.zig:3:5] field_naming
+
+ 3 |     b: u32, // Too short
+   |     ^
+
+warning Struct field names should have a length greater or equal to 3 [test_cases/field_naming/field_lengths.input.zig:4:5] field_naming
+
+ 4 |     bb: u32, // Too short,
+   |     ^^
+
+error Struct field names should have a length less or equal to 7 [test_cases/field_naming/field_lengths.input.zig:8:5] field_naming
+
+ 8 |     bbbbbbbb: u32, // Too long,
+   |     ^^^^^^^^
+
+warning Union field names should have a length greater or equal to 2 [test_cases/field_naming/field_lengths.input.zig:20:5] field_naming
+
+ 20 |     b: u32, // Too short
+    |     ^
+
+error Union field names should have a length less or equal to 3 [test_cases/field_naming/field_lengths.input.zig:23:5] field_naming
+
+ 23 |     bbbb: u32, // Too long,
+    |     ^^^^
+
+warning Enum field names should have a length greater or equal to 3 [test_cases/field_naming/field_lengths.input.zig:29:5] field_naming
+
+ 29 |     b, // Too short
+    |     ^
+
+warning Enum field names should have a length greater or equal to 3 [test_cases/field_naming/field_lengths.input.zig:30:5] field_naming
+
+ 30 |     bb, // Too short,
+    |     ^^
+
+warning Enum field names should have a length less or equal to 5 [test_cases/field_naming/field_lengths.input.zig:34:5] field_naming
+
+ 34 |     bbbbbb, // Too long,
+    |     ^^^^^^
+
+error Error field names should have a length less or equal to 2 [test_cases/field_naming/field_lengths.input.zig:42:5] field_naming
+
+ 42 |     BBB, // Too long
+    |     ^^^
+
+error Error field names should have a length greater or equal to 2 [test_cases/field_naming/field_lengths.input.zig:40:5] field_naming
+
+ 40 |     B, // Too short
+    |     ^
+
+x 4 errors
+x 6 warnings

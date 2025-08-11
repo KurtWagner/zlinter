@@ -167,6 +167,19 @@ pub const LintTextStyle = enum {
     }
 };
 
+/// Represents a min or max length configuration, usually for fields and variable
+/// declaration checks.
+pub const LenAndSeverity = struct {
+    /// Should always be inclusive.
+    len: u16,
+    severity: LintProblemSeverity,
+
+    pub const off = LenAndSeverity{
+        .len = 0,
+        .severity = .off,
+    };
+};
+
 pub const LintProblemSeverity = enum {
     /// Exit zero
     off,

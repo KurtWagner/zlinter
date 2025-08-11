@@ -1,0 +1,6 @@
+.{
+    .enum_field_min_len = .{
+        .len = 0,
+        .severity = .off,
+    },
+}
