@@ -273,22 +273,37 @@ fn runLinterRules(
     }, gpa);
     defer ctx.deinit();
 
-    var rule_filter_map = map: {
-        var map = std.StringHashMapUnmanaged(void).empty;
-        if (args.rules) |filter_rules| {
-            for (filter_rules) |rule| {
-                try map.put(gpa, rule, {});
-            }
-            break :map map;
-        }
-        break :map null;
-    };
-    defer if (rule_filter_map) |*m| m.deinit(gpa);
+    var enabled_rules = enabledRules(args.rules);
 
-    for (lint_files, 0..) |lint_file, i| {
+    var config_overrides_arena = std.heap.ArenaAllocator.init(gpa);
+    defer config_overrides_arena.deinit();
+
+    var rule_configs: [rules.len]*anyopaque = undefined;
+    {
+        var rule_it = enabled_rules.iterator(.{ .direction = .forward, .kind = .set });
+        while (rule_it.next()) |rule_index| {
+            rule_configs[rule_index] = config: {
+                if (args.rule_config_overrides) |rule_config_overrides| {
+                    if (rule_config_overrides.get(rules[rule_index].rule_id)) |zon_path| {
+                        inline for (0..rules_configs_types.len) |i| {
+                            if (i == rule_index) break :config try allocZon(
+                                rules_configs_types[i],
+                                zon_path,
+                                config_overrides_arena.allocator(),
+                            );
+                        }
+                        unreachable;
+                    }
+                }
+                break :config rules_configs[rule_index];
+            };
+        }
+    }
+
+    files: for (lint_files, 0..) |lint_file, i| {
         if (lint_file.excluded) {
             printer.println(.verbose, "[{d}/{d}] Excluding: {s}", .{ i + 1, lint_files.len, lint_file.pathname });
-            continue;
+            continue :files;
         }
         printer.println(.verbose, "[{d}/{d}] Linting: {s}", .{ i + 1, lint_files.len, lint_file.pathname });
 
@@ -311,7 +326,7 @@ fn runLinterRules(
 
         var doc = try ctx.loadDocument(lint_file.pathname, ctx.gpa, arena_allocator) orelse {
             printer.println(.err, "Unable to open file: {s}", .{lint_file.pathname});
-            continue;
+            continue :files;
         };
         defer doc.deinit(ctx.gpa);
 
@@ -359,49 +374,15 @@ fn runLinterRules(
 
         printer.println(.verbose, "  - Rules", .{});
 
-        var rule_run_arena = std.heap.ArenaAllocator.init(gpa);
-        defer rule_run_arena.deinit();
-
-        for (rules) |rule| {
-            if (rule_filter_map) |map|
-                if (!map.contains(rule.rule_id)) continue;
-
-            defer _ = rule_run_arena.reset(.retain_capacity);
-
-            const rule_result = try rule.run(
+        var rule_it = enabled_rules.iterator(.{ .direction = .forward, .kind = .set });
+        while (rule_it.next()) |rule_index| {
+            const rule = rules[rule_index];
+            if (try rule.run(
                 rule,
                 doc,
                 gpa,
-                .{
-                    .config = config: {
-                        if (args.rule_config_overrides) |rule_config_overrides| {
-                            if (rule_config_overrides.get(rule.rule_id)) |zon_path| {
-                                inline for (@typeInfo(configs).@"struct".decls) |decl| {
-                                    if (std.mem.eql(u8, rule.rule_id, decl.name)) {
-                                        break :config @as(*anyopaque, @constCast(
-                                            try allocZon(
-                                                @TypeOf(@field(configs, decl.name)),
-                                                zon_path,
-                                                rule_run_arena.allocator(),
-                                            ),
-                                        ));
-                                    }
-                                }
-                            }
-                        }
-
-                        inline for (@typeInfo(configs).@"struct".decls) |decl| {
-                            if (std.mem.eql(u8, rule.rule_id, decl.name)) {
-                                break :config @as(*anyopaque, @constCast(&@field(configs, decl.name)));
-                            }
-                        }
-                        printer.println(.err, "Failed to lookup rule config for {s}", .{rule.rule_id});
-                        @panic("Failed to find rule config");
-                    },
-                },
-            );
-
-            if (rule_result) |result| {
+                .{ .config = rule_configs[rule_index] },
+            )) |result| {
                 for (result.problems) |*err| {
                     err.disabled_by_comment = try doc.shouldSkipProblem(err.*);
                 }
@@ -416,7 +397,6 @@ fn runLinterRules(
                         rule_elapsed_time.put(rule.rule_id, ns) catch {};
                     }
                 }
-
                 printer.println(.verbose, "    - {s}: {d}ms", .{ rule.rule_id, ns / std.time.ns_per_ms });
             } else printer.println(.verbose, "    - {s}", .{rule.rule_id});
         }
@@ -667,6 +647,25 @@ fn buildFilterIndex(cwd: []const u8, gpa: std.mem.Allocator, dir: std.fs.Dir, ar
     return index;
 }
 
+/// Creates and returns a bitset representing enabled rules using the fixed
+/// indices in the rules array. This is what allows people to filter runs with
+/// the `--rule` CLI argument.
+fn enabledRules(filter_rule_ids: ?[]const []const u8) std.StaticBitSet(rules.len) {
+    var bitset: std.StaticBitSet(rules.len) = .initFull();
+    if (filter_rule_ids == null) return bitset;
+
+    bitset.toggleAll();
+    for (rules, 0..) |rule, i| {
+        filters: for (filter_rule_ids.?) |filter_id| {
+            if (std.mem.eql(u8, rule.rule_id, filter_id)) {
+                bitset.set(i);
+                break :filters;
+            }
+        }
+    }
+    return bitset;
+}
+
 /// Simple more forgiving timer for optionally timing laps in verbose mode.
 const Timer = struct {
     backing: ?std.time.Timer = null,
@@ -792,6 +791,7 @@ const builtin = @import("builtin");
 const std = @import("std");
 const zlinter = @import("zlinter");
 const shims = zlinter.shims;
-const rules = @import("rules").rules; // Generated in build.zig
-const configs = @import("rules").configs; // Generated in build.zig
+const rules = @import("rules").rules; // Generated in build_rules.zig
+const rules_configs = @import("rules").rules_configs; // Generated in build_rules.zig
+const rules_configs_types = @import("rules").rules_configs_types; // Generated in build_rules.zig
 const Ast = std.zig.Ast;

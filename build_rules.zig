@@ -17,6 +17,8 @@ pub fn main() !void {
     };
     defer output_file.close();
 
+    const rule_names = args[2..];
+
     try output_file.writeAll(
         \\const zlinter = @import("zlinter");
         \\
@@ -25,7 +27,7 @@ pub fn main() !void {
     );
     var buffer: [2048]u8 = undefined;
     {
-        for (args[2..]) |rule_name| {
+        for (rule_names) |rule_name| {
             try output_file.writeAll(
                 try std.fmt.bufPrint(&buffer, "@import(\"{s}\").buildRule(.{{}}),\n", .{rule_name}),
             );
@@ -35,14 +37,50 @@ pub fn main() !void {
     try output_file.writeAll(
         \\};
         \\
-        \\pub const configs = struct {
+        \\const config_namespace = struct {
         \\
     );
 
     {
-        for (args[2..]) |rule_name| {
+        for (rule_names) |rule_name| {
             try output_file.writeAll(
                 try std.fmt.bufPrint(&buffer, "pub const @\"{s}\": @import(\"{s}\").Config = @import(\"{s}.zon\");\n", .{ rule_name, rule_name, rule_name }),
+            );
+        }
+    }
+
+    try output_file.writeAll(
+        \\};
+        \\
+    );
+
+    try output_file.writeAll(
+        \\pub const rules_configs = [_]*anyopaque {
+        \\
+    );
+
+    {
+        for (rule_names) |rule_name| {
+            try output_file.writeAll(
+                try std.fmt.bufPrint(&buffer, "@alignCast(@ptrCast(@constCast(&@field(config_namespace, \"{s}\")))),\n", .{rule_name}),
+            );
+        }
+    }
+
+    try output_file.writeAll(
+        \\};
+        \\
+    );
+
+    try output_file.writeAll(
+        \\pub const rules_configs_types = [_]type {
+        \\
+    );
+
+    {
+        for (rule_names) |rule_name| {
+            try output_file.writeAll(
+                try std.fmt.bufPrint(&buffer, "@import(\"{s}\").Config,\n", .{rule_name}),
             );
         }
     }
