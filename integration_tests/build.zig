@@ -82,5 +82,5 @@ fn addFileArgIfExists(b: *std.Build, step: *std.Build.Step.Run, raw_path: []cons
     }
 }
 
-const zlinter = @import("zlinter");
 const std = @import("std");
+const zlinter = @import("zlinter");

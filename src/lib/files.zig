@@ -229,6 +229,6 @@ test "allocLintFiles - with arg files" {
     }, &.{ lint_files[0].pathname, lint_files[1].pathname });
 }
 
-const testing = @import("testing.zig");
 const std = @import("std");
+const testing = @import("testing.zig");
 const zlinter = @import("./zlinter.zig");

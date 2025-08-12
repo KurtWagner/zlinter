@@ -949,8 +949,8 @@ fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
     return buffer;
 }
 
-const std = @import("std");
 const BuildInfo = @import("src/lib/BuildInfo.zig");
+const std = @import("std");
 const isLintableFilePath = @import("src/lib/files.zig").isLintableFilePath;
 const shims = @import("src/lib/shims.zig");
 

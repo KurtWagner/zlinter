@@ -218,9 +218,9 @@ pub const LintProblemSeverity = enum {
     }
 };
 
-const std = @import("std");
-const strings = @import("strings.zig");
 const ansi = @import("ansi.zig");
-const testing = @import("testing.zig");
 const results = @import("results.zig");
 const session = @import("session.zig");
+const std = @import("std");
+const strings = @import("strings.zig");
+const testing = @import("testing.zig");

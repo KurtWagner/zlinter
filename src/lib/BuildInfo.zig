@@ -60,5 +60,5 @@ pub fn consumeStdinAlloc(
     };
 }
 
-const std = @import("std");
 const rendering = @import("rendering.zig");
+const std = @import("std");

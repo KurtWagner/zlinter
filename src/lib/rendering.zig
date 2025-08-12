@@ -343,8 +343,8 @@ inline fn assertTestOnly() void {
     comptime if (!@import("builtin").is_test) @compileError("Test only");
 }
 
-const std = @import("std");
 const ansi = @import("ansi.zig");
+const std = @import("std");
 const max_zig_file_size_bytes = @import("session.zig").max_zig_file_size_bytes;
-const version = @import("version.zig");
 const shims = @import("shims.zig");
+const version = @import("version.zig");

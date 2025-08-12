@@ -524,11 +524,11 @@ test "isEnumLiteral" {
     }
 }
 
-const std = @import("std");
-const zls = @import("zls");
-const shims = @import("shims.zig");
-const version = @import("version.zig");
-const testing = @import("testing.zig");
 const session = @import("session.zig");
+const shims = @import("shims.zig");
+const std = @import("std");
+const testing = @import("testing.zig");
+const version = @import("version.zig");
+const zls = @import("zls");
 const NodeIndexShim = shims.NodeIndexShim;
 const Ast = std.zig.Ast;
