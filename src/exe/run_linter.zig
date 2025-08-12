@@ -286,11 +286,33 @@ fn runLinterRules(
                 if (args.rule_config_overrides) |rule_config_overrides| {
                     if (rule_config_overrides.get(rules[rule_index].rule_id)) |zon_path| {
                         inline for (0..rules_configs_types.len) |i| {
-                            if (i == rule_index) break :config try allocZon(
-                                rules_configs_types[i],
-                                zon_path,
-                                config_overrides_arena.allocator(),
-                            );
+                            if (i == rule_index) {
+                                const arena = config_overrides_arena.allocator();
+                                const config = try arena.create(rules_configs_types[i]);
+                                errdefer arena.destroy(config);
+
+                                var diagnostics: zlinter.zon.Diagnostics = .{};
+
+                                config.* = zlinter.zon.parseFileAlloc(
+                                    rules_configs_types[i],
+                                    std.fs.cwd(),
+                                    zon_path,
+                                    &diagnostics,
+                                    arena,
+                                ) catch |e| {
+                                    switch (e) {
+                                        error.ParseZon => {
+                                            std.log.err("Failed to parse rule config: " ++ switch (zlinter.version.zig) {
+                                                .@"0.14" => "{}",
+                                                .@"0.15" => "{f}",
+                                            }, .{diagnostics});
+                                        },
+                                        else => {},
+                                    }
+                                    return e;
+                                };
+                                break :config config;
+                            }
                         }
                         unreachable;
                     }
@@ -739,47 +761,6 @@ const SlowestItemQueue = struct {
         }
     }
 };
-
-fn allocZon(T: type, file_path: []const u8, gpa: std.mem.Allocator) !*T {
-    const file = try std.fs.cwd().openFile(file_path, .{
-        .mode = .read_only,
-    });
-    defer file.close();
-
-    const null_terminated = value: {
-        const file_content = switch (zlinter.version.zig) {
-            .@"0.14" => try file.reader().readAllAlloc(gpa, zlinter.session.max_zig_file_size_bytes),
-            .@"0.15" => try file.deprecatedReader().readAllAlloc(gpa, zlinter.session.max_zig_file_size_bytes),
-        };
-        defer gpa.free(file_content);
-        break :value try gpa.dupeZ(u8, file_content);
-    };
-    defer gpa.free(null_terminated);
-
-    var status: switch (zlinter.version.zig) {
-        .@"0.14" => std.zon.parse.Status,
-        .@"0.15" => std.zon.parse.Diagnostics,
-    } = .{};
-
-    const result = try gpa.create(T);
-    errdefer gpa.destroy(result);
-
-    result.* = std.zon.parse.fromSlice(
-        T,
-        gpa,
-        null_terminated,
-        &status,
-        .{},
-    ) catch |e| {
-        std.log.err("Failed to parse rule config: " ++ switch (zlinter.version.zig) {
-            .@"0.14" => "{}",
-            .@"0.15" => "{f}",
-        }, .{status});
-        return e;
-    };
-
-    return result;
-}
 
 test {
     std.testing.refAllDecls(@This());
