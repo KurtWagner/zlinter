@@ -788,8 +788,8 @@ test {
     std.testing.refAllDecls(@This());
 }
 
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
 const zlinter = @import("zlinter");
 const shims = zlinter.shims;
 const rules = @import("rules").rules; // Generated in build.zig

@@ -305,53 +305,6 @@ fn run(
         null;
 }
 
-fn handleNameLenCheck(
-    rule: zlinter.rules.LintRule,
-    tree: Ast,
-    node: Ast.Node.Index,
-    config: Config,
-    lint_problems: *shims.ArrayList(zlinter.results.LintProblem),
-    allocator: std.mem.Allocator,
-) !void {
-    const min = config.struct_field_min_len;
-    const max = config.struct_field_max_len;
-
-    if (min.severity == .off and max.severity == .off) return;
-
-    const container_field = tree.fullContainerField(node) orelse return;
-    if (container_field.ast.tuple_like) return;
-
-    const name_token = container_field.ast.main_token;
-    const name_slice = tree.tokenSlice(name_token);
-    const name_len = name_slice.len;
-
-    if (min.severity != .off and name_len < min.len) {
-        for (config.struct_field_exclude_len) |exclude_name| {
-            if (std.mem.eql(u8, name_slice, exclude_name)) return;
-        }
-
-        try lint_problems.append(allocator, .{
-            .rule_id = rule.rule_id,
-            .severity = min.severity,
-            .start = .startOfToken(tree, name_token),
-            .end = .endOfToken(tree, name_token),
-            .message = try std.fmt.allocPrint(allocator, "Field names should have a length greater or equal to {d}", .{min.len}),
-        });
-    } else if (max.severity != .off and name_len > max.len) {
-        for (config.struct_field_exclude_len) |exclude_name| {
-            if (std.mem.eql(u8, name_slice, exclude_name)) return;
-        }
-
-        try lint_problems.append(allocator, .{
-            .rule_id = rule.rule_id,
-            .severity = max.severity,
-            .start = .startOfToken(tree, name_token),
-            .end = .endOfToken(tree, name_token),
-            .message = try std.fmt.allocPrint(allocator, "Field names should have a length less or equal to {d}", .{max.len}),
-        });
-    }
-}
-
 test {
     std.testing.refAllDecls(@This());
 }

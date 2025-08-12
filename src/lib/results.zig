@@ -396,8 +396,8 @@ pub const LintProblemFix = struct {
     }
 };
 
-const std = @import("std");
-const rules = @import("rules.zig");
 const comments = @import("comments.zig");
+const rules = @import("rules.zig");
+const std = @import("std");
 const strings = @import("strings.zig");
 const Ast = std.zig.Ast;

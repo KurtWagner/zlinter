@@ -867,14 +867,14 @@ test "LintDocument.resolveTypeKind" {
     }
 }
 
-const std = @import("std");
-const builtin = @import("builtin");
-const zls = @import("zls");
-const version = @import("version.zig");
-const shims = @import("shims.zig");
-const testing = @import("testing.zig");
 const ast = @import("ast.zig");
+const builtin = @import("builtin");
 const comments = @import("comments.zig");
+const shims = @import("shims.zig");
+const std = @import("std");
+const testing = @import("testing.zig");
+const version = @import("version.zig");
+const zls = @import("zls");
 const LintProblem = @import("results.zig").LintProblem;
 const NodeIndexShim = shims.NodeIndexShim;
 const Ast = std.zig.Ast;

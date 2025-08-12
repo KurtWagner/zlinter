@@ -61,6 +61,5 @@ test "sequence" {
     );
 }
 
-const std = @import("std");
 const builtin = @import("builtin");
-const version = @import("version.zig");
+const std = @import("std");

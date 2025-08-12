@@ -1021,9 +1021,9 @@ const testing = struct {
     }
 };
 
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
 const LintRule = @import("./rules.zig").LintRule;
-const rendering = @import("./rendering.zig");
 const BuildInfo = @import("BuildInfo.zig");
+const rendering = @import("./rendering.zig");
 const shims = @import("shims.zig");

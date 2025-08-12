@@ -21,5 +21,5 @@ pub inline fn format(self: *const Formatter, input: FormatInput, writer: anytype
     return self.formatFn(self, input, writer);
 }
 
-const zlinter = @import("../zlinter.zig");
 const std = @import("std");
+const zlinter = @import("../zlinter.zig");
