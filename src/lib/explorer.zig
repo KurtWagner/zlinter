@@ -125,7 +125,7 @@ fn errorsToJson(tree: Ast, arena: std.mem.Allocator) !std.json.Array {
         try json_error.put("token_is_prev", .{ .bool = e.token_is_prev });
         try json_error.put("token", .{ .integer = e.token });
 
-        var render_backing = std.ArrayListUnmanaged(u8).empty;
+        var render_backing = shims.ArrayList(u8).empty;
 
         switch (version.zig) {
             .@"0.14" => try tree.renderError(e, render_backing.writer(arena)),

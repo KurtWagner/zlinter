@@ -323,7 +323,7 @@ fn runLinterRules(
         printer.println(.verbose, "    - {d} nodes", .{doc.handle.tree.nodes.len});
         printer.println(.verbose, "    - {d} tokens", .{doc.handle.tree.tokens.len});
 
-        var results = std.ArrayListUnmanaged(zlinter.results.LintResult).empty;
+        var results = shims.ArrayList(zlinter.results.LintResult).empty;
         defer results.deinit(gpa);
 
         const tree = doc.handle.tree;
@@ -442,7 +442,7 @@ fn runFormatter(
     defer arena.deinit();
     const arena_allocator = arena.allocator();
 
-    var flattened = std.ArrayListUnmanaged(zlinter.results.LintResult).empty;
+    var flattened = shims.ArrayList(zlinter.results.LintResult).empty;
     for (file_lint_problems.values()) |results| {
         try flattened.appendSlice(arena_allocator, results);
     }
@@ -483,7 +483,7 @@ fn runFixes(
 
     var it = file_lint_problems.iterator();
     while (it.next()) |entry| {
-        var lint_fixes = std.ArrayListUnmanaged(zlinter.results.LintProblemFix).empty;
+        var lint_fixes = shims.ArrayList(zlinter.results.LintProblemFix).empty;
         defer lint_fixes.deinit(gpa);
 
         const results = entry.value_ptr.*;
@@ -518,7 +518,7 @@ fn runFixes(
         const file_content = try file.reader().readAllAlloc(gpa, zlinter.session.max_zig_file_size_bytes);
         defer gpa.free(file_content);
 
-        var output_slices = std.ArrayListUnmanaged([]const u8).empty;
+        var output_slices = shims.ArrayList([]const u8).empty;
         defer output_slices.deinit(gpa);
 
         var file_fixes: usize = 0;
@@ -591,7 +591,7 @@ fn allocAstErrorMsg(
     err: Ast.Error,
     allocator: std.mem.Allocator,
 ) error{OutOfMemory}![]const u8 {
-    var error_message = std.ArrayListUnmanaged(u8).empty;
+    var error_message = shims.ArrayList(u8).empty;
     defer error_message.deinit(allocator);
 
     try tree.renderError(err, error_message.writer(allocator));
@@ -791,6 +791,7 @@ test {
 const std = @import("std");
 const builtin = @import("builtin");
 const zlinter = @import("zlinter");
+const shims = zlinter.shims;
 const rules = @import("rules").rules; // Generated in build.zig
 const configs = @import("rules").configs; // Generated in build.zig
 const Ast = std.zig.Ast;

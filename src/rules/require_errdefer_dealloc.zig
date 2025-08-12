@@ -71,8 +71,8 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    var problem_nodes = std.ArrayList(Ast.Node.Index).init(allocator);
-    defer problem_nodes.deinit();
+    var problem_nodes = shims.ArrayList(Ast.Node.Index).empty;
+    defer problem_nodes.deinit(allocator);
 
     const root: NodeIndexShim = .root;
     var it = try doc.nodeLineageIterator(root, allocator);
@@ -89,11 +89,11 @@ fn run(
         try processBlock(doc, fn_decl.block, &problem_nodes, allocator);
     }
 
-    var lint_problems = std.ArrayList(zlinter.results.LintProblem).init(allocator);
-    defer lint_problems.deinit();
+    var lint_problems: shims.ArrayList(zlinter.results.LintProblem) = .empty;
+    defer lint_problems.deinit(allocator);
 
     for (problem_nodes.items) |node| {
-        try lint_problems.append(.{
+        try lint_problems.append(allocator, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
             .start = .startOfNode(tree, node),
@@ -106,7 +106,7 @@ fn run(
         try zlinter.results.LintResult.init(
             allocator,
             doc.path,
-            try lint_problems.toOwnedSlice(),
+            try lint_problems.toOwnedSlice(allocator),
         )
     else
         null;
@@ -115,7 +115,7 @@ fn run(
 fn processBlock(
     doc: zlinter.session.LintDocument,
     block_node: Ast.Node.Index,
-    problems: *std.ArrayList(Ast.Node.Index),
+    problems: *shims.ArrayList(Ast.Node.Index),
     gpa: std.mem.Allocator,
 ) !void {
     const tree = doc.handle.tree;
@@ -151,7 +151,7 @@ fn processBlock(
 
     var leftover_it = cleanup_symbols.valueIterator();
     while (leftover_it.next()) |node| {
-        try problems.append(node.*);
+        try problems.append(gpa, node.*);
     }
 }
 

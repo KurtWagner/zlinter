@@ -54,7 +54,7 @@ fn run(
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
-    var lint_problems = std.ArrayListUnmanaged(zlinter.results.LintProblem).empty;
+    var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(allocator);
 
     const tree = doc.handle.tree;
@@ -97,11 +97,11 @@ fn run(
             continue :nodes;
         }
 
-        var actual_order = std.ArrayList(Ast.Node.Index).init(allocator);
-        defer actual_order.deinit();
+        var actual_order = shims.ArrayList(Ast.Node.Index).empty;
+        defer actual_order.deinit(allocator);
 
-        var expected_order = std.ArrayList(Ast.Node.Index).init(allocator);
-        defer expected_order.deinit();
+        var expected_order = shims.ArrayList(Ast.Node.Index).empty;
+        defer expected_order.deinit(allocator);
 
         var sorted_queue = std.PriorityQueue(
             Field,
@@ -126,7 +126,7 @@ fn run(
                 else => if (seen_field) break :children else continue :children,
             };
 
-            try actual_order.append(container_child);
+            try actual_order.append(allocator, container_child);
             try sorted_queue.add(.{
                 .name = tree.tokenSlice(name_token),
                 .node = container_child,
@@ -138,7 +138,7 @@ fn run(
         var maybe_first_problem_index: ?usize = null; // Inclusive
         var maybe_last_problem_index: ?usize = null; // Inclusive
         while (sorted_queue.removeOrNull()) |field| : (i += 1) {
-            try expected_order.append(field.node);
+            try expected_order.append(allocator, field.node);
             if (field.node != actual_order.items[i]) {
                 maybe_first_problem_index = maybe_first_problem_index orelse i;
                 maybe_last_problem_index = i;
@@ -158,8 +158,8 @@ fn run(
                     },
                 );
 
-            var expected_source = std.ArrayList(u8).init(allocator);
-            defer expected_source.deinit();
+            var expected_source = shims.ArrayList(u8).empty;
+            defer expected_source.deinit(allocator);
 
             const last_node = expected_order.items[expected_order.items.len - 1];
             for (expected_order.items[first_problem_index .. last_problem_index + 1]) |current_node| {
@@ -173,9 +173,9 @@ fn run(
                 );
                 const is_multiline = expected_start.line < expected_end.line;
 
-                try expected_source.appendSlice(tree.source[expected_start.byte_offset .. expected_end.byte_offset + 1]);
+                try expected_source.appendSlice(allocator, tree.source[expected_start.byte_offset .. expected_end.byte_offset + 1]);
                 if (!is_last_field or is_multiline) {
-                    try expected_source.append(',');
+                    try expected_source.append(allocator, ',');
                 }
             }
 
@@ -191,7 +191,7 @@ fn run(
                 .fix = .{
                     .start = actual_start.byte_offset,
                     .end = actual_end.byte_offset + 1, // + 1 as fix is exclusive
-                    .text = try expected_source.toOwnedSlice(),
+                    .text = try expected_source.toOwnedSlice(allocator),
                 },
             });
         }

@@ -39,7 +39,7 @@ fn run(
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
-    var lint_problems = std.ArrayListUnmanaged(zlinter.results.LintProblem).empty;
+    var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(allocator);
 
     const tree = doc.handle.tree;

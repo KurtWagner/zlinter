@@ -513,10 +513,10 @@ pub const LintContext = struct {
                 node: NodeIndexShim,
             };
 
-            var queue = std.ArrayList(QueueItem).init(gpa);
-            defer queue.deinit();
+            var queue = shims.ArrayList(QueueItem).empty;
+            defer queue.deinit(gpa);
 
-            try queue.append(.{ .node = NodeIndexShim.root });
+            try queue.append(gpa, .{ .node = NodeIndexShim.root });
 
             while (queue.pop()) |item| {
                 const children = try ast.nodeChildrenAlloc(
@@ -539,7 +539,7 @@ pub const LintContext = struct {
                 });
 
                 for (children) |child| {
-                    try queue.append(.{
+                    try queue.append(gpa, .{
                         .parent = item.node,
                         .node = NodeIndexShim.init(child),
                     });
