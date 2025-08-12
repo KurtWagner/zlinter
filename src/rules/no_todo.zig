@@ -42,11 +42,8 @@ fn run(
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
-    var lint_problems = std.ArrayList(zlinter.results.LintProblem).init(allocator);
-    defer lint_problems.deinit();
-
-    var content_accumulator = std.ArrayList(u8).init(allocator);
-    defer content_accumulator.deinit();
+    var lint_problems: shims.ArrayList(zlinter.results.LintProblem) = .empty;
+    defer lint_problems.deinit(allocator);
 
     const tree = doc.handle.tree;
     const source = tree.source;
@@ -76,7 +73,7 @@ fn run(
             }
         }
 
-        try lint_problems.append(.{
+        try lint_problems.append(allocator, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
             .start = .startOfComment(doc.comments, comment),
@@ -92,7 +89,7 @@ fn run(
         try zlinter.results.LintResult.init(
             allocator,
             doc.path,
-            try lint_problems.toOwnedSlice(),
+            try lint_problems.toOwnedSlice(allocator),
         )
     else
         null;
@@ -175,3 +172,4 @@ test {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const shims = zlinter.shims;

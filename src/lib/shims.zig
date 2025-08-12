@@ -181,6 +181,15 @@ pub fn isContainerNamespace(tree: Ast, container_decl: Ast.full.ContainerDecl) b
     return true;
 }
 
+/// Managed versions of ArrayList are being removed from std. While it's phased
+/// out this can be used to consistently return an unmanaged version.
+pub fn ArrayList(T: type) type {
+    return comptime switch (version.zig) {
+        .@"0.14" => std.ArrayListUnmanaged(T),
+        .@"0.15" => std.ArrayListUnmanaged(T), // TODO: Change to ArrayList once released
+    };
+}
+
 const std = @import("std");
 const version = @import("version.zig");
 const Ast = std.zig.Ast;

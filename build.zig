@@ -70,8 +70,8 @@ pub const BuilderOptions = struct {
 pub fn builder(b: *std.Build, options: BuilderOptions) StepBuilder {
     return .{
         .rules = .empty,
-        .include_paths = .init(b.allocator),
-        .exclude_paths = .init(b.allocator),
+        .include_paths = .empty,
+        .exclude_paths = .empty,
         .b = b,
         .optimize = options.optimize,
         .target = options.target orelse b.graph.host,
@@ -79,9 +79,9 @@ pub fn builder(b: *std.Build, options: BuilderOptions) StepBuilder {
 }
 
 const StepBuilder = struct {
-    rules: std.ArrayListUnmanaged(BuiltRule),
-    include_paths: std.ArrayList(std.Build.LazyPath),
-    exclude_paths: std.ArrayList(std.Build.LazyPath),
+    rules: shims.ArrayList(BuiltRule),
+    include_paths: shims.ArrayList(std.Build.LazyPath),
+    exclude_paths: shims.ArrayList(std.Build.LazyPath),
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
@@ -118,9 +118,9 @@ const StepBuilder = struct {
         },
     ) void {
         if (paths.include) |includes|
-            for (includes) |path| self.include_paths.append(path) catch @panic("OOM");
+            for (includes) |path| self.include_paths.append(self.b.allocator, path) catch @panic("OOM");
         if (paths.exclude) |excludes|
-            for (excludes) |path| self.exclude_paths.append(path) catch @panic("OOM");
+            for (excludes) |path| self.exclude_paths.append(self.b.allocator, path) catch @panic("OOM");
     }
 
     /// Returns a build step and cleans itself up.
@@ -146,8 +146,8 @@ const StepBuilder = struct {
     }
 
     fn deinit(self: *StepBuilder) void {
-        self.include_paths.deinit();
-        self.exclude_paths.deinit();
+        self.include_paths.deinit(self.b.allocator);
+        self.exclude_paths.deinit(self.b.allocator);
         for (self.rules.items) |*r| r.deinit(self.b.allocator);
         self.* = undefined;
     }
@@ -325,11 +325,11 @@ pub fn build(b: *std.Build) void {
 
     const lint_cmd = b.step("lint", "Lint the linters own source code.");
     lint_cmd.dependOn(step: {
-        var exclude_paths = std.ArrayList(std.Build.LazyPath).init(b.allocator);
-        defer exclude_paths.deinit();
+        var exclude_paths = shims.ArrayList(std.Build.LazyPath).empty;
+        defer exclude_paths.deinit(b.allocator);
 
-        exclude_paths.append(b.path("integration_tests/test_cases")) catch @panic("OOM");
-        exclude_paths.append(b.path("integration_tests/src/test_case_references.zig")) catch @panic("OOM");
+        exclude_paths.append(b.allocator, b.path("integration_tests/test_cases")) catch @panic("OOM");
+        exclude_paths.append(b.allocator, b.path("integration_tests/src/test_case_references.zig")) catch @panic("OOM");
 
         break :step buildStep(
             b,
@@ -448,8 +448,8 @@ fn buildStep(
             dependency: *std.Build.Dependency,
             module: *std.Build.Module,
         },
-        include_paths: ?std.ArrayList(std.Build.LazyPath) = null,
-        exclude_paths: ?std.ArrayList(std.Build.LazyPath) = null,
+        include_paths: ?shims.ArrayList(std.Build.LazyPath) = null,
+        exclude_paths: ?shims.ArrayList(std.Build.LazyPath) = null,
     },
 ) *std.Build.Step {
     const zlinter_lib_module: *std.Build.Module, const exe_file: std.Build.LazyPath, const build_rules_exe_file: std.Build.LazyPath = switch (options.zlinter) {
@@ -718,13 +718,13 @@ const ZlinterRun = struct {
     step: std.Build.Step,
 
     /// CLI arguments to be passed to zlinter when executed
-    argv: std.ArrayList(Arg),
+    argv: shims.ArrayList(Arg),
 
     /// Include paths configured within the build file.
-    include_paths: std.ArrayList([]const u8),
+    include_paths: shims.ArrayList([]const u8),
 
     /// Exclude paths confiured within the build file.
-    exclude_paths: std.ArrayList([]const u8),
+    exclude_paths: shims.ArrayList([]const u8),
 
     const Arg = union(enum) {
         artifact: *std.Build.Step.Compile,
@@ -742,12 +742,12 @@ const ZlinterRun = struct {
                 .owner = owner,
                 .makeFn = make,
             }),
-            .argv = .init(arena),
-            .exclude_paths = .init(arena),
-            .include_paths = .init(arena),
+            .argv = .empty,
+            .exclude_paths = .empty,
+            .include_paths = .empty,
         };
 
-        self.argv.append(.{ .artifact = exe }) catch @panic("OOM");
+        self.argv.append(arena, .{ .artifact = exe }) catch @panic("OOM");
 
         const bin_file = exe.getEmittedBin();
         bin_file.addStepDependencies(&self.step);
@@ -758,16 +758,16 @@ const ZlinterRun = struct {
     pub fn addArgs(run: *ZlinterRun, args: []const []const u8) void {
         const b = run.step.owner;
         for (args) |arg|
-            run.argv.append(.{ .bytes = b.dupe(arg) }) catch @panic("OOM");
+            run.argv.append(b.allocator, .{ .bytes = b.dupe(arg) }) catch @panic("OOM");
     }
 
     pub fn addIncludePath(run: *ZlinterRun, owner: *std.Build, path: std.Build.LazyPath) void {
         addWatchInput(owner, &run.step, path, .lintable_file) catch @panic("OOM");
-        run.include_paths.append(run.step.owner.dupe(path.getPath3(owner, &run.step).subPathOrDot())) catch @panic("OOM");
+        run.include_paths.append(run.step.owner.allocator, run.step.owner.dupe(path.getPath3(owner, &run.step).subPathOrDot())) catch @panic("OOM");
     }
 
     pub fn addExcludePath(run: *ZlinterRun, exclude_path: []const u8) void {
-        run.exclude_paths.append(run.step.owner.dupe(exclude_path)) catch @panic("OOM");
+        run.exclude_paths.append(run.step.owner.allocator, run.step.owner.dupe(exclude_path)) catch @panic("OOM");
     }
 
     fn make(step: *std.Build.Step, _: std.Build.Step.MakeOptions) !void {
@@ -783,7 +783,7 @@ const ZlinterRun = struct {
         const env_map = arena.create(std.process.EnvMap) catch @panic("OOM");
         env_map.* = std.process.getEnvMap(arena) catch @panic("unhandled error");
 
-        var argv_list = std.ArrayList([]const u8).initCapacity(
+        var argv_list = shims.ArrayList([]const u8).initCapacity(
             arena,
             run.argv.items.len + 1,
         ) catch @panic("OOM");
@@ -791,7 +791,7 @@ const ZlinterRun = struct {
         for (run.argv.items) |arg| {
             switch (arg) {
                 .bytes => |bytes| {
-                    try argv_list.append(bytes);
+                    try argv_list.append(arena, bytes);
                 },
                 .artifact => |artifact| {
                     if (artifact.rootModuleTarget().os.tag == .windows) {
@@ -816,13 +816,13 @@ const ZlinterRun = struct {
                         }
                     }
                     const file_path = artifact.installed_path orelse artifact.generated_bin.?.path.?;
-                    try argv_list.append(b.dupe(file_path));
+                    try argv_list.append(arena, b.dupe(file_path));
                 },
             }
         }
 
         // We're always sending "build_info_zon_bytes" in stdin
-        argv_list.append("--stdin") catch @panic("OOM");
+        argv_list.append(arena, "--stdin") catch @panic("OOM");
 
         if (!std.process.can_spawn) {
             return run.step.fail("Host cannot spawn zlinter:\n\t{s}", .{
@@ -952,5 +952,6 @@ fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
 const std = @import("std");
 const BuildInfo = @import("src/lib/BuildInfo.zig");
 const isLintableFilePath = @import("src/lib/files.zig").isLintableFilePath;
+const shims = @import("src/lib/shims.zig");
 
 pub const version = @import("./src/lib/version.zig");

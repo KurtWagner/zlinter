@@ -9,20 +9,20 @@ pub const LintFileRenderer = struct {
     pub fn init(allocator: std.mem.Allocator, stream: anytype) !Self {
         const source = try stream.readAllAlloc(allocator, max_zig_file_size_bytes);
 
-        var line_ends = try std.ArrayList(usize).initCapacity(allocator, source.len / 40);
-        defer line_ends.deinit();
+        var line_ends = try shims.ArrayList(usize).initCapacity(allocator, source.len / 40);
+        errdefer line_ends.deinit(allocator);
 
         for (0..source.len) |i| {
             if (source[i] == '\n')
-                try line_ends.append(i);
+                try line_ends.append(allocator, i);
         }
         if (source[source.len - 1] != '\n') {
-            try line_ends.append(source.len - 1);
+            try line_ends.append(allocator, source.len - 1);
         }
 
         return .{
             .source = source,
-            .line_ends = try line_ends.toOwnedSlice(),
+            .line_ends = try line_ends.toOwnedSlice(allocator),
         };
     }
 
@@ -157,7 +157,7 @@ test "LintFileRenderer" {
         try std.testing.expectEqualStrings("", renderer.getLine(2));
 
         {
-            var output = std.ArrayListUnmanaged(u8).empty;
+            var output = shims.ArrayList(u8).empty;
             defer output.deinit(std.testing.allocator);
 
             try renderer.render(
@@ -176,7 +176,7 @@ test "LintFileRenderer" {
         }
 
         {
-            var output = std.ArrayListUnmanaged(u8).empty;
+            var output = shims.ArrayList(u8).empty;
             defer output.deinit(std.testing.allocator);
 
             try renderer.render(
@@ -290,7 +290,7 @@ pub const Printer = struct {
 /// ensure they're cleaned up properly afterwards.
 const Context = union(enum) {
     file: std.fs.File,
-    array: *std.ArrayList(u8),
+    array: struct { allocator: std.mem.Allocator, backing: *shims.ArrayList(u8) },
 };
 
 const WriteError = std.fs.File.WriteError || std.mem.Allocator.Error;
@@ -300,7 +300,7 @@ fn writeFn(context: Context, bytes: []const u8) WriteError!usize {
     switch (context) {
         .file => |file| return try file.write(bytes),
         .array => |array| {
-            try array.appendSlice(bytes);
+            try array.backing.appendSlice(array.allocator, bytes);
             return bytes.len;
         },
     }
@@ -310,13 +310,13 @@ fn writeFn(context: Context, bytes: []const u8) WriteError!usize {
 /// `attachFakeStderrSink` for examples
 const FakeSink = struct {
     allocator: std.mem.Allocator,
-    array_sink: *std.ArrayList(u8),
+    array_sink: *shims.ArrayList(u8),
 
     fn init(allocator: std.mem.Allocator) error{OutOfMemory}!FakeSink {
         assertTestOnly();
 
-        const array_sink = try allocator.create(std.ArrayList(u8));
-        array_sink.* = .init(allocator);
+        const array_sink = try allocator.create(shims.ArrayList(u8));
+        array_sink.* = .empty;
 
         return .{
             .array_sink = array_sink,
@@ -325,7 +325,7 @@ const FakeSink = struct {
     }
 
     fn writer(self: *FakeSink) Writer {
-        return .{ .context = .{ .array = self.array_sink } };
+        return .{ .context = .{ .array = .{ .allocator = self.allocator, .backing = self.array_sink } } };
     }
 
     pub fn output(self: FakeSink) []const u8 {
@@ -333,7 +333,7 @@ const FakeSink = struct {
     }
 
     pub fn deinit(self: *FakeSink) void {
-        self.array_sink.deinit();
+        self.array_sink.deinit(self.allocator);
         self.allocator.destroy(self.array_sink);
         self.* = undefined;
     }
@@ -347,3 +347,4 @@ const std = @import("std");
 const ansi = @import("ansi.zig");
 const max_zig_file_size_bytes = @import("session.zig").max_zig_file_size_bytes;
 const version = @import("version.zig");
+const shims = @import("shims.zig");

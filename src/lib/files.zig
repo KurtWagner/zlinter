@@ -57,13 +57,17 @@ pub fn allocLintFiles(cwd: []const u8, dir: std.fs.Dir, maybe_files: ?[]const []
         );
     }
 
-    var lint_files = try std.ArrayList(zlinter.files.LintFile).initCapacity(gpa, file_paths.count());
-    defer lint_files.deinit();
+    var lint_files = try gpa.alloc(zlinter.files.LintFile, file_paths.count());
+    errdefer gpa.free(lint_files);
 
+    var i: usize = 0;
     var it = file_paths.keyIterator();
-    while (it.next()) |f| try lint_files.append(.{ .pathname = f.* });
+    while (it.next()) |f| {
+        lint_files[i] = .{ .pathname = f.* };
+        i += 1;
+    }
 
-    return lint_files.toOwnedSlice();
+    return lint_files;
 }
 
 /// Walks a directory and its sub directories adding any zig relative file

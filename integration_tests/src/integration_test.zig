@@ -46,10 +46,10 @@ test "integration test rules" {
     // Lint command "zig build lint -- <file>.zig"
     // --------------------------------------------------------------------
     {
-        var lint_args = std.ArrayList([]const u8).init(std.testing.allocator);
-        defer lint_args.deinit();
+        var lint_args = std.ArrayListUnmanaged([]const u8).empty;
+        defer lint_args.deinit(std.testing.allocator);
 
-        try lint_args.appendSlice(&.{
+        try lint_args.appendSlice(std.testing.allocator, &.{
             zig_bin,
             "build",
             "lint",
@@ -60,7 +60,7 @@ test "integration test rules" {
             input_zig_file.?,
         });
         if (input_zon_file) |file| {
-            try lint_args.appendSlice(&.{
+            try lint_args.appendSlice(std.testing.allocator, &.{
                 "--rule-config",
                 rule_name,
                 file,
@@ -110,10 +110,10 @@ test "integration test rules" {
             .{},
         );
 
-        var lint_args = std.ArrayList([]const u8).init(std.testing.allocator);
-        defer lint_args.deinit();
+        var lint_args = std.ArrayListUnmanaged([]const u8).empty;
+        defer lint_args.deinit(std.testing.allocator);
 
-        try lint_args.appendSlice(&.{
+        try lint_args.appendSlice(std.testing.allocator, &.{
             zig_bin,
             "build",
             "lint",
@@ -125,7 +125,7 @@ test "integration test rules" {
             temp_path,
         });
         if (input_zon_file) |file| {
-            try lint_args.appendSlice(&.{
+            try lint_args.appendSlice(std.testing.allocator, &.{
                 "--rule-config",
                 rule_name,
                 file,
@@ -211,8 +211,8 @@ fn expectEqualStringsNormalized(expected: []const u8, actual: []const u8) !void 
 }
 
 fn normalizeNewLinesAlloc(input: []const u8, allocator: std.mem.Allocator) ![]const u8 {
-    var result = std.ArrayList(u8).init(allocator);
-    defer result.deinit();
+    var result = std.ArrayListUnmanaged(u8).empty;
+    defer result.deinit(allocator);
 
     // Removes "\r". e.g., "\r\n"
     for (input) |c| {
@@ -221,11 +221,11 @@ fn normalizeNewLinesAlloc(input: []const u8, allocator: std.mem.Allocator) ![]co
             // This assumes that '\' is never in output, which is currently true
             // If this ever changes we will need something more sophisticated
             // to identify strings that look like paths
-            else => try result.append(if (std.fs.path.isSep(c)) std.fs.path.sep_posix else c),
+            else => try result.append(allocator, if (std.fs.path.isSep(c)) std.fs.path.sep_posix else c),
         }
     }
 
-    return result.toOwnedSlice();
+    return result.toOwnedSlice(allocator);
 }
 
 fn printWithHeader(header: []const u8, content: []const u8) !void {
@@ -236,11 +236,11 @@ fn printWithHeader(header: []const u8, content: []const u8) !void {
         .{header},
     );
 
-    var bottom_bar = std.ArrayListUnmanaged(u8).empty;
-    defer bottom_bar.deinit(std.testing.allocator);
-    for (0..top_bar.len) |_| try bottom_bar.append(std.testing.allocator, '=');
+    const bottom_bar = try std.testing.allocator.alloc(u8, top_bar.len);
+    defer std.testing.allocator.free(bottom_bar);
+    @memset(bottom_bar, '=');
 
-    std.debug.print("{s}\n{s}\n{s}\n", .{ top_bar, content, bottom_bar.items });
+    std.debug.print("{s}\n{s}\n{s}\n", .{ top_bar, content, bottom_bar[0..] });
 }
 
 fn runLintCommand(args: []const []const u8) !std.process.Child.RunResult {

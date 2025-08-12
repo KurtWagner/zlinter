@@ -62,8 +62,8 @@ fn run(
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
-    var lint_problems = std.ArrayList(zlinter.results.LintProblem).init(allocator);
-    defer lint_problems.deinit();
+    var lint_problems: shims.ArrayList(zlinter.results.LintProblem) = .empty;
+    defer lint_problems.deinit(allocator);
 
     var scoped_imports = try resolveScopedImports(doc, allocator);
     defer deinitScopedImports(&scoped_imports);
@@ -79,7 +79,7 @@ fn run(
                 const is_same_chunk = (p.last_line + 1) == import.first_line;
 
                 if (!config.allow_line_separated_chunks and !is_same_chunk) {
-                    try lint_problems.append(.{
+                    try lint_problems.append(allocator, .{
                         .rule_id = rule.rule_id,
                         .severity = config.severity,
                         .start = .startOfNode(tree, import.decl_node),
@@ -93,7 +93,7 @@ fn run(
                 if (is_same_chunk) {
                     const order = config.order.cmp(import.decl_name, p.decl_name);
                     if (order == .lt) {
-                        try lint_problems.append(.{
+                        try lint_problems.append(allocator, .{
                             .rule_id = rule.rule_id,
                             .severity = config.severity,
                             .start = .startOfNode(tree, import.decl_node),
@@ -113,7 +113,7 @@ fn run(
         try zlinter.results.LintResult.init(
             allocator,
             doc.path,
-            try lint_problems.toOwnedSlice(),
+            try lint_problems.toOwnedSlice(allocator),
         )
     else
         null;
@@ -159,20 +159,20 @@ fn swapNodesFix(
     const second_line_start = tree.tokenLocation(0, tree.firstToken(second)).line_start;
     const second_line_end = tree.tokenLocation(0, tree.lastToken(second)).line_end;
 
-    var text = try std.ArrayList(u8).initCapacity(allocator, second_line_start - first_line_start);
-    errdefer text.deinit();
+    var text = try shims.ArrayList(u8).initCapacity(allocator, second_line_start - first_line_start);
+    errdefer text.deinit(allocator);
 
     if (source[second_line_end] == 0) {
-        try text.appendSlice(source[second_line_start..second_line_end]);
-        try text.append('\n');
-        try text.appendSlice(source[first_line_start .. second_line_start - 1]);
+        try text.appendSlice(allocator, source[second_line_start..second_line_end]);
+        try text.append(allocator, '\n');
+        try text.appendSlice(allocator, source[first_line_start .. second_line_start - 1]);
     } else {
-        try text.appendSlice(source[second_line_start .. second_line_end + 1]);
-        try text.appendSlice(source[first_line_start..second_line_start]);
+        try text.appendSlice(allocator, source[second_line_start .. second_line_end + 1]);
+        try text.appendSlice(allocator, source[first_line_start..second_line_start]);
     }
 
     return .{
-        .text = try text.toOwnedSlice(),
+        .text = try text.toOwnedSlice(allocator),
         .start = first_line_start,
         .end = second_line_end + 1,
     };

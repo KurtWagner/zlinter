@@ -104,22 +104,22 @@ pub fn allocParse(
     var lint_args = Args{};
     errdefer lint_args.deinit(allocator);
 
-    var unknown_args = std.ArrayListUnmanaged([]const u8).empty;
+    var unknown_args = shims.ArrayList([]const u8).empty;
     defer unknown_args.deinit(allocator);
 
-    var include_paths = std.ArrayListUnmanaged([]const u8).empty;
+    var include_paths = shims.ArrayList([]const u8).empty;
     defer include_paths.deinit(allocator);
     errdefer for (include_paths.items) |p| allocator.free(p);
 
-    var exclude_paths = std.ArrayListUnmanaged([]const u8).empty;
+    var exclude_paths = shims.ArrayList([]const u8).empty;
     defer exclude_paths.deinit(allocator);
     errdefer for (exclude_paths.items) |p| allocator.free(p);
 
-    var filter_paths = std.ArrayListUnmanaged([]const u8).empty;
+    var filter_paths = shims.ArrayList([]const u8).empty;
     defer filter_paths.deinit(allocator);
     errdefer for (filter_paths.items) |p| allocator.free(p);
 
-    var rules = std.ArrayListUnmanaged([]const u8).empty;
+    var rules = shims.ArrayList([]const u8).empty;
     defer rules.deinit(allocator);
     errdefer for (rules.items) |r| allocator.free(r);
 
@@ -596,11 +596,11 @@ test "allocParse with only exclude_paths" {
         \\}
     ;
 
-    var backing = std.ArrayList(u8).init(std.testing.allocator);
-    defer backing.deinit();
+    var backing: shims.ArrayList(u8) = .empty;
+    defer backing.deinit(std.testing.allocator);
 
-    try backing.writer().writeInt(usize, bytes.len, .little);
-    try backing.writer().writeAll(bytes);
+    try backing.writer(std.testing.allocator).writeInt(usize, bytes.len, .little);
+    try backing.writer(std.testing.allocator).writeAll(bytes);
 
     var stdin_fbs = std.io.fixedBufferStream(backing.items);
     const args = try allocParse(
@@ -626,11 +626,11 @@ test "allocParse with only include_paths" {
         \\}
     ;
 
-    var backing = std.ArrayList(u8).init(std.testing.allocator);
-    defer backing.deinit();
+    var backing: shims.ArrayList(u8) = .empty;
+    defer backing.deinit(std.testing.allocator);
 
-    try backing.writer().writeInt(usize, bytes.len, .little);
-    try backing.writer().writeAll(bytes);
+    try backing.writer(std.testing.allocator).writeInt(usize, bytes.len, .little);
+    try backing.writer(std.testing.allocator).writeAll(bytes);
 
     var stdin_fbs = std.io.fixedBufferStream(backing.items);
     const args = try allocParse(
@@ -657,11 +657,11 @@ test "allocParse with include_paths and exclude_paths" {
         \\}
     ;
 
-    var backing = std.ArrayList(u8).init(std.testing.allocator);
-    defer backing.deinit();
+    var backing: shims.ArrayList(u8) = .empty;
+    defer backing.deinit(std.testing.allocator);
 
-    try backing.writer().writeInt(usize, bytes.len, .little);
-    try backing.writer().writeAll(bytes);
+    try backing.writer(std.testing.allocator).writeInt(usize, bytes.len, .little);
+    try backing.writer(std.testing.allocator).writeAll(bytes);
 
     var stdin_fbs = std.io.fixedBufferStream(backing.items);
     const args = try allocParse(
@@ -1026,3 +1026,4 @@ const builtin = @import("builtin");
 const LintRule = @import("./rules.zig").LintRule;
 const rendering = @import("./rendering.zig");
 const BuildInfo = @import("BuildInfo.zig");
+const shims = @import("shims.zig");

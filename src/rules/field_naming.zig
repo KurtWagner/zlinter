@@ -147,8 +147,8 @@ fn run(
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
-    var lint_problems = std.ArrayList(zlinter.results.LintProblem).init(allocator);
-    defer lint_problems.deinit();
+    var lint_problems: shims.ArrayList(zlinter.results.LintProblem) = .empty;
+    defer lint_problems.deinit(allocator);
 
     const tree = doc.handle.tree;
     var buffer: [2]Ast.Node.Index = undefined;
@@ -180,7 +180,7 @@ fn run(
                                 if (std.mem.eql(u8, name, exclude_name)) continue :tokens;
                             }
 
-                            try lint_problems.append(.{
+                            try lint_problems.append(allocator, .{
                                 .rule_id = rule.rule_id,
                                 .severity = min_len.severity,
                                 .start = .startOfToken(tree, token),
@@ -192,7 +192,7 @@ fn run(
                                 if (std.mem.eql(u8, name, exclude_name)) continue :tokens;
                             }
 
-                            try lint_problems.append(.{
+                            try lint_problems.append(allocator, .{
                                 .rule_id = rule.rule_id,
                                 .severity = max_len.severity,
                                 .start = .startOfToken(tree, token),
@@ -202,7 +202,7 @@ fn run(
                         }
 
                         if (!config.error_field.style.check(name)) {
-                            try lint_problems.append(.{
+                            try lint_problems.append(allocator, .{
                                 .rule_id = rule.rule_id,
                                 .severity = config.error_field.severity,
                                 .start = .startOfToken(tree, token),
@@ -260,7 +260,7 @@ fn run(
                             if (std.mem.eql(u8, name, exclude_name)) continue :fields;
                         }
 
-                        try lint_problems.append(.{
+                        try lint_problems.append(allocator, .{
                             .rule_id = rule.rule_id,
                             .severity = min_len.severity,
                             .start = .startOfToken(tree, name_token),
@@ -272,7 +272,7 @@ fn run(
                             if (std.mem.eql(u8, name, exclude_name)) continue :fields;
                         }
 
-                        try lint_problems.append(.{
+                        try lint_problems.append(allocator, .{
                             .rule_id = rule.rule_id,
                             .severity = max_len.severity,
                             .start = .startOfToken(tree, name_token),
@@ -282,7 +282,7 @@ fn run(
                     }
 
                     if (!style_with_severity.style.check(name)) {
-                        try lint_problems.append(.{
+                        try lint_problems.append(allocator, .{
                             .rule_id = rule.rule_id,
                             .severity = style_with_severity.severity,
                             .start = .startOfToken(tree, name_token),
@@ -299,7 +299,7 @@ fn run(
         try zlinter.results.LintResult.init(
             allocator,
             doc.path,
-            try lint_problems.toOwnedSlice(),
+            try lint_problems.toOwnedSlice(allocator),
         )
     else
         null;
@@ -310,7 +310,7 @@ fn handleNameLenCheck(
     tree: Ast,
     node: Ast.Node.Index,
     config: Config,
-    lint_problems: *std.ArrayList(zlinter.results.LintProblem),
+    lint_problems: *shims.ArrayList(zlinter.results.LintProblem),
     allocator: std.mem.Allocator,
 ) !void {
     const min = config.struct_field_min_len;
@@ -330,7 +330,7 @@ fn handleNameLenCheck(
             if (std.mem.eql(u8, name_slice, exclude_name)) return;
         }
 
-        try lint_problems.append(.{
+        try lint_problems.append(allocator, .{
             .rule_id = rule.rule_id,
             .severity = min.severity,
             .start = .startOfToken(tree, name_token),
@@ -342,7 +342,7 @@ fn handleNameLenCheck(
             if (std.mem.eql(u8, name_slice, exclude_name)) return;
         }
 
-        try lint_problems.append(.{
+        try lint_problems.append(allocator, .{
             .rule_id = rule.rule_id,
             .severity = max.severity,
             .start = .startOfToken(tree, name_token),

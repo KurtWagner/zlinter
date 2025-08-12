@@ -323,11 +323,11 @@ pub fn testRunRule(
     ));
     defer if (result) |*r| r.deinit(std.testing.allocator);
 
-    var actual = std.ArrayList(LintProblemExpectation).init(std.testing.allocator);
-    defer actual.deinit();
+    var actual = shims.ArrayList(LintProblemExpectation).empty;
+    defer actual.deinit(std.testing.allocator);
 
     for (if (result) |r| r.problems else &.{}) |problem| {
-        try actual.append(LintProblemExpectation.init(problem, source));
+        try actual.append(std.testing.allocator, LintProblemExpectation.init(problem, source));
     }
 
     try expectDeepEquals(LintProblemExpectation, expected, actual.items);
@@ -343,7 +343,8 @@ const LintProblem = @import("results.zig").LintProblem;
 const LintResult = @import("results.zig").LintResult;
 const LintProblemFix = @import("results.zig").LintProblemFix;
 const RunOptions = @import("rules.zig").RunOptions;
-const NodeIndexShim = @import("shims.zig").NodeIndexShim;
-const nodeTag = @import("shims.zig").nodeTag;
+const shims = @import("shims.zig");
+const NodeIndexShim = shims.NodeIndexShim;
+const nodeTag = shims.nodeTag;
 const strings = @import("strings.zig");
 const Ast = std.zig.Ast;

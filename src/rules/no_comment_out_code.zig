@@ -49,11 +49,11 @@ fn run(
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
-    var lint_problems = std.ArrayList(zlinter.results.LintProblem).init(allocator);
-    defer lint_problems.deinit();
+    var lint_problems: shims.ArrayList(zlinter.results.LintProblem) = .empty;
+    defer lint_problems.deinit(allocator);
 
-    var content_accumulator = std.ArrayList(u8).init(allocator);
-    defer content_accumulator.deinit();
+    var content_accumulator: shims.ArrayList(u8) = .empty;
+    defer content_accumulator.deinit(allocator);
 
     var first_comment: ?zlinter.comments.Comment = null;
     var last_comment: ?zlinter.comments.Comment = null;
@@ -68,14 +68,14 @@ fn run(
 
         if (content_accumulator.items.len == 0 or prev_line == line - 1) {
             if (content_accumulator.items.len == 0) {
-                try content_accumulator.appendSlice("fn container() void {");
+                try content_accumulator.appendSlice(allocator, "fn container() void {");
             }
-            try content_accumulator.appendSlice(contents);
-            try content_accumulator.append('\n');
+            try content_accumulator.appendSlice(allocator, contents);
+            try content_accumulator.append(allocator, '\n');
         } else {
             if (content_accumulator.items.len > 0) {
                 if (try looksLikeCode(content_accumulator.items[0..], allocator)) {
-                    try lint_problems.append(.{
+                    try lint_problems.append(allocator, .{
                         .rule_id = rule.rule_id,
                         .severity = config.severity,
                         .start = .startOfComment(doc.comments, first_comment.?),
@@ -84,12 +84,12 @@ fn run(
                     });
                 }
 
-                content_accumulator.clearAndFree();
+                content_accumulator.clearAndFree(allocator);
                 first_comment = null;
                 last_comment = null;
             }
-            try content_accumulator.appendSlice(contents);
-            try content_accumulator.append('\n');
+            try content_accumulator.appendSlice(allocator, contents);
+            try content_accumulator.append(allocator, '\n');
         }
 
         first_comment = first_comment orelse comment;
@@ -98,7 +98,7 @@ fn run(
 
     if (content_accumulator.items.len > 0) {
         if (try looksLikeCode(content_accumulator.items[0..], allocator)) {
-            try lint_problems.append(.{
+            try lint_problems.append(allocator, .{
                 .rule_id = rule.rule_id,
                 .severity = config.severity,
                 .start = .startOfComment(doc.comments, first_comment.?),
@@ -107,7 +107,7 @@ fn run(
             });
         }
 
-        content_accumulator.clearAndFree();
+        content_accumulator.clearAndFree(allocator);
         first_comment = null;
         last_comment = null;
     }
@@ -116,7 +116,7 @@ fn run(
         try zlinter.results.LintResult.init(
             allocator,
             doc.path,
-            try lint_problems.toOwnedSlice(),
+            try lint_problems.toOwnedSlice(allocator),
         )
     else
         null;

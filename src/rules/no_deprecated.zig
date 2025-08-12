@@ -31,7 +31,7 @@ fn run(
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
-    var lint_problems = std.ArrayListUnmanaged(zlinter.results.LintProblem).empty;
+    var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
     const handle = doc.handle;
@@ -176,7 +176,7 @@ fn handleIdentifierAccess(
     doc: zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     identifier_token: Ast.TokenIndex,
-    lint_problems: *std.ArrayListUnmanaged(zlinter.results.LintProblem),
+    lint_problems: *shims.ArrayList(zlinter.results.LintProblem),
     config: Config,
 ) !void {
     const handle = doc.handle;
@@ -229,7 +229,7 @@ fn handleEnumLiteral(
     doc: zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     identifier_token: Ast.TokenIndex,
-    lint_problems: *std.ArrayListUnmanaged(zlinter.results.LintProblem),
+    lint_problems: *shims.ArrayList(zlinter.results.LintProblem),
     config: Config,
 ) !void {
     const decl_with_handle = try getSymbolEnumLiteral(
@@ -259,17 +259,17 @@ fn getSymbolEnumLiteral(
 ) error{OutOfMemory}!?zlinter.zls.Analyser.DeclWithHandle {
     std.debug.assert(shims.nodeTag(doc.handle.tree, node) == .enum_literal);
 
-    var ancestors = std.ArrayList(Ast.Node.Index).init(gpa);
-    defer ancestors.deinit();
+    var ancestors = shims.ArrayList(Ast.Node.Index).empty;
+    defer ancestors.deinit(gpa);
 
     var current = node;
-    try ancestors.append(current);
+    try ancestors.append(gpa, current);
 
     var it = doc.nodeAncestorIterator(current);
     while (it.next()) |ancestor| {
         if (NodeIndexShim.init(ancestor).isRoot()) break;
         if (shims.isNodeOverlapping(doc.handle.tree, current, ancestor)) {
-            try ancestors.append(ancestor);
+            try ancestors.append(gpa, ancestor);
             current = ancestor;
         } else {
             break;
@@ -298,7 +298,7 @@ fn handleFieldAccess(
     doc: zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     identifier_token: Ast.TokenIndex,
-    lint_problems: *std.ArrayListUnmanaged(zlinter.results.LintProblem),
+    lint_problems: *shims.ArrayList(zlinter.results.LintProblem),
     config: Config,
 ) !void {
     const handle = doc.handle;
