@@ -18,6 +18,15 @@ pub fn loadFakeDocument(ctx: *LintContext, dir: std.fs.Dir, file_name: []const u
     return (try ctx.loadDocument(real_path, ctx.gpa, arena)).?;
 }
 
+pub fn writeFile(dir: std.fs.Dir, file_name: []const u8, contents: []const u8) !void {
+    assertTestOnly();
+
+    const file = try dir.createFile(file_name, .{});
+    defer file.close();
+
+    try file.writeAll(contents);
+}
+
 pub const paths = struct {
     /// Comptime join parts using the systems path separator (tests only)
     pub fn join(comptime parts: []const []const u8) []const u8 {
