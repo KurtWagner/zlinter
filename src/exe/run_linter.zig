@@ -592,10 +592,21 @@ fn allocAstErrorMsg(
     tree: Ast,
     err: Ast.Error,
     allocator: std.mem.Allocator,
-) error{ OutOfMemory, WriteFailed }![]const u8 {
-    var aw = std.io.Writer.Allocating.init(allocator);
-    try tree.renderError(err, &aw.writer);
-    return aw.toOwnedSlice();
+) ![]const u8 {
+    switch (zlinter.version.zig) {
+        .@"0.14" => {
+            var error_message = shims.ArrayList(u8).empty;
+            defer error_message.deinit(allocator);
+
+            try tree.renderError(err, error_message.writer(allocator));
+            return error_message.toOwnedSlice(allocator);
+        },
+        .@"0.15" => {
+            var aw = std.io.Writer.Allocating.init(allocator);
+            try tree.renderError(err, &aw.writer);
+            return aw.toOwnedSlice();
+        },
+    }
 }
 
 // TODO: Move buildExcludesIndex and buildFilterIndex to lib and write unit tests
