@@ -56,6 +56,25 @@ pub const Config = struct {
         .style = .title_case,
         .severity = .@"error",
     },
+
+    /// Minimum length of a declarations name. To exclude names from this check
+    /// see `decl_name_exclude_len` option. Set to `.off` to disable this
+    /// check.
+    decl_name_min_len: zlinter.rules.LenAndSeverity = .{
+        .len = 3,
+        .severity = .warning,
+    },
+
+    /// Maximum length of an `error` field name. To exclude names from this check
+    /// see `decl_name_exclude_len` option. Set to `.off` to disable this
+    /// check.
+    decl_name_max_len: zlinter.rules.LenAndSeverity = .{
+        .len = 30,
+        .severity = .warning,
+    },
+
+    /// Exclude these declaration names from min and max declaration name checks.
+    decl_name_exclude_len: []const []const u8 = &.{ "x", "y", "z", "i", "b" },
 };
 
 /// Builds and returns the declaration_naming rule.
@@ -86,6 +105,7 @@ fn run(
     nodes: while (node.index < tree.nodes.len) : (node.index += 1) {
         const var_decl = tree.fullVarDecl(node.toNodeIndex()) orelse continue :nodes;
 
+        // Check whether name should be excluded from checks:
         if (config.exclude_extern and var_decl.extern_export_token != null) {
             const token_tag = tree.tokens.items(.tag)[var_decl.extern_export_token.?];
             if (token_tag == .keyword_extern) continue :nodes;
@@ -110,6 +130,34 @@ fn run(
             }
         }
 
+        // Check name length:
+        if (config.decl_name_min_len.severity != .off and name.len < config.decl_name_min_len.len) {
+            for (config.decl_name_exclude_len) |exclude_name| {
+                if (std.mem.eql(u8, name, exclude_name)) continue :nodes;
+            }
+
+            try lint_problems.append(allocator, .{
+                .rule_id = rule.rule_id,
+                .severity = config.decl_name_min_len.severity,
+                .start = .startOfToken(tree, name_token),
+                .end = .endOfToken(tree, name_token),
+                .message = try std.fmt.allocPrint(allocator, "Declaration names should have a length greater or equal to {d}", .{config.decl_name_min_len.len}),
+            });
+        } else if (config.decl_name_max_len.severity != .off and name.len > config.decl_name_max_len.len) {
+            for (config.decl_name_exclude_len) |exclude_name| {
+                if (std.mem.eql(u8, name, exclude_name)) continue :nodes;
+            }
+
+            try lint_problems.append(allocator, .{
+                .rule_id = rule.rule_id,
+                .severity = config.decl_name_max_len.severity,
+                .start = .startOfToken(tree, name_token),
+                .end = .endOfToken(tree, name_token),
+                .message = try std.fmt.allocPrint(allocator, "Declaration names should have a length less or equal to {d}", .{config.decl_name_max_len.len}),
+            });
+        }
+
+        // Check name style:
         const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const var_desc: []const u8 =
             switch (type_kind) {
                 .fn_returns_type => .{ config.decl_that_is_type_fn, "Type function" },
@@ -199,8 +247,6 @@ test "declaration_naming" {
                     .column = 14,
                 },
                 .message = "Constant declaration should be snake_case",
-                .disabled_by_comment = false,
-                .fix = null,
             },
             .{
                 .rule_id = "declaration_naming",
@@ -216,8 +262,6 @@ test "declaration_naming" {
                     .column = 12,
                 },
                 .message = "Variable declaration should be snake_case",
-                .disabled_by_comment = false,
-                .fix = null,
             },
             .{
                 .rule_id = "declaration_naming",
@@ -233,8 +277,6 @@ test "declaration_naming" {
                     .column = 8,
                 },
                 .message = "Type declaration should be TitleCase",
-                .disabled_by_comment = false,
-                .fix = null,
             },
             .{
                 .rule_id = "declaration_naming",
@@ -250,8 +292,6 @@ test "declaration_naming" {
                     .column = 17,
                 },
                 .message = "Namespace declaration should be snake_case",
-                .disabled_by_comment = false,
-                .fix = null,
             },
             .{
                 .rule_id = "declaration_naming",
@@ -267,8 +307,6 @@ test "declaration_naming" {
                     .column = 16,
                 },
                 .message = "Function declaration should be camelCase",
-                .disabled_by_comment = false,
-                .fix = null,
             },
             .{
                 .rule_id = "declaration_naming",
@@ -284,8 +322,6 @@ test "declaration_naming" {
                     .column = 14,
                 },
                 .message = "Type function declaration should be TitleCase",
-                .disabled_by_comment = false,
-                .fix = null,
             },
         },
         result.problems,
@@ -382,6 +418,63 @@ test "extern excluded" {
         defer if (result) |*r| r.deinit(std.testing.allocator);
         try std.testing.expectEqual(null, result);
     }
+}
+
+test "name lengths" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const s = 1;
+        \\ const b = 2;
+        \\ const oo = 3;
+        \\ const ooo = 4;
+        \\ const bbbb = 5;
+        \\ const ssss = 6;
+    ,
+        Config{
+            .decl_name_max_len = .{
+                .severity = .warning,
+                .len = 3,
+            },
+            .decl_name_min_len = .{
+                .severity = .@"error",
+                .len = 2,
+            },
+            .decl_name_exclude_len = &.{ "s", "ssss" },
+        },
+        &.{
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "b",
+                .message = "Declaration names should have a length greater or equal to 2",
+            },
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .warning,
+                .slice = "bbbb",
+                .message = "Declaration names should have a length less or equal to 3",
+            },
+        },
+    );
+
+    // Checks are off:
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const b = 1;
+        \\ const bbbb = 2;
+    ,
+        Config{
+            .decl_name_max_len = .{
+                .severity = .off,
+                .len = 3,
+            },
+            .decl_name_min_len = .{
+                .severity = .off,
+                .len = 2,
+            },
+        },
+        &.{},
+    );
 }
 
 const std = @import("std");
