@@ -61,6 +61,24 @@ Enforces that variable declaration names use consistent naming. For example,
 
   * **Default:** `.{ .style = .title_case, .severity = .@"error", }`
 
+* `decl_name_min_len`
+
+  * Minimum length of a declarations name. To exclude names from this check see `decl_name_exclude_len` option. Set to `.off` to disable this check.
+
+  * **Default:** `.{ .len = 3, .severity = .warning, }`
+
+* `decl_name_max_len`
+
+  * Maximum length of an `error` field name. To exclude names from this check see `decl_name_exclude_len` option. Set to `.off` to disable this check.
+
+  * **Default:** `.{ .len = 30, .severity = .warning, }`
+
+* `decl_name_exclude_len`
+
+  * Exclude these declaration names from min and max declaration name checks.
+
+  * **Default:** `&.{ "x", "y", "z", "i", "b" }`
+
 ## `field_naming`
 
 Enforces a consistent naming convention for fields in containers. For

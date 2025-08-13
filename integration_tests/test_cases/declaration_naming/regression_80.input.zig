@@ -1,6 +1,6 @@
 const SomePackedType = packed struct(u32) {
-    a: u16 = 0,
-    b: u16 = 0,
+    abc: u16 = 0,
+    bcd: u16 = 0,
 };
 const GoodType = @typeInfo(SomePackedType).@"struct".backing_integer.?;
 const badType = @typeInfo(SomePackedType).@"struct".backing_integer.?;
