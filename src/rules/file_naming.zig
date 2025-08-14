@@ -35,39 +35,37 @@ fn run(
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
-    const error_message: ?[]const u8, const severity: ?zlinter.rules.LintProblemSeverity = msg: {
+    const message, const severity = msg: {
         const basename = std.fs.path.basename(doc.path);
         if (shims.isRootImplicitStruct(doc.handle.tree)) {
-            if (!config.file_struct.style.check(basename)) {
+            if (config.file_struct.severity != .off and !config.file_struct.style.check(basename)) {
                 break :msg .{
                     try std.fmt.allocPrint(allocator, "File is struct so name should be {s}", .{config.file_struct.style.name()}),
                     config.file_struct.severity,
                 };
             }
-        } else if (!config.file_namespace.style.check(basename)) {
+        } else if (config.file_namespace.severity != .off and !config.file_namespace.style.check(basename)) {
             break :msg .{
                 try std.fmt.allocPrint(allocator, "File is namespace so name should be {s}", .{config.file_namespace.style.name()}),
-                config.file_struct.severity,
+                config.file_namespace.severity,
             };
         }
-        break :msg .{ null, null };
+        return null;
     };
 
-    if (error_message) |message| {
-        var lint_problems = try allocator.alloc(zlinter.results.LintProblem, 1);
-        lint_problems[0] = .{
-            .severity = severity.?,
-            .rule_id = rule.rule_id,
-            .start = .zero,
-            .end = .zero,
-            .message = message,
-        };
-        return try zlinter.results.LintResult.init(
-            allocator,
-            doc.path,
-            lint_problems,
-        );
-    } else return null;
+    var lint_problems = try allocator.alloc(zlinter.results.LintProblem, 1);
+    lint_problems[0] = .{
+        .severity = severity,
+        .rule_id = rule.rule_id,
+        .start = .zero,
+        .end = .zero,
+        .message = message,
+    };
+    return try zlinter.results.LintResult.init(
+        allocator,
+        doc.path,
+        lint_problems,
+    );
 }
 
 // ----------------------------------------------------------------------------
@@ -76,6 +74,87 @@ fn run(
 
 test {
     std.testing.refAllDecls(@This());
+}
+
+test "severity" {
+    inline for (&.{
+        zlinter.rules.LintProblemSeverity.@"error",
+        zlinter.rules.LintProblemSeverity.warning,
+    }) |severity| {
+        // Implicit struct file:
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
+            \\ field_a: u32
+        ,
+            .{ .filename = zlinter.testing.paths.posix("snake_case.zig") },
+            Config{
+                .file_struct = .{
+                    .style = .title_case,
+                    .severity = severity,
+                },
+            },
+            &.{.{
+                .rule_id = "file_naming",
+                .severity = severity,
+                .slice = "",
+                .message = "File is struct so name should be TitleCase",
+            }},
+        );
+
+        // namespace struct file:
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
+            \\ pub const a = 1;
+        ,
+            .{ .filename = zlinter.testing.paths.posix("TitleCase.zig") },
+            Config{
+                .file_namespace = .{
+                    .style = .snake_case,
+                    .severity = severity,
+                },
+            },
+            &.{.{
+                .rule_id = "file_naming",
+                .severity = severity,
+                .slice = "",
+                .message = "File is namespace so name should be snake_case",
+            }},
+        );
+    }
+    // Off:
+    {
+        const severity: zlinter.rules.LintProblemSeverity = .off;
+
+        // Implicit struct file:
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
+            \\ field_a: u32
+        ,
+            .{ .filename = zlinter.testing.paths.posix("snake_case.zig") },
+            Config{
+                .file_struct = .{
+                    .style = .title_case,
+                    .severity = severity,
+                },
+            },
+            &.{},
+        );
+
+        // namespace struct file:
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
+            \\ pub const a = 1;
+        ,
+            .{ .filename = zlinter.testing.paths.posix("TitleCase.zig") },
+            Config{
+                .file_namespace = .{
+                    .style = .title_case,
+                    .severity = severity,
+                },
+            },
+            &.{},
+        );
+    }
 }
 
 test "good cases" {

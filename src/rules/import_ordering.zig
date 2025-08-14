@@ -294,6 +294,7 @@ test "order" {
         \\ const b = @import("b");
         \\ const c = @import("c");
     ,
+        .{},
         Config{ .order = .alphabetical_ascending },
         &.{},
     );
@@ -304,6 +305,7 @@ test "order" {
         \\ const b = @import("b");
         \\ const c = @import("c");
     ,
+        .{},
         Config{
             .order = .alphabetical_descending,
             .allow_line_separated_chunks = false,
@@ -336,6 +338,7 @@ test "order" {
         \\ const c = @import("c");
         \\ const b = @import("b");
     ,
+        .{},
         Config{ .order = .alphabetical_ascending, .severity = .@"error" },
         &.{.{
             .rule_id = "import_ordering",
@@ -364,6 +367,7 @@ test "order" {
         \\ const b = @import("b");
         \\ const d = @import("d");
     ,
+        .{},
         Config{ .order = .alphabetical_ascending },
         &.{},
     );
@@ -376,6 +380,7 @@ test "order" {
         \\ const d = @import("d");
         \\ const c = @import("c");
     ,
+        .{},
         Config{ .order = .alphabetical_ascending },
         &.{
             .{
@@ -405,6 +410,7 @@ test "order" {
         \\ );
         \\ const a = @import("a");
     ,
+        .{},
         Config{ .order = .alphabetical_ascending },
         &.{
             .{
@@ -444,6 +450,7 @@ test "order" {
         \\   const a_main = @import("a");
         \\ }
     ,
+        .{},
         Config{ .order = .alphabetical_ascending },
         &.{
             .{
@@ -508,6 +515,7 @@ test "allow_line_separated_chunks" {
     try zlinter.testing.testRunRule(
         buildRule(.{}),
         "",
+        .{},
         Config{ .allow_line_separated_chunks = true },
         &.{},
     );
@@ -516,6 +524,7 @@ test "allow_line_separated_chunks" {
         buildRule(.{}),
         \\ const a = @import("a");
     ,
+        .{},
         Config{ .allow_line_separated_chunks = true },
         &.{},
     );
@@ -526,6 +535,7 @@ test "allow_line_separated_chunks" {
         \\
         \\ const a = @import("a");
     ,
+        .{},
         Config{ .allow_line_separated_chunks = true },
         &.{},
     );
@@ -538,6 +548,7 @@ test "allow_line_separated_chunks" {
         \\
         \\ const a = @import("a");
     ,
+        .{},
         Config{ .allow_line_separated_chunks = true },
         &.{},
     );
@@ -550,6 +561,7 @@ test "allow_line_separated_chunks" {
         \\
         \\ const a = @import("a");
     ,
+        .{},
         Config{ .allow_line_separated_chunks = false },
         &.{
             .{
@@ -581,6 +593,7 @@ test "allow_line_separated_chunks" {
         \\
         \\ const b = @import("b");
     ,
+        .{},
         Config{ .allow_line_separated_chunks = false, .severity = .@"error" },
         &.{
             .{

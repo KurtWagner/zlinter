@@ -430,6 +430,7 @@ test "name lengths" {
         \\ const bbbb = 5;
         \\ const ssss = 6;
     ,
+        .{},
         Config{
             .decl_name_max_len = .{
                 .severity = .warning,
@@ -463,6 +464,7 @@ test "name lengths" {
         \\ const b = 1;
         \\ const bbbb = 2;
     ,
+        .{},
         Config{
             .decl_name_max_len = .{
                 .severity = .off,

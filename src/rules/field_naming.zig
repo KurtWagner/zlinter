@@ -503,6 +503,7 @@ test "name lengths" {
         \\  abcd: []const u8,
         \\};
     ,
+        .{},
         Config{
             .struct_field_max_len = .{
                 .severity = .warning,
@@ -544,6 +545,7 @@ test "name lengths" {
         \\  []const u8,
         \\};
     ,
+        .{},
         Config{
             .struct_field_max_len = .{
                 .severity = .warning,
@@ -570,6 +572,7 @@ test "name lengths" {
         \\  abcd: []const u8,
         \\};
     ,
+        .{},
         Config{
             .union_field_max_len = .{
                 .severity = .warning,
@@ -614,6 +617,7 @@ test "name lengths" {
         \\  abcd,
         \\};
     ,
+        .{},
         Config{
             .enum_field_max_len = .{
                 .severity = .warning,
@@ -657,6 +661,7 @@ test "name lengths" {
         \\  ADBC,
         \\};
     ,
+        .{},
         Config{ .error_field_max_len = .{
             .severity = .warning,
             .len = 3,
