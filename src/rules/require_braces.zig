@@ -1,3 +1,7 @@
+//! > [!WARNING]
+//! > The `require_braces` rule is still under testing and development. It may
+//! > not work as expected and may change without notice.
+//!
 //! Enforces the use of braces `{}` for the bodies of `if`, `else`, `while`,
 //! and `for` statements.
 //!
@@ -25,27 +29,37 @@
 pub const Config = struct {
     if_statement: RequirementAndSeverity = .{
         .severity = .warning,
-        .requirement = .multiline,
+        .requirement = .multi_line_only,
     },
 
     while_statement: RequirementAndSeverity = .{
         .severity = .off,
-        .requirement = .multiline,
+        .requirement = .multi_line_only,
     },
 
     for_statement: RequirementAndSeverity = .{
         .severity = .warning,
-        .requirement = .multiline,
+        .requirement = .multi_line_only,
     },
 
     catch_statement: RequirementAndSeverity = .{
         .severity = .warning,
-        .requirement = .multiline,
+        .requirement = .multi_line_only,
     },
 
     switch_case_statement: RequirementAndSeverity = .{
         .severity = .off,
-        .requirement = .multiline,
+        .requirement = .multi_line_only,
+    },
+
+    defer_statement: RequirementAndSeverity = .{
+        .severity = .off,
+        .requirement = .multi_line_only,
+    },
+
+    errdefer_statement: RequirementAndSeverity = .{
+        .severity = .off,
+        .requirement = .multi_line_only,
     },
 };
 
@@ -55,13 +69,13 @@ pub const RequirementAndSeverity = struct {
 };
 
 pub const Requirement = enum {
-    /// Use braces all the time
+    /// Require braces all the time.
     all,
     /// Must only use braces when there's multiple statements within a block
-    /// unless block is empty.
-    multi,
-    /// Must use braces when the statement is on a new line
-    multiline,
+    /// unless block is empty. All others scenarios must not use braces.
+    multi_statement_only,
+    /// Must only use braces when the statement **starts** on a new line.
+    multi_line_only,
 };
 
 /// Builds and returns the require_braces rule.
@@ -114,10 +128,13 @@ fn run(
             .@"for" => config.for_statement,
             .switch_case => config.switch_case_statement,
             .@"catch" => config.catch_statement,
+            .@"defer" => config.defer_statement,
+            .@"errdefer" => config.errdefer_statement,
         };
+        if (req_and_severity.severity == .off) continue :nodes;
 
         var expr_nodes_buffer: [2]Ast.Node.Index = undefined;
-        var expr_nodes = std.ArrayListUnmanaged(Ast.Node.Index).initBuffer(&expr_nodes_buffer);
+        var expr_nodes: std.ArrayListUnmanaged(Ast.Node.Index) = .initBuffer(&expr_nodes_buffer);
 
         switch (statement) {
             .@"if" => |info| {
@@ -139,7 +156,9 @@ fn run(
                 }
             },
             .switch_case => |info| expr_nodes.appendAssumeCapacity(info.ast.target_expr),
-            .@"catch" => |block_node| expr_nodes.appendAssumeCapacity(block_node),
+            .@"catch" => |expr_node| expr_nodes.appendAssumeCapacity(expr_node),
+            .@"defer" => |expr_node| expr_nodes.appendAssumeCapacity(expr_node),
+            .@"errdefer" => |expr_node| expr_nodes.appendAssumeCapacity(expr_node),
         }
 
         expr_nodes: for (expr_nodes.items) |expr_node| {
@@ -163,16 +182,12 @@ fn run(
 
             const error_msg = error_msg: {
                 switch (req_and_severity.requirement) {
-                    // Use braces all the time
                     .all => {
                         if (!has_braces) {
                             break :error_msg try allocator.dupe(u8, "Expects braces whether on a single or across multiple lines");
                         }
                     },
-                    // Only use braces when there's multiple statements within a
-                    // block. If there's no block, we assume there's one statement
-                    // i.e., one child.
-                    .multi => {
+                    .multi_statement_only => {
                         if (has_braces) {
                             const children_count = (doc.lineage.items(.children)[expr_node] orelse &.{}).len;
                             if (children_count == 1) {
@@ -180,16 +195,18 @@ fn run(
                             }
                         }
                     },
-                    // Must use braces when the statement is on a new line
-                    .multiline => {
+                    .multi_line_only => {
                         const on_single_line = tree.tokensOnSameLine(first_token, last_token);
                         if (on_single_line) {
                             const children_count = (doc.lineage.items(.children)[expr_node] orelse &.{}).len;
-                            if (has_braces and children_count > 0) {
+                            if (has_braces and children_count > 0) { // We allow empy blocks / no children
                                 break :error_msg try allocator.dupe(u8, "Expects no braces when on a single line");
                             }
                         } else if (!has_braces) {
-                            break :error_msg try allocator.dupe(u8, "Expects braces when over multiple lines");
+                            const starts_on_same_line = tree.tokensOnSameLine(first_token - 1, first_token);
+                            if (!starts_on_same_line) {
+                                break :error_msg try allocator.dupe(u8, "Expects braces when over multiple lines");
+                            }
                         }
                     },
                 }
@@ -221,9 +238,17 @@ const Statement = union(enum) {
     @"while": Ast.full.While,
     @"for": Ast.full.For,
     switch_case: Ast.full.SwitchCase,
+    /// Contains the expression node index (i.e., `catch <expr>`)
     @"catch": Ast.Node.Index,
+    /// Contains the expression node index (i.e., `defer <expr>`)
+    @"defer": Ast.Node.Index,
+    /// Contains the expression node index (i.e., `errdefer <expr>`)
+    @"errdefer": Ast.Node.Index,
 };
 
+/// Returns if, for, while, switch case, defer and errdefer and catch statements
+/// focusing on the expression node attached, which is relevant in whether or not
+/// it's a block enclosed in braces.
 fn fullStatement(tree: Ast, node: Ast.Node.Index) ?Statement {
     return if (tree.fullIf(node)) |ifStatement|
         .{ .@"if" = ifStatement }
@@ -233,15 +258,169 @@ fn fullStatement(tree: Ast, node: Ast.Node.Index) ?Statement {
         .{ .@"for" = forStatement }
     else if (tree.fullSwitchCase(node)) |switchStatement|
         .{ .switch_case = switchStatement }
-    else if (shims.nodeTag(tree, node) == .@"catch")
-        .{
+    else switch (shims.nodeTag(tree, node)) {
+        .@"catch" => .{
             .@"catch" = switch (zlinter.version.zig) {
                 .@"0.14" => shims.nodeData(tree, node).rhs,
                 .@"0.15" => shims.nodeData(tree, node).node_and_node[1],
             },
-        }
-    else
-        null;
+        },
+        .@"defer" => .{
+            .@"defer" = switch (zlinter.version.zig) {
+                .@"0.14" => shims.nodeData(tree, node).rhs,
+                .@"0.15" => shims.nodeData(tree, node).node[0],
+            },
+        },
+        .@"errdefer" => .{
+            .@"errdefer" = switch (zlinter.version.zig) {
+                .@"0.14" => shims.nodeData(tree, node).rhs,
+                .@"0.15" => shims.nodeData(tree, node).node[0],
+            },
+        },
+        else => null,
+    };
+}
+
+test "if statements" {
+    const source =
+        \\ pub fn main() u32 {
+        \\     var a: u32 = 1;
+        \\     if (a == 1) {
+        \\         a = 2;
+        \\     } else if (a == 2)
+        \\         a = 4
+        \\     else switch (mode) {
+        \\         .on => a = 5,
+        \\         else => a = 3,
+        \\     }
+        \\
+        \\     if (a == 2) {
+        \\         a = 3;
+        \\     } else {
+        \\         switch (mode) {
+        \\             .on => a = 5,
+        \\             else => a = 3,
+        \\         }
+        \\     }
+        \\
+        \\     const b = if (a == 3) 10 else 11;
+        \\
+        \\     const c = if (a == 3)
+        \\         10
+        \\     else
+        \\         11;
+        \\
+        \\     return if (b == 10 or c == 11) 12 else 13;
+        \\ }
+    ;
+
+    // if statement with 'all' requirement
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{
+            .if_statement = .{
+                .requirement = .all,
+                .severity = .warning,
+            },
+        },
+        &.{
+            .{
+                .rule_id = "require_braces",
+                .severity = .warning,
+                .slice = "a = 4",
+                .message = "Expects braces whether on a single or across multiple lines",
+            },
+            .{
+                .rule_id = "require_braces",
+                .severity = .warning,
+                .slice =
+                \\switch (mode) {
+                \\         .on => a = 5,
+                \\         else => a = 3,
+                \\     }
+                ,
+                .message = "Expects braces whether on a single or across multiple lines",
+            },
+        },
+    );
+
+    // if statement with 'all' requirement but off
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{
+            .if_statement = .{
+                .requirement = .all,
+                .severity = .off,
+            },
+        },
+        &.{},
+    );
+
+    // if statement with 'multi_line_only' requirement
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{
+            .if_statement = .{
+                .requirement = .multi_line_only,
+                .severity = .@"error",
+            },
+        },
+        &.{},
+    );
+
+    // if statement with 'multi_statement_only' requirement
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{
+            .if_statement = .{
+                .requirement = .multi_statement_only,
+                .severity = .@"error",
+            },
+        },
+        &.{
+            .{
+                .rule_id = "require_braces",
+                .severity = .@"error",
+                .slice =
+                \\{
+                \\         a = 3;
+                \\     }
+                ,
+                .message = "Expects no braces when there's only one statement",
+            },
+            .{
+                .rule_id = "require_braces",
+                .severity = .@"error",
+                .slice =
+                \\{
+                \\         switch (mode) {
+                \\             .on => a = 5,
+                \\             else => a = 3,
+                \\         }
+                \\     }
+                ,
+                .message = "Expects no braces when there's only one statement",
+            },
+            .{
+                .rule_id = "require_braces",
+                .severity = .@"error",
+                .slice =
+                \\{
+                \\         a = 2;
+                \\     }
+                ,
+                .message = "Expects no braces when there's only one statement",
+            },
+        },
+    );
 }
 
 const std = @import("std");

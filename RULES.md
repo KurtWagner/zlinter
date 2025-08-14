@@ -777,6 +777,10 @@ Enforces that container declarations are referenced.
 
 ## `require_braces`
 
+> [!WARNING]
+> The `require_braces` rule is still under testing and development. It may
+> not work as expected and may change without notice.
+
 Enforces the use of braces `{}` for the bodies of `if`, `else`, `while`,
 and `for` statements.
 
@@ -784,8 +788,8 @@ By requiring braces, you avoid ambiguity, make code easier to maintain,
 and prevent unintended logic changes when adding new lines.
 
 If an `if` statement is used as part of a return or assignment it is excluded
-from this rule (braces not required). For example, the following will be ignored
-by this rule.
+from this rule (braces not required). For example, the following two examples
+will be ignored by this rule.
 
 ```zig
 const label = if (x > 10) "over 10" else "under 10";
@@ -802,17 +806,47 @@ else
 
 **Config options:**
 
-* `severity`
+* `if_statement`
 
-  * The severity when require braces problem is found.
+  *
 
-  * **Default:** `.@"error"`
+  * **Default:** `.{ .severity = .warning, .requirement = .multi_line_only, }`
 
-* `requirement`
+* `while_statement`
 
-  * Whether or not to include cases where the condition is on the same line as the expression or to only require when spans multiple lines.
+  *
 
-  * **Default:** `.multiline`
+  * **Default:** `.{ .severity = .off, .requirement = .multi_line_only, }`
+
+* `for_statement`
+
+  *
+
+  * **Default:** `.{ .severity = .warning, .requirement = .multi_line_only, }`
+
+* `catch_statement`
+
+  *
+
+  * **Default:** `.{ .severity = .warning, .requirement = .multi_line_only, }`
+
+* `switch_case_statement`
+
+  *
+
+  * **Default:** `.{ .severity = .off, .requirement = .multi_line_only, }`
+
+* `defer_statement`
+
+  *
+
+  * **Default:** `.{ .severity = .off, .requirement = .multi_line_only, }`
+
+* `errdefer_statement`
+
+  *
+
+  * **Default:** `.{ .severity = .off, .requirement = .multi_line_only, }`
 
 ## `require_doc_comment`
 
