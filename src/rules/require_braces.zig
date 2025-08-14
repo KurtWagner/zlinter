@@ -21,24 +21,46 @@
 //!    "under 20";
 //! ```
 
-// TODO: Consider `catch`
-// TODO: Consider `switch` cases
-
 /// Config for require_braces rule.
 pub const Config = struct {
-    /// The severity when require braces problem is found.
-    severity: zlinter.rules.LintProblemSeverity = .@"error",
+    if_statement: RequirementAndSeverity = .{
+        .severity = .warning,
+        .requirement = .multiline,
+    },
 
-    /// Whether or not to include cases where the condition is on the same
-    /// line as the expression or to only require when spans multiple lines.
-    requirement: enum {
-        /// Use braces all the time
-        all,
-        /// Must only use braces when there's multiple statements within a block
-        multi,
-        /// Must use braces when the statement is on a new line
-        multiline,
-    } = .multiline,
+    while_statement: RequirementAndSeverity = .{
+        .severity = .off,
+        .requirement = .multiline,
+    },
+
+    for_statement: RequirementAndSeverity = .{
+        .severity = .warning,
+        .requirement = .multiline,
+    },
+
+    catch_statement: RequirementAndSeverity = .{
+        .severity = .warning,
+        .requirement = .multiline,
+    },
+
+    switch_case_statement: RequirementAndSeverity = .{
+        .severity = .off,
+        .requirement = .multiline,
+    },
+};
+
+pub const RequirementAndSeverity = struct {
+    severity: zlinter.rules.LintProblemSeverity,
+    requirement: Requirement,
+};
+
+pub const Requirement = enum {
+    /// Use braces all the time
+    all,
+    /// Must only use braces when there's multiple statements within a block
+    multi,
+    /// Must use braces when the statement is on a new line
+    multiline,
 };
 
 /// Builds and returns the require_braces rule.
@@ -87,15 +109,46 @@ fn run(
 
         var nodes: [2]Ast.Node.Index = undefined;
 
+        const req_and_severity: RequirementAndSeverity = switch (statement) {
+            .@"if" => config.if_statement,
+            .@"while" => config.while_statement,
+            .@"for" => config.for_statement,
+            .switch_case => config.switch_case_statement,
+            .@"catch" => config.catch_statement,
+        };
+
         switch (statement) {
             .@"if" => |info| {
                 nodes[0] = info.ast.then_expr;
+                if (shims.NodeIndexShim.initOptional(info.ast.else_expr)) |n| {
+                    nodes[1] = n.toNodeIndex();
+
+                    std.debug.print(
+                        "ELSE {} '{s}'\n",
+                        .{
+                            shims.nodeTag(tree, nodes[1]),
+                            tree.getNodeSource(nodes[1]),
+                        },
+                    );
+                }
             },
             .@"while" => |info| {
                 nodes[0] = info.ast.then_expr;
+                if (shims.NodeIndexShim.initOptional(info.ast.else_expr)) |n| {
+                    nodes[1] = n.toNodeIndex();
+                }
             },
             .@"for" => |info| {
                 nodes[0] = info.ast.then_expr;
+                if (shims.NodeIndexShim.initOptional(info.ast.else_expr)) |n| {
+                    nodes[1] = n.toNodeIndex();
+                }
+            },
+            .switch_case => |info| {
+                nodes[0] = info.ast.target_expr;
+            },
+            .@"catch" => |block_node| {
+                nodes[0] = block_node;
             },
         }
 
@@ -104,13 +157,13 @@ fn run(
 
         const first_token_tag = shims.tokenTag(tree, first_token);
 
-        switch (config.requirement) {
+        switch (req_and_severity.requirement) {
             // Use braces all the time
             .all => {
                 if (first_token_tag != .l_brace) {
                     try lint_problems.append(allocator, .{
                         .rule_id = rule.rule_id,
-                        .severity = config.severity,
+                        .severity = req_and_severity.severity,
                         .start = .startOfToken(tree, first_token),
                         .end = .endOfToken(tree, last_token),
                         .message = try allocator.dupe(u8, "Requires braces"),
@@ -124,7 +177,7 @@ fn run(
                     if (first_token_tag != .l_brace) {
                         try lint_problems.append(allocator, .{
                             .rule_id = rule.rule_id,
-                            .severity = config.severity,
+                            .severity = req_and_severity.severity,
                             .start = .startOfToken(tree, first_token),
                             .end = .endOfToken(tree, last_token),
                             .message = try allocator.dupe(u8, "Requires braces"),
@@ -133,7 +186,7 @@ fn run(
                 } else if (first_token_tag == .l_brace) {
                     try lint_problems.append(allocator, .{
                         .rule_id = rule.rule_id,
-                        .severity = config.severity,
+                        .severity = req_and_severity.severity,
                         .start = .startOfToken(tree, first_token),
                         .end = .endOfToken(tree, last_token),
                         .message = try allocator.dupe(u8, "Requires no braces"),
@@ -146,7 +199,7 @@ fn run(
                     if (first_token_tag == .l_brace) {
                         try lint_problems.append(allocator, .{
                             .rule_id = rule.rule_id,
-                            .severity = config.severity,
+                            .severity = req_and_severity.severity,
                             .start = .startOfToken(tree, first_token),
                             .end = .endOfToken(tree, last_token),
                             .message = try allocator.dupe(u8, "Requires no braces"),
@@ -155,7 +208,7 @@ fn run(
                 } else if (first_token_tag != .l_brace) {
                     try lint_problems.append(allocator, .{
                         .rule_id = rule.rule_id,
-                        .severity = config.severity,
+                        .severity = req_and_severity.severity,
                         .start = .startOfToken(tree, first_token),
                         .end = .endOfToken(tree, last_token),
                         .message = try allocator.dupe(u8, "Requires braces"),
@@ -179,6 +232,8 @@ const Statement = union(enum) {
     @"if": Ast.full.If,
     @"while": Ast.full.While,
     @"for": Ast.full.For,
+    switch_case: Ast.full.SwitchCase,
+    @"catch": Ast.Node.Index,
 };
 
 fn fullStatement(tree: Ast, node: Ast.Node.Index) ?Statement {
@@ -188,6 +243,15 @@ fn fullStatement(tree: Ast, node: Ast.Node.Index) ?Statement {
         .{ .@"while" = whileStatement }
     else if (tree.fullFor(node)) |forStatement|
         .{ .@"for" = forStatement }
+    else if (tree.fullSwitchCase(node)) |switchStatement|
+        .{ .switch_case = switchStatement }
+    else if (shims.nodeTag(tree, node) == .@"catch")
+        .{
+            .@"catch" = switch (zlinter.version.zig) {
+                .@"0.14" => shims.nodeData(tree, node).rhs,
+                .@"0.15" => shims.nodeData(tree, node).node_and_node[1],
+            },
+        }
     else
         null;
 }
