@@ -333,6 +333,7 @@ pub const LintProblem = struct {
     }
 
     pub fn sliceSource(self: Self, source: [:0]const u8) []const u8 {
+        if (self.start.byte_offset == 0 and self.start.byte_offset == self.end.byte_offset) return "";
         return source[self.start.byte_offset .. self.end.byte_offset + 1];
     }
 

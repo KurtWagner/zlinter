@@ -308,13 +308,16 @@ pub const LintProblemExpectation = struct {
 pub fn testRunRule(
     rule: LintRule,
     source: [:0]const u8,
+    options: struct {
+        filename: []const u8 = "path/to/test.zig",
+    },
     config: anytype,
     expected: []const LintProblemExpectation,
 ) !void {
     var local_config = config;
     var result = (try runRule(
         rule,
-        paths.posix("path/to/test.zig"),
+        options.filename,
         source,
         .{ .config = &local_config },
     ));
