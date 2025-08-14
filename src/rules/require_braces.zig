@@ -58,6 +58,7 @@ pub const Requirement = enum {
     /// Use braces all the time
     all,
     /// Must only use braces when there's multiple statements within a block
+    /// unless block is empty.
     multi,
     /// Must use braces when the statement is on a new line
     multiline,
@@ -107,8 +108,6 @@ fn run(
             else => {},
         }
 
-        var nodes: [2]Ast.Node.Index = undefined;
-
         const req_and_severity: RequirementAndSeverity = switch (statement) {
             .@"if" => config.if_statement,
             .@"while" => config.while_statement,
@@ -117,104 +116,93 @@ fn run(
             .@"catch" => config.catch_statement,
         };
 
+        var expr_nodes_buffer: [2]Ast.Node.Index = undefined;
+        var expr_nodes = std.ArrayListUnmanaged(Ast.Node.Index).initBuffer(&expr_nodes_buffer);
+
         switch (statement) {
             .@"if" => |info| {
-                nodes[0] = info.ast.then_expr;
+                expr_nodes.appendAssumeCapacity(info.ast.then_expr);
                 if (shims.NodeIndexShim.initOptional(info.ast.else_expr)) |n| {
-                    nodes[1] = n.toNodeIndex();
-
-                    std.debug.print(
-                        "ELSE {} '{s}'\n",
-                        .{
-                            shims.nodeTag(tree, nodes[1]),
-                            tree.getNodeSource(nodes[1]),
-                        },
-                    );
+                    expr_nodes.appendAssumeCapacity(n.toNodeIndex());
                 }
             },
             .@"while" => |info| {
-                nodes[0] = info.ast.then_expr;
+                expr_nodes.appendAssumeCapacity(info.ast.then_expr);
                 if (shims.NodeIndexShim.initOptional(info.ast.else_expr)) |n| {
-                    nodes[1] = n.toNodeIndex();
+                    expr_nodes.appendAssumeCapacity(n.toNodeIndex());
                 }
             },
             .@"for" => |info| {
-                nodes[0] = info.ast.then_expr;
+                expr_nodes.appendAssumeCapacity(info.ast.then_expr);
                 if (shims.NodeIndexShim.initOptional(info.ast.else_expr)) |n| {
-                    nodes[1] = n.toNodeIndex();
+                    expr_nodes.appendAssumeCapacity(n.toNodeIndex());
                 }
             },
-            .switch_case => |info| {
-                nodes[0] = info.ast.target_expr;
-            },
-            .@"catch" => |block_node| {
-                nodes[0] = block_node;
-            },
+            .switch_case => |info| expr_nodes.appendAssumeCapacity(info.ast.target_expr),
+            .@"catch" => |block_node| expr_nodes.appendAssumeCapacity(block_node),
         }
 
-        const first_token = tree.firstToken(nodes[0]);
-        const last_token = tree.lastToken(nodes[0]);
+        expr_nodes: for (expr_nodes.items) |expr_node| {
+            // Ignore here as it'll be processed in the outer loop.
+            if (fullStatement(tree, expr_node) != null) continue :expr_nodes;
 
-        const first_token_tag = shims.tokenTag(tree, first_token);
+            // If it's not a block we assume it's a single statement (i.e., one
+            // child). Keep in mind a block may have zero statement (i.e., empty).
+            // Which this rule does not care about.
+            const has_braces = switch (shims.nodeTag(tree, expr_node)) {
+                .block,
+                .block_semicolon,
+                .block_two,
+                .block_two_semicolon,
+                => true,
+                else => false,
+            };
 
-        switch (req_and_severity.requirement) {
-            // Use braces all the time
-            .all => {
-                if (first_token_tag != .l_brace) {
-                    try lint_problems.append(allocator, .{
-                        .rule_id = rule.rule_id,
-                        .severity = req_and_severity.severity,
-                        .start = .startOfToken(tree, first_token),
-                        .end = .endOfToken(tree, last_token),
-                        .message = try allocator.dupe(u8, "Requires braces"),
-                    });
+            const first_token = tree.firstToken(expr_node);
+            const last_token = tree.lastToken(expr_node);
+
+            const error_msg = error_msg: {
+                switch (req_and_severity.requirement) {
+                    // Use braces all the time
+                    .all => {
+                        if (!has_braces) {
+                            break :error_msg try allocator.dupe(u8, "Expects braces whether on a single or across multiple lines");
+                        }
+                    },
+                    // Only use braces when there's multiple statements within a
+                    // block. If there's no block, we assume there's one statement
+                    // i.e., one child.
+                    .multi => {
+                        if (has_braces) {
+                            const children_count = (doc.lineage.items(.children)[expr_node] orelse &.{}).len;
+                            if (children_count == 1) {
+                                break :error_msg try allocator.dupe(u8, "Expects no braces when there's only one statement");
+                            }
+                        }
+                    },
+                    // Must use braces when the statement is on a new line
+                    .multiline => {
+                        const on_single_line = tree.tokensOnSameLine(first_token, last_token);
+                        if (on_single_line) {
+                            const children_count = (doc.lineage.items(.children)[expr_node] orelse &.{}).len;
+                            if (has_braces and children_count > 0) {
+                                break :error_msg try allocator.dupe(u8, "Expects no braces when on a single line");
+                            }
+                        } else if (!has_braces) {
+                            break :error_msg try allocator.dupe(u8, "Expects braces when over multiple lines");
+                        }
+                    },
                 }
-            },
-            // Only use braces when there's multiple statements within a block
-            .multi => {
-                const children_count = (doc.lineage.items(.children)[nodes[0]] orelse &.{}).len;
-                if (children_count > 1) {
-                    if (first_token_tag != .l_brace) {
-                        try lint_problems.append(allocator, .{
-                            .rule_id = rule.rule_id,
-                            .severity = req_and_severity.severity,
-                            .start = .startOfToken(tree, first_token),
-                            .end = .endOfToken(tree, last_token),
-                            .message = try allocator.dupe(u8, "Requires braces"),
-                        });
-                    }
-                } else if (first_token_tag == .l_brace) {
-                    try lint_problems.append(allocator, .{
-                        .rule_id = rule.rule_id,
-                        .severity = req_and_severity.severity,
-                        .start = .startOfToken(tree, first_token),
-                        .end = .endOfToken(tree, last_token),
-                        .message = try allocator.dupe(u8, "Requires no braces"),
-                    });
-                }
-            },
-            // Must use braces when the statement is on a new line
-            .multiline => {
-                if (tree.tokensOnSameLine(first_token, last_token)) {
-                    if (first_token_tag == .l_brace) {
-                        try lint_problems.append(allocator, .{
-                            .rule_id = rule.rule_id,
-                            .severity = req_and_severity.severity,
-                            .start = .startOfToken(tree, first_token),
-                            .end = .endOfToken(tree, last_token),
-                            .message = try allocator.dupe(u8, "Requires no braces"),
-                        });
-                    }
-                } else if (first_token_tag != .l_brace) {
-                    try lint_problems.append(allocator, .{
-                        .rule_id = rule.rule_id,
-                        .severity = req_and_severity.severity,
-                        .start = .startOfToken(tree, first_token),
-                        .end = .endOfToken(tree, last_token),
-                        .message = try allocator.dupe(u8, "Requires braces"),
-                    });
-                }
-            },
+                continue :expr_nodes;
+            };
+
+            try lint_problems.append(allocator, .{
+                .rule_id = rule.rule_id,
+                .severity = req_and_severity.severity,
+                .start = .startOfToken(tree, first_token),
+                .end = .endOfToken(tree, last_token),
+                .message = error_msg,
+            });
         }
     }
 
