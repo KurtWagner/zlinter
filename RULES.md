@@ -775,6 +775,45 @@ Enforces that container declarations are referenced.
 
   * **Default:** `.warning`
 
+## `require_braces`
+
+Enforces the use of braces `{}` for the bodies of `if`, `else`, `while`,
+and `for` statements.
+
+By requiring braces, you avoid ambiguity, make code easier to maintain,
+and prevent unintended logic changes when adding new lines.
+
+If an `if` statement is used as part of a return or assignment it is excluded
+from this rule (braces not required). For example, the following will be ignored
+by this rule.
+
+```zig
+const label = if (x > 10) "over 10" else "under 10";
+```
+
+and
+
+```zig
+return if (x > 20)
+   "over 20"
+else
+   "under 20";
+```
+
+**Config options:**
+
+* `severity`
+
+  * The severity when require braces problem is found.
+
+  * **Default:** `.@"error"`
+
+* `requirement`
+
+  * Whether or not to include cases where the condition is on the same line as the expression or to only require when spans multiple lines.
+
+  * **Default:** `.multiline`
+
 ## `require_doc_comment`
 
 Require doc comments for all public functions, types, and constants.
