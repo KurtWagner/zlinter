@@ -76,44 +76,35 @@ test "no_orelse_unreachable" {
         \\const c = d.?;
         \\const e = f orelse 1;
     ;
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/my_file.zig"),
-        source,
-        .{},
-    )).?;
-    defer result.deinit(std.testing.allocator);
 
-    try std.testing.expectStringEndsWith(
-        result.file_path,
-        zlinter.testing.paths.posix("path/to/my_file.zig"),
-    );
-
-    inline for (&.{"b orelse unreachable;"}, 0..) |slice, i| {
-        try std.testing.expectEqualStrings(slice, result.problems[i].sliceSource(source));
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            rule,
+            source,
+            .{},
+            Config{
+                .severity = severity,
+            },
+            &.{
+                .{
+                    .rule_id = "no_orelse_unreachable",
+                    .severity = severity,
+                    .slice = "b orelse unreachable;",
+                    .message = "Prefer `.?` over `orelse unreachable`",
+                },
+            },
+        );
     }
 
-    try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.results.LintProblem{
-            .{
-                .rule_id = "no_orelse_unreachable",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 10,
-                    .line = 0,
-                    .column = 10,
-                },
-                .end = .{
-                    .byte_offset = 30,
-                    .line = 0,
-                    .column = 30,
-                },
-                .message = "Prefer `.?` over `orelse unreachable`",
-                .disabled_by_comment = false,
-                .fix = null,
-            },
+    // Off:
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{
+            .severity = .off,
         },
-        result.problems,
+        &.{},
     );
 }
 
