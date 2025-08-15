@@ -202,9 +202,7 @@ test "no_panic" {
     std.testing.refAllDecls(@This());
 
     const rule = buildRule(.{});
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/panic.zig"),
+    const source =
         \\pub fn main() void {
         \\  @panic("Main not implemented");
         \\}
@@ -212,37 +210,38 @@ test "no_panic" {
         \\test {
         \\  @panic("test not implemented");
         \\}
-    ,
-        .{},
-    )).?;
-    defer result.deinit(std.testing.allocator);
+    ;
 
-    try std.testing.expectStringEndsWith(
-        result.file_path,
-        zlinter.testing.paths.posix("path/to/panic.zig"),
-    );
-
-    try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.results.LintProblem{
-            .{
-                .rule_id = "no_panic",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 23,
-                    .line = 1,
-                    .column = 2,
-                },
-                .end = .{
-                    .byte_offset = 53,
-                    .line = 1,
-                    .column = 32,
-                },
-                .message = "`@panic` forcibly stops the program at runtime and should be avoided",
-                .disabled_by_comment = false,
-                .fix = null,
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            rule,
+            source,
+            .{},
+            Config{
+                .severity = severity,
             },
+            &.{
+                .{
+                    .rule_id = "no_panic",
+                    .severity = severity,
+                    .slice =
+                    \\@panic("Main not implemented");
+                    ,
+                    .message = "`@panic` forcibly stops the program at runtime and should be avoided",
+                },
+            },
+        );
+    }
+
+    // Off:
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{
+            .severity = .off,
         },
-        result.problems,
+        &.{},
     );
 }
 

@@ -165,67 +165,36 @@ test "require_doc_comment - public" {
     ;
 
     inline for (&.{ .warning, .@"error" }) |severity| {
-        var config = Config{ .public_severity = severity };
-        var result = (try zlinter.testing.runRule(
+        try zlinter.testing.testRunRule(
             rule,
-            zlinter.testing.paths.posix("path/to/doc_comments.zig"),
             source,
-            .{ .config = &config },
-        )).?;
-        defer result.deinit(std.testing.allocator);
-
-        try std.testing.expectStringEndsWith(
-            result.file_path,
-            zlinter.testing.paths.posix("path/to/doc_comments.zig"),
-        );
-
-        try zlinter.testing.expectProblemsEqual(
-            &[_]zlinter.results.LintProblem{
+            .{},
+            Config{ .public_severity = severity },
+            &.{
                 .{
                     .rule_id = "require_doc_comment",
                     .severity = severity,
-                    .start = .{
-                        .byte_offset = 74,
-                        .line = 7,
-                        .column = 0,
-                    },
-                    .end = .{
-                        .byte_offset = 87,
-                        .line = 7,
-                        .column = 13,
-                    },
+                    .slice = "pub const name",
                     .message = "Public declaration is missing a doc comment",
                 },
                 .{
                     .rule_id = "require_doc_comment",
                     .severity = severity,
-                    .start = .{
-                        .byte_offset = 0,
-                        .line = 0,
-                        .column = 0,
-                    },
-                    .end = .{
-                        .byte_offset = 19,
-                        .line = 0,
-                        .column = 19,
-                    },
+                    .slice = "pub fn noDoc() void ",
                     .message = "Public function is missing a doc comment",
                 },
             },
-            result.problems,
         );
     }
-    { // off
-        var config = Config{ .public_severity = .off };
-        var result = (try zlinter.testing.runRule(
-            rule,
-            zlinter.testing.paths.posix("path/to/doc_comments.zig"),
-            source,
-            .{ .config = &config },
-        ));
-        defer if (result) |*r| r.deinit(std.testing.allocator);
-        try std.testing.expectEqual(null, result);
-    }
+
+    // off
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .public_severity = .off },
+        &.{},
+    );
 }
 
 test "require_doc_comment - private" {
@@ -245,67 +214,35 @@ test "require_doc_comment - private" {
     ;
 
     inline for (&.{ .warning, .@"error" }) |severity| {
-        var config = Config{ .private_severity = severity };
-        var result = (try zlinter.testing.runRule(
+        try zlinter.testing.testRunRule(
             rule,
-            zlinter.testing.paths.posix("path/to/doc_comments.zig"),
             source,
-            .{ .config = &config },
-        )).?;
-        defer result.deinit(std.testing.allocator);
-
-        try std.testing.expectStringEndsWith(
-            result.file_path,
-            zlinter.testing.paths.posix("path/to/doc_comments.zig"),
-        );
-
-        try zlinter.testing.expectProblemsEqual(
-            &[_]zlinter.results.LintProblem{
+            .{},
+            Config{ .private_severity = severity },
+            &.{
                 .{
                     .rule_id = "require_doc_comment",
                     .severity = severity,
-                    .start = .{
-                        .byte_offset = 66,
-                        .line = 7,
-                        .column = 0,
-                    },
-                    .end = .{
-                        .byte_offset = 75,
-                        .line = 7,
-                        .column = 9,
-                    },
+                    .slice = "const name",
                     .message = "Private declaration is missing a doc comment",
                 },
                 .{
                     .rule_id = "require_doc_comment",
                     .severity = severity,
-                    .start = .{
-                        .byte_offset = 0,
-                        .line = 0,
-                        .column = 0,
-                    },
-                    .end = .{
-                        .byte_offset = 15,
-                        .line = 0,
-                        .column = 15,
-                    },
+                    .slice = "fn noDoc() void ",
                     .message = "Private function is missing a doc comment",
                 },
             },
-            result.problems,
         );
     }
-    { // off
-        var config = Config{ .private_severity = .off };
-        var result = (try zlinter.testing.runRule(
-            rule,
-            zlinter.testing.paths.posix("path/to/doc_comments.zig"),
-            source,
-            .{ .config = &config },
-        ));
-        defer if (result) |*r| r.deinit(std.testing.allocator);
-        try std.testing.expectEqual(null, result);
-    }
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .private_severity = .off },
+        &.{},
+    );
 }
 
 test "require_doc_comment - file" {
@@ -315,52 +252,29 @@ test "require_doc_comment - file" {
     ;
 
     inline for (&.{ .warning, .@"error" }) |severity| {
-        var config = Config{ .file_severity = severity };
-        var result = (try zlinter.testing.runRule(
+        try zlinter.testing.testRunRule(
             rule,
-            zlinter.testing.paths.posix("path/to/doc_comments.zig"),
             source,
-            .{ .config = &config },
-        )).?;
-        defer result.deinit(std.testing.allocator);
-
-        try std.testing.expectStringEndsWith(
-            result.file_path,
-            zlinter.testing.paths.posix("path/to/doc_comments.zig"),
-        );
-
-        try zlinter.testing.expectProblemsEqual(
-            &[_]zlinter.results.LintProblem{
+            .{},
+            Config{ .file_severity = severity },
+            &.{
                 .{
                     .rule_id = "require_doc_comment",
                     .severity = severity,
-                    .start = .{
-                        .byte_offset = 0,
-                        .line = 0,
-                        .column = 0,
-                    },
-                    .end = .{
-                        .byte_offset = 0,
-                        .line = 0,
-                        .column = 0,
-                    },
+                    .slice = "",
                     .message = "File is missing a doc comment",
                 },
             },
-            result.problems,
         );
     }
-    { // off
-        var config = Config{ .file_severity = .off };
-        var result = (try zlinter.testing.runRule(
-            rule,
-            zlinter.testing.paths.posix("path/to/doc_comments.zig"),
-            source,
-            .{ .config = &config },
-        ));
-        defer if (result) |*r| r.deinit(std.testing.allocator);
-        try std.testing.expectEqual(null, result);
-    }
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .file_severity = .off },
+        &.{},
+    );
 }
 
 const std = @import("std");

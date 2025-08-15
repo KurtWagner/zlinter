@@ -29,6 +29,8 @@ fn run(
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
+    if (config.container_declaration == .off) return null;
+
     var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(allocator);
 
@@ -183,9 +185,7 @@ test "no_unused" {
     std.testing.refAllDecls(@This());
 
     const rule = buildRule(.{});
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/my_file.zig"),
+    const source =
         \\
         \\const a = @import("a");
         \\pub const c = @import("c");
@@ -197,83 +197,69 @@ test "no_unused" {
         \\fn unusedFn() void {
         \\   usedFn();
         \\}
-    ,
+    ;
+
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            rule,
+            source,
+            .{},
+            Config{ .container_declaration = severity },
+            &.{
+                .{
+                    .rule_id = "no_unused",
+                    .severity = severity,
+                    .slice =
+                    \\const a = @import("a");
+                    ,
+                    .message = "Unused declaration",
+                    .fix = .{
+                        .start = 1,
+                        .end = 25,
+                        .text = "",
+                    },
+                },
+                .{
+                    .rule_id = "no_unused",
+                    .severity = severity,
+                    .slice =
+                    \\var Ok = struct {
+                    \\ name: u32,
+                    \\};
+                    ,
+                    .message = "Unused declaration",
+                    .fix = .{
+                        .start = 53,
+                        .end = 86,
+                        .text = "",
+                    },
+                },
+                .{
+                    .rule_id = "no_unused",
+                    .severity = severity,
+                    .slice =
+                    \\fn unusedFn() void {
+                    \\   usedFn();
+                    \\}
+                    ,
+                    .message = "Unused declaration",
+                    .fix = .{
+                        .start = 107,
+                        .end = 142,
+                        .text = "",
+                    },
+                },
+            },
+        );
+    }
+
+    // Off
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
         .{},
-    )).?;
-    defer result.deinit(std.testing.allocator);
-
-    try std.testing.expectStringEndsWith(
-        result.file_path,
-        zlinter.testing.paths.posix("path/to/my_file.zig"),
-    );
-
-    try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.results.LintProblem{
-            .{
-                .rule_id = "no_unused",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 1,
-                    .line = 1,
-                    .column = 0,
-                },
-                .end = .{
-                    .byte_offset = 23,
-                    .line = 1,
-                    .column = 22,
-                },
-                .message = "Unused declaration",
-                .disabled_by_comment = false,
-                .fix = .{
-                    .start = 1,
-                    .end = 25,
-                    .text = "",
-                },
-            },
-            .{
-                .rule_id = "no_unused",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 53,
-                    .line = 3,
-                    .column = 0,
-                },
-                .end = .{
-                    .byte_offset = 84,
-                    .line = 5,
-                    .column = 1,
-                },
-                .message = "Unused declaration",
-                .disabled_by_comment = false,
-                .fix = .{
-                    .start = 53,
-                    .end = 86,
-                    .text = "",
-                },
-            },
-            .{
-                .rule_id = "no_unused",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 107,
-                    .line = 8,
-                    .column = 0,
-                },
-                .end = .{
-                    .byte_offset = 141,
-                    .line = 10,
-                    .column = 0,
-                },
-                .message = "Unused declaration",
-                .disabled_by_comment = false,
-                .fix = .{
-                    .start = 107,
-                    .end = 142,
-                    .text = "",
-                },
-            },
-        },
-        result.problems,
+        Config{ .container_declaration = .off },
+        &.{},
     );
 }
 

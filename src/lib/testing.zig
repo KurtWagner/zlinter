@@ -305,7 +305,7 @@ pub const LintProblemExpectation = struct {
         } else {
             writer.print("\"{s}\"", .{self.slice});
         }
-        writer.print("{s},\n", .{if (has_newline) "\n" else ""});
+        writer.print("{s},\n", .{if (has_newline or has_quote) "\n" else ""});
 
         writer.print("  .message = \"{s}\",\n", .{self.message});
 
