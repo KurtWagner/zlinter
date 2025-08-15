@@ -495,6 +495,8 @@ fn buildStep(
     const zlinter_exe = b.addExecutable(.{
         .name = "zlinter",
         .root_module = exe_module,
+        // TODO: Look into why 0.15 is segfaulting on linux without this:
+        .use_llvm = true,
     });
 
     const zlinter_run = ZlinterRun.create(b, zlinter_exe);
