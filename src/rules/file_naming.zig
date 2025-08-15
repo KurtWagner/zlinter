@@ -158,203 +158,112 @@ test "severity" {
 }
 
 test "good cases" {
-    const rule = buildRule(.{});
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        "pub const hit_points: f32 = 1;",
+        .{ .filename = zlinter.testing.paths.posix("path/to/my_file.zig") },
+        Config{},
+        &.{},
+    );
 
-    {
-        var result = try zlinter.testing.runRule(
-            rule,
-            zlinter.testing.paths.posix("path/to/my_file.zig"),
-            "pub const hit_points: f32 = 1;",
-            .{},
-        );
-        defer {
-            if (result) |*r| r.deinit(std.testing.allocator);
-        }
-    }
-    {
-        var result = try zlinter.testing.runRule(
-            rule,
-            zlinter.testing.paths.posix("path/to/file.zig"),
-            "pub const hit_points: f32 = 1;",
-            .{},
-        );
-        defer {
-            if (result) |*r| r.deinit(std.testing.allocator);
-        }
-    }
-    {
-        var result = try zlinter.testing.runRule(
-            rule,
-            zlinter.testing.paths.posix("path/to/File.zig"),
-            "hit_points: f32,",
-            .{},
-        );
-        defer {
-            if (result) |*r| r.deinit(std.testing.allocator);
-        }
-    }
-    {
-        var result = try zlinter.testing.runRule(
-            rule,
-            zlinter.testing.paths.posix("path/to/MyFile.zig"),
-            "hit_points: f32,",
-            .{},
-        );
-        defer {
-            if (result) |*r| r.deinit(std.testing.allocator);
-        }
-    }
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        "pub const hit_points: f32 = 1;",
+        .{ .filename = zlinter.testing.paths.posix("path/to/file.zig") },
+        Config{},
+        &.{},
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        "hit_points: f32,",
+        .{ .filename = zlinter.testing.paths.posix("path/to/File.zig") },
+        Config{},
+        &.{},
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        "hit_points: f32,",
+        .{ .filename = zlinter.testing.paths.posix("path/to/MyFile.zig") },
+        Config{},
+        &.{},
+    );
 }
 
 test "expects snake_case with TitleCase" {
-    const rule = buildRule(.{});
-
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/File.zig"),
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         "pub const hit_points: f32 = 1;",
-        .{},
-    )).?;
-    defer result.deinit(std.testing.allocator);
-
-    try std.testing.expectStringEndsWith(
-        result.file_path,
-        zlinter.testing.paths.posix("path/to/File.zig"),
-    );
-
-    try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.results.LintProblem{
+        .{
+            .filename = zlinter.testing.paths.posix("path/to/File.zig"),
+        },
+        Config{},
+        &.{
             .{
                 .rule_id = "file_naming",
                 .severity = .@"error",
-                .start = .{
-                    .byte_offset = 0,
-                    .line = 0,
-                    .column = 0,
-                },
-                .end = .{
-                    .byte_offset = 0,
-                    .line = 0,
-                    .column = 0,
-                },
+                .slice = "",
                 .message = "File is namespace so name should be snake_case",
             },
         },
-        result.problems,
     );
 }
 
 test "expects snake_case with camelCase" {
-    const rule = buildRule(.{});
-
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/myFile.zig"),
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         "pub const hit_points: f32 = 1;",
-        .{},
-    )).?;
-    defer result.deinit(std.testing.allocator);
-
-    try std.testing.expectStringEndsWith(
-        result.file_path,
-        zlinter.testing.paths.posix("path/to/myFile.zig"),
-    );
-
-    try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.results.LintProblem{
+        .{
+            .filename = zlinter.testing.paths.posix("path/to/myFile.zig"),
+        },
+        Config{},
+        &.{
             .{
                 .rule_id = "file_naming",
                 .severity = .@"error",
-                .start = .{
-                    .byte_offset = 0,
-                    .line = 0,
-                    .column = 0,
-                },
-                .end = .{
-                    .byte_offset = 0,
-                    .line = 0,
-                    .column = 0,
-                },
+                .slice = "",
                 .message = "File is namespace so name should be snake_case",
             },
         },
-        result.problems,
     );
 }
 
 test "expects TitleCase with snake_case" {
-    const rule = buildRule(.{});
-
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/myFile.zig"),
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         "hit_points: f32,",
-        .{},
-    )).?;
-    defer result.deinit(std.testing.allocator);
-
-    try std.testing.expectStringEndsWith(
-        result.file_path,
-        zlinter.testing.paths.posix("path/to/myFile.zig"),
-    );
-
-    try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.results.LintProblem{
+        .{
+            .filename = zlinter.testing.paths.posix("path/to/myFile.zig"),
+        },
+        Config{ .file_struct = .{ .severity = .warning, .style = .title_case } },
+        &.{
             .{
                 .rule_id = "file_naming",
-                .severity = .@"error",
-                .start = .{
-                    .byte_offset = 0,
-                    .line = 0,
-                    .column = 0,
-                },
-                .end = .{
-                    .byte_offset = 0,
-                    .line = 0,
-                    .column = 0,
-                },
+                .severity = .warning,
+                .slice = "",
                 .message = "File is struct so name should be TitleCase",
             },
         },
-        result.problems,
     );
 }
 
 test "expects TitleCase with under_score" {
-    const rule = buildRule(.{});
-
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/my_file.zig"),
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         "hit_points: f32,",
-        .{},
-    )).?;
-    defer result.deinit(std.testing.allocator);
-
-    try std.testing.expectStringEndsWith(
-        result.file_path,
-        zlinter.testing.paths.posix("path/to/my_file.zig"),
-    );
-
-    try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.results.LintProblem{
+        .{
+            .filename = zlinter.testing.paths.posix("path/to/my_file.zig"),
+        },
+        Config{},
+        &.{
             .{
                 .rule_id = "file_naming",
                 .severity = .@"error",
-                .start = .{
-                    .byte_offset = 0,
-                    .line = 0,
-                    .column = 0,
-                },
-                .end = .{
-                    .byte_offset = 0,
-                    .line = 0,
-                    .column = 0,
-                },
+                .slice = "",
                 .message = "File is struct so name should be TitleCase",
             },
         },
-        result.problems,
     );
 }
 

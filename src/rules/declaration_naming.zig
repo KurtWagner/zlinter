@@ -198,14 +198,13 @@ fn run(
         null;
 }
 
-test "declaration_naming" {
+test {
     std.testing.refAllDecls(@This());
+}
 
-    const rule = buildRule(.{});
-
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/file.zig"),
+test "declaration_naming" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         \\
         \\pub const hit_points: f32 = 1;
         \\const HitPoints: f32 = 1;
@@ -226,197 +225,171 @@ test "declaration_naming" {
         \\}
     ,
         .{},
-    )).?;
-    defer result.deinit(std.testing.allocator);
-
-    try std.testing.expectStringEndsWith(result.file_path, zlinter.testing.paths.posix("path/to/file.zig"));
-
-    try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.results.LintProblem{
+        Config{},
+        &.{
             .{
                 .rule_id = "declaration_naming",
                 .severity = .@"error",
-                .start = .{
-                    .byte_offset = 38,
-                    .line = 2,
-                    .column = 6,
-                },
-                .end = .{
-                    .byte_offset = 46,
-                    .line = 2,
-                    .column = 14,
-                },
+                .slice = "HitPoints",
                 .message = "Constant declaration should be snake_case",
             },
             .{
                 .rule_id = "declaration_naming",
                 .severity = .@"error",
-                .start = .{
-                    .byte_offset = 62,
-                    .line = 3,
-                    .column = 4,
-                },
-                .end = .{
-                    .byte_offset = 70,
-                    .line = 3,
-                    .column = 12,
-                },
+                .slice = "hitPoints",
                 .message = "Variable declaration should be snake_case",
             },
             .{
                 .rule_id = "declaration_naming",
                 .severity = .@"error",
-                .start = .{
-                    .byte_offset = 106,
-                    .line = 5,
-                    .column = 6,
-                },
-                .end = .{
-                    .byte_offset = 108,
-                    .line = 5,
-                    .column = 8,
-                },
+                .slice = "bad",
                 .message = "Type declaration should be TitleCase",
             },
             .{
                 .rule_id = "declaration_naming",
                 .severity = .@"error",
-                .start = .{
-                    .byte_offset = 123,
-                    .line = 6,
-                    .column = 6,
-                },
-                .end = .{
-                    .byte_offset = 134,
-                    .line = 6,
-                    .column = 17,
-                },
+                .slice = "BadNamespace",
                 .message = "Namespace declaration should be snake_case",
             },
             .{
                 .rule_id = "declaration_naming",
                 .severity = .@"error",
-                .start = .{
-                    .byte_offset = 275,
-                    .line = 12,
-                    .column = 6,
-                },
-                .end = .{
-                    .byte_offset = 285,
-                    .line = 12,
-                    .column = 16,
-                },
+                .slice = "this_not_ok",
                 .message = "Function declaration should be camelCase",
             },
             .{
                 .rule_id = "declaration_naming",
                 .severity = .@"error",
-                .start = .{
-                    .byte_offset = 316,
-                    .line = 13,
-                    .column = 6,
-                },
-                .end = .{
-                    .byte_offset = 324,
-                    .line = 13,
-                    .column = 14,
-                },
+                .slice = "thisNotOk",
                 .message = "Type function declaration should be TitleCase",
             },
         },
-        result.problems,
     );
 }
 
 test "export included" {
-    std.testing.refAllDecls(@This());
-
-    const rule = buildRule(.{});
-    inline for (&.{
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         "export const NotGood: u32 = 10;",
-        "export const notGood: u32 = 10;",
-        "export const no_good = u32;",
-    }) |source| {
-        var config = Config{ .exclude_export = false };
-        var result = (try zlinter.testing.runRule(
-            rule,
-            zlinter.testing.paths.posix("path/to/file.zig"),
-            source,
+        .{},
+        Config{ .exclude_export = false },
+        &.{
             .{
-                .config = &config,
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "NotGood",
+                .message = "Constant declaration should be snake_case",
             },
-        ));
-        defer if (result) |*r| r.deinit(std.testing.allocator);
-        try std.testing.expectEqual(1, result.?.problems.len);
-    }
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        "export const notGood: u32 = 10;",
+        .{},
+        Config{ .exclude_export = false },
+        &.{
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "notGood",
+                .message = "Constant declaration should be snake_case",
+            },
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        "export const no_good = u32;",
+        .{},
+        Config{ .exclude_export = false },
+        &.{
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "no_good",
+                .message = "Type declaration should be TitleCase",
+            },
+        },
+    );
 }
 
 test "export excluded" {
-    std.testing.refAllDecls(@This());
-
-    const rule = buildRule(.{});
     inline for (&.{
         "export const NotGood: u32 = 10;",
         "export const notGood: u32 = 10;",
         "export const no_good = u32;",
     }) |source| {
-        var config = Config{ .exclude_export = true };
-        var result = (try zlinter.testing.runRule(
-            rule,
-            zlinter.testing.paths.posix("path/to/file.zig"),
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
             source,
-            .{
-                .config = &config,
-            },
-        ));
-        defer if (result) |*r| r.deinit(std.testing.allocator);
-        try std.testing.expectEqual(null, result);
+            .{},
+            Config{ .exclude_export = true },
+            &.{},
+        );
     }
 }
 
 test "extern included" {
-    std.testing.refAllDecls(@This());
-
-    const rule = buildRule(.{});
-    inline for (&.{
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         "extern const NotGood: u32;",
-        "extern const notGood: u32;",
-        "extern const no_good: type;",
-    }) |source| {
-        var config = Config{ .exclude_extern = false };
-        var result = (try zlinter.testing.runRule(
-            rule,
-            zlinter.testing.paths.posix("path/to/file.zig"),
-            source,
+        .{},
+        Config{ .exclude_extern = false },
+        &.{
             .{
-                .config = &config,
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "NotGood",
+                .message = "Constant declaration should be snake_case",
             },
-        ));
-        defer if (result) |*r| r.deinit(std.testing.allocator);
-        try std.testing.expectEqual(1, result.?.problems.len);
-    }
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        "extern const notGood: u32;",
+        .{},
+        Config{ .exclude_extern = false },
+        &.{
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "notGood",
+                .message = "Constant declaration should be snake_case",
+            },
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        "extern const no_good: type;",
+        .{},
+        Config{ .exclude_extern = false },
+        &.{
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "no_good",
+                .message = "Type declaration should be TitleCase",
+            },
+        },
+    );
 }
 
 test "extern excluded" {
-    std.testing.refAllDecls(@This());
-
-    const rule = buildRule(.{});
     inline for (&.{
         "extern const NotGood: u32;",
         "extern const notGood: u32;",
         "extern const no_good: type;",
     }) |source| {
-        var config = Config{ .exclude_extern = true };
-        var result = (try zlinter.testing.runRule(
-            rule,
-            zlinter.testing.paths.posix("path/to/file.zig"),
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
             source,
-            .{
-                .config = &config,
-            },
-        ));
-        defer if (result) |*r| r.deinit(std.testing.allocator);
-        try std.testing.expectEqual(null, result);
+            .{},
+            Config{ .exclude_extern = true },
+            &.{},
+        );
     }
 }
 

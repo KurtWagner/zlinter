@@ -152,8 +152,9 @@ pub fn expectNodeOfTagFirst(doc: LintDocument, comptime tags: []const Ast.Node.T
     return error.TestExpectedSingleNodeTag;
 }
 
-/// Builds and runs a rule with fake file name and content (test only)
-pub fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8, options: RunOptions) !?LintResult {
+/// Builds and runs a rule with fake file name and content. Use `testRunRule`
+/// which uses this method instead of this method directly.
+fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8, options: RunOptions) !?LintResult {
     assertTestOnly();
 
     var ctx: LintContext = undefined;
@@ -177,7 +178,7 @@ pub fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8, op
 
     const tree = doc.handle.tree;
     std.testing.expectEqual(tree.errors.len, 0) catch |err| {
-        std.debug.print("Failed to parse AST:\n", .{});
+        std.debug.print("Failed to parse AST:\n{s}\n", .{contents});
         for (tree.errors) |ast_err| {
             try tree.renderError(ast_err, std.io.getStdErr().writer());
         }
@@ -194,31 +195,7 @@ pub fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8, op
 
 /// Expectation for problems with "pretty" printing on error that can be
 /// copied back into assertions (test only)
-pub fn expectProblemsEqual(expected: []const LintProblem, actual: []LintProblem) !void {
-    assertTestOnly();
-
-    std.testing.expectEqualDeep(expected, actual) catch |e| {
-        switch (e) {
-            error.TestExpectedEqual => {
-                std.debug.print(
-                    \\--------------------------------------------------
-                    \\ Actual Lint Problems:
-                    \\--------------------------------------------------
-                    \\
-                , .{});
-
-                for (actual) |problem| problem.debugPrint(std.debug);
-                std.debug.print("--------------------------------------------------\n", .{});
-
-                return e;
-            },
-        }
-    };
-}
-
-/// Expectation for problems with "pretty" printing on error that can be
-/// copied back into assertions (test only)
-pub fn expectDeepEquals(T: type, expected: []const T, actual: []const T) !void {
+fn expectDeepEquals(T: type, expected: []const T, actual: []const T) !void {
     assertTestOnly();
 
     // TODO: Once we're 0.15.x plus can we just implement fmt methods and use `{f}`?
