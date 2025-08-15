@@ -150,31 +150,52 @@ fn builtinHasParamContent(
 }
 
 test "excludes based on configurable contents" {
-    var config = Config{
-        .exclude_panic_with_content = &.{
-            "OOM", "other",
-        },
-    };
-    const rule = buildRule(.{});
-
     // Bad cases:
-    inline for (&.{
-        \\ @panic("oom");
-        ,
-        \\ @panic("OTHER");
-    }) |source| {
-        var result = (try zlinter.testing.runRule(
-            rule,
-            zlinter.testing.paths.posix("path/to/my_file.zig"),
-            "pub fn main() void {" ++ source ++ "}",
-            .{ .config = &config },
-        ));
-        defer if (result) |*r| r.deinit(std.testing.allocator);
-        std.testing.expectEqual(1, result.?.problems.len) catch |e| {
-            std.debug.print("Expected issues: {s}\n", .{source});
-            return e;
-        };
-    }
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ pub fn main() void { 
+        \\  @panic("oom");
+        \\}
+    ,
+        .{},
+        Config{
+            .exclude_panic_with_content = &.{
+                "OOM", "other",
+            },
+        },
+        &.{
+            .{
+                .rule_id = "no_panic",
+                .severity = .warning,
+                .slice =
+                \\@panic("oom");
+                ,
+                .message = "`@panic` forcibly stops the program at runtime and should be avoided",
+            },
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ pub fn main() void { @panic("OTHER"); }
+    ,
+        .{},
+        Config{
+            .exclude_panic_with_content = &.{
+                "OOM", "other",
+            },
+        },
+        &.{
+            .{
+                .rule_id = "no_panic",
+                .severity = .warning,
+                .slice =
+                \\@panic("OTHER");
+                ,
+                .message = "`@panic` forcibly stops the program at runtime and should be avoided",
+            },
+        },
+    );
 
     // Good cases:
     inline for (&.{
@@ -184,17 +205,17 @@ test "excludes based on configurable contents" {
         ,
         \\ const a = @abs(-10);
     }) |source| {
-        var result = (try zlinter.testing.runRule(
-            rule,
-            zlinter.testing.paths.posix("path/to/my_file.zig"),
-            "pub fn main() void {" ++ source ++ "}",
-            .{ .config = &config },
-        ));
-        defer if (result) |*r| r.deinit(std.testing.allocator);
-        std.testing.expectEqual(null, result) catch |e| {
-            std.debug.print("Expected no issues: {s}\n", .{source});
-            return e;
-        };
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
+            "pub fn main() void { " ++ source ++ "}",
+            .{},
+            Config{
+                .exclude_panic_with_content = &.{
+                    "OOM", "other",
+                },
+            },
+            &.{},
+        );
     }
 }
 
