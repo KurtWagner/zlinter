@@ -186,7 +186,7 @@ pub fn isContainerNamespace(tree: Ast, container_decl: Ast.full.ContainerDecl) b
 pub fn ArrayList(T: type) type {
     return comptime switch (version.zig) {
         .@"0.14" => std.ArrayListUnmanaged(T),
-        .@"0.15" => std.ArrayListUnmanaged(T), // TODO: Change to ArrayList once released
+        .@"0.15" => std.ArrayList(T),
     };
 }
 

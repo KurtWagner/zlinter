@@ -1,7 +1,7 @@
 // Anything in here is ok as the function does not return an error
 pub fn noError() void {
-    var good_a = std.ArrayList(u8).init(std.heap.page_allocator);
-    var good_b: std.ArrayList(u8) = .init(std.heap.page_allocator);
+    var good_a = std.AutoHashMap(u8, void).init(std.heap.page_allocator);
+    var good_b: std.AutoHashMap(u8, void) = .init(std.heap.page_allocator);
     var good_c: std.AutoHashMapUnmanaged(u8, void) = .empty;
     var good_d = std.AutoHashMapUnmanaged(u8, void).empty;
 
@@ -12,8 +12,8 @@ pub fn noError() void {
 }
 
 pub fn hasErrorButWithDefers(input: u32) error{NotOk}!void {
-    var has_cleanup_a = std.ArrayList(u8).init(std.heap.page_allocator);
-    var has_cleanup_b: std.ArrayList(u8) = .init(std.heap.page_allocator);
+    var has_cleanup_a = std.AutoHashMap(u8, void).init(std.heap.page_allocator);
+    var has_cleanup_b: std.AutoHashMap(u8, void) = .init(std.heap.page_allocator);
     var has_cleanup_c: std.AutoHashMapUnmanaged(u8, void) = .empty;
     var has_cleanup_d = std.AutoHashMapUnmanaged(u8, void).empty;
 
@@ -33,8 +33,8 @@ pub fn hasErrorButWithDefers(input: u32) error{NotOk}!void {
 }
 
 pub fn hasError(input: u32) error{NotOk}!void {
-    var bad_a = std.ArrayList(u8).init(std.heap.page_allocator);
-    var bad_b: std.ArrayList(u8) = .init(std.heap.page_allocator);
+    var bad_a = std.AutoHashMap(u8, void).init(std.heap.page_allocator);
+    var bad_b: std.AutoHashMap(u8, void) = .init(std.heap.page_allocator);
     var bad_c: std.AutoHashMapUnmanaged(u8, void) = .empty;
     var bad_d = std.AutoHashMapUnmanaged(u8, void).empty;
 
@@ -46,15 +46,15 @@ pub fn hasError(input: u32) error{NotOk}!void {
     bad_d.deinit(std.heap.page_allocator);
 }
 
-const MyArray = std.ArrayList(u8);
-const MyArrayUmanaged = std.ArrayListUnmanaged(u8);
+const MyHash = std.AutoHashMap(u8, void);
+const MyHashUmanaged = std.AutoHashMapUnmanaged(u8);
 const MyBufSet = std.BufSet;
 
 pub fn hasErrorReferencedStdArray(input: u32) error{NotOk}!void {
-    var bad_a = MyArray.init(std.heap.page_allocator);
-    var bad_b: MyArray = .init(std.heap.page_allocator);
-    var bad_c: MyArrayUmanaged = .empty;
-    var bad_d = MyArrayUmanaged.empty;
+    var bad_a = MyHash.init(std.heap.page_allocator);
+    var bad_b: MyHash = .init(std.heap.page_allocator);
+    var bad_c: MyHashUmanaged = .empty;
+    var bad_d = MyHashUmanaged.empty;
 
     const ambiguous_name = std.heap.c_allocator;
     var bad_e: MyBufSet = .init(ambiguous_name);
@@ -79,9 +79,9 @@ pub fn hasErrorButWithArena(input: u32) error{NotOk}!void {
     const fba = std.heap.FixedBufferAllocator.init(&buffer);
     const fixed_buffer_allocator = fba.allocator();
 
-    var has_arena_a = std.ArrayList(u8).init(fba.allocator());
-    var has_arena_b: std.ArrayList(u8) = .init(arena_allocator.allocator());
-    var has_arena_c: std.ArrayList(u8) = .init(arena);
+    var has_arena_a = std.AutoHashMap(u8, void).init(fba.allocator());
+    var has_arena_b: std.AutoHashMap(u8, void) = .init(arena_allocator.allocator());
+    var has_arena_c: std.AutoHashMap(u8, void) = .init(arena);
     var has_arena_d = std.ArrayLive(u32).init(fixed_buffer_allocator);
 
     if (input == 0) return error.NotOk;

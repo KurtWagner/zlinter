@@ -23,6 +23,9 @@ pub const Config = struct {
         "buf",
         "buff",
     },
+
+    /// Skips when the undefined variable has this method called on it.
+    init_method_names: []const []const u8 = &.{ "init", "initialize", "initialise" },
 };
 
 /// Builds and returns the no_undefined rule.
@@ -124,8 +127,10 @@ fn run(
                             const lhs_source = tree.getNodeSource(lhs_node);
                             if (std.mem.eql(u8, lhs_source, var_name)) {
                                 const identifier_name = tree.tokenSlice(identifier_token);
-                                if (std.mem.eql(u8, identifier_name, "init")) {
-                                    continue :nodes;
+                                for (config.init_method_names) |init_name| {
+                                    if (std.mem.eql(u8, identifier_name, init_name)) {
+                                        continue :nodes;
+                                    }
                                 }
                             }
                         }
@@ -159,54 +164,127 @@ test {
     std.testing.refAllDecls(@This());
 }
 
-test "no_literal_args" {
-    const rule = buildRule(.{});
-    const source: [:0]const u8 =
+test "exclude configs" {
+    inline for ([_]zlinter.rules.LintProblemSeverity{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
+            \\pub fn main() void {
+            \\  var buffer:[10]u8 = undefined; // ok
+            \\  var me_excluded:SomeType = undefined; // ok
+            \\  var not_ok: u32 = undefined;
+            \\}
+            \\
+            \\fn meExcluded() void {
+            \\  var ok: u32 = undefined;
+            \\}
+        ,
+            .{},
+            Config{
+                .severity = severity,
+                .exclude_var_decl_name_equals = &.{"buffer"},
+                .exclude_var_decl_name_ends_with = &.{"excluded"},
+                .exclude_in_fn = &.{"meExcluded"},
+            },
+            &.{
+                .{
+                    .rule_id = "no_undefined",
+                    .severity = severity,
+                    .slice = "undefined;",
+                    .message = "Take care when using `undefined`",
+                },
+            },
+        );
+    }
+}
+
+test "off" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         \\pub fn main() void {
-        \\  var buffer:[10]u8 = undefined; // ok
         \\  var not_ok: u32 = undefined;
         \\}
-        \\
-        \\test {
-        \\  var ok: u32 = undefined; // ok as in test
-        \\}
-    ;
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/my_file.zig"),
-        source,
+    ,
         .{},
-    )).?;
-    defer result.deinit(std.testing.allocator);
-
-    try std.testing.expectStringEndsWith(
-        result.file_path,
-        zlinter.testing.paths.posix("path/to/my_file.zig"),
+        Config{ .severity = .off },
+        &.{},
     );
+}
 
-    inline for (&.{"undefined;"}, 0..) |slice, i| {
-        try std.testing.expectEqualStrings(slice, result.problems[i].sliceSource(source));
-    }
-
-    try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.results.LintProblem{
+test "exclude tests" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ test {
+        \\     var not_ok: SomeType = undefined;
+        \\ }
+    ,
+        .{},
+        Config{
+            .severity = .warning,
+            .exclude_tests = false,
+        },
+        &.{
             .{
                 .rule_id = "no_undefined",
                 .severity = .warning,
-                .start = .{
-                    .byte_offset = 80,
-                    .line = 2,
-                    .column = 20,
-                },
-                .end = .{
-                    .byte_offset = 89,
-                    .line = 2,
-                    .column = 29,
-                },
+                .slice = "undefined;",
                 .message = "Take care when using `undefined`",
             },
         },
-        result.problems,
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ test {
+        \\     var not_ok: SomeType = undefined;
+        \\ }
+    ,
+        .{},
+        Config{
+            .severity = .warning,
+            .exclude_tests = true,
+        },
+        &.{},
+    );
+}
+
+test "init methods" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ pub fn main() void {
+        \\     var not_ok: SomeType = undefined;
+        \\     not_ok.notInit();
+        \\ }
+    ,
+        .{},
+        Config{
+            .severity = .warning,
+            .init_method_names = &.{ "init", "initialize" },
+        },
+        &.{
+            .{
+                .rule_id = "no_undefined",
+                .severity = .warning,
+                .slice = "undefined;",
+                .message = "Take care when using `undefined`",
+            },
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ pub fn main() void {
+        \\     var ok: SomeType = undefined;
+        \\     ok.init();
+        \\     var also_ok: SomeType = undefined;
+        \\     also_ok.initialize();
+        \\ }
+    ,
+        .{},
+        Config{
+            .severity = .warning,
+            .init_method_names = &.{ "init", "initialize" },
+        },
+        &.{},
     );
 }
 
