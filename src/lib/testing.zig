@@ -276,7 +276,6 @@ pub const LintProblemExpectation = struct {
     rule_id: []const u8,
     severity: LintProblemSeverity,
     slice: []const u8,
-
     message: []const u8,
     disabled_by_comment: bool = false,
     fix: ?LintProblemFix = null,
@@ -297,18 +296,26 @@ pub const LintProblemExpectation = struct {
         writer.print("  .rule_id = \"{s}\",\n", .{self.rule_id});
         writer.print("  .severity = .@\"{s}\",\n", .{@tagName(self.severity)});
 
-        writer.print("  .slice = \n", .{});
-        strings.debugPrintMultilineString(self.slice, writer, 2);
-        writer.print("\n,\n", .{});
+        const has_quote = std.mem.indexOfScalar(u8, self.slice, '"') != null;
+        const has_newline = std.mem.indexOfScalar(u8, self.slice, '\n') != null;
+
+        writer.print("  .slice ={s}", .{if (has_newline) "\n" else " "});
+        if (has_newline or has_quote) {
+            strings.debugPrintMultilineString(self.slice, writer, 2);
+        } else {
+            writer.print("\"{s}\"", .{self.slice});
+        }
+        writer.print("{s},\n", .{if (has_newline) "\n" else ""});
 
         writer.print("  .message = \"{s}\",\n", .{self.message});
-        writer.print("  .disabled_by_comment = {},\n", .{self.disabled_by_comment});
+
+        if (self.disabled_by_comment) {
+            writer.print("  .disabled_by_comment = {},\n", .{self.disabled_by_comment});
+        }
 
         if (self.fix) |fix| {
             writer.print("  .fix =\n", .{});
             fix.debugPrintWithIndent(writer, 4);
-        } else {
-            writer.print("  .fix = null,\n", .{});
         }
 
         writer.print("}},\n", .{});

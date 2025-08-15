@@ -765,6 +765,12 @@ case uses should disable the line with an explanation.
 
   * **Default:** `&.{ "memory", "mem", "buffer", "buf", "buff", }`
 
+* `init_method_names`
+
+  * Skips when the undefined variable has this method called on it.
+
+  * **Default:** `&.{ "init", "initialize", "initialise" }`
+
 ## `no_unused`
 
 Enforces that container declarations are referenced.
