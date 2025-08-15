@@ -390,7 +390,8 @@ test {
 }
 
 test "no_deprecated - regression test for #36" {
-    const source: [:0]const u8 =
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         \\const convention: namespace.CallingConvention = .Stdcall;
         \\
         \\const namespace = struct {
@@ -400,48 +401,25 @@ test "no_deprecated - regression test for #36" {
         \\    std_call,
         \\  };
         \\};
-    ;
-
-    const rule = buildRule(.{});
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/regression_36.zig"),
-        source,
+    ,
         .{},
-    )).?;
-    defer result.deinit(std.testing.allocator);
-
-    try std.testing.expectStringEndsWith(
-        result.file_path,
-        zlinter.testing.paths.posix("path/to/regression_36.zig"),
-    );
-
-    try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.results.LintProblem{
+        Config{ .severity = .@"error" },
+        &.{
             .{
                 .rule_id = "no_deprecated",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 0,
-                    .line = 0,
-                    .column = 48,
-                },
-                .end = .{
-                    .byte_offset = 0,
-                    .line = 0,
-                    .column = 55,
-                },
+                .severity = .@"error",
+                .slice = "",
                 .message = "Deprecated: Don't use",
             },
         },
-        result.problems,
     );
 }
 
 test "no_deprecated - explicit 0.15.x breaking changes" {
     if (zlinter.version.zig != .@"0.14") return error.SkipZigTest;
 
-    const source: [:0]const u8 =
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         \\
         \\pub usingnamespace @import("something");
         \\
@@ -453,86 +431,35 @@ test "no_deprecated - explicit 0.15.x breaking changes" {
         \\  var frame = async func3();
         \\  try expect(await frame == 5);
         \\}
-    ;
-
-    const rule = buildRule(.{});
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/removed_features.zig"),
-        source,
+    ,
         .{},
-    )).?;
-    defer result.deinit(std.testing.allocator);
-
-    try std.testing.expectStringEndsWith(
-        result.file_path,
-        zlinter.testing.paths.posix("path/to/removed_features.zig"),
-    );
-
-    try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.results.LintProblem{
+        Config{ .severity = .@"error" },
+        &.{
             .{
                 .rule_id = "no_deprecated",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 5,
-                    .line = 1,
-                    .column = 4,
-                },
-                .end = .{
-                    .byte_offset = 18,
-                    .line = 1,
-                    .column = 17,
-                },
+                .severity = .@"error",
+                .slice = "usingnamespace",
                 .message = "Deprecated - `usingnamespace` keyword is removed in 0.15",
             },
             .{
                 .rule_id = "no_deprecated",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 69,
-                    .line = 4,
-                    .column = 9,
-                },
-                .end = .{
-                    .byte_offset = 84,
-                    .line = 4,
-                    .column = 24,
-                },
+                .severity = .@"error",
+                .slice = "@frameSize(u32);",
                 .message = "Deprecated - @frameSize builtin is removed in 0.15",
             },
             .{
                 .rule_id = "no_deprecated",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 126,
-                    .line = 8,
-                    .column = 14,
-                },
-                .end = .{
-                    .byte_offset = 139,
-                    .line = 8,
-                    .column = 27,
-                },
+                .severity = .@"error",
+                .slice = "async func3();",
                 .message = "Deprecated - `async` keyword is removed in 0.15",
             },
             .{
                 .rule_id = "no_deprecated",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 154,
-                    .line = 9,
-                    .column = 13,
-                },
-                .end = .{
-                    .byte_offset = 165,
-                    .line = 9,
-                    .column = 24,
-                },
+                .severity = .@"error",
+                .slice = "await frame ",
                 .message = "Deprecated - `await` keyword is removed in 0.15",
             },
         },
-        result.problems,
     );
 }
 

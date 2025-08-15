@@ -310,187 +310,101 @@ test {
 }
 
 test "regression 59 - tuples not included in field naming" {
-    const rule = buildRule(.{});
-    var result = try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/file.zig"),
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         "const Tuple = struct { TitleCase, snake_case, camelCase, MACRO_CASE };",
         .{},
+        Config{},
+        &.{},
     );
-    defer if (result) |*r| r.deinit(std.testing.allocator);
-    try std.testing.expectEqual(null, result);
 }
 
 test "run - implicit struct (root struct)" {
-    const rule = buildRule(.{});
-    const source =
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         \\good: u32,
         \\also_good: u32,
         \\Notgood: u32,
         \\notGood: u32,
-    ;
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/file.zig"),
-        source,
+    ,
         .{},
-    )).?;
-    defer result.deinit(std.testing.allocator);
-
-    try std.testing.expectStringEndsWith(
-        result.file_path,
-        zlinter.testing.paths.posix("path/to/file.zig"),
+        Config{},
+        &.{
+            .{
+                .rule_id = "field_naming",
+                .severity = .@"error",
+                .slice = "Notgood",
+                .message = "Struct fields should be snake_case",
+            },
+            .{
+                .rule_id = "field_naming",
+                .severity = .@"error",
+                .slice = "notGood",
+                .message = "Struct fields should be snake_case",
+            },
+        },
     );
-
-    try zlinter.testing.expectProblemsEqual(&[_]zlinter.results.LintProblem{
-        .{
-            .rule_id = "field_naming",
-            .severity = .@"error",
-            .start = .{
-                .byte_offset = 27,
-                .line = 2,
-                .column = 0,
-            },
-            .end = .{
-                .byte_offset = 33,
-                .line = 2,
-                .column = 6,
-            },
-            .message = "Struct fields should be snake_case",
-        },
-        .{
-            .rule_id = "field_naming",
-            .severity = .@"error",
-            .start = .{
-                .byte_offset = 41,
-                .line = 3,
-                .column = 0,
-            },
-            .end = .{
-                .byte_offset = 47,
-                .line = 3,
-                .column = 6,
-            },
-            .message = "Struct fields should be snake_case",
-        },
-    }, result.problems);
-
-    try std.testing.expectEqualStrings("Notgood", result.problems[0].sliceSource(source));
-    try std.testing.expectEqualStrings("notGood", result.problems[1].sliceSource(source));
 }
 
 test "run - union container" {
-    const rule = buildRule(.{});
-    const source =
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         \\const A = union {
         \\ good: u32,
         \\ also_good: f32,
         \\ notGood: i32,
         \\ NotGood: i16
         \\};
-    ;
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/file.zig"),
-        source,
+    ,
         .{},
-    )).?;
-    defer result.deinit(std.testing.allocator);
-
-    try zlinter.testing.expectProblemsEqual(&[_]zlinter.results.LintProblem{
-        .{
-            .rule_id = "field_naming",
-            .severity = .@"error",
-            .start = .{
-                .byte_offset = 48,
-                .line = 3,
-                .column = 1,
+        Config{},
+        &.{
+            .{
+                .rule_id = "field_naming",
+                .severity = .@"error",
+                .slice = "notGood",
+                .message = "Union fields should be snake_case",
             },
-            .end = .{
-                .byte_offset = 54,
-                .line = 3,
-                .column = 7,
+            .{
+                .rule_id = "field_naming",
+                .severity = .@"error",
+                .slice = "NotGood",
+                .message = "Union fields should be snake_case",
             },
-            .message = "Union fields should be snake_case",
         },
-        .{
-            .rule_id = "field_naming",
-            .severity = .@"error",
-            .start = .{
-                .byte_offset = 63,
-                .line = 4,
-                .column = 1,
-            },
-            .end = .{
-                .byte_offset = 69,
-                .line = 4,
-                .column = 7,
-            },
-            .message = "Union fields should be snake_case",
-        },
-    }, result.problems);
-
-    try std.testing.expectEqualStrings("notGood", result.problems[0].sliceSource(source));
-    try std.testing.expectEqualStrings("NotGood", result.problems[1].sliceSource(source));
+    );
 }
 
 test "run - error container" {
-    const rule = buildRule(.{});
-    const source =
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         \\const A = error {
         \\ Good,
         \\ AlsoGood,
         \\ not_good,
         \\ notGood
         \\};
-    ;
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/file.zig"),
-        source,
+    ,
         .{},
-    )).?;
-    defer result.deinit(std.testing.allocator);
-
-    try zlinter.testing.expectProblemsEqual(&[_]zlinter.results.LintProblem{
-        .{
-            .rule_id = "field_naming",
-            .severity = .@"error",
-            .start = .{
-                .byte_offset = 48,
-                .line = 4,
-                .column = 1,
+        Config{},
+        &.{
+            .{
+                .rule_id = "field_naming",
+                .severity = .@"error",
+                .slice = "notGood",
+                .message = "Error fields should be TitleCase",
             },
-            .end = .{
-                .byte_offset = 54,
-                .line = 4,
-                .column = 7,
+            .{
+                .rule_id = "field_naming",
+                .severity = .@"error",
+                .slice = "not_good",
+                .message = "Error fields should be TitleCase",
             },
-            .message = "Error fields should be TitleCase",
         },
-        .{
-            .rule_id = "field_naming",
-            .severity = .@"error",
-            .start = .{
-                .byte_offset = 37,
-                .line = 3,
-                .column = 1,
-            },
-            .end = .{
-                .byte_offset = 44,
-                .line = 3,
-                .column = 8,
-            },
-            .message = "Error fields should be TitleCase",
-        },
-    }, result.problems);
-
-    try std.testing.expectEqualStrings("notGood", result.problems[0].sliceSource(source));
-    try std.testing.expectEqualStrings("not_good", result.problems[1].sliceSource(source));
+    );
 }
 
 test "name lengths" {
-    // Struct fields are included:
     try zlinter.testing.testRunRule(
         buildRule(.{}),
         \\ const Struct = struct {
@@ -519,17 +433,13 @@ test "name lengths" {
             .{
                 .rule_id = "field_naming",
                 .severity = .@"error",
-                .slice =
-                \\a
-                ,
+                .slice = "a",
                 .message = "Struct field names should have a length greater or equal to 2",
             },
             .{
                 .rule_id = "field_naming",
                 .severity = .warning,
-                .slice =
-                \\abcd
-                ,
+                .slice = "abcd",
                 .message = "Struct field names should have a length less or equal to 3",
             },
         },

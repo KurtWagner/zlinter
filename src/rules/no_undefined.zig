@@ -165,7 +165,7 @@ test {
 }
 
 test "exclude configs" {
-    inline for ([_]zlinter.rules.LintProblemSeverity{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity| {
         try zlinter.testing.testRunRule(
             buildRule(.{}),
             \\pub fn main() void {

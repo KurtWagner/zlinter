@@ -130,137 +130,86 @@ test "no_inferred_error_unions - valid function declarations" {
         \\ return error.Always;
         \\}
     }) |source| {
-        const rule = buildRule(.{});
-        var result = (try zlinter.testing.runRule(
-            rule,
-            zlinter.testing.paths.posix("path/to/return_err.zig"),
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
             source,
             .{},
-        ));
-        defer if (result) |*r| r.deinit(std.testing.allocator);
-        try std.testing.expectEqual(null, result);
+            Config{},
+            &.{},
+        );
     }
 }
 
-test "no_inferred_error_unions - Invalid function declarations - defaults" {
-    const rule = buildRule(.{});
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/return_err.zig"),
+test "no_inferred_error_unions - Invalid function declarations - off" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         \\pub fn inferred() !void {
         \\  return error.Always;
         \\}
     ,
         .{},
-    )).?;
-    defer result.deinit(std.testing.allocator);
-
-    try std.testing.expectStringEndsWith(
-        result.file_path,
-        zlinter.testing.paths.posix("path/to/return_err.zig"),
+        Config{ .severity = .off },
+        &.{},
     );
+}
 
-    try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.results.LintProblem{
+test "no_inferred_error_unions - Invalid function declarations - defaults" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\pub fn inferred() !void {
+        \\  return error.Always;
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{
             .{
                 .rule_id = "no_inferred_error_unions",
                 .severity = .warning,
-                .start = .{
-                    .byte_offset = 0,
-                    .line = 0,
-                    .column = 0,
-                },
-                .end = .{
-                    .byte_offset = 23,
-                    .line = 0,
-                    .column = 23,
-                },
+                .slice = "pub fn inferred() !void ",
                 .message = "Function returns an inferred error union. Prefer an explicit error set",
             },
         },
-        result.problems,
     );
 }
 
 test "no_inferred_error_unions - Invalid function declarations - allow_private = false" {
-    const rule = buildRule(.{});
-    var config = Config{ .allow_private = false };
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/return_err.zig"),
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         \\fn inferred() !void {
         \\  return error.Always;
         \\}
     ,
-        .{ .config = &config },
-    )).?;
-    defer result.deinit(std.testing.allocator);
-
-    try std.testing.expectStringEndsWith(
-        result.file_path,
-        zlinter.testing.paths.posix("path/to/return_err.zig"),
-    );
-
-    try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.results.LintProblem{
+        .{},
+        Config{ .allow_private = false },
+        &.{
             .{
                 .rule_id = "no_inferred_error_unions",
                 .severity = .warning,
-                .start = .{
-                    .byte_offset = 0,
-                    .line = 0,
-                    .column = 0,
-                },
-                .end = .{
-                    .byte_offset = 19,
-                    .line = 0,
-                    .column = 19,
-                },
+                .slice = "fn inferred() !void ",
                 .message = "Function returns an inferred error union. Prefer an explicit error set",
             },
         },
-        result.problems,
     );
 }
 
 test "no_inferred_error_unions - Invalid function declarations - allow_anyerror = false" {
-    const rule = buildRule(.{});
-    var config = Config{ .allow_anyerror = false };
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/return_err.zig"),
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         \\pub fn inferred() anyerror!void {
         \\  return error.Always;
         \\}
     ,
-        .{ .config = &config },
-    )).?;
-    defer result.deinit(std.testing.allocator);
-
-    try std.testing.expectStringEndsWith(
-        result.file_path,
-        zlinter.testing.paths.posix("path/to/return_err.zig"),
-    );
-
-    try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.results.LintProblem{
+        .{},
+        Config{ .allow_anyerror = false, .severity = .@"error" },
+        &.{
             .{
                 .rule_id = "no_inferred_error_unions",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 0,
-                    .line = 0,
-                    .column = 0,
-                },
-                .end = .{
-                    .byte_offset = 31,
-                    .line = 0,
-                    .column = 31,
-                },
+                .severity = .@"error",
+                .slice = "pub fn inferred() anyerror!void ",
                 .message = "Function returns an inferred error union. Prefer an explicit error set",
             },
         },
-        result.problems,
     );
 }
 

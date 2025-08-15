@@ -210,179 +210,91 @@ pub fn fnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?Ast
     return null;
 }
 
-test "export excluded" {
+test {
     std.testing.refAllDecls(@This());
+}
 
-    const rule = buildRule(.{});
-    const source =
+test "export excluded" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         \\export fn export_not_good() void;
         \\export fn exportNotGood() void;
         \\export fn exportWith(BadArg: u32) void;
-    ;
-    var config = Config{ .exclude_export = true };
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/file.zig"),
-        source,
-        .{
-            .config = &config,
-        },
-    ));
-    defer if (result) |*r| r.deinit(std.testing.allocator);
-
-    try std.testing.expectEqual(null, result);
+    ,
+        .{},
+        Config{ .exclude_export = true },
+        &.{},
+    );
 }
 
 test "export included" {
-    std.testing.refAllDecls(@This());
-
-    const rule = buildRule(.{});
-    const source =
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         \\export fn export_not_good() void;
         \\export fn exportGood() void;
         \\export fn exportWith(BadArg: u32) void;
-    ;
-    var config = Config{ .exclude_export = false };
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/file.zig"),
-        source,
-        .{
-            .config = &config,
+    ,
+        .{},
+        Config{ .exclude_export = false },
+        &.{
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "export_not_good",
+                .message = "Callable should be camelCase",
+            },
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "BadArg",
+                .message = "Function argument should be snake_case",
+            },
         },
-    )).?;
-    defer result.deinit(std.testing.allocator);
-
-    try std.testing.expectStringEndsWith(
-        result.file_path,
-        zlinter.testing.paths.posix("path/to/file.zig"),
     );
-
-    try zlinter.testing.expectProblemsEqual(&[_]zlinter.results.LintProblem{
-        .{
-            .rule_id = "function_naming",
-            .severity = .@"error",
-            .start = .{
-                .byte_offset = 10,
-                .line = 0,
-                .column = 10,
-            },
-            .end = .{
-                .byte_offset = 24,
-                .line = 0,
-                .column = 24,
-            },
-            .message = "Callable should be camelCase",
-        },
-        .{
-            .rule_id = "function_naming",
-            .severity = .@"error",
-            .start = .{
-                .byte_offset = 84,
-                .line = 2,
-                .column = 21,
-            },
-            .end = .{
-                .byte_offset = 89,
-                .line = 2,
-                .column = 26,
-            },
-            .message = "Function argument should be snake_case",
-        },
-    }, result.problems);
-
-    try std.testing.expectEqualStrings("export_not_good", result.problems[0].sliceSource(source));
 }
 
 test "extern excluded" {
-    std.testing.refAllDecls(@This());
-
-    const rule = buildRule(.{});
-    const source =
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         \\extern fn extern_not_good() void;
         \\extern fn ExternNotGood() void;
         \\extern fn externWith(BadArg: u32) void;
-    ;
-    var config = Config{ .exclude_extern = true };
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/file.zig"),
-        source,
-        .{
-            .config = &config,
-        },
-    ));
-    defer if (result) |*r| r.deinit(std.testing.allocator);
-
-    try std.testing.expectEqual(null, result);
+    ,
+        .{},
+        Config{ .exclude_extern = true },
+        &.{},
+    );
 }
 
 test "extern included" {
-    std.testing.refAllDecls(@This());
-
-    const rule = buildRule(.{});
-    const source =
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         \\extern fn extern_not_good() void;
         \\extern fn externGood() void;
         \\extern fn externWith(BadArg: u32) void;
-    ;
-    var config = Config{ .exclude_extern = false };
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/file.zig"),
-        source,
-        .{
-            .config = &config,
+    ,
+        .{},
+        Config{ .exclude_extern = false },
+        &.{
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "extern_not_good",
+                .message = "Callable should be camelCase",
+            },
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "BadArg",
+                .message = "Function argument should be snake_case",
+            },
         },
-    )).?;
-    defer result.deinit(std.testing.allocator);
-
-    try std.testing.expectStringEndsWith(
-        result.file_path,
-        zlinter.testing.paths.posix("path/to/file.zig"),
     );
-
-    try zlinter.testing.expectProblemsEqual(&[_]zlinter.results.LintProblem{
-        .{
-            .rule_id = "function_naming",
-            .severity = .@"error",
-            .start = .{
-                .byte_offset = 10,
-                .line = 0,
-                .column = 10,
-            },
-            .end = .{
-                .byte_offset = 24,
-                .line = 0,
-                .column = 24,
-            },
-            .message = "Callable should be camelCase",
-        },
-        .{
-            .rule_id = "function_naming",
-            .severity = .@"error",
-            .start = .{
-                .byte_offset = 84,
-                .line = 2,
-                .column = 21,
-            },
-            .end = .{
-                .byte_offset = 89,
-                .line = 2,
-                .column = 26,
-            },
-            .message = "Function argument should be snake_case",
-        },
-    }, result.problems);
-
-    try std.testing.expectEqualStrings("extern_not_good", result.problems[0].sliceSource(source));
 }
 
 test "general" {
-    std.testing.refAllDecls(@This());
-
-    const rule = buildRule(.{});
-    const source =
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         \\
         \\fn not_good() void {}
         \\fn good() void {}
@@ -399,112 +311,48 @@ test "general" {
         \\    fnCall(arg);
         \\    return @intCast(arg);
         \\}
-    ;
-    var config = Config{};
-    var result = (try zlinter.testing.runRule(rule, zlinter.testing.paths.posix("path/to/file.zig"), source, .{
-        .config = &config,
-    })).?;
-    defer result.deinit(std.testing.allocator);
-
-    try std.testing.expectStringEndsWith(
-        result.file_path,
-        zlinter.testing.paths.posix("path/to/file.zig"),
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "not_good",
+                .message = "Callable should be camelCase",
+            },
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "NotGood",
+                .message = "Callable should be camelCase",
+            },
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "Arg",
+                .message = "Function argument should be snake_case",
+            },
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "t",
+                .message = "Function argument of type should be TitleCase",
+            },
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "fn_call",
+                .message = "Function argument of function should be camelCase",
+            },
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "A",
+                .message = "Function argument should be snake_case",
+            },
+        },
     );
-
-    try zlinter.testing.expectProblemsEqual(&[_]zlinter.results.LintProblem{
-        .{
-            .rule_id = "function_naming",
-            .severity = .@"error",
-            .start = .{
-                .byte_offset = 4,
-                .line = 1,
-                .column = 3,
-            },
-            .end = .{
-                .byte_offset = 11,
-                .line = 1,
-                .column = 10,
-            },
-            .message = "Callable should be camelCase",
-        },
-        .{
-            .rule_id = "function_naming",
-            .severity = .@"error",
-            .start = .{
-                .byte_offset = 106,
-                .line = 5,
-                .column = 3,
-            },
-            .end = .{
-                .byte_offset = 112,
-                .line = 5,
-                .column = 9,
-            },
-            .message = "Callable should be camelCase",
-        },
-        .{
-            .rule_id = "function_naming",
-            .severity = .@"error",
-            .start = .{
-                .byte_offset = 133,
-                .line = 7,
-                .column = 8,
-            },
-            .end = .{
-                .byte_offset = 135,
-                .line = 7,
-                .column = 10,
-            },
-            .message = "Function argument should be snake_case",
-        },
-        .{
-            .rule_id = "function_naming",
-            .severity = .@"error",
-            .start = .{
-                .byte_offset = 143,
-                .line = 7,
-                .column = 18,
-            },
-            .end = .{
-                .byte_offset = 143,
-                .line = 7,
-                .column = 18,
-            },
-            .message = "Function argument of type should be TitleCase",
-        },
-        .{
-            .rule_id = "function_naming",
-            .severity = .@"error",
-            .start = .{
-                .byte_offset = 152,
-                .line = 7,
-                .column = 27,
-            },
-            .end = .{
-                .byte_offset = 158,
-                .line = 7,
-                .column = 33,
-            },
-            .message = "Function argument of function should be camelCase",
-        },
-        .{
-            .rule_id = "function_naming",
-            .severity = .@"error",
-            .start = .{
-                .byte_offset = 172,
-                .line = 7,
-                .column = 47,
-            },
-            .end = .{
-                .byte_offset = 172,
-                .line = 7,
-                .column = 47,
-            },
-            .message = "Function argument should be snake_case",
-        },
-    }, result.problems);
-
-    try std.testing.expectEqualStrings("not_good", result.problems[0].sliceSource(source));
 }
 
 const std = @import("std");

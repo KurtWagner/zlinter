@@ -166,96 +166,60 @@ test "no_literal_args" {
         \\  call(true, 0, num, 0.5, flag, false);
         \\}
     ;
-    var config = Config{ .detect_number_literal = .warning };
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/my_file.zig"),
-        source,
-        .{ .config = &config },
-    )).?;
-    defer result.deinit(std.testing.allocator);
 
-    try std.testing.expectStringEndsWith(
-        result.file_path,
-        zlinter.testing.paths.posix("path/to/my_file.zig"),
-    );
-
-    inline for (&.{ "true,", "0,", "0.5,", "false)" }, 0..) |slice, i| {
-        try std.testing.expectEqualStrings(slice, result.problems[i].sliceSource(source));
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            rule,
+            source,
+            .{},
+            Config{
+                // TODO: Split this into different tests to ensure severity doesn't leak between
+                .detect_number_literal = severity,
+                .detect_bool_literal = severity,
+                .detect_char_literal = severity,
+                .detect_string_literal = severity,
+            },
+            &.{
+                .{
+                    .rule_id = "no_literal_args",
+                    .severity = severity,
+                    .slice = "true,",
+                    .message = "Avoid bool literal arguments as they're ambiguous.",
+                },
+                .{
+                    .rule_id = "no_literal_args",
+                    .severity = severity,
+                    .slice = "0,",
+                    .message = "Avoid number literal arguments as they're ambiguous.",
+                },
+                .{
+                    .rule_id = "no_literal_args",
+                    .severity = severity,
+                    .slice = "0.5,",
+                    .message = "Avoid number literal arguments as they're ambiguous.",
+                },
+                .{
+                    .rule_id = "no_literal_args",
+                    .severity = severity,
+                    .slice = "false)",
+                    .message = "Avoid bool literal arguments as they're ambiguous.",
+                },
+            },
+        );
     }
 
-    try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.results.LintProblem{
-            .{
-                .rule_id = "no_literal_args",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 68,
-                    .line = 3,
-                    .column = 7,
-                },
-                .end = .{
-                    .byte_offset = 72,
-                    .line = 3,
-                    .column = 11,
-                },
-                .message = "Avoid bool literal arguments as they're ambiguous.",
-                .disabled_by_comment = false,
-                .fix = null,
-            },
-            .{
-                .rule_id = "no_literal_args",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 74,
-                    .line = 3,
-                    .column = 13,
-                },
-                .end = .{
-                    .byte_offset = 75,
-                    .line = 3,
-                    .column = 14,
-                },
-                .message = "Avoid number literal arguments as they're ambiguous.",
-                .disabled_by_comment = false,
-                .fix = null,
-            },
-            .{
-                .rule_id = "no_literal_args",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 82,
-                    .line = 3,
-                    .column = 21,
-                },
-                .end = .{
-                    .byte_offset = 85,
-                    .line = 3,
-                    .column = 24,
-                },
-                .message = "Avoid number literal arguments as they're ambiguous.",
-                .disabled_by_comment = false,
-                .fix = null,
-            },
-            .{
-                .rule_id = "no_literal_args",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 93,
-                    .line = 3,
-                    .column = 32,
-                },
-                .end = .{
-                    .byte_offset = 98,
-                    .line = 3,
-                    .column = 37,
-                },
-                .message = "Avoid bool literal arguments as they're ambiguous.",
-                .disabled_by_comment = false,
-                .fix = null,
-            },
+    // Off:
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{
+            .detect_number_literal = .off,
+            .detect_bool_literal = .off,
+            .detect_char_literal = .off,
+            .detect_string_literal = .off,
         },
-        result.problems,
+        &.{},
     );
 }
 
