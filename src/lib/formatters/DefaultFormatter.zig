@@ -39,8 +39,8 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: any
                 .warning => warning_count += 1,
             }
 
-            const start_line, const start_column = file_renderer.getLineColumn(problem.start.byte_offset);
-            const end_line, const end_column = file_renderer.getLineColumn(problem.end.byte_offset);
+            const start_line, const start_column = file_renderer.lineAndColumn(problem.start.byte_offset);
+            const end_line, const end_column = file_renderer.lineAndColumn(problem.end.byte_offset);
 
             var severity_buffer: [32]u8 = undefined;
             writer.print("{s} {s} [{s}{s}:{d}:{d}{s}] {s}{s}{s}\n\n", .{

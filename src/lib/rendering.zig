@@ -26,24 +26,26 @@ pub const LintFileRenderer = struct {
         };
     }
 
-    // TODO: This needs tests
-    pub fn getLineColumn(self: Self, byte: usize) struct { usize, usize } {
-        const line = self.getLineNumber(byte);
-        return .{ line, self.getColumnNumber(line, byte) };
+    /// Returns the line and column (both zero indexed) of a given byte offset
+    /// in the file being rendered.
+    pub fn lineAndColumn(self: Self, byte_offset: usize) struct { usize, usize } {
+        std.debug.assert(byte_offset < self.source.len);
+        const line = self.lineNumber(byte_offset);
+        return .{ line, self.columnNumber(line, byte_offset) };
     }
 
-    pub fn getLineNumber(self: Self, byte: usize) usize {
+    fn lineNumber(self: Self, byte_offset: usize) usize {
         for (self.line_ends, 0..) |line_end, i| {
-            if (byte <= line_end) return i;
+            if (byte_offset <= line_end) return i;
         }
         return self.line_ends.len;
     }
 
-    pub fn getColumnNumber(self: Self, line: usize, byte: usize) usize {
+    fn columnNumber(self: Self, line: usize, byte_offset: usize) usize {
         return if (line == 0)
-            byte
+            byte_offset
         else
-            byte - self.line_ends[line - 1] - 1;
+            byte_offset - self.line_ends[line - 1] - 1;
     }
 
     pub fn getLine(self: Self, line: usize) []const u8 {
@@ -163,7 +165,7 @@ pub const LintFileRenderer = struct {
 
 test "LintFileRenderer" {
     inline for (&.{ "\n", "\r\n" }) |newline| {
-        const data = "123456789" ++ newline ++ "987654321" ++ newline;
+        const data = "123456789" ++ newline ++ "abcdefghi" ++ newline;
         var input = std.io.fixedBufferStream(data);
 
         var renderer = try LintFileRenderer.init(
@@ -172,8 +174,19 @@ test "LintFileRenderer" {
         );
         defer renderer.deinit(std.testing.allocator);
 
+        try std.testing.expectEqualDeep(.{ 0, 0 }, renderer.lineAndColumn(0)); // 1
+        try std.testing.expectEqualDeep(.{ 0, 1 }, renderer.lineAndColumn(1)); // 2
+        // ...
+        try std.testing.expectEqualDeep(.{ 0, 8 }, renderer.lineAndColumn(8)); // 9
+        // newline
+        std.debug.assert(data[8 + newline.len + 1] == 'a');
+        try std.testing.expectEqualDeep(.{ 1, 0 }, renderer.lineAndColumn(8 + newline.len + 1)); // a
+        try std.testing.expectEqualDeep(.{ 1, 1 }, renderer.lineAndColumn(8 + newline.len + 2)); // b
+        // ...
+        try std.testing.expectEqualDeep(.{ 1, 8 }, renderer.lineAndColumn(8 + newline.len + 9)); // i
+
         try std.testing.expectEqualStrings("123456789", renderer.getLine(0));
-        try std.testing.expectEqualStrings("987654321", renderer.getLine(1));
+        try std.testing.expectEqualStrings("abcdefghi", renderer.getLine(1));
         try std.testing.expectEqualStrings("", renderer.getLine(2));
 
         {
@@ -190,7 +203,7 @@ test "LintFileRenderer" {
             );
 
             try std.testing.expectEqualStrings(
-                \\ 2 | 987654321
+                \\ 2 | abcdefghi
                 \\   |    ^^^
             , output.items);
         }
@@ -211,7 +224,7 @@ test "LintFileRenderer" {
             try std.testing.expectEqualStrings(
                 \\ 1 | 123456789
                 \\   |    ^^^^^^
-                \\ 2 | 987654321
+                \\ 2 | abcdefghi
                 \\   | ^^
             , output.items);
         }

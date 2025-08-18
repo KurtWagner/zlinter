@@ -475,10 +475,11 @@ pub const CommentsDocument = struct {
         self.* = undefined;
     }
 
-    // TODO: Needs tests
-    pub fn lineNumber(self: CommentsDocument, byte: usize) usize {
+    /// Returns the line number (zero-indexed) of a given byte offset from in
+    /// the source of the document.
+    pub fn lineNumber(self: CommentsDocument, byte_offset: usize) usize {
         for (self.line_starts[1..], 1..) |line_start, i| {
-            if (byte < line_start) return i - 1;
+            if (byte_offset < line_start) return i - 1;
         }
         return self.line_starts.len - 1;
     }
@@ -1274,11 +1275,33 @@ test "parse - enable" {
     );
 }
 
+test "lineNumber" {
+    var doc_comments = try allocParse(
+        \\123
+        \\4
+        \\56
+    , std.testing.allocator);
+    defer doc_comments.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(0, doc_comments.lineNumber(0)); // 1
+    try std.testing.expectEqual(0, doc_comments.lineNumber(1)); // 2
+    try std.testing.expectEqual(0, doc_comments.lineNumber(2)); // 3
+    try std.testing.expectEqual(0, doc_comments.lineNumber(3)); // \n
+    try std.testing.expectEqual(1, doc_comments.lineNumber(4)); // 4
+    try std.testing.expectEqual(1, doc_comments.lineNumber(5)); // \n
+    try std.testing.expectEqual(2, doc_comments.lineNumber(6)); // 5
+    try std.testing.expectEqual(2, doc_comments.lineNumber(7)); // 6
+
+    // Maybe one day this should become an assertion but for now assumes anything
+    // past the last line is on the last line...
+    try std.testing.expectEqual(2, doc_comments.lineNumber(100));
+}
+
 fn testParse(
     comptime lines: []const []const u8,
     expected: []const Comment,
 ) !void {
-    inline for (&.{"\n"}) |new_line| {
+    inline for (&.{ "\n", "\r\n" }) |new_line| {
         comptime var source: [:0]const u8 = "";
         if (lines.len > 0) source = source ++ lines[0];
         if (lines.len > 1) {
