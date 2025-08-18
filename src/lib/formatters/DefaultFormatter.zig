@@ -39,6 +39,9 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: any
                 .warning => warning_count += 1,
             }
 
+            const start_line, const start_column = file_renderer.lineAndColumn(problem.start.byte_offset);
+            const end_line, const end_column = file_renderer.lineAndColumn(problem.end.byte_offset);
+
             var severity_buffer: [32]u8 = undefined;
             writer.print("{s} {s} [{s}{s}:{d}:{d}{s}] {s}{s}{s}\n\n", .{
                 problem.severity.name(&severity_buffer, .{ .tty = input.tty }),
@@ -49,8 +52,8 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: any
                 file_result.file_path,
                 // "+ 1" because line and column are zero indexed but
                 // when printing a link to a file it starts at 1.
-                problem.start.line + 1,
-                problem.start.column + 1,
+                start_line + 1,
+                start_column + 1,
                 input.tty.ansiOrEmpty(&.{.reset}),
 
                 input.tty.ansiOrEmpty(&.{.gray}),
@@ -58,10 +61,10 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: any
                 input.tty.ansiOrEmpty(&.{.reset}),
             }) catch |e| return logAndReturnWriteFailure("Problem title", e);
             file_renderer.render(
-                problem.start.line,
-                problem.start.column,
-                problem.end.line,
-                problem.end.column,
+                start_line,
+                start_column,
+                end_line,
+                end_column,
                 writer,
                 input.tty,
             ) catch |e| return logAndReturnWriteFailure("Problem lint", e);

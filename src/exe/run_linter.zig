@@ -379,13 +379,9 @@ fn runLinterRules(
                         .severity = .@"error",
                         .start = .{
                             .byte_offset = position.line_start + position.column,
-                            .line = position.line,
-                            .column = position.column,
                         },
                         .end = .{
                             .byte_offset = position.line_start + position.column + tree.tokenSlice(err.token).len - 1,
-                            .line = position.line,
-                            .column = position.column + tree.tokenSlice(err.token).len - 1,
                         },
                         .message = try allocAstErrorMsg(tree, err, gpa),
                     }}),
@@ -517,7 +513,10 @@ fn runFixes(
         });
         defer file.close();
 
-        const file_content = try file.deprecatedReader().readAllAlloc(gpa, zlinter.session.max_zig_file_size_bytes);
+        const file_content = try switch (zlinter.version.zig) {
+            .@"0.14" => file.reader(),
+            .@"0.15" => file.deprecatedReader(),
+        }.readAllAlloc(gpa, zlinter.session.max_zig_file_size_bytes);
         defer gpa.free(file_content);
 
         var output_slices = shims.ArrayList([]const u8).empty;
@@ -561,7 +560,10 @@ fn runFixes(
             });
             defer new_file.close();
 
-            var writer = new_file.deprecatedWriter();
+            var writer = switch (zlinter.version.zig) {
+                .@"0.14" => new_file.writer(),
+                .@"0.15" => new_file.deprecatedWriter(),
+            };
             for (output_slices.items) |output_slice| {
                 try writer.writeAll(output_slice);
             }

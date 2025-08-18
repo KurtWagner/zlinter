@@ -31,23 +31,15 @@ pub const LintResult = struct {
 pub const LintProblemLocation = struct {
     /// Location in entire source (inclusive)
     byte_offset: usize,
-    /// Line number in source (index zero - i.e., first line in doc is 0)
-    line: usize,
-    /// Column on line in source (index zero)
-    column: usize,
 
     pub const zero: LintProblemLocation = .{
         .byte_offset = 0,
-        .line = 0,
-        .column = 0,
     };
 
     pub fn startOfNode(tree: Ast, index: Ast.Node.Index) LintProblemLocation {
         const first_token_loc = tree.tokenLocation(0, tree.firstToken(index));
         return .{
             .byte_offset = first_token_loc.line_start + first_token_loc.column,
-            .line = first_token_loc.line,
-            .column = first_token_loc.column,
         };
     }
 
@@ -63,14 +55,10 @@ pub const LintProblemLocation = struct {
 
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 0,
-            .line = 0,
-            .column = 0,
         }, LintProblemLocation.startOfNode(tree, a_decl));
 
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 17,
-            .line = 1,
-            .column = 0,
         }, LintProblemLocation.startOfNode(tree, b_decl));
     }
 
@@ -80,8 +68,6 @@ pub const LintProblemLocation = struct {
         const column = last_token_loc.column + tree.tokenSlice(last_token).len;
         return .{
             .byte_offset = last_token_loc.line_start + column,
-            .line = last_token_loc.line,
-            .column = column,
         };
     }
 
@@ -97,14 +83,10 @@ pub const LintProblemLocation = struct {
 
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 15,
-            .line = 0,
-            .column = 15,
         }, LintProblemLocation.endOfNode(tree, a_decl));
 
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 32,
-            .line = 1,
-            .column = 15,
         }, LintProblemLocation.endOfNode(tree, b_decl));
     }
 
@@ -112,8 +94,6 @@ pub const LintProblemLocation = struct {
         const loc = tree.tokenLocation(0, index);
         return .{
             .byte_offset = loc.line_start + loc.column,
-            .line = loc.line,
-            .column = loc.column,
         };
     }
 
@@ -127,29 +107,21 @@ pub const LintProblemLocation = struct {
         // `pub` on line 1
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 0,
-            .line = 0,
-            .column = 0,
         }, LintProblemLocation.startOfToken(tree, 0));
 
         // `const` on line 1
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 4,
-            .line = 0,
-            .column = 4,
         }, LintProblemLocation.startOfToken(tree, 1));
 
         // `pub` on line 2
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 17,
-            .line = 1,
-            .column = 0,
         }, LintProblemLocation.startOfToken(tree, 6));
 
         // `const` on line 2
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 21,
-            .line = 1,
-            .column = 4,
         }, LintProblemLocation.startOfToken(tree, 7));
     }
 
@@ -158,8 +130,6 @@ pub const LintProblemLocation = struct {
         const column = loc.column + tree.tokenSlice(index).len - 1;
         return .{
             .byte_offset = loc.line_start + column,
-            .line = loc.line,
-            .column = column,
         };
     }
 
@@ -173,29 +143,21 @@ pub const LintProblemLocation = struct {
         // `pub` on line 1
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 2,
-            .line = 0,
-            .column = 2,
         }, LintProblemLocation.endOfToken(tree, 0));
 
         // `const` on line 1
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 8,
-            .line = 0,
-            .column = 8,
         }, LintProblemLocation.endOfToken(tree, 1));
 
         // `pub` on line 2
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 19,
-            .line = 1,
-            .column = 2,
         }, LintProblemLocation.endOfToken(tree, 6));
 
         // `const` on line 2
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 25,
-            .line = 1,
-            .column = 8,
         }, LintProblemLocation.endOfToken(tree, 7));
     }
 
@@ -203,8 +165,6 @@ pub const LintProblemLocation = struct {
         const first_token = doc.tokens[comment.first_token];
         return .{
             .byte_offset = first_token.first_byte,
-            .line = first_token.line,
-            .column = first_token.first_byte - doc.line_starts[first_token.line],
         };
     }
 
@@ -221,8 +181,6 @@ pub const LintProblemLocation = struct {
         try std.testing.expectEqualDeep(
             LintProblemLocation{
                 .byte_offset = 1,
-                .line = 0,
-                .column = 1,
             },
             LintProblemLocation.startOfComment(doc, doc.comments[0]),
         );
@@ -231,8 +189,6 @@ pub const LintProblemLocation = struct {
         try std.testing.expectEqualDeep(
             LintProblemLocation{
                 .byte_offset = 28,
-                .line = 1,
-                .column = 13,
             },
             LintProblemLocation.startOfComment(doc, doc.comments[1]),
         );
@@ -241,8 +197,6 @@ pub const LintProblemLocation = struct {
         try std.testing.expectEqualDeep(
             LintProblemLocation{
                 .byte_offset = 42,
-                .line = 2,
-                .column = 1,
             },
             LintProblemLocation.startOfComment(doc, doc.comments[2]),
         );
@@ -252,8 +206,6 @@ pub const LintProblemLocation = struct {
         const last_token = doc.tokens[comment.last_token];
         return .{
             .byte_offset = last_token.first_byte + last_token.len,
-            .line = last_token.line,
-            .column = last_token.first_byte + last_token.len - doc.line_starts[last_token.line],
         };
     }
 
@@ -270,8 +222,6 @@ pub const LintProblemLocation = struct {
         try std.testing.expectEqualDeep(
             LintProblemLocation{
                 .byte_offset = 14,
-                .line = 0,
-                .column = 14,
             },
             LintProblemLocation.endOfComment(doc, doc.comments[0]),
         );
@@ -280,8 +230,6 @@ pub const LintProblemLocation = struct {
         try std.testing.expectEqualDeep(
             LintProblemLocation{
                 .byte_offset = 40,
-                .line = 1,
-                .column = 25,
             },
             LintProblemLocation.endOfComment(doc, doc.comments[1]),
         );
@@ -290,8 +238,6 @@ pub const LintProblemLocation = struct {
         try std.testing.expectEqualDeep(
             LintProblemLocation{
                 .byte_offset = 55,
-                .line = 2,
-                .column = 14,
             },
             LintProblemLocation.endOfComment(doc, doc.comments[2]),
         );
@@ -307,8 +253,6 @@ pub const LintProblemLocation = struct {
 
         writer.print("{s}.{{\n", .{indent_str});
         writer.print("{s}  .byte_offset = {d},\n", .{ indent_str, self.byte_offset });
-        writer.print("{s}  .line = {d},\n", .{ indent_str, self.line });
-        writer.print("{s}  .column = {d},\n", .{ indent_str, self.column });
         writer.print("{s}}},\n", .{indent_str});
     }
 };
