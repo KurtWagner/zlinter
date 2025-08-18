@@ -475,6 +475,14 @@ pub const CommentsDocument = struct {
         self.* = undefined;
     }
 
+    // TODO: Needs tests
+    pub fn lineNumber(self: CommentsDocument, byte: usize) usize {
+        for (self.line_starts[1..], 1..) |line_start, i| {
+            if (byte < line_start) return i - 1;
+        }
+        return self.line_starts.len - 1;
+    }
+
     // TODO: Add unit tests for this new method:
     // Returns the slice containing the text content of the comment. For example
     // for a todo, this would be all text after the todo keyword.
@@ -1330,10 +1338,11 @@ pub const LazyRuleSkipper = struct {
     pub fn shouldSkip(self: *LazyRuleSkipper, problem: LintProblem) error{OutOfMemory}!bool {
         const index = try self.ensureBuilt();
 
-        if (!index.all.isSet(problem.start.line)) return true;
+        const line = self.doc.lineNumber(problem.start.byte_offset);
+        if (!index.all.isSet(line)) return true;
 
         if (index.rules.get(problem.rule_id)) |bits|
-            if (!bits.isSet(problem.start.line)) return true;
+            if (!bits.isSet(line)) return true;
 
         return false;
     }

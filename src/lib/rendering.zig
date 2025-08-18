@@ -26,6 +26,26 @@ pub const LintFileRenderer = struct {
         };
     }
 
+    // TODO: This needs tests
+    pub fn getLineColumn(self: Self, byte: usize) struct { usize, usize } {
+        const line = self.getLineNumber(byte);
+        return .{ line, self.getColumnNumber(line, byte) };
+    }
+
+    pub fn getLineNumber(self: Self, byte: usize) usize {
+        for (self.line_ends, 0..) |line_end, i| {
+            if (byte <= line_end) return i;
+        }
+        return self.line_ends.len;
+    }
+
+    pub fn getColumnNumber(self: Self, line: usize, byte: usize) usize {
+        return if (line == 0)
+            byte
+        else
+            byte - self.line_ends[line - 1] - 1;
+    }
+
     pub fn getLine(self: Self, line: usize) []const u8 {
         // Given this should only ever be called for a small handful of lines
         // we trim the potential carriage return in here and not during parsing
