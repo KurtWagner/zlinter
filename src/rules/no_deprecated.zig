@@ -149,26 +149,6 @@ fn run(
         null;
 }
 
-fn getLintProblemLocationStart(doc: zlinter.session.LintDocument, node_index: Ast.Node.Index) zlinter.results.LintProblemLocation {
-    const first_token = doc.handle.tree.firstToken(node_index);
-    const first_token_loc = doc.handle.tree.tokenLocation(0, first_token);
-    return .{
-        .byte_offset = first_token_loc.line_start,
-        .line = first_token_loc.line,
-        .column = first_token_loc.column,
-    };
-}
-
-fn getLintProblemLocationEnd(doc: zlinter.session.LintDocument, node_index: Ast.Node.Index) zlinter.results.LintProblemLocation {
-    const last_token = doc.handle.tree.lastToken(node_index);
-    const last_token_loc = doc.handle.tree.tokenLocation(0, last_token);
-    return .{
-        .byte_offset = last_token_loc.line_start,
-        .line = last_token_loc.line,
-        .column = last_token_loc.column + doc.handle.tree.tokenSlice(last_token).len - 1,
-    };
-}
-
 fn handleIdentifierAccess(
     rule: zlinter.rules.LintRule,
     gpa: std.mem.Allocator,
@@ -212,8 +192,8 @@ fn handleIdentifierAccess(
     if (try decl_with_handle.docComments(arena)) |comment| {
         if (getDeprecationFromDoc(comment)) |message| {
             try lint_problems.append(gpa, .{
-                .start = getLintProblemLocationStart(doc, node_index),
-                .end = getLintProblemLocationEnd(doc, node_index),
+                .start = .startOfNode(doc.handle.tree, node_index),
+                .end = .endOfNode(doc.handle.tree, node_index),
                 .message = try std.fmt.allocPrint(gpa, "Deprecated - {s}", .{message}),
                 .rule_id = rule.rule_id,
                 .severity = config.severity,
@@ -243,8 +223,8 @@ fn handleEnumLiteral(
     const deprecated_message = getDeprecationFromDoc(doc_comment) orelse return;
 
     try lint_problems.append(gpa, .{
-        .start = getLintProblemLocationStart(doc, node_index),
-        .end = getLintProblemLocationEnd(doc, node_index),
+        .start = .startOfNode(doc.handle.tree, node_index),
+        .end = .endOfNode(doc.handle.tree, node_index),
         .message = try std.fmt.allocPrint(gpa, "Deprecated: {s}", .{deprecated_message}),
         .rule_id = rule.rule_id,
         .severity = config.severity,
@@ -328,8 +308,8 @@ fn handleFieldAccess(
             const deprecated_message = getDeprecationFromDoc(doc_comment) orelse continue;
 
             try lint_problems.append(gpa, .{
-                .start = getLintProblemLocationStart(doc, node_index),
-                .end = getLintProblemLocationEnd(doc, node_index),
+                .start = .startOfNode(doc.handle.tree, node_index),
+                .end = .endOfNode(doc.handle.tree, node_index),
                 .message = try std.fmt.allocPrint(gpa, "Deprecated: {s}", .{deprecated_message}),
                 .rule_id = rule.rule_id,
                 .severity = config.severity,
@@ -408,7 +388,7 @@ test "no_deprecated - regression test for #36" {
             .{
                 .rule_id = "no_deprecated",
                 .severity = .@"error",
-                .slice = "",
+                .slice = ".Stdcall;",
                 .message = "Deprecated: Don't use",
             },
         },
