@@ -2,8 +2,8 @@
 //! > The `require_braces` rule is still under testing and development. It may
 //! > not work as expected and may change without notice.
 //!
-//! Enforces the use of braces `{}` for the bodies of `if`, `else`, `while`,
-//! and `for` statements.
+//! Requires specific brace `{}` usage for the bodies of `if`, `else`, `while`,
+//! `for`, `defer` and `catch` statements.
 //!
 //! By requiring braces, you avoid ambiguity, make code easier to maintain,
 //! and prevent unintended logic changes when adding new lines.
@@ -27,36 +27,43 @@
 
 /// Config for require_braces rule.
 pub const Config = struct {
+    /// Requirement for `if` statements
     if_statement: RequirementAndSeverity = .{
         .severity = .warning,
         .requirement = .multi_line_only,
     },
 
+    /// Requirement for `while` statements
     while_statement: RequirementAndSeverity = .{
         .severity = .off,
         .requirement = .multi_line_only,
     },
 
+    /// Requirement for for statements
     for_statement: RequirementAndSeverity = .{
         .severity = .warning,
         .requirement = .multi_line_only,
     },
 
+    /// Requirement for `catch` statements
     catch_statement: RequirementAndSeverity = .{
         .severity = .warning,
         .requirement = .multi_line_only,
     },
 
+    /// Requirement for `switch` statements
     switch_case_statement: RequirementAndSeverity = .{
         .severity = .off,
         .requirement = .multi_line_only,
     },
 
+    /// Requirement for `defer` statements
     defer_statement: RequirementAndSeverity = .{
         .severity = .off,
         .requirement = .multi_line_only,
     },
 
+    /// Requirement for `errdefer` statements
     errdefer_statement: RequirementAndSeverity = .{
         .severity = .off,
         .requirement = .multi_line_only,
