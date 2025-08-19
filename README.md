@@ -44,6 +44,7 @@ A **linter** is a tool that automatically checks source code for style issues, b
   - [no_todo](RULES.md#no_todo)
   - [no_undefined](RULES.md#no_undefined)
   - [no_unused](RULES.md#no_unused)
+  - [require_braces](RULES.md#require_braces)
   - [require_doc_comment](RULES.md#require_doc_comment)
   - [require_errdefer_dealloc](RULES.md#require_errdefer_dealloc)
   - [switch_case_ordering](RULES.md#switch_case_ordering)
@@ -70,11 +71,13 @@ hook it up to a build step, like `zig build lint`:
 **1. Save dependency to your zig project:**
 
    For 0.14.x:
+
    ```shell
    zig fetch --save git+https://github.com/kurtwagner/zlinter#0.14.x
    ```
 
    For master (0.15.x-dev):
+
    ```shell
    zig fetch --save git+https://github.com/kurtwagner/zlinter#master
    ```
