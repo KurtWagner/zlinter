@@ -196,7 +196,7 @@ fn run(
                     },
                     .multi_statement_only => {
                         if (has_braces) {
-                            const children_count = (doc.lineage.items(.children)[expr_node] orelse &.{}).len;
+                            const children_count = (doc.lineage.items(.children)[shims.NodeIndexShim.init(expr_node).index] orelse &.{}).len;
                             if (children_count == 1) {
                                 break :error_msg try allocator.dupe(u8, "Expects no braces when there's only one statement");
                             }
@@ -205,7 +205,7 @@ fn run(
                     .multi_line_only => {
                         const on_single_line = tree.tokensOnSameLine(first_token, last_token);
                         if (on_single_line) {
-                            const children_count = (doc.lineage.items(.children)[expr_node] orelse &.{}).len;
+                            const children_count = (doc.lineage.items(.children)[shims.NodeIndexShim.init(expr_node).index] orelse &.{}).len;
                             if (has_braces and children_count > 0) { // We allow empy blocks / no children
                                 break :error_msg try allocator.dupe(u8, "Expects no braces when on a single line");
                             }
@@ -275,13 +275,13 @@ fn fullStatement(tree: Ast, node: Ast.Node.Index) ?Statement {
         .@"defer" => .{
             .@"defer" = switch (zlinter.version.zig) {
                 .@"0.14" => shims.nodeData(tree, node).rhs,
-                .@"0.15" => shims.nodeData(tree, node).node[0],
+                .@"0.15" => shims.nodeData(tree, node).node,
             },
         },
         .@"errdefer" => .{
             .@"errdefer" = switch (zlinter.version.zig) {
                 .@"0.14" => shims.nodeData(tree, node).rhs,
-                .@"0.15" => shims.nodeData(tree, node).node[0],
+                .@"0.15" => shims.nodeData(tree, node).opt_token_and_node[1],
             },
         },
         else => null,
