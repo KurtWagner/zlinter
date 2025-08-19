@@ -154,34 +154,47 @@ fn isLiteral(tree: Ast, node: Ast.Node.Index) ?Literal {
 
 test "bad cases" {
     const rule = buildRule(.{});
-    inline for (&.{
-        "if (1 == 1) {}",
-        "if (1 <= 2) {}",
-        "if (true) {}",
-        "if (false) {}",
-        "if (1 > 2) {}",
-        "if (2 >= 2) {}",
-        "if (2 != 1) {}",
-        "if (1 == 1 or 1 >= a) {}",
-        "if (1 == a and 2 == 3) {}",
-        "const a = 1 == 2;",
-        "const a = 1 <= 2;",
-        "while (false) {}",
-        "while (1==1) {}",
-        "while (2==1) {}",
-    }) |source| {
-        var result = (try zlinter.testing.runRule(
-            rule,
-            zlinter.testing.paths.posix("path/to/my_file.zig"),
-            "pub fn main() void {" ++ source ++ "}",
-            .{},
-        ));
-        defer if (result) |*r| r.deinit(std.testing.allocator);
-        std.testing.expectEqual(1, result.?.problems.len) catch |e| {
-            std.debug.print("Expected issues: {s}\n", .{source});
-            return e;
-        };
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        inline for (&.{
+            .{ "if (1 == 1) {}", "1 == 1)" },
+            .{ "if (1 <= 2) {}", "1 <= 2)" },
+            .{ "if (true) {}", "true)" },
+            .{ "if (false) {}", "false)" },
+            .{ "if (1 > 2) {}", "1 > 2)" },
+            .{ "if (2 >= 2) {}", "2 >= 2)" },
+            .{ "if (2 != 1) {}", "2 != 1)" },
+            .{ "if (1 == 1 or 1 >= a) {}", "1 == 1 " },
+            .{ "if (1 == a and 2 == 3) {}", "2 == 3)" },
+            .{ "const a = 1 == 2;", "1 == 2;" },
+            .{ "const a = 1 <= 2;", "1 <= 2;" },
+            .{ "while (false) {}", "false)" },
+            .{ "while (1 == 1) {}", "1 == 1)" },
+            .{ "while (2 == 1) {}", "2 == 1)" },
+        }) |tuple| {
+            const source, const problem = tuple;
+            try zlinter.testing.testRunRule(
+                rule,
+                "pub fn main() void {\n" ++ source ++ "\n}",
+                .{},
+                Config{ .severity = severity },
+                &.{
+                    .{
+                        .rule_id = "no_literal_only_bool_expression",
+                        .severity = severity,
+                        .slice = problem,
+                        .message = "Useless condition",
+                    },
+                },
+            );
+        }
     }
+    try zlinter.testing.testRunRule(
+        rule,
+        "pub fn main() void { var a = 1 == 1; }",
+        .{},
+        Config{ .severity = .off },
+        &.{},
+    );
 }
 
 test "good cases" {
@@ -191,17 +204,13 @@ test "good cases" {
         "if (a == 1) {}",
         "if (1 >= a) {}",
     }) |source| {
-        var result = (try zlinter.testing.runRule(
+        try zlinter.testing.testRunRule(
             rule,
-            zlinter.testing.paths.posix("path/to/my_file.zig"),
-            "pub fn main() void {" ++ source ++ "}",
+            "pub fn main() void {\n" ++ source ++ "\n}",
             .{},
-        ));
-        defer if (result) |*r| r.deinit(std.testing.allocator);
-        std.testing.expectEqual(null, result) catch |e| {
-            std.debug.print("Expected no issues: {s}\n", .{source});
-            return e;
-        };
+            Config{ .severity = .warning },
+            &.{},
+        );
     }
 }
 

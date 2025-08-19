@@ -171,7 +171,12 @@ fn run(
                     current_node,
                     .{},
                 );
-                const is_multiline = expected_start.line < expected_end.line;
+                const is_multiline = is_multiline: {
+                    for (expected_start.byte_offset..expected_end.byte_offset + 1) |byte| {
+                        if (doc.handle.tree.source[byte] == '\n') break :is_multiline true;
+                    }
+                    break :is_multiline false;
+                };
 
                 try expected_source.appendSlice(allocator, tree.source[expected_start.byte_offset .. expected_end.byte_offset + 1]);
                 if (!is_last_field or is_multiline) {
@@ -223,8 +228,6 @@ fn nodeSpanIncludingComments(
     const prev_end: zlinter.results.LintProblemLocation = .endOfToken(tree, first_token - 1);
     const start: zlinter.results.LintProblemLocation = .{
         .byte_offset = prev_end.byte_offset + 1,
-        .line = if (tree.source[prev_end.byte_offset] == '\n') prev_end.line + 1 else prev_end.line,
-        .column = if (tree.source[prev_end.byte_offset] == '\n') 0 else prev_end.column + 1,
     };
 
     var last_token = tree.lastToken(last_node);

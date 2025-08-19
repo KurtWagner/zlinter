@@ -180,113 +180,78 @@ test "no_swallow_error" {
         \\  if (method()) {} else |e| { std.log.err("{s}", @errorName(e)); } 
         \\}
     ;
-    var result = (try zlinter.testing.runRule(
+
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            rule,
+            source,
+            .{},
+            Config{
+                // TODO: Split these into separate tests to ensure severity isn't leaked
+                .detect_catch_unreachable = severity,
+                .detect_empty_catch = severity,
+                .detect_empty_else = severity,
+                .detect_else_unreachable = severity,
+            },
+            &.{
+                .{
+                    .rule_id = "no_swallow_error",
+                    .severity = severity,
+                    .slice =
+                    \\if (method()) {} else |_| {}
+                    \\
+                    ,
+                    .message = "Avoid swallowing error with empty else",
+                },
+                .{
+                    .rule_id = "no_swallow_error",
+                    .severity = severity,
+                    .slice =
+                    \\if (method()) {} else |_| { unreachable; }
+                    \\
+                    ,
+                    .message = "Avoid swallowing error with else unreachable",
+                },
+                .{
+                    .rule_id = "no_swallow_error",
+                    .severity = severity,
+                    .slice = "if (method()) {} else |_| unreachable;",
+                    .message = "Avoid swallowing error with else unreachable",
+                },
+                .{
+                    .rule_id = "no_swallow_error",
+                    .severity = severity,
+                    .slice = "method() catch { unreachable; };",
+                    .message = "Avoid swallowing error with catch unreachable",
+                },
+                .{
+                    .rule_id = "no_swallow_error",
+                    .severity = severity,
+                    .slice = "method() catch unreachable;",
+                    .message = "Avoid swallowing error with catch unreachable",
+                },
+                .{
+                    .rule_id = "no_swallow_error",
+                    .severity = severity,
+                    .slice = "method() catch {};",
+                    .message = "Avoid swallowing error with empty catch",
+                },
+            },
+        );
+    }
+
+    // Off:
+    try zlinter.testing.testRunRule(
         rule,
-        zlinter.testing.paths.posix("path/to/my_file.zig"),
         source,
         .{},
-    )).?;
-    defer result.deinit(std.testing.allocator);
-
-    try std.testing.expectStringEndsWith(
-        result.file_path,
-        zlinter.testing.paths.posix("path/to/my_file.zig"),
-    );
-
-    try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.results.LintProblem{
-            .{
-                .rule_id = "no_swallow_error",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 196,
-                    .line = 6,
-                    .column = 2,
-                },
-                .end = .{
-                    .byte_offset = 224,
-                    .line = 6,
-                    .column = 30,
-                },
-                .message = "Avoid swallowing error with empty else",
-            },
-            .{
-                .rule_id = "no_swallow_error",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 151,
-                    .line = 5,
-                    .column = 2,
-                },
-                .end = .{
-                    .byte_offset = 193,
-                    .line = 5,
-                    .column = 44,
-                },
-                .message = "Avoid swallowing error with else unreachable",
-            },
-            .{
-                .rule_id = "no_swallow_error",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 110,
-                    .line = 4,
-                    .column = 2,
-                },
-                .end = .{
-                    .byte_offset = 147,
-                    .line = 4,
-                    .column = 39,
-                },
-                .message = "Avoid swallowing error with else unreachable",
-            },
-            .{
-                .rule_id = "no_swallow_error",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 75,
-                    .line = 3,
-                    .column = 2,
-                },
-                .end = .{
-                    .byte_offset = 106,
-                    .line = 3,
-                    .column = 33,
-                },
-                .message = "Avoid swallowing error with catch unreachable",
-            },
-            .{
-                .rule_id = "no_swallow_error",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 45,
-                    .line = 2,
-                    .column = 2,
-                },
-                .end = .{
-                    .byte_offset = 71,
-                    .line = 2,
-                    .column = 28,
-                },
-                .message = "Avoid swallowing error with catch unreachable",
-            },
-            .{
-                .rule_id = "no_swallow_error",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 24,
-                    .line = 1,
-                    .column = 2,
-                },
-                .end = .{
-                    .byte_offset = 41,
-                    .line = 1,
-                    .column = 19,
-                },
-                .message = "Avoid swallowing error with empty catch",
-            },
+        Config{
+            .detect_catch_unreachable = .off,
+            .detect_empty_catch = .off,
+            .detect_empty_else = .off,
+            .detect_else_unreachable = .off,
         },
-        result.problems,
+        &.{},
     );
 }
 

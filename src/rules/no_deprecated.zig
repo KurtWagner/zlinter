@@ -149,26 +149,6 @@ fn run(
         null;
 }
 
-fn getLintProblemLocationStart(doc: zlinter.session.LintDocument, node_index: Ast.Node.Index) zlinter.results.LintProblemLocation {
-    const first_token = doc.handle.tree.firstToken(node_index);
-    const first_token_loc = doc.handle.tree.tokenLocation(0, first_token);
-    return .{
-        .byte_offset = first_token_loc.line_start,
-        .line = first_token_loc.line,
-        .column = first_token_loc.column,
-    };
-}
-
-fn getLintProblemLocationEnd(doc: zlinter.session.LintDocument, node_index: Ast.Node.Index) zlinter.results.LintProblemLocation {
-    const last_token = doc.handle.tree.lastToken(node_index);
-    const last_token_loc = doc.handle.tree.tokenLocation(0, last_token);
-    return .{
-        .byte_offset = last_token_loc.line_start,
-        .line = last_token_loc.line,
-        .column = last_token_loc.column + doc.handle.tree.tokenSlice(last_token).len - 1,
-    };
-}
-
 fn handleIdentifierAccess(
     rule: zlinter.rules.LintRule,
     gpa: std.mem.Allocator,
@@ -212,8 +192,8 @@ fn handleIdentifierAccess(
     if (try decl_with_handle.docComments(arena)) |comment| {
         if (getDeprecationFromDoc(comment)) |message| {
             try lint_problems.append(gpa, .{
-                .start = getLintProblemLocationStart(doc, node_index),
-                .end = getLintProblemLocationEnd(doc, node_index),
+                .start = .startOfNode(doc.handle.tree, node_index),
+                .end = .endOfNode(doc.handle.tree, node_index),
                 .message = try std.fmt.allocPrint(gpa, "Deprecated - {s}", .{message}),
                 .rule_id = rule.rule_id,
                 .severity = config.severity,
@@ -243,8 +223,8 @@ fn handleEnumLiteral(
     const deprecated_message = getDeprecationFromDoc(doc_comment) orelse return;
 
     try lint_problems.append(gpa, .{
-        .start = getLintProblemLocationStart(doc, node_index),
-        .end = getLintProblemLocationEnd(doc, node_index),
+        .start = .startOfNode(doc.handle.tree, node_index),
+        .end = .endOfNode(doc.handle.tree, node_index),
         .message = try std.fmt.allocPrint(gpa, "Deprecated: {s}", .{deprecated_message}),
         .rule_id = rule.rule_id,
         .severity = config.severity,
@@ -328,8 +308,8 @@ fn handleFieldAccess(
             const deprecated_message = getDeprecationFromDoc(doc_comment) orelse continue;
 
             try lint_problems.append(gpa, .{
-                .start = getLintProblemLocationStart(doc, node_index),
-                .end = getLintProblemLocationEnd(doc, node_index),
+                .start = .startOfNode(doc.handle.tree, node_index),
+                .end = .endOfNode(doc.handle.tree, node_index),
                 .message = try std.fmt.allocPrint(gpa, "Deprecated: {s}", .{deprecated_message}),
                 .rule_id = rule.rule_id,
                 .severity = config.severity,
@@ -390,7 +370,8 @@ test {
 }
 
 test "no_deprecated - regression test for #36" {
-    const source: [:0]const u8 =
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         \\const convention: namespace.CallingConvention = .Stdcall;
         \\
         \\const namespace = struct {
@@ -400,48 +381,25 @@ test "no_deprecated - regression test for #36" {
         \\    std_call,
         \\  };
         \\};
-    ;
-
-    const rule = buildRule(.{});
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/regression_36.zig"),
-        source,
+    ,
         .{},
-    )).?;
-    defer result.deinit(std.testing.allocator);
-
-    try std.testing.expectStringEndsWith(
-        result.file_path,
-        zlinter.testing.paths.posix("path/to/regression_36.zig"),
-    );
-
-    try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.results.LintProblem{
+        Config{ .severity = .@"error" },
+        &.{
             .{
                 .rule_id = "no_deprecated",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 0,
-                    .line = 0,
-                    .column = 48,
-                },
-                .end = .{
-                    .byte_offset = 0,
-                    .line = 0,
-                    .column = 55,
-                },
+                .severity = .@"error",
+                .slice = ".Stdcall;",
                 .message = "Deprecated: Don't use",
             },
         },
-        result.problems,
     );
 }
 
 test "no_deprecated - explicit 0.15.x breaking changes" {
     if (zlinter.version.zig != .@"0.14") return error.SkipZigTest;
 
-    const source: [:0]const u8 =
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         \\
         \\pub usingnamespace @import("something");
         \\
@@ -453,86 +411,35 @@ test "no_deprecated - explicit 0.15.x breaking changes" {
         \\  var frame = async func3();
         \\  try expect(await frame == 5);
         \\}
-    ;
-
-    const rule = buildRule(.{});
-    var result = (try zlinter.testing.runRule(
-        rule,
-        zlinter.testing.paths.posix("path/to/removed_features.zig"),
-        source,
+    ,
         .{},
-    )).?;
-    defer result.deinit(std.testing.allocator);
-
-    try std.testing.expectStringEndsWith(
-        result.file_path,
-        zlinter.testing.paths.posix("path/to/removed_features.zig"),
-    );
-
-    try zlinter.testing.expectProblemsEqual(
-        &[_]zlinter.results.LintProblem{
+        Config{ .severity = .@"error" },
+        &.{
             .{
                 .rule_id = "no_deprecated",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 5,
-                    .line = 1,
-                    .column = 4,
-                },
-                .end = .{
-                    .byte_offset = 18,
-                    .line = 1,
-                    .column = 17,
-                },
+                .severity = .@"error",
+                .slice = "usingnamespace",
                 .message = "Deprecated - `usingnamespace` keyword is removed in 0.15",
             },
             .{
                 .rule_id = "no_deprecated",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 69,
-                    .line = 4,
-                    .column = 9,
-                },
-                .end = .{
-                    .byte_offset = 84,
-                    .line = 4,
-                    .column = 24,
-                },
+                .severity = .@"error",
+                .slice = "@frameSize(u32);",
                 .message = "Deprecated - @frameSize builtin is removed in 0.15",
             },
             .{
                 .rule_id = "no_deprecated",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 126,
-                    .line = 8,
-                    .column = 14,
-                },
-                .end = .{
-                    .byte_offset = 139,
-                    .line = 8,
-                    .column = 27,
-                },
+                .severity = .@"error",
+                .slice = "async func3();",
                 .message = "Deprecated - `async` keyword is removed in 0.15",
             },
             .{
                 .rule_id = "no_deprecated",
-                .severity = .warning,
-                .start = .{
-                    .byte_offset = 154,
-                    .line = 9,
-                    .column = 13,
-                },
-                .end = .{
-                    .byte_offset = 165,
-                    .line = 9,
-                    .column = 24,
-                },
+                .severity = .@"error",
+                .slice = "await frame ",
                 .message = "Deprecated - `await` keyword is removed in 0.15",
             },
         },
-        result.problems,
     );
 }
 
