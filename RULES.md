@@ -781,6 +781,79 @@ Enforces that container declarations are referenced.
 
   * **Default:** `.warning`
 
+## `require_braces`
+
+> [!WARNING]
+> The `require_braces` rule is still under testing and development. It may
+> not work as expected and may change without notice.
+
+Requires specific brace `{}` usage for the bodies of `if`, `else`, `while`,
+`for`, `defer` and `catch` statements.
+
+By requiring braces, you avoid ambiguity, make code easier to maintain,
+and prevent unintended logic changes when adding new lines.
+
+If an `if` statement is used as part of a return or assignment it is excluded
+from this rule (braces not required). For example, the following two examples
+will be ignored by this rule.
+
+```zig
+const label = if (x > 10) "over 10" else "under 10";
+```
+
+and
+
+```zig
+return if (x > 20)
+   "over 20"
+else
+   "under 20";
+```
+
+**Config options:**
+
+* `if_statement`
+
+  * Requirement for `if` statements
+
+  * **Default:** `.{ .severity = .warning, .requirement = .multi_line_only, }`
+
+* `while_statement`
+
+  * Requirement for `while` statements
+
+  * **Default:** `.{ .severity = .off, .requirement = .multi_line_only, }`
+
+* `for_statement`
+
+  * Requirement for for statements
+
+  * **Default:** `.{ .severity = .warning, .requirement = .multi_line_only, }`
+
+* `catch_statement`
+
+  * Requirement for `catch` statements
+
+  * **Default:** `.{ .severity = .warning, .requirement = .multi_line_only, }`
+
+* `switch_case_statement`
+
+  * Requirement for `switch` statements
+
+  * **Default:** `.{ .severity = .off, .requirement = .multi_line_only, }`
+
+* `defer_statement`
+
+  * Requirement for `defer` statements
+
+  * **Default:** `.{ .severity = .off, .requirement = .multi_line_only, }`
+
+* `errdefer_statement`
+
+  * Requirement for `errdefer` statements
+
+  * **Default:** `.{ .severity = .off, .requirement = .multi_line_only, }`
+
 ## `require_doc_comment`
 
 Require doc comments for all public functions, types, and constants.
