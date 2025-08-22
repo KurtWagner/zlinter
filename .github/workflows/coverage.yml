@@ -6,8 +6,7 @@ on:
     types:
       - completed
     branches:
-      - master
-      - 0.14.x
+      - 0.15.x
 jobs:
   coverage:
     if: github.event.workflow_run.conclusion == 'success' && github.repository_owner == 'KurtWagner'
@@ -22,7 +21,7 @@ jobs:
       - name: "Setup zig environment"
         uses: mlugg/setup-zig@v2
         with:
-          version: master
+          version: 0.15.1
       
       - run: zig env
 
