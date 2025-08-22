@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - master
-      - 0.14.x
     paths:
       - '**.zig'
       - '**.zon'
