@@ -202,7 +202,7 @@ fn callWithName(doc: zlinter.session.LintDocument, node: Ast.Node.Index, buffer:
         .field_access => {
             const field_node, const fn_name = switch (zlinter.version.zig) {
                 .@"0.14" => .{ fn_expr_node_data.lhs, fn_expr_node_data.rhs },
-                .@"0.15" => .{ fn_expr_node_data.node_and_token[0], fn_expr_node_data.node_and_token[1] },
+                .@"0.15", .@"0.16" => .{ fn_expr_node_data.node_and_token[0], fn_expr_node_data.node_and_token[1] },
             };
             std.debug.assert(shims.tokenTag(tree, fn_name) == .identifier);
 
@@ -333,7 +333,7 @@ fn declRef(doc: zlinter.session.LintDocument, var_decl_node: Ast.Node.Index) !?D
         .container => |container| {
             const scope_handle = switch (zlinter.version.zig) {
                 .@"0.14" => container,
-                .@"0.15" => container.scope_handle,
+                .@"0.15", .@"0.16" => container.scope_handle,
             };
             const node = scope_handle.toNode();
             const tag = shims.nodeTag(scope_handle.handle.tree, node);
@@ -368,7 +368,7 @@ fn declRef(doc: zlinter.session.LintDocument, var_decl_node: Ast.Node.Index) !?D
                                 doc_scope,
                                 tree.tokens.items(.start)[first_token - 1],
                             ).unwrap(),
-                            .@"0.15" => zlinter.zls.Analyser.innermostScopeAtIndexWithTag(
+                            .@"0.15", .@"0.16" => zlinter.zls.Analyser.innermostScopeAtIndexWithTag(
                                 doc_scope,
                                 tree.tokenStart(first_token - 1),
                                 .initOne(.function),

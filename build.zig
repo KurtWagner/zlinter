@@ -1,7 +1,7 @@
 const @"build.zig" = @This();
 
 const zls_version: []const u8 = switch (version.zig) {
-    .@"0.15" => "0.15.0-dev",
+    .@"0.15", .@"0.16" => "0.15.0-dev",
     .@"0.14" => "0.14.0",
 };
 
@@ -558,7 +558,7 @@ fn addWatchInput(
         },
         else => switch (version.zig) {
             .@"0.14" => @panic(b.fmt("Unable to open directory '{}': {s}", .{ src_dir_path, @errorName(e) })),
-            .@"0.15" => @panic(b.fmt("Unable to open directory '{f}': {t}", .{ src_dir_path, e })),
+            .@"0.15", .@"0.16" => @panic(b.fmt("Unable to open directory '{f}': {t}", .{ src_dir_path, e })),
         },
     };
     defer src_dir.close();
@@ -876,7 +876,7 @@ const ZlinterRun = struct {
 
             const writer = switch (version.zig) {
                 .@"0.14" => child.stdin.?.writer(),
-                .@"0.15" => child.stdin.?.deprecatedWriter(),
+                .@"0.15", .@"0.16" => child.stdin.?.deprecatedWriter(),
             };
             writer.writeInt(usize, build_info_zon_bytes.len, .little) catch @panic("stdin write failed");
             writer.writeAll(build_info_zon_bytes) catch @panic("stdin write failed");

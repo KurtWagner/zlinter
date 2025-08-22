@@ -239,7 +239,7 @@ fn isImportCall(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
             const data = shims.nodeData(tree, node);
             const lhs_node = NodeIndexShim.initOptional(switch (zlinter.version.zig) {
                 .@"0.14" => data.lhs,
-                .@"0.15" => data.opt_node_and_opt_node[0],
+                .@"0.15", .@"0.16" => data.opt_node_and_opt_node[0],
             }) orelse return null;
 
             std.debug.assert(shims.nodeTag(tree, lhs_node.toNodeIndex()) == .string_literal);

@@ -93,22 +93,22 @@ pub fn unwrapNode(
         switch (nodeTag(tree, current)) {
             .unwrap_optional => if (options.unwrap_optional_unwrap) switch (version.zig) {
                 .@"0.14" => current = nodeData(tree, current).lhs,
-                .@"0.15" => current = nodeData(tree, current).node_and_token.@"0",
+                .@"0.15", .@"0.16" => current = nodeData(tree, current).node_and_token.@"0",
             } else break,
             .optional_type => if (options.unwrap_optional) switch (version.zig) {
                 .@"0.14" => current = nodeData(tree, current).lhs,
-                .@"0.15" => current = nodeData(tree, current).node,
+                .@"0.15", .@"0.16" => current = nodeData(tree, current).node,
             } else break,
             .ptr_type_aligned,
             .ptr_type_sentinel,
             => if (options.unwrap_pointer) switch (version.zig) {
                 .@"0.14" => current = nodeData(tree, current).rhs,
-                .@"0.15" => current = nodeData(tree, current).opt_node_and_node.@"1",
+                .@"0.15", .@"0.16" => current = nodeData(tree, current).opt_node_and_node.@"1",
             } else break,
             .ptr_type,
             => if (options.unwrap_pointer) switch (version.zig) {
                 .@"0.14" => current = nodeData(tree, current).rhs,
-                .@"0.15" => current = nodeData(tree, current).extra_and_node.@"1",
+                .@"0.15", .@"0.16" => current = nodeData(tree, current).extra_and_node.@"1",
             } else break,
             else => break,
         }
@@ -186,7 +186,7 @@ pub fn isContainerNamespace(tree: Ast, container_decl: Ast.full.ContainerDecl) b
 pub fn ArrayList(T: type) type {
     return comptime switch (version.zig) {
         .@"0.14" => std.ArrayListUnmanaged(T),
-        .@"0.15" => std.ArrayList(T),
+        .@"0.15", .@"0.16" => std.ArrayList(T),
     };
 }
 

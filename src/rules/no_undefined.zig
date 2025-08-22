@@ -122,7 +122,7 @@ fn run(
                             const node_data = shims.nodeData(tree, block_node.toNodeIndex());
                             const lhs_node, const identifier_token = switch (zlinter.version.zig) {
                                 .@"0.14" => .{ node_data.lhs, node_data.rhs },
-                                .@"0.15" => .{ node_data.node_and_token.@"0", node_data.node_and_token.@"1" },
+                                .@"0.15", .@"0.16" => .{ node_data.node_and_token.@"0", node_data.node_and_token.@"1" },
                             };
                             const lhs_source = tree.getNodeSource(lhs_node);
                             if (std.mem.eql(u8, lhs_source, var_name)) {

@@ -1,6 +1,6 @@
 pub const Diagnostics = switch (version.zig) {
     .@"0.14" => std.zon.parse.Status,
-    .@"0.15" => std.zon.parse.Diagnostics,
+    .@"0.15", .@"0.16" => std.zon.parse.Diagnostics,
 };
 
 pub fn parseFileAlloc(
@@ -18,7 +18,7 @@ pub fn parseFileAlloc(
     const null_terminated = value: {
         const file_content = switch (version.zig) {
             .@"0.14" => try file.reader().readAllAlloc(gpa, session.max_zig_file_size_bytes),
-            .@"0.15" => try file.deprecatedReader().readAllAlloc(gpa, session.max_zig_file_size_bytes),
+            .@"0.15", .@"0.16" => try file.deprecatedReader().readAllAlloc(gpa, session.max_zig_file_size_bytes),
         };
         defer gpa.free(file_content);
         break :value try gpa.dupeZ(u8, file_content);

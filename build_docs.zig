@@ -100,7 +100,7 @@ fn writeFileRuleConfig(content: []const u8, gpa: std.mem.Allocator, writer: anyt
 
             const struct_init = tree.fullContainerDecl(&struct_buffer, switch (zig_version) {
                 .@"0.14" => var_decl.ast.init_node,
-                .@"0.15" => var_decl.ast.init_node.unwrap().?,
+                .@"0.15", .@"0.16" => var_decl.ast.init_node.unwrap().?,
             }).?;
 
             for (struct_init.ast.members) |field| {
@@ -124,7 +124,7 @@ fn writeFileRuleConfig(content: []const u8, gpa: std.mem.Allocator, writer: anyt
 
                 const maybe_default: ?[]const u8 = switch (zig_version) {
                     .@"0.14" => if (container_field.ast.value_expr != 0) tree.getNodeSource(container_field.ast.value_expr) else null,
-                    .@"0.15" => if (container_field.ast.value_expr.unwrap()) |default_node| tree.getNodeSource(default_node) else null,
+                    .@"0.15", .@"0.16" => if (container_field.ast.value_expr.unwrap()) |default_node| tree.getNodeSource(default_node) else null,
                 };
 
                 if (maybe_default) |default| {

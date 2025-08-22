@@ -65,7 +65,7 @@ fn run(
                 node.toNodeIndex(),
                 switch (zlinter.version.zig) {
                     .@"0.14" => shims.nodeData(tree, node.toNodeIndex()).rhs,
-                    .@"0.15" => shims.nodeData(tree, node.toNodeIndex()).node_and_token.@"1",
+                    .@"0.15", .@"0.16" => shims.nodeData(tree, node.toNodeIndex()).node_and_token.@"1",
                 },
                 &lint_problems,
                 config,
@@ -262,7 +262,7 @@ fn getSymbolEnumLiteral(
             name,
             ancestors.items[0..],
         ),
-        .@"0.15" => doc.analyser.lookupSymbolFieldInit(
+        .@"0.15", .@"0.16" => doc.analyser.lookupSymbolFieldInit(
             doc.handle,
             name,
             ancestors.items[0],

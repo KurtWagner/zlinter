@@ -161,7 +161,7 @@ fn run(
 
             const rbrace = switch (zlinter.version.zig) {
                 .@"0.14" => node_data.rhs,
-                .@"0.15" => node_data.token_and_token.@"1",
+                .@"0.15", .@"0.16" => node_data.token_and_token.@"1",
             };
 
             var token = rbrace - 1;
