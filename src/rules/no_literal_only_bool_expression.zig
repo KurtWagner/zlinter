@@ -73,7 +73,7 @@ fn run(
                 const data = shims.nodeData(tree, node.toNodeIndex());
                 const lhs, const rhs = switch (zlinter.version.zig) {
                     .@"0.14" => .{ data.lhs, data.rhs },
-                    .@"0.15" => .{ data.node_and_node[0], data.node_and_node[1] },
+                    .@"0.15", .@"0.16" => .{ data.node_and_node[0], data.node_and_node[1] },
                 };
                 if (isLiteral(tree, lhs) != null and isLiteral(tree, rhs) != null) {
                     try lint_problems.append(allocator, .{

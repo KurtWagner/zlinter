@@ -251,7 +251,7 @@ pub const Printer = struct {
                 .init(std.io.getStdOut()),
                 verbose,
             ),
-            .@"0.15" => self.init(
+            .@"0.15", .@"0.16" => self.init(
                 .{ .context = .{ .file = std.fs.File.stdout() } },
                 .{ .context = .{ .file = std.fs.File.stderr() } },
                 .init(std.fs.File.stdout()),

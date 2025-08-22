@@ -38,7 +38,7 @@ pub const LintDocument = struct {
 
     pub inline fn resolveTypeOfNode(self: @This(), node: Ast.Node.Index) !?zls.Analyser.Type {
         return switch (version.zig) {
-            .@"0.15" => self.analyser.resolveTypeOfNode(.of(node, self.handle)),
+            .@"0.15", .@"0.16" => self.analyser.resolveTypeOfNode(.of(node, self.handle)),
             .@"0.14" => self.analyser.resolveTypeOfNode(.{ .handle = self.handle, .node = node }),
         };
     }
@@ -47,7 +47,7 @@ pub const LintDocument = struct {
         const resolved_type = try self.resolveTypeOfNode(node) orelse return null;
         const instance_type = if (resolved_type.isMetaType()) resolved_type else switch (version.zig) {
             .@"0.14" => resolved_type.instanceTypeVal(self.analyser) orelse resolved_type,
-            .@"0.15" => try resolved_type.instanceTypeVal(self.analyser) orelse resolved_type,
+            .@"0.15", .@"0.16" => try resolved_type.instanceTypeVal(self.analyser) orelse resolved_type,
         };
 
         return instance_type.resolveDeclLiteralResultType();
@@ -248,7 +248,7 @@ pub const LintDocument = struct {
                         .container => |container| result: {
                             const container_node, const container_tree = switch (version.zig) {
                                 .@"0.14" => .{ container.toNode(), container.handle.tree },
-                                .@"0.15" => .{ container.scope_handle.toNode(), container.scope_handle.handle.tree },
+                                .@"0.15", .@"0.16" => .{ container.scope_handle.toNode(), container.scope_handle.handle.tree },
                             };
 
                             if (!NodeIndexShim.init(container_node).isRoot()) {
@@ -410,7 +410,7 @@ pub const LintContext = struct {
             .allocator = gpa,
             .diagnostics_collection = &self.diagnostics_collection,
             .config = switch (version.zig) {
-                .@"0.15" => .{
+                .@"0.15", .@"0.16" => .{
                     .zig_exe_path = config.zig_exe_path,
                     .zig_lib_dir = dir: {
                         if (config.zig_lib_path) |zig_lib_path| {
@@ -493,7 +493,7 @@ pub const LintContext = struct {
                 &self.intern_pool,
                 handle,
             ),
-            .@"0.15" => zls.Analyser.init(
+            .@"0.15", .@"0.16" => zls.Analyser.init(
                 gpa,
                 arena,
                 &self.document_store,

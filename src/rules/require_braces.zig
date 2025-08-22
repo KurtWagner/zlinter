@@ -269,19 +269,19 @@ fn fullStatement(tree: Ast, node: Ast.Node.Index) ?Statement {
         .@"catch" => .{
             .@"catch" = switch (zlinter.version.zig) {
                 .@"0.14" => shims.nodeData(tree, node).rhs,
-                .@"0.15" => shims.nodeData(tree, node).node_and_node[1],
+                .@"0.15", .@"0.16" => shims.nodeData(tree, node).node_and_node[1],
             },
         },
         .@"defer" => .{
             .@"defer" = switch (zlinter.version.zig) {
                 .@"0.14" => shims.nodeData(tree, node).rhs,
-                .@"0.15" => shims.nodeData(tree, node).node,
+                .@"0.15", .@"0.16" => shims.nodeData(tree, node).node,
             },
         },
         .@"errdefer" => .{
             .@"errdefer" = switch (zlinter.version.zig) {
                 .@"0.14" => shims.nodeData(tree, node).rhs,
-                .@"0.15" => shims.nodeData(tree, node).opt_token_and_node[1],
+                .@"0.15", .@"0.16" => shims.nodeData(tree, node).opt_token_and_node[1],
             },
         },
         else => null,

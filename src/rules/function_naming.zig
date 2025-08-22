@@ -95,7 +95,7 @@ fn run(
             const return_type = (try doc.resolveTypeOfTypeNode(
                 switch (zlinter.version.zig) {
                     .@"0.14" => fn_proto.ast.return_type,
-                    .@"0.15" => fn_proto.ast.return_type.unwrap().?,
+                    .@"0.15", .@"0.16" => fn_proto.ast.return_type.unwrap().?,
                 },
             )) orelse continue :nodes;
 

@@ -61,7 +61,7 @@ fn run(
                     const data = shims.nodeData(tree, node.toNodeIndex());
                     const rhs = switch (zlinter.version.zig) {
                         .@"0.14" => data.rhs,
-                        .@"0.15" => data.node_and_node.@"1",
+                        .@"0.15", .@"0.16" => data.node_and_node.@"1",
                     };
 
                     switch (shims.nodeTag(tree, rhs)) {
@@ -151,7 +151,7 @@ fn isEmptyOrUnreachableBlock(tree: Ast, node: Ast.Node.Index) enum { none, empty
             NodeIndexShim.initOptional(data.lhs),
             NodeIndexShim.initOptional(data.rhs),
         },
-        .@"0.15" => .{
+        .@"0.15", .@"0.16" => .{
             NodeIndexShim.initOptional(data.opt_node_and_opt_node.@"0"),
             NodeIndexShim.initOptional(data.opt_node_and_opt_node.@"1"),
         },

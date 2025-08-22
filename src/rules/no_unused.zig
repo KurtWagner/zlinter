@@ -51,7 +51,7 @@ fn run(
                     const node_data = shims.nodeData(tree, node.toNodeIndex());
                     try map.put(allocator, tree.tokenSlice(switch (zlinter.version.zig) {
                         .@"0.14" => node_data.rhs,
-                        .@"0.15" => node_data.node_and_token.@"1",
+                        .@"0.15", .@"0.16" => node_data.node_and_token.@"1",
                     }), {});
                 },
                 else => {},
@@ -145,7 +145,7 @@ fn namedFnDeclProto(
     if (switch (shims.nodeTag(tree, node)) {
         .fn_decl => tree.fullFnProto(buffer, switch (zlinter.version.zig) {
             .@"0.14" => shims.nodeData(tree, node).lhs,
-            .@"0.15" => shims.nodeData(tree, node).node_and_node.@"0",
+            .@"0.15", .@"0.16" => shims.nodeData(tree, node).node_and_node.@"0",
         }),
         else => null,
     }) |fn_proto| {
@@ -162,7 +162,7 @@ fn isFieldAccessOfRootContainer(doc: zlinter.session.LintDocument, node: Ast.Nod
     const node_data = shims.nodeData(tree, node);
     const lhs = switch (zlinter.version.zig) {
         .@"0.14" => node_data.lhs,
-        .@"0.15" => node_data.node_and_token.@"0",
+        .@"0.15", .@"0.16" => node_data.node_and_token.@"0",
     };
 
     if (try doc.resolveTypeOfNode(lhs)) |t| {
@@ -177,7 +177,7 @@ fn isFieldAccessOfRootContainer(doc: zlinter.session.LintDocument, node: Ast.Nod
 fn isContainerRoot(container: anytype) bool {
     return switch (zlinter.version.zig) {
         .@"0.14" => container.toNode() == 0,
-        .@"0.15" => container.scope_handle.toNode() == .root,
+        .@"0.15", .@"0.16" => container.scope_handle.toNode() == .root,
     };
 }
 

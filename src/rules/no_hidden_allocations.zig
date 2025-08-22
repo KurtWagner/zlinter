@@ -81,7 +81,7 @@ fn run(
         const node_data = shims.nodeData(tree, node.toNodeIndex());
         const lhs, const identifier = switch (zlinter.version.zig) {
             .@"0.14" => .{ node_data.lhs, node_data.rhs },
-            .@"0.15" => .{ node_data.node_and_token.@"0", node_data.node_and_token.@"1" },
+            .@"0.15", .@"0.16" => .{ node_data.node_and_token.@"0", node_data.node_and_token.@"1" },
         };
 
         // is identifier a method on Allocator e.g., something.alloc(..) or something.create(..)
@@ -99,7 +99,7 @@ fn run(
         const decl_name, const uri = decl_name_and_uri: {
             if (try doc.analyser.resolveVarDeclAlias(switch (zlinter.version.zig) {
                 .@"0.14" => .{ .node = lhs, .handle = doc.handle },
-                .@"0.15" => .{ .node_handle = .{ .node = lhs, .handle = doc.handle }, .container_type = null },
+                .@"0.15", .@"0.16" => .{ .node_handle = .{ .node = lhs, .handle = doc.handle }, .container_type = null },
             })) |decl_handle| {
                 const uri = decl_handle.handle.uri;
 

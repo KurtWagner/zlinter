@@ -58,7 +58,7 @@ pub fn main() !u8 {
             gpa,
             switch (zlinter.version.zig) {
                 .@"0.14" => std.io.getStdIn().reader(),
-                .@"0.15" => std.fs.File.stdin().deprecatedReader(),
+                .@"0.15", .@"0.16" => std.fs.File.stdin().deprecatedReader(),
             },
         ) catch |e| switch (e) {
             error.InvalidArgs => {
@@ -304,7 +304,7 @@ fn runLinterRules(
                                         error.ParseZon => {
                                             std.log.err("Failed to parse rule config: " ++ switch (zlinter.version.zig) {
                                                 .@"0.14" => "{}",
-                                                .@"0.15" => "{f}",
+                                                .@"0.15", .@"0.16" => "{f}",
                                             }, .{diagnostics});
                                         },
                                         else => {},
@@ -515,7 +515,7 @@ fn runFixes(
 
         const file_content = try switch (zlinter.version.zig) {
             .@"0.14" => file.reader(),
-            .@"0.15" => file.deprecatedReader(),
+            .@"0.15", .@"0.16" => file.deprecatedReader(),
         }.readAllAlloc(gpa, zlinter.session.max_zig_file_size_bytes);
         defer gpa.free(file_content);
 
@@ -562,7 +562,7 @@ fn runFixes(
 
             var writer = switch (zlinter.version.zig) {
                 .@"0.14" => new_file.writer(),
-                .@"0.15" => new_file.deprecatedWriter(),
+                .@"0.15", .@"0.16" => new_file.deprecatedWriter(),
             };
             for (output_slices.items) |output_slice| {
                 try writer.writeAll(output_slice);
@@ -603,7 +603,7 @@ fn allocAstErrorMsg(
             try tree.renderError(err, error_message.writer(allocator));
             return error_message.toOwnedSlice(allocator);
         },
-        .@"0.15" => {
+        .@"0.15", .@"0.16" => {
             var aw = std.io.Writer.Allocating.init(allocator);
             try tree.renderError(err, &aw.writer);
             return aw.toOwnedSlice();
