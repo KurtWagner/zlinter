@@ -11,8 +11,8 @@
             // .hash = "zls-0.14.0-rmm5fjKFIADiTeGEPxU79BXPmOqepsgJPJrghXzTStc5",
             // 0.15.x
             // Update with `zig fetch --save git+https://github.com/zigtools/zls#master`
-            .url = "git+https://github.com/zigtools/zls?ref=master#3ed95ecd5f41bb98c3c7027f80664404ed001771",
-            .hash = "zls-0.15.0-dev-rmm5fq8GJADMYlM0qNF1Srsvmr6ybGIpczQac2YQzhQE",
+            .url = "git+https://github.com/zigtools/zls?ref=master#f510075be49833f02e8765e39ae486bc61c0e488",
+            .hash = "zls-0.15.0-dev-rmm5fiztIwBfZizuCMMUbF2ZXHXTNYIaHJT1qTC0AQqs",
         },
     },
     .paths = .{
