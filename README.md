@@ -4,7 +4,7 @@
 
 # Zlinter - Linter for Zig
 
-[![Zig support](https://img.shields.io/badge/Zig-0.14.x%20%7C%20master-%23f3ab20?logo=zig&style=flat)](http://github.com/kurtwagner/what-the-zig)
+[![Zig support](https://img.shields.io/badge/Zig-0.14.x%20%7C%200.15.x%20%7C%20master-%23f3ab20?logo=zig&style=flat)](http://github.com/kurtwagner/what-the-zig)
 [![linux](https://img.shields.io/github/actions/workflow/status/KurtWagner/zlinter/linux.yml?branch=0.14.x&label=linux&style=flat)](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml)
 [![windows](https://img.shields.io/github/actions/workflow/status/KurtWagner/zlinter/windows.yml?branch=0.14.x&label=windows&style=flat)](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml)
 [![Coverage Status](https://img.shields.io/coveralls/github/KurtWagner/zlinter/0.14.x?style=flat)](https://coveralls.io/github/KurtWagner/zlinter?branch=0.14.x)
