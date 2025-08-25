@@ -2,17 +2,12 @@
     .name = .zlinter,
     .fingerprint = 0x10e04548f134343a,
     .version = "0.0.1",
-    .minimum_zig_version = "0.15.0-dev.864+75d0ec9c0",
+    .minimum_zig_version = "0.15.1",
     .dependencies = .{
         .zls = .{
-            // 0.14.x
-            // Update with `zig fetch --save git+https://github.com/zigtools/zls#0.14.0`
-            // .url = "git+https://github.com/zigtools/zls?ref=0.14.0#7485feeeda45d1ad09422ae83af73307ab9e6c9e",
-            // .hash = "zls-0.14.0-rmm5fjKFIADiTeGEPxU79BXPmOqepsgJPJrghXzTStc5",
-            // 0.15.x
             // Update with `zig fetch --save git+https://github.com/zigtools/zls#master`
-            .url = "git+https://github.com/zigtools/zls?ref=0.15.0#ce6c8f02c78e622421cfc2405c67c5222819ec03",
-            .hash = "zls-0.15.0-rmm5fkjqIwDZpmDHyKwxa9K2gcI3FPaGVFPwjYWFBM5B",
+            .url = "git+https://github.com/zigtools/zls?ref=master#35fa2d3ef62378db68b1e0805b9e529f6df9f5ce",
+            .hash = "zls-0.16.0-dev-rmm5fuLpIwD7tV0Lb0s_ZMWJ22BZxP1rkk_gYfyUEbsa",
         },
     },
     .paths = .{
