@@ -5,14 +5,9 @@
     .minimum_zig_version = "0.14.0",
     .dependencies = .{
         .zls = .{
-            // 0.14.x
             // Update with `zig fetch --save git+https://github.com/zigtools/zls#0.14.0`
             .url = "git+https://github.com/zigtools/zls?ref=0.14.0#7485feeeda45d1ad09422ae83af73307ab9e6c9e",
             .hash = "zls-0.14.0-rmm5fjKFIADiTeGEPxU79BXPmOqepsgJPJrghXzTStc5",
-            // 0.15.x
-            // Update with `zig fetch --save git+https://github.com/zigtools/zls#master`
-            // .url = "git+https://github.com/zigtools/zls?ref=master#59776e49291cdd4fdf7d7a140ae39d4112f44ad1",
-            // .hash = "zls-0.15.0-dev-rmm5fjgXJADGthEbaIU9lbt3-Wzent8KCv-GeWhqBJF-",
         },
     },
     .paths = .{
