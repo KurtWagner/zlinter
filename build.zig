@@ -1,7 +1,7 @@
 const @"build.zig" = @This();
 
 const zls_version: []const u8 = switch (version.zig) {
-    .@"0.16" => "0.15.0-dev",
+    .@"0.16" => "0.16.0-dev",
     .@"0.15" => "0.15.0",
     .@"0.14" => "0.14.0",
 };
