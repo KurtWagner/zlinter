@@ -580,12 +580,21 @@ fn runFixes(
             });
             defer new_file.close();
 
-            var writer = switch (zlinter.version.zig) {
-                .@"0.14" => new_file.writer(),
-                .@"0.15", .@"0.16" => new_file.deprecatedWriter(),
-            };
-            for (output_slices.items) |output_slice| {
-                try writer.writeAll(output_slice);
+            switch (zlinter.version.zig) {
+                .@"0.14" => {
+                    var writer = new_file.writer();
+                    for (output_slices.items) |output_slice| {
+                        try writer.writeAll(output_slice);
+                    }
+                },
+                .@"0.15", .@"0.16" => {
+                    var buffer: [1024]u8 = undefined;
+                    var writer = new_file.writer(&buffer);
+                    for (output_slices.items) |output_slice| {
+                        try writer.interface.writeAll(output_slice);
+                    }
+                    try writer.interface.flush();
+                },
             }
         }
     }
