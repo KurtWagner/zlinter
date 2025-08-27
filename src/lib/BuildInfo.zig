@@ -46,7 +46,7 @@ pub fn consumeStdinAlloc(
         return error.InvalidArgs;
     };
 
-    return std.zon.parse.fromSlice(BuildInfo, gpa, buffer[0..size :0], null, .{
+    return std.zon.parse.fromSliceAlloc(BuildInfo, gpa, buffer[0..size :0], null, .{
         .ignore_unknown_fields = false,
         .free_on_error = true,
     }) catch |e| {

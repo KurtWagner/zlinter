@@ -50,7 +50,7 @@ pub fn parseFileAlloc(
     };
     defer gpa.free(null_terminated);
 
-    return try std.zon.parse.fromSlice(
+    return try std.zon.parse.fromSliceAlloc(
         T,
         gpa,
         null_terminated,
