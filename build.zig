@@ -875,12 +875,21 @@ const ZlinterRun = struct {
             if (b.verbose)
                 std.debug.print("Writing stdin: '{s}'\n", .{build_info_zon_bytes});
 
-            const writer = switch (version.zig) {
-                .@"0.14" => child.stdin.?.writer(),
-                .@"0.15", .@"0.16" => child.stdin.?.deprecatedWriter(),
-            };
-            writer.writeInt(usize, build_info_zon_bytes.len, .little) catch @panic("stdin write failed");
-            writer.writeAll(build_info_zon_bytes) catch @panic("stdin write failed");
+            var stdin_file = child.stdin.?;
+            switch (version.zig) {
+                .@"0.14" => {
+                    var writer = stdin_file.writer();
+                    writer.writeInt(usize, build_info_zon_bytes.len, .little) catch @panic("stdin write failed");
+                    writer.writeAll(build_info_zon_bytes) catch @panic("stdin write failed");
+                },
+                .@"0.15", .@"0.16" => {
+                    var buffer: [1024]u8 = undefined;
+                    var writer = stdin_file.writer(&buffer);
+                    writer.interface.writeInt(usize, build_info_zon_bytes.len, .little) catch @panic("stdin write failed");
+                    writer.interface.writeAll(build_info_zon_bytes) catch @panic("stdin write failed");
+                    writer.interface.flush() catch @panic("Flush failed");
+                },
+            }
         }
 
         const term = try child.wait();

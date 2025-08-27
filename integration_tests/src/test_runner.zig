@@ -21,7 +21,8 @@ pub fn main() !void {
     const rule_name = args[2];
     const test_name = args[3];
 
-    const out = std.fs.File.stdout().deprecatedWriter();
+    var buffer: [1024]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&buffer);
 
     const output_fmt = ansi_gray ++
         "[Integration test]" ++
@@ -43,7 +44,7 @@ pub fn main() !void {
             std.fmt.bufPrint(&test_desc_buffer, "{s} - ", .{prettyName(&pretty_name_buffer, test_name)}) catch "";
 
         if (t.func()) {
-            try std.fmt.format(out, output_fmt ++ "\n", .{
+            try stdout_writer.interface.print(output_fmt ++ "\n", .{
                 rule_name,
                 test_description,
                 ansi_green_bold,
@@ -52,7 +53,7 @@ pub fn main() !void {
             });
         } else |err| switch (err) {
             error.SkipZigTest => {
-                try std.fmt.format(out, output_fmt ++ "\n", .{
+                try stdout_writer.interface.print(output_fmt ++ "\n", .{
                     rule_name,
                     test_description,
                     ansi_yellow_bold,
@@ -62,7 +63,7 @@ pub fn main() !void {
             },
             else => {
                 fail = true;
-                try std.fmt.format(out, output_fmt ++ ": {}\n", .{
+                try stdout_writer.interface.print(output_fmt ++ ": {}\n", .{
                     rule_name,
                     test_description,
                     ansi_red_bold,
@@ -74,6 +75,7 @@ pub fn main() !void {
         }
     }
 
+    try stdout_writer.interface.flush();
     std.posix.exit(if (fail) 1 else 0);
 }
 
