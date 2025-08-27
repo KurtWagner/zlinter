@@ -15,13 +15,38 @@ pub fn parseFileAlloc(
     });
     defer file.close();
 
-    const null_terminated = value: {
-        const file_content = switch (version.zig) {
-            .@"0.14" => try file.reader().readAllAlloc(gpa, session.max_zig_file_size_bytes),
-            .@"0.15", .@"0.16" => try file.deprecatedReader().readAllAlloc(gpa, session.max_zig_file_size_bytes),
-        };
-        defer gpa.free(file_content);
-        break :value try gpa.dupeZ(u8, file_content);
+    const null_terminated = null_terminated: switch (version.zig) {
+        .@"0.14" => {
+            var array_list: std.ArrayList(u8) = .init(gpa);
+            defer array_list.deinit();
+
+            var file_reader = file.reader();
+            try file_reader.readAllArrayList(
+                &array_list,
+                session.max_zig_file_size_bytes,
+            );
+            break :null_terminated try array_list.toOwnedSliceSentinel(0);
+        },
+        .@"0.15", .@"0.16" => {
+            var file_reader_buffer: [1024]u8 = undefined;
+            var file_reader = file.reader(&file_reader_buffer);
+
+            var buffer: std.ArrayList(u8) = .empty;
+            defer buffer.deinit(gpa);
+
+            if (file_reader.getSize()) |size| {
+                const casted_size = std.math.cast(u32, size) orelse return error.StreamTooLong;
+                try buffer.ensureTotalCapacityPrecise(gpa, casted_size + 1); // +1 for null term
+            } else |_| {}
+
+            try file_reader.interface.appendRemaining(
+                gpa,
+                &buffer,
+                .limited(session.max_zig_file_size_bytes),
+            );
+
+            break :null_terminated try buffer.toOwnedSliceSentinel(gpa, 0);
+        },
     };
     defer gpa.free(null_terminated);
 

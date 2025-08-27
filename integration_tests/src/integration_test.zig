@@ -138,7 +138,10 @@ test "integration test rules" {
 
         // Expect all integration fix tests to be successful so exit 0 with
         // no stderr. Maybe one day we will add cases where it fails
-        try std.testing.expect(fix_output.term.Exited == 0);
+        std.testing.expect(fix_output.term.Exited == 0) catch |e| {
+            std.log.err("stderr: {s}", .{fix_output.stderr});
+            return e;
+        };
         try expectEqualStringsNormalized("", fix_output.stderr);
 
         expectFileContentsEquals(
