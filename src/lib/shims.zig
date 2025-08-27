@@ -185,6 +185,7 @@ pub fn isContainerNamespace(tree: Ast, container_decl: Ast.full.ContainerDecl) b
 /// out this can be used to consistently return an unmanaged version.
 pub fn ArrayList(T: type) type {
     return comptime switch (version.zig) {
+        // zlinter-disable-next-line no_deprecated - targets 0.14 when not deprecated
         .@"0.14" => std.ArrayListUnmanaged(T),
         .@"0.15", .@"0.16" => std.ArrayList(T),
     };

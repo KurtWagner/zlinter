@@ -141,7 +141,7 @@ fn run(
         if (req_and_severity.severity == .off) continue :nodes;
 
         var expr_nodes_buffer: [2]Ast.Node.Index = undefined;
-        var expr_nodes: std.ArrayListUnmanaged(Ast.Node.Index) = .initBuffer(&expr_nodes_buffer);
+        var expr_nodes: shims.ArrayList(Ast.Node.Index) = .initBuffer(&expr_nodes_buffer);
 
         switch (statement) {
             .@"if" => |info| {

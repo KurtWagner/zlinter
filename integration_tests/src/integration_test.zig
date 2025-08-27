@@ -46,7 +46,7 @@ test "integration test rules" {
     // Lint command "zig build lint -- <file>.zig"
     // --------------------------------------------------------------------
     {
-        var lint_args = std.ArrayListUnmanaged([]const u8).empty;
+        var lint_args = std.ArrayList([]const u8).empty;
         defer lint_args.deinit(std.testing.allocator);
 
         try lint_args.appendSlice(std.testing.allocator, &.{
@@ -110,7 +110,7 @@ test "integration test rules" {
             .{},
         );
 
-        var lint_args = std.ArrayListUnmanaged([]const u8).empty;
+        var lint_args = std.ArrayList([]const u8).empty;
         defer lint_args.deinit(std.testing.allocator);
 
         try lint_args.appendSlice(std.testing.allocator, &.{
@@ -214,7 +214,7 @@ fn expectEqualStringsNormalized(expected: []const u8, actual: []const u8) !void 
 }
 
 fn normalizeNewLinesAlloc(input: []const u8, allocator: std.mem.Allocator) ![]const u8 {
-    var result = std.ArrayListUnmanaged(u8).empty;
+    var result = std.ArrayList(u8).empty;
     defer result.deinit(allocator);
 
     // Removes "\r". e.g., "\r\n"
