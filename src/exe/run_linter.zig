@@ -52,14 +52,14 @@ pub fn main() !u8 {
         const raw_args = try std.process.argsAlloc(gpa);
         defer std.process.argsFree(gpa, raw_args);
 
+        var buffer: [1024]u8 = undefined;
+        var stdin_reader = std.fs.File.stdin().reader(&buffer);
+
         break :args zlinter.Args.allocParse(
             raw_args,
             &rules,
             gpa,
-            switch (zlinter.version.zig) {
-                .@"0.14" => std.io.getStdIn().reader(),
-                .@"0.15", .@"0.16" => std.fs.File.stdin().deprecatedReader(),
-            },
+            &stdin_reader.interface,
         ) catch |e| switch (e) {
             error.InvalidArgs => {
                 zlinter.Args.printHelp(printer);
