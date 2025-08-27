@@ -686,7 +686,7 @@ fn createRulesModule(
     rules: []const BuiltRule,
     build_rules_output: std.Build.LazyPath,
 ) *std.Build.Module {
-    var rule_imports = std.ArrayListUnmanaged(std.Build.Module.Import).empty;
+    var rule_imports = shims.ArrayList(std.Build.Module.Import).empty;
     for (rules) |r| rule_imports.append(b.allocator, r.import) catch @panic("OOM");
     defer rule_imports.deinit(b.allocator);
 
