@@ -27,11 +27,11 @@ pub fn deinit(self: BuildInfo, gpa: std.mem.Allocator) void {
 }
 
 pub fn consumeStdinAlloc(
-    stdin_reader: anytype,
+    stdin_reader: *std.io.Reader,
     gpa: std.mem.Allocator,
     printer: *rendering.Printer,
 ) error{ OutOfMemory, InvalidArgs }!?BuildInfo {
-    const size = stdin_reader.readInt(usize, .little) catch |e| {
+    const size = stdin_reader.takeInt(usize, .little) catch |e| {
         if (e == error.EndOfStream) return null else {
             printer.println(.err, "Failed to read stdin length: {s}", .{@errorName(e)});
             return error.InvalidArgs;
@@ -41,7 +41,7 @@ pub fn consumeStdinAlloc(
     @memset(buffer, 0);
     defer gpa.free(buffer);
 
-    stdin_reader.readNoEof(buffer[0..size]) catch |e| {
+    stdin_reader.readSliceAll(buffer[0..size]) catch |e| {
         printer.println(.err, "Failed to read stdin content: {s}", .{@errorName(e)});
         return error.InvalidArgs;
     };
