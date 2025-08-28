@@ -10,10 +10,13 @@ pub fn loadFakeDocument(ctx: *LintContext, dir: std.fs.Dir, file_name: []const u
     const file = try dir.createFile(file_name, .{});
     defer file.close();
 
-    var buffer: [2024]u8 = undefined;
+    var buffer: [1024]u8 = undefined;
     const real_path = try dir.realpath(file_name, &buffer);
 
-    try file.writeAll(contents);
+    var file_buffer: [1024]u8 = undefined;
+    var file_writer = file.writer(&file_buffer);
+    try file_writer.interface.writeAll(contents);
+    try file_writer.interface.flush();
 
     return (try ctx.loadDocument(real_path, ctx.gpa, arena)).?;
 }

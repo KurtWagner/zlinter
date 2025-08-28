@@ -19,22 +19,23 @@ pub fn main() !void {
 
     const rule_names = args[2..];
 
-    try output_file.writeAll(
+    var write_buffer: [2048]u8 = undefined;
+    var output_file_writer = output_file.writer(&write_buffer);
+
+    try output_file_writer.interface.writeAll(
         \\const zlinter = @import("zlinter");
         \\
         \\pub const rules = [_]zlinter.rules.LintRule{
         \\
     );
-    var buffer: [2048]u8 = undefined;
+
     {
         for (rule_names) |rule_name| {
-            try output_file.writeAll(
-                try std.fmt.bufPrint(&buffer, "@import(\"{s}\").buildRule(.{{}}),\n", .{rule_name}),
-            );
+            try output_file_writer.interface.print("@import(\"{s}\").buildRule(.{{}}),\n", .{rule_name});
         }
     }
 
-    try output_file.writeAll(
+    try output_file_writer.interface.writeAll(
         \\};
         \\
         \\const config_namespace = struct {
@@ -43,52 +44,52 @@ pub fn main() !void {
 
     {
         for (rule_names) |rule_name| {
-            try output_file.writeAll(
-                try std.fmt.bufPrint(&buffer, "pub const @\"{s}\": @import(\"{s}\").Config = @import(\"{s}.zon\");\n", .{ rule_name, rule_name, rule_name }),
-            );
+            try output_file_writer.interface.print("pub const @\"{s}\": @import(\"{s}\").Config = @import(\"{s}.zon\");\n", .{
+                rule_name,
+                rule_name,
+                rule_name,
+            });
         }
     }
 
-    try output_file.writeAll(
+    try output_file_writer.interface.writeAll(
         \\};
         \\
     );
 
-    try output_file.writeAll(
+    try output_file_writer.interface.writeAll(
         \\pub const rules_configs = [_]*anyopaque {
         \\
     );
 
     {
         for (rule_names) |rule_name| {
-            try output_file.writeAll(
-                try std.fmt.bufPrint(&buffer, "@alignCast(@ptrCast(@constCast(&@field(config_namespace, \"{s}\")))),\n", .{rule_name}),
-            );
+            try output_file_writer.interface.print("@alignCast(@ptrCast(@constCast(&@field(config_namespace, \"{s}\")))),\n", .{rule_name});
         }
     }
 
-    try output_file.writeAll(
+    try output_file_writer.interface.writeAll(
         \\};
         \\
     );
 
-    try output_file.writeAll(
+    try output_file_writer.interface.writeAll(
         \\pub const rules_configs_types = [_]type {
         \\
     );
 
     {
         for (rule_names) |rule_name| {
-            try output_file.writeAll(
-                try std.fmt.bufPrint(&buffer, "@import(\"{s}\").Config,\n", .{rule_name}),
-            );
+            try output_file_writer.interface.print("@import(\"{s}\").Config,\n", .{rule_name});
         }
     }
 
-    try output_file.writeAll(
+    try output_file_writer.interface.writeAll(
         \\};
         \\
     );
+
+    try output_file_writer.interface.flush();
 
     return std.process.cleanExit();
 }

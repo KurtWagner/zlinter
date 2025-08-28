@@ -52,7 +52,7 @@ pub const LintFileRenderer = struct {
         // Given this should only ever be called for a small handful of lines
         // we trim the potential carriage return in here and not during parsing
         // to keep parsing as simple as possible.
-        return std.mem.trimRight(u8, if (line == 0)
+        return std.mem.trimEnd(u8, if (line == 0)
             self.source[0..self.line_ends[line]]
         else if (line < self.line_ends.len)
             self.source[self.line_ends[line - 1] + 1 .. self.line_ends[line]]

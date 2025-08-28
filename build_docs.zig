@@ -39,14 +39,18 @@ pub fn main() !void {
         var file = try std.fs.cwd().openFile(file_name, .{});
         defer file.close();
 
-        var reader = file.deprecatedReader();
-        const content = try reader.readAllAlloc(gpa, 10 * 1024 * 1024);
-        defer gpa.free(content);
+        var file_buffer: [2048]u8 = undefined;
+        var reader = file.readerStreaming(&file_buffer);
 
-        try writeFileDocComments(content, &writer.interface);
+        var content: std.io.Writer.Allocating = try .initCapacity(gpa, 1024 * 1024);
+        defer content.deinit();
+
+        _ = try reader.interface.streamRemaining(&content.writer);
+
+        try writeFileDocComments(content.written(), &writer.interface);
         try writer.interface.writeByte('\n');
 
-        try writeFileRuleConfig(content, gpa, &writer.interface);
+        try writeFileRuleConfig(content.written(), gpa, &writer.interface);
         try writer.interface.writeByte('\n');
     }
 
@@ -63,7 +67,7 @@ fn trimCommentLine(source: []const u8) []const u8 {
     if (source.len == 0) return source;
 
     const start: usize = if (std.ascii.isWhitespace(source[0])) 1 else 0;
-    return std.mem.trimRight(u8, source[start..], &std.ascii.whitespace);
+    return std.mem.trimEnd(u8, source[start..], &std.ascii.whitespace);
 }
 
 fn fatal(comptime format: []const u8, args: anytype) noreturn {
