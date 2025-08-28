@@ -517,24 +517,18 @@ fn runFixes(
             .@"0.14" => try file.reader().readAllAlloc(gpa, zlinter.session.max_zig_file_size_bytes),
             .@"0.15", .@"0.16" => file_content: {
                 var file_reader_buffer: [1024]u8 = undefined;
-                var file_reader = file.reader(&file_reader_buffer);
+                var file_reader = file.readerStreaming(&file_reader_buffer);
 
-                var buffer: std.ArrayList(u8) = .empty;
-                defer buffer.deinit(gpa);
+                var buffer: std.io.Writer.Allocating = .init(gpa);
+                defer buffer.deinit();
 
-                // TODO: Work out why this is causing a leak.
-                // if (file_reader.getSize()) |size| {
-                //     const casted_size = std.math.cast(u32, size) orelse return error.StreamTooLong;
-                //     try buffer.ensureTotalCapacityPrecise(gpa, casted_size);
-                // } else |_| {}
+                if (file_reader.getSize()) |size| {
+                    const casted_size = std.math.cast(u32, size) orelse return error.StreamTooLong;
+                    try buffer.ensureTotalCapacity(casted_size);
+                } else |_| {}
 
-                try file_reader.interface.appendRemaining(
-                    gpa,
-                    &buffer,
-                    .limited(zlinter.session.max_zig_file_size_bytes),
-                );
-
-                break :file_content try buffer.toOwnedSlice(gpa);
+                _ = try file_reader.interface.streamRemaining(&buffer.writer);
+                break :file_content try buffer.toOwnedSlice();
             },
         };
         defer gpa.free(file_content);

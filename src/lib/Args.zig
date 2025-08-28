@@ -601,13 +601,13 @@ test "allocParse with only exclude_paths" {
         \\}
     ;
 
-    var backing: shims.ArrayList(u8) = .empty;
-    defer backing.deinit(std.testing.allocator);
+    var backing: std.io.Writer.Allocating = .init(std.testing.allocator);
+    defer backing.deinit();
 
-    try backing.writer(std.testing.allocator).writeInt(usize, bytes.len, .little);
-    try backing.writer(std.testing.allocator).writeAll(bytes);
+    try backing.writer.writeInt(usize, bytes.len, .little);
+    try backing.writer.writeAll(bytes);
 
-    var stdin_fbs = std.io.Reader.fixed(backing.items);
+    var stdin_fbs = std.io.Reader.fixed(backing.written());
     const args = try allocParse(
         testing.cliArgs(&.{"--stdin"}),
         &.{},
@@ -631,13 +631,13 @@ test "allocParse with only include_paths" {
         \\}
     ;
 
-    var backing: shims.ArrayList(u8) = .empty;
-    defer backing.deinit(std.testing.allocator);
+    var backing: std.io.Writer.Allocating = .init(std.testing.allocator);
+    defer backing.deinit();
 
-    try backing.writer(std.testing.allocator).writeInt(usize, bytes.len, .little);
-    try backing.writer(std.testing.allocator).writeAll(bytes);
+    try backing.writer.writeInt(usize, bytes.len, .little);
+    try backing.writer.writeAll(bytes);
 
-    var stdin_fbs = std.io.Reader.fixed(backing.items);
+    var stdin_fbs = std.io.Reader.fixed(backing.written());
     const args = try allocParse(
         testing.cliArgs(&.{"--stdin"}),
         &.{},
@@ -662,13 +662,13 @@ test "allocParse with include_paths and exclude_paths" {
         \\}
     ;
 
-    var backing: shims.ArrayList(u8) = .empty;
-    defer backing.deinit(std.testing.allocator);
+    var backing: std.io.Writer.Allocating = .init(std.testing.allocator);
+    defer backing.deinit();
 
-    try backing.writer(std.testing.allocator).writeInt(usize, bytes.len, .little);
-    try backing.writer(std.testing.allocator).writeAll(bytes);
+    try backing.writer.writeInt(usize, bytes.len, .little);
+    try backing.writer.writeAll(bytes);
 
-    var stdin_fbs = std.io.Reader.fixed(backing.items);
+    var stdin_fbs = std.io.Reader.fixed(backing.written());
     const args = try allocParse(
         testing.cliArgs(&.{"--stdin"}),
         &.{},
