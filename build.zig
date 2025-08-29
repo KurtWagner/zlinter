@@ -807,7 +807,8 @@ const ZlinterRun = struct {
                             if (compile.root_module.resolved_target.?.result.os.tag == .windows) continue;
                             if (compile.isDynamicLibrary()) continue;
 
-                            const search_path = std.fs.path.dirname(compile.getEmittedBin().getPath2(b, &run.step)).?;
+                            const bin_path = compile.getEmittedBin().getPath3(b, &run.step);
+                            const search_path = std.fs.path.dirname(b.pathResolve(&.{ bin_path.root_dir.path orelse ".", bin_path.sub_path })).?;
                             const key = "PATH";
                             if (env_map.get(key)) |prev_path| {
                                 env_map.put(key, b.fmt("{s}{c}{s}", .{
