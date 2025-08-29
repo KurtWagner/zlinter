@@ -28,7 +28,14 @@ pub fn main() !void {
     defer gpa.free(file_names);
     std.mem.sort([]const u8, file_names, {}, stringLessThan);
 
+    var file_buffer: [2048]u8 = undefined;
+
+    var content: std.io.Writer.Allocating = try .initCapacity(gpa, 1024 * 1024);
+    defer content.deinit();
+
     for (file_names) |file_name| {
+        defer content.clearRetainingCapacity();
+
         const basename = std.fs.path.basename(file_name);
         const rule_name = basename[0 .. basename.len - ".zig".len];
 
@@ -39,11 +46,7 @@ pub fn main() !void {
         var file = try std.fs.cwd().openFile(file_name, .{});
         defer file.close();
 
-        var file_buffer: [2048]u8 = undefined;
         var reader = file.readerStreaming(&file_buffer);
-
-        var content: std.io.Writer.Allocating = try .initCapacity(gpa, 1024 * 1024);
-        defer content.deinit();
 
         _ = try reader.interface.streamRemaining(&content.writer);
 

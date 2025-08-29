@@ -6,8 +6,8 @@ pub const LintFileRenderer = struct {
     source: []const u8,
     line_ends: []usize,
 
-    pub fn init(allocator: std.mem.Allocator, stream: anytype) !Self {
-        const source = try stream.readAllAlloc(allocator, max_zig_file_size_bytes);
+    pub fn init(allocator: std.mem.Allocator, reader: *std.io.Reader) !Self {
+        const source = try reader.allocRemaining(allocator, .limited(max_zig_file_size_bytes));
 
         var line_ends = try shims.ArrayList(usize).initCapacity(allocator, source.len / 40);
         errdefer line_ends.deinit(allocator);
@@ -166,11 +166,11 @@ pub const LintFileRenderer = struct {
 test "LintFileRenderer" {
     inline for (&.{ "\n", "\r\n" }) |newline| {
         const data = "123456789" ++ newline ++ "abcdefghi" ++ newline;
-        var input = std.io.fixedBufferStream(data);
+        var input = std.io.Reader.fixed(data);
 
         var renderer = try LintFileRenderer.init(
             std.testing.allocator,
-            input.reader(),
+            &input,
         );
         defer renderer.deinit(std.testing.allocator);
 
