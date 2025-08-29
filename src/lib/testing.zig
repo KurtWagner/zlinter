@@ -27,7 +27,11 @@ pub fn writeFile(dir: std.fs.Dir, file_name: []const u8, contents: []const u8) !
     const file = try dir.createFile(file_name, .{});
     defer file.close();
 
-    try file.writeAll(contents);
+    var file_buffer: [2048]u8 = undefined;
+    var file_writer = file.writer(&file_buffer);
+
+    try file_writer.interface.writeAll(contents);
+    try file_writer.interface.flush();
 }
 
 pub const paths = struct {

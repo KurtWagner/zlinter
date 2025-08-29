@@ -938,7 +938,13 @@ fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
     defer file.close();
 
     const max_bytes = 128 * 1024;
-    const bytes = try file.readToEndAlloc(b.allocator, max_bytes);
+
+    var file_buffer: [2048]u8 = undefined;
+    var file_reader = file.reader(&file_buffer);
+    const bytes = try file_reader.interface.allocRemaining(
+        b.allocator,
+        .limited(max_bytes),
+    );
     defer b.allocator.free(bytes);
 
     const replacement = b.fmt("{d}", .{std.time.milliTimestamp()});

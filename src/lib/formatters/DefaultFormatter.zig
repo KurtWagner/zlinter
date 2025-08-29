@@ -13,6 +13,7 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: any
     var total_disabled_by_comment: usize = 0;
 
     var file_arena = std.heap.ArenaAllocator.init(input.arena);
+    var file_buffer: [2048]u8 = undefined;
 
     for (input.results) |file_result| {
         defer _ = file_arena.reset(.retain_capacity);
@@ -22,9 +23,11 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: any
             .{ .mode = .read_only },
         ) catch |e| return logAndReturnWriteFailure("Open file", e);
 
+        var file_reader = file.reader(&file_buffer);
+
         const file_renderer = zlinter.rendering.LintFileRenderer.init(
             file_arena.allocator(),
-            file.deprecatedReader(),
+            &file_reader.interface,
         ) catch |e| return logAndReturnWriteFailure("Render", e);
 
         for (file_result.problems) |problem| {

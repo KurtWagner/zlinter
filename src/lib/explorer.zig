@@ -128,6 +128,7 @@ fn errorsToJson(tree: Ast, arena: std.mem.Allocator) !std.json.Array {
         switch (version.zig) {
             .@"0.14" => {
                 var render_backing = shims.ArrayList(u8).empty;
+                // zlinter-disable-next-line no_deprecated - Upgraded in 0.15
                 try tree.renderError(e, render_backing.writer(arena));
                 try json_error.put("message", .{ .string = try render_backing.toOwnedSlice(arena) });
             },
