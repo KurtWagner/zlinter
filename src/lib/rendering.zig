@@ -70,7 +70,7 @@ pub const LintFileRenderer = struct {
         start_column: usize,
         end_line: usize,
         end_column: usize,
-        writer: anytype,
+        writer: *std.io.Writer,
         tty: ansi.Tty,
     ) !void {
         for (start_line..end_line + 1) |line_index| {
@@ -125,7 +125,7 @@ pub const LintFileRenderer = struct {
         line: usize,
         column: usize,
         end_column: usize,
-        writer: anytype,
+        writer: *std.io.Writer,
         tty: ansi.Tty,
     ) !void {
         const lhs_format = " {d} ";
@@ -190,34 +190,34 @@ test "LintFileRenderer" {
         try std.testing.expectEqualStrings("", renderer.getLine(2));
 
         {
-            var output = shims.ArrayList(u8).empty;
-            defer output.deinit(std.testing.allocator);
+            var output: std.io.Writer.Allocating = .init(std.testing.allocator);
+            defer output.deinit();
 
             try renderer.render(
                 1,
                 3,
                 1,
                 5,
-                output.writer(std.testing.allocator),
+                &output.writer,
                 .no_color,
             );
 
             try std.testing.expectEqualStrings(
                 \\ 2 | abcdefghi
                 \\   |    ^^^
-            , output.items);
+            , output.written());
         }
 
         {
-            var output = shims.ArrayList(u8).empty;
-            defer output.deinit(std.testing.allocator);
+            var output: std.io.Writer.Allocating = .init(std.testing.allocator);
+            defer output.deinit();
 
             try renderer.render(
                 0,
                 3,
                 1,
                 1,
-                output.writer(std.testing.allocator),
+                &output.writer,
                 .no_color,
             );
 
@@ -226,7 +226,7 @@ test "LintFileRenderer" {
                 \\   |    ^^^^^^
                 \\ 2 | abcdefghi
                 \\   | ^^
-            , output.items);
+            , output.written());
         }
     }
 }
@@ -237,30 +237,13 @@ pub var process_printer = &printer_singleton;
 
 pub const Printer = struct {
     verbose: bool,
-    stdout: ?Writer = null,
-    stderr: ?Writer = null,
+    stdout: ?*std.io.Writer = null,
+    stderr: ?*std.io.Writer = null,
     tty: ansi.Tty,
 
     const empty: Printer = .{ .verbose = false, .tty = .no_color };
 
-    pub fn initAuto(self: *Printer, verbose: bool) void {
-        switch (version.zig) {
-            .@"0.14" => self.init(
-                .{ .context = .{ .file = std.io.getStdOut() } },
-                .{ .context = .{ .file = std.io.getStdErr() } },
-                .init(std.io.getStdOut()),
-                verbose,
-            ),
-            .@"0.15", .@"0.16" => self.init(
-                .{ .context = .{ .file = std.fs.File.stdout() } },
-                .{ .context = .{ .file = std.fs.File.stderr() } },
-                .init(std.fs.File.stdout()),
-                verbose,
-            ),
-        }
-    }
-
-    pub fn init(self: *Printer, stdout: Writer, stderr: Writer, tty: ansi.Tty, verbose: bool) void {
+    pub fn init(self: *Printer, stdout: *std.io.Writer, stderr: *std.io.Writer, tty: ansi.Tty, verbose: bool) void {
         std.debug.assert(self.stdout == null);
         std.debug.assert(self.stderr == null);
 
@@ -287,13 +270,13 @@ pub const Printer = struct {
     }
 
     pub fn print(self: Printer, kind: Kind, comptime fmt: []const u8, args: anytype) void {
-        var writer: Writer = switch (kind) {
+        var writer: *std.io.Writer = switch (kind) {
             .verbose => if (self.verbose)
-                self.stdout orelse @panic("Requires initAuto or if testing attachFakeStdoutSink")
+                self.stdout orelse @panic("Requires initAuto or set stdout")
             else
                 return,
-            .err => self.stderr orelse @panic("Requires initAuto or if testing attachFakeStderrSink"),
-            .out => self.stdout orelse @panic("Requires initAuto or if testing attachFakeStdoutSink"),
+            .err => self.stderr orelse @panic("Requires initAuto or set stderr"),
+            .out => self.stdout orelse @panic("Requires initAuto or set stdout"),
         };
 
         return writer.print(fmt, args) catch |e| {
@@ -302,82 +285,14 @@ pub const Printer = struct {
         };
     }
 
-    pub fn attachFakeStdoutSink(self: *Printer, allocator: std.mem.Allocator) !FakeSink {
-        assertTestOnly();
-
-        var fake = try FakeSink.init(allocator);
-        self.stdout = fake.writer();
-        return fake;
-    }
-
-    pub fn attachFakeStderrSink(self: *Printer, allocator: std.mem.Allocator) !FakeSink {
-        assertTestOnly();
-
-        var fake = try FakeSink.init(allocator);
-        self.stderr = fake.writer();
-        return fake;
+    pub fn flush(self: *Printer) !void {
+        try self.stderr.?.flush();
+        try self.stdout.?.flush();
     }
 };
 
-/// Context resources are not owned by the writer so the caller needs to
-/// ensure they're cleaned up properly afterwards.
-const Context = union(enum) {
-    file: std.fs.File,
-    array: struct { allocator: std.mem.Allocator, backing: *shims.ArrayList(u8) },
-};
-
-const WriteError = std.fs.File.WriteError || std.mem.Allocator.Error;
-const Writer = std.io.GenericWriter(Context, WriteError, writeFn);
-
-fn writeFn(context: Context, bytes: []const u8) WriteError!usize {
-    switch (context) {
-        .file => |file| return try file.write(bytes),
-        .array => |array| {
-            try array.backing.appendSlice(array.allocator, bytes);
-            return bytes.len;
-        },
-    }
-}
-
-/// Fake output sink for used in tests. See usage of `attachFakeStdoutSink` and
-/// `attachFakeStderrSink` for examples
-const FakeSink = struct {
-    allocator: std.mem.Allocator,
-    array_sink: *shims.ArrayList(u8),
-
-    fn init(allocator: std.mem.Allocator) error{OutOfMemory}!FakeSink {
-        assertTestOnly();
-
-        const array_sink = try allocator.create(shims.ArrayList(u8));
-        array_sink.* = .empty;
-
-        return .{
-            .array_sink = array_sink,
-            .allocator = allocator,
-        };
-    }
-
-    fn writer(self: *FakeSink) Writer {
-        return .{ .context = .{ .array = .{ .allocator = self.allocator, .backing = self.array_sink } } };
-    }
-
-    pub fn output(self: FakeSink) []const u8 {
-        return self.array_sink.items[0..];
-    }
-
-    pub fn deinit(self: *FakeSink) void {
-        self.array_sink.deinit(self.allocator);
-        self.allocator.destroy(self.array_sink);
-        self.* = undefined;
-    }
-};
-
-inline fn assertTestOnly() void {
-    comptime if (!@import("builtin").is_test) @compileError("Test only");
-}
 
 const ansi = @import("ansi.zig");
 const std = @import("std");
 const max_zig_file_size_bytes = @import("session.zig").max_zig_file_size_bytes;
 const shims = @import("shims.zig");
-const version = @import("version.zig");

@@ -15,9 +15,9 @@ pub const Error = error{
     WriteFailure,
 };
 
-formatFn: *const fn (*const Formatter, FormatInput, writer: anytype) Error!void,
+formatFn: *const fn (*const Formatter, FormatInput, writer: *std.io.Writer) Error!void,
 
-pub inline fn format(self: *const Formatter, input: FormatInput, writer: anytype) Error!void {
+pub inline fn format(self: *const Formatter, input: FormatInput, writer: *std.io.Writer) Error!void {
     return self.formatFn(self, input, writer);
 }
 

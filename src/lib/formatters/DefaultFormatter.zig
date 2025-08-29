@@ -4,7 +4,7 @@ formatter: Formatter = .{
     .formatFn = &format,
 },
 
-fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: anytype) Formatter.Error!void {
+fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: *std.io.Writer) Formatter.Error!void {
     const self: *const DefaultFormatter = @alignCast(@fieldParentPtr("formatter", formatter));
     _ = self;
 
@@ -72,6 +72,7 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: any
                 input.tty,
             ) catch |e| return logAndReturnWriteFailure("Problem lint", e);
             writer.writeAll("\n\n") catch |e| return logAndReturnWriteFailure("Newline", e);
+            writer.flush() catch |e| return logAndReturnWriteFailure("Flush", e);
         }
     }
 

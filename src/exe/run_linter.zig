@@ -34,8 +34,18 @@ pub const std_options: std.Options = .{
 };
 
 pub fn main() !u8 {
+    var stdout_buffer: [1024]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    var stderr_buffer: [1024]u8 = undefined;
+    var stderr_writer = std.fs.File.stderr().writer(&stderr_buffer);
+
     var printer: *zlinter.rendering.Printer = zlinter.rendering.process_printer;
-    printer.initAuto(false);
+    printer.init(
+        &stdout_writer.interface,
+        &stderr_writer.interface,
+        .init(std.fs.File.stdout()),
+        false,
+    );
 
     const gpa, const is_debug = gpa: {
         if (builtin.os.tag == .wasi) break :gpa .{ std.heap.wasm_allocator, false };
@@ -113,6 +123,8 @@ pub fn main() !u8 {
             },
         );
     }
+    try printer.flush();
+
     return result.exit_code.int();
 }
 
@@ -432,7 +444,7 @@ fn runFormatter(
     gpa: std.mem.Allocator,
     dir: std.fs.Dir,
     file_lint_problems: std.StringArrayHashMap([]zlinter.results.LintResult),
-    output_writer: anytype,
+    output_writer: *std.io.Writer,
     output_tty: zlinter.ansi.Tty,
     formatter: *const zlinter.formatters.Formatter,
 ) !RunResult {
@@ -461,7 +473,7 @@ fn runFormatter(
         .dir = dir,
         .arena = arena_allocator,
         .tty = output_tty,
-    }, &output_writer);
+    }, output_writer);
 
     return run_result;
 }

@@ -823,8 +823,9 @@ test "allocParse with max fix passes arg" {
 test "allocParse with fix passes missing arg" {
     var stdin_fbs = std.io.Reader.fixed("");
 
-    var stderr_sink = try rendering.process_printer.attachFakeStderrSink(std.testing.allocator);
+    var stderr_sink: std.io.Writer.Allocating = .init(std.testing.allocator);
     defer stderr_sink.deinit();
+    rendering.process_printer.stderr = &stderr_sink.writer;
 
     try std.testing.expectError(error.InvalidArgs, allocParse(
         testing.cliArgs(&.{"--fix-passes"}),
@@ -833,15 +834,16 @@ test "allocParse with fix passes missing arg" {
         &stdin_fbs,
     ));
 
-    try std.testing.expectEqualStrings("--fix-passes missing value\n", stderr_sink.output());
+    try std.testing.expectEqualStrings("--fix-passes missing value\n", stderr_sink.written());
 }
 
 test "allocParse with invalid fix passes arg" {
     inline for (&.{ "-1", "256", "a" }) |arg| {
         var stdin_fbs = std.io.Reader.fixed("");
 
-        var stderr_sink = try rendering.process_printer.attachFakeStderrSink(std.testing.allocator);
+        var stderr_sink: std.io.Writer.Allocating = .init(std.testing.allocator);
         defer stderr_sink.deinit();
+        rendering.process_printer.stderr = &stderr_sink.writer;
 
         try std.testing.expectError(error.InvalidArgs, allocParse(
             testing.cliArgs(&.{ "--fix-passes", arg }),
@@ -850,7 +852,7 @@ test "allocParse with invalid fix passes arg" {
             &stdin_fbs,
         ));
 
-        try std.testing.expectEqualStrings("--fix-passes expects an int between 1 and 255\n", stderr_sink.output());
+        try std.testing.expectEqualStrings("--fix-passes expects an int between 1 and 255\n", stderr_sink.written());
     }
 }
 
@@ -884,8 +886,9 @@ test "allocParse with rule arg" {
 test "allocParse with invalid rule arg" {
     var stdin_fbs = std.io.Reader.fixed("");
 
-    var stderr_sink = try rendering.process_printer.attachFakeStderrSink(std.testing.allocator);
+    var stderr_sink: std.io.Writer.Allocating = .init(std.testing.allocator);
     defer stderr_sink.deinit();
+    rendering.process_printer.stderr = &stderr_sink.writer;
 
     try std.testing.expectError(error.InvalidArgs, allocParse(
         testing.cliArgs(&.{ "--rule", "not_found_rule" }),
@@ -897,7 +900,7 @@ test "allocParse with invalid rule arg" {
         &stdin_fbs,
     ));
 
-    try std.testing.expectEqualStrings("rule 'not_found_rule' not found\n", stderr_sink.output());
+    try std.testing.expectEqualStrings("rule 'not_found_rule' not found\n", stderr_sink.written());
 }
 
 test "allocParse without args" {
@@ -970,8 +973,9 @@ test "allocParse with rule_config arg" {
 test "allocParse with invalid rule config rule id arg" {
     var stdin_fbs = std.io.Reader.fixed("");
 
-    var stderr_sink = try rendering.process_printer.attachFakeStderrSink(std.testing.allocator);
+    var stderr_sink: std.io.Writer.Allocating = .init(std.testing.allocator);
     defer stderr_sink.deinit();
+    rendering.process_printer.stderr = &stderr_sink.writer;
 
     try std.testing.expectError(error.InvalidArgs, allocParse(
         testing.cliArgs(&.{ "--rule-config", "my_rule", "./path/rule_config.zon" }),
@@ -983,14 +987,15 @@ test "allocParse with invalid rule config rule id arg" {
         &stdin_fbs,
     ));
 
-    try std.testing.expectEqualStrings("rule 'my_rule' not found\n", stderr_sink.output());
+    try std.testing.expectEqualStrings("rule 'my_rule' not found\n", stderr_sink.written());
 }
 
 test "allocParse with with missing rule config rule id" {
     var stdin_fbs = std.io.Reader.fixed("");
 
-    var stderr_sink = try rendering.process_printer.attachFakeStderrSink(std.testing.allocator);
+    var stderr_sink: std.io.Writer.Allocating = .init(std.testing.allocator);
     defer stderr_sink.deinit();
+    rendering.process_printer.stderr = &stderr_sink.writer;
 
     try std.testing.expectError(error.InvalidArgs, allocParse(
         testing.cliArgs(&.{"--rule-config"}),
@@ -999,14 +1004,15 @@ test "allocParse with with missing rule config rule id" {
         &stdin_fbs,
     ));
 
-    try std.testing.expectEqualStrings("--rule-config arg missing rule id\n", stderr_sink.output());
+    try std.testing.expectEqualStrings("--rule-config arg missing rule id\n", stderr_sink.written());
 }
 
 test "allocParse with with missing rule config rule config path" {
     var stdin_fbs = std.io.Reader.fixed("");
 
-    var stderr_sink = try rendering.process_printer.attachFakeStderrSink(std.testing.allocator);
+    var stderr_sink: std.io.Writer.Allocating = .init(std.testing.allocator);
     defer stderr_sink.deinit();
+    rendering.process_printer.stderr = &stderr_sink.writer;
 
     try std.testing.expectError(error.InvalidArgs, allocParse(
         testing.cliArgs(&.{ "--rule-config", "my_rule" }),
@@ -1018,7 +1024,7 @@ test "allocParse with with missing rule config rule config path" {
         &stdin_fbs,
     ));
 
-    try std.testing.expectEqualStrings("--rule-config arg missing zon file path\n", stderr_sink.output());
+    try std.testing.expectEqualStrings("--rule-config arg missing zon file path\n", stderr_sink.written());
 }
 
 const testing = struct {
