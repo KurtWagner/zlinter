@@ -1,43 +1,24 @@
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 const default_formatter = zlinter.formatters.DefaultFormatter{};
 
-const ExitCode = enum(u8) {
-    /// No lint errors - everything ran smoothly
-    success = 0,
-
-    /// The tool itself blew up (i.e., a bug to be reported)
-    tool_error = 1,
-
-    /// A lint problem with severity error is found (i.e., fixable by user)
-    lint_error = 2,
-
-    /// An error in the usage of zlinter occured. e.g., an incorrect flag (i.e., fixable by user)
-    usage_error = 3,
-
-    pub inline fn int(self: ExitCode) u8 {
-        return @intFromEnum(self);
-    }
-};
-
-const RunResult = struct {
-    exit_code: ExitCode,
-    fixes_applied: usize = 0,
-
-    const success: RunResult = .{ .exit_code = .success };
-    const tool_error: RunResult = .{ .exit_code = .tool_error };
-    const lint_error: RunResult = .{ .exit_code = .lint_error };
-    const usage_error: RunResult = .{ .exit_code = .usage_error };
-};
-
-pub const std_options: std.Options = .{
-    .log_level = .err,
-};
+pub const std_options: std.Options = .{ .log_level = .err };
 
 pub fn main() !u8 {
+    const gpa, const is_debug = switch (builtin.mode) {
+        .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
+        .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, false },
+    };
+    defer if (is_debug) {
+        if (debug_allocator.deinit() == .leak) @panic("Memory leak");
+    };
+
     var stdout_buffer: [1024]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
     var stderr_buffer: [1024]u8 = undefined;
+    var stdin_buffer: [1024]u8 = undefined;
+
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
     var stderr_writer = std.fs.File.stderr().writer(&stderr_buffer);
+    var stdin_reader = std.fs.File.stdin().reader(&stdin_buffer);
 
     var printer: *zlinter.rendering.Printer = zlinter.rendering.process_printer;
     printer.init(
@@ -47,23 +28,9 @@ pub fn main() !u8 {
         false,
     );
 
-    const gpa, const is_debug = gpa: {
-        if (builtin.os.tag == .wasi) break :gpa .{ std.heap.wasm_allocator, false };
-        break :gpa switch (builtin.mode) {
-            .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
-            .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, false },
-        };
-    };
-    defer if (is_debug) {
-        if (debug_allocator.deinit() == .leak) @panic("Memory leak");
-    };
-
     const args = args: {
         const raw_args = try std.process.argsAlloc(gpa);
         defer std.process.argsFree(gpa, raw_args);
-
-        var buffer: [1024]u8 = undefined;
-        var stdin_reader = std.fs.File.stdin().reader(&buffer);
 
         break :args zlinter.Args.allocParse(
             raw_args,
@@ -84,6 +51,18 @@ pub fn main() !u8 {
     // while parsing args, so this would probably be better as a build option
     // but for now this should be fine and keeps args together at runtime...
     printer.verbose = args.verbose;
+
+    if (args.help) {
+        zlinter.Args.printHelp(printer);
+        return ExitCode.success.int();
+    }
+
+    if (args.unknown_args) |unknown_args| {
+        for (unknown_args) |arg|
+            printer.println(.err, "Unknown argument: {s}", .{arg});
+        zlinter.Args.printHelp(printer);
+        return ExitCode.usage_error.int();
+    }
 
     var total_fixes: usize = 0;
     const result = result: {
@@ -128,120 +107,102 @@ pub fn main() !u8 {
     return result.exit_code.int();
 }
 
-fn run(gpa: std.mem.Allocator, args: zlinter.Args, printer: *zlinter.rendering.Printer) !RunResult {
+fn run(
+    gpa: std.mem.Allocator,
+    args: zlinter.Args,
+    printer: *zlinter.rendering.Printer,
+) !RunResult {
     var timer = Timer.createStarted();
     var total_timer = Timer.createStarted();
 
-    if (args.help) {
-        zlinter.Args.printHelp(printer);
-        return .success;
-    }
-
-    if (args.unknown_args) |unknown_args| {
-        for (unknown_args) |arg|
-            printer.println(.err, "Unknown argument: {s}", .{arg});
-        zlinter.Args.printHelp(printer);
-        return .usage_error;
-    }
-
-    // Key is file path and value are errors for the file.
-    var file_lint_problems = std.StringArrayHashMap(
+    // Key is index to `lint_files` and value are errors for the file.
+    var file_lint_problems = std.AutoArrayHashMap(
+        u32,
         []zlinter.results.LintResult,
     ).init(gpa);
     defer {
-        var it = file_lint_problems.iterator();
-        while (it.next()) |entry| {
-            const file_path = entry.key_ptr.*;
-            const results = entry.value_ptr.*;
-
+        for (file_lint_problems.values()) |results| {
             for (results) |*result| result.deinit(gpa);
-
             gpa.free(results);
-            gpa.free(file_path);
         }
         file_lint_problems.deinit();
     }
 
+    // ------------------------------------------------------------------------
+    // Resolve files then apply excludes and filters
+    // ------------------------------------------------------------------------
+
     var dir = try std.fs.cwd().openDir("./", .{ .iterate = true });
     defer dir.close();
 
-    {
-        // ------------------------------------------------------------------------
-        // Resolve files then apply excludes and filters
-        // ------------------------------------------------------------------------
-        const cwd = try std.process.getCwdAlloc(gpa);
-        defer gpa.free(cwd);
+    const cwd = try std.process.getCwdAlloc(gpa);
+    defer gpa.free(cwd);
 
-        const lint_files = try zlinter.files.allocLintFiles(
-            cwd,
-            dir,
-            // `--include` argument supersedes build defined includes and excludes
-            args.include_paths orelse args.build_info.include_paths orelse null,
-            gpa,
-        );
-        defer {
-            for (lint_files) |*lint_file| lint_file.deinit(gpa);
-            gpa.free(lint_files);
-        }
-
-        if (try buildExcludesIndex(cwd, gpa, dir, args)) |*index| {
-            defer @constCast(index).deinit();
-
-            for (lint_files) |*file|
-                file.excluded = index.contains(file.pathname);
-        }
-
-        if (try buildFilterIndex(cwd, gpa, dir, args)) |*index| {
-            defer @constCast(index).deinit();
-
-            for (lint_files) |*file|
-                file.excluded = !index.contains(file.pathname);
-        }
-
-        if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "Resolving {d} files took: {d}ms", .{ lint_files.len, ms });
-
-        defer {
-            printer.printBanner(.verbose);
-            printer.println(.verbose, "Linted {d} files", .{lint_files.len});
-            if (total_timer.lapMilliseconds()) |ms| printer.println(.verbose, "Took {d}ms", .{ms});
-            printer.printBanner(.verbose);
-        }
-
-        try runLinterRules(
-            gpa,
-            lint_files,
-            printer,
-            &timer,
-            &file_lint_problems,
-            args,
-        );
+    const lint_files = try zlinter.files.allocLintFiles(
+        cwd,
+        dir,
+        // `--include` argument supersedes build defined includes and excludes
+        args.include_paths orelse args.build_info.include_paths orelse null,
+        gpa,
+    );
+    defer {
+        for (lint_files) |*lint_file| lint_file.deinit(gpa);
+        gpa.free(lint_files);
     }
+
+    if (try buildExcludesIndex(cwd, gpa, dir, args)) |*index| {
+        defer @constCast(index).deinit();
+
+        for (lint_files) |*file|
+            file.excluded = index.contains(file.pathname);
+    }
+
+    if (try buildFilterIndex(cwd, gpa, dir, args)) |*index| {
+        defer @constCast(index).deinit();
+
+        for (lint_files) |*file|
+            file.excluded = !index.contains(file.pathname);
+    }
+
+    if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "Resolving {d} files took: {d}ms", .{ lint_files.len, ms });
+
+    try runLinterRules(
+        gpa,
+        lint_files,
+        printer,
+        &timer,
+        &file_lint_problems,
+        args,
+    );
+
+    printer.printBanner(.verbose);
+    printer.println(.verbose, "Linted {d} files", .{lint_files.len});
+    if (total_timer.lapMilliseconds()) |ms| printer.println(.verbose, "Took {d}ms", .{ms});
+    printer.printBanner(.verbose);
 
     // ------------------------------------------------------------------------
     // Print out results:
     // ------------------------------------------------------------------------
-    {
-        if (args.fix) {
-            return try runFixes(
-                gpa,
-                dir,
-                file_lint_problems,
-                printer,
-            );
-        } else {
-            const formatter = switch (args.format) {
+
+    return if (args.fix)
+        try runFixes(
+            gpa,
+            dir,
+            lint_files,
+            file_lint_problems,
+            printer,
+        )
+    else
+        try runFormatter(
+            gpa,
+            dir,
+            file_lint_problems,
+            printer.stdout.?,
+            printer.tty,
+            switch (args.format) {
                 .default => &default_formatter.formatter,
-            };
-            return try runFormatter(
-                gpa,
-                dir,
-                file_lint_problems,
-                printer.stdout.?,
-                printer.tty,
-                formatter,
-            );
-        }
-    }
+            },
+        );
 }
 
 fn runLinterRules(
@@ -249,7 +210,7 @@ fn runLinterRules(
     lint_files: []zlinter.files.LintFile,
     printer: *zlinter.rendering.Printer,
     timer: *Timer,
-    file_lint_problems: *std.StringArrayHashMap([]zlinter.results.LintResult),
+    file_lint_problems: *std.AutoArrayHashMap(u32, []zlinter.results.LintResult),
     args: zlinter.Args,
 ) !void {
     var maybe_slowest_files = if (args.verbose) SlowestItemQueue.init(gpa) else null;
@@ -258,20 +219,18 @@ fn runLinterRules(
         slowest_files.unloadAndPrint("Files", printer);
     };
 
-    var maybe_rule_elapsed_times = if (args.verbose)
-        std.StringHashMap(u64).init(gpa)
+    var maybe_rule_elapsed_times: ?[rules.len]usize = if (args.verbose)
+        @splat(0)
     else
         null;
-    defer if (maybe_rule_elapsed_times) |*e| e.deinit();
     defer if (maybe_rule_elapsed_times) |*rule_elapsed_times| {
         var item_timers = SlowestItemQueue.init(gpa);
         defer item_timers.deinit();
 
-        var it = rule_elapsed_times.iterator();
-        while (it.next()) |e| {
+        for (rule_elapsed_times, 0..) |elapsed_ns, rule_id| {
             item_timers.add(.{
-                .name = e.key_ptr.*,
-                .elapsed_ns = e.value_ptr.*,
+                .name = rules[rule_id].rule_id,
+                .elapsed_ns = elapsed_ns,
             });
         }
         item_timers.unloadAndPrint("Rules", printer);
@@ -421,11 +380,7 @@ fn runLinterRules(
 
             if (timer.lapNanoseconds()) |ns| {
                 if (maybe_rule_elapsed_times) |*rule_elapsed_time| {
-                    if (rule_elapsed_time.getPtr(rule.rule_id)) |elapsed_ns| {
-                        elapsed_ns.* += ns;
-                    } else {
-                        rule_elapsed_time.put(rule.rule_id, ns) catch {};
-                    }
+                    rule_elapsed_time[rule_index] += ns;
                 }
                 printer.println(.verbose, "    - {s}: {d}ms", .{ rule.rule_id, ns / std.time.ns_per_ms });
             } else printer.println(.verbose, "    - {s}", .{rule.rule_id});
@@ -433,7 +388,7 @@ fn runLinterRules(
 
         if (results.items.len > 0) {
             try file_lint_problems.putNoClobber(
-                try gpa.dupe(u8, lint_file.pathname),
+                std.math.cast(u32, i) orelse @panic("Too many files"),
                 try results.toOwnedSlice(gpa),
             );
         }
@@ -443,7 +398,7 @@ fn runLinterRules(
 fn runFormatter(
     gpa: std.mem.Allocator,
     dir: std.fs.Dir,
-    file_lint_problems: std.StringArrayHashMap([]zlinter.results.LintResult),
+    file_lint_problems: std.AutoArrayHashMap(u32, []zlinter.results.LintResult),
     output_writer: *std.io.Writer,
     output_tty: zlinter.ansi.Tty,
     formatter: *const zlinter.formatters.Formatter,
@@ -485,7 +440,8 @@ fn cmpFix(context: void, a: zlinter.results.LintProblemFix, b: zlinter.results.L
 fn runFixes(
     gpa: std.mem.Allocator,
     dir: std.fs.Dir,
-    file_lint_problems: std.StringArrayHashMap([]zlinter.results.LintResult),
+    lint_files: []zlinter.files.LintFile,
+    file_lint_problems: std.AutoArrayHashMap(u32, []zlinter.results.LintResult),
     printer: *zlinter.rendering.Printer,
 ) !RunResult {
     var total_fixes: usize = 0;
@@ -519,7 +475,7 @@ fn runFixes(
             cmpFix,
         );
 
-        const file_path = entry.key_ptr.*;
+        const file_path = lint_files[entry.key_ptr.*].pathname;
         const file = try dir.openFile(file_path, .{
             .mode = .read_only,
         });
@@ -734,6 +690,34 @@ fn enabledRules(filter_rule_ids: ?[]const []const u8) std.StaticBitSet(rules.len
     return bitset;
 }
 
+const ExitCode = enum(u8) {
+    /// No lint errors - everything ran smoothly
+    success = 0,
+
+    /// The tool itself blew up (i.e., a bug to be reported)
+    tool_error = 1,
+
+    /// A lint problem with severity error is found (i.e., fixable by user)
+    lint_error = 2,
+
+    /// An error in the usage of zlinter occured. e.g., an incorrect flag (i.e., fixable by user)
+    usage_error = 3,
+
+    pub inline fn int(self: ExitCode) u8 {
+        return @intFromEnum(self);
+    }
+};
+
+const RunResult = struct {
+    exit_code: ExitCode,
+    fixes_applied: usize = 0,
+
+    const success: RunResult = .{ .exit_code = .success };
+    const tool_error: RunResult = .{ .exit_code = .tool_error };
+    const lint_error: RunResult = .{ .exit_code = .lint_error };
+    const usage_error: RunResult = .{ .exit_code = .usage_error };
+};
+
 /// Simple more forgiving timer for optionally timing laps in verbose mode.
 const Timer = struct {
     backing: ?std.time.Timer = null,
@@ -742,11 +726,11 @@ const Timer = struct {
         return .{ .backing = std.time.Timer.start() catch null };
     }
 
-    pub fn lapNanoseconds(self: *Timer) ?u64 {
+    pub fn lapNanoseconds(self: *Timer) ?usize {
         return (self.backing orelse return null).lap();
     }
 
-    pub fn lapMilliseconds(self: *Timer) ?u64 {
+    pub fn lapMilliseconds(self: *Timer) ?usize {
         return (self.lapNanoseconds() orelse return null) / std.time.ns_per_ms;
     }
 };
@@ -762,7 +746,7 @@ const SlowestItemQueue = struct {
 
     const Item = struct {
         name: []const u8,
-        elapsed_ns: u64,
+        elapsed_ns: usize,
 
         pub fn compare(_: void, a: Item, b: Item) std.math.Order {
             return std.math.order(a.elapsed_ns, b.elapsed_ns);
