@@ -938,41 +938,54 @@ fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
     var file = try rules_path.root_dir.handle.openFile(rules_path.subPathOrDot(), .{});
     defer file.close();
 
-    const max_bytes = 128 * 1024;
-
-    var file_buffer: [2048]u8 = undefined;
+    var file_buffer: [1024]u8 = undefined;
     var file_reader = file.reader(&file_buffer);
-    const bytes = try file_reader.interface.allocRemaining(
-        b.allocator,
-        .limited(max_bytes),
-    );
-    defer b.allocator.free(bytes);
 
-    const replacement = b.fmt("{d}", .{std.time.milliTimestamp()});
-    const needle = "{{build_timestamp}}";
+    var out: std.io.Writer.Allocating = .init(b.allocator);
+    defer out.deinit();
 
-    const buffer = try b.allocator.alloc(u8, std.mem.replacementSize(
-        u8,
-        bytes,
-        needle,
-        replacement,
-    ));
-    errdefer b.allocator.free(buffer);
+    var template_name_buffer: [32]u8 = undefined; // must be big enough for template names (e.g., build_template)
+    var template_name: std.io.Writer.Allocating = .initOwnedSlice(b.allocator, &template_name_buffer);
+    defer template_name.deinit();
 
-    const replacements = std.mem.replace(
-        u8,
-        bytes,
-        needle,
-        replacement,
-        buffer,
-    );
-    if (replacements == 0) @panic("Failed to replace template timestamps");
-    return buffer;
+    if (file_reader.getSize()) |size| {
+        try out.ensureTotalCapacity(size);
+    } else |_| {}
+
+    const build_timestamp = b.fmt("{d}", .{std.time.milliTimestamp()});
+    const zig_version = zig_version_string;
+
+    while (true) {
+        if (file_reader.interface.streamDelimiter(&out.writer, '{')) |_| {
+            file_reader.interface.toss(1); // Toss '{'
+
+            if (file_reader.interface.streamDelimiter(&template_name.writer, '}')) |_| {
+                defer template_name.clearRetainingCapacity();
+
+                if (std.mem.eql(u8, template_name.written(), "zig_version")) {
+                    try out.writer.writeAll(zig_version);
+                } else if (std.mem.eql(u8, template_name.written(), "build_timestamp")) {
+                    try out.writer.writeAll(build_timestamp);
+                } else {
+                    std.log.err("Unable to handle template: {s}", .{template_name.written()});
+                    @panic("Invalid template");
+                }
+                file_reader.interface.toss(1); // Toss '}'
+            } else |_| {
+                @panic("Invalid template: Unable to find closing }");
+            }
+        } else |e| switch (e) {
+            error.EndOfStream => break,
+            else => return e,
+        }
+    }
+
+    return try out.toOwnedSlice();
 }
 
 const BuildInfo = @import("src/lib/BuildInfo.zig");
 const std = @import("std");
 const isLintableFilePath = @import("src/lib/files.zig").isLintableFilePath;
 const shims = @import("src/lib/shims.zig");
-
+const zig_version_string = @import("builtin").zig_version_string;
 pub const version = @import("./src/lib/version.zig");
