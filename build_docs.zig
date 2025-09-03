@@ -30,7 +30,7 @@ pub fn main() !void {
 
     var file_buffer: [2048]u8 = undefined;
 
-    var content: std.io.Writer.Allocating = try .initCapacity(gpa, 1024 * 1024);
+    var content: std.Io.Writer.Allocating = try .initCapacity(gpa, 1024 * 1024);
     defer content.deinit();
 
     for (file_names) |file_name| {

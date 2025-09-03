@@ -6,7 +6,7 @@ pub const LintFileRenderer = struct {
     source: []const u8,
     line_ends: []usize,
 
-    pub fn init(allocator: std.mem.Allocator, reader: *std.io.Reader) !Self {
+    pub fn init(allocator: std.mem.Allocator, reader: *std.Io.Reader) !Self {
         const source = try reader.allocRemaining(allocator, .limited(max_zig_file_size_bytes));
 
         var line_ends = try shims.ArrayList(usize).initCapacity(allocator, source.len / 40);
@@ -70,7 +70,7 @@ pub const LintFileRenderer = struct {
         start_column: usize,
         end_line: usize,
         end_column: usize,
-        writer: *std.io.Writer,
+        writer: *std.Io.Writer,
         tty: ansi.Tty,
     ) !void {
         for (start_line..end_line + 1) |line_index| {
@@ -125,7 +125,7 @@ pub const LintFileRenderer = struct {
         line: usize,
         column: usize,
         end_column: usize,
-        writer: *std.io.Writer,
+        writer: *std.Io.Writer,
         tty: ansi.Tty,
     ) !void {
         const lhs_format = " {d} ";
@@ -166,7 +166,7 @@ pub const LintFileRenderer = struct {
 test "LintFileRenderer" {
     inline for (&.{ "\n", "\r\n" }) |newline| {
         const data = "123456789" ++ newline ++ "abcdefghi" ++ newline;
-        var input = std.io.Reader.fixed(data);
+        var input = std.Io.Reader.fixed(data);
 
         var renderer = try LintFileRenderer.init(
             std.testing.allocator,
@@ -190,7 +190,7 @@ test "LintFileRenderer" {
         try std.testing.expectEqualStrings("", renderer.getLine(2));
 
         {
-            var output: std.io.Writer.Allocating = .init(std.testing.allocator);
+            var output: std.Io.Writer.Allocating = .init(std.testing.allocator);
             defer output.deinit();
 
             try renderer.render(
@@ -209,7 +209,7 @@ test "LintFileRenderer" {
         }
 
         {
-            var output: std.io.Writer.Allocating = .init(std.testing.allocator);
+            var output: std.Io.Writer.Allocating = .init(std.testing.allocator);
             defer output.deinit();
 
             try renderer.render(
@@ -237,13 +237,13 @@ pub var process_printer = &printer_singleton;
 
 pub const Printer = struct {
     verbose: bool,
-    stdout: ?*std.io.Writer = null,
-    stderr: ?*std.io.Writer = null,
+    stdout: ?*std.Io.Writer = null,
+    stderr: ?*std.Io.Writer = null,
     tty: ansi.Tty,
 
     const empty: Printer = .{ .verbose = false, .tty = .no_color };
 
-    pub fn init(self: *Printer, stdout: *std.io.Writer, stderr: *std.io.Writer, tty: ansi.Tty, verbose: bool) void {
+    pub fn init(self: *Printer, stdout: *std.Io.Writer, stderr: *std.Io.Writer, tty: ansi.Tty, verbose: bool) void {
         std.debug.assert(self.stdout == null);
         std.debug.assert(self.stderr == null);
 
@@ -270,7 +270,7 @@ pub const Printer = struct {
     }
 
     pub fn print(self: Printer, kind: Kind, comptime fmt: []const u8, args: anytype) void {
-        var writer: *std.io.Writer = switch (kind) {
+        var writer: *std.Io.Writer = switch (kind) {
             .verbose => if (self.verbose)
                 self.stdout orelse @panic("Requires initAuto or set stdout")
             else
@@ -290,7 +290,6 @@ pub const Printer = struct {
         try self.stdout.?.flush();
     }
 };
-
 
 const ansi = @import("ansi.zig");
 const std = @import("std");

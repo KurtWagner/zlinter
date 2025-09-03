@@ -434,7 +434,7 @@ pub fn build(b: *std.Build) void {
 }
 
 fn toZonString(val: anytype, allocator: std.mem.Allocator) []const u8 {
-    var aw = std.io.Writer.Allocating.init(allocator);
+    var aw = std.Io.Writer.Allocating.init(allocator);
     std.zon.stringify.serialize(val, .{}, &aw.writer) catch
         @panic("Invalid rule config");
 
@@ -941,11 +941,11 @@ fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
     var file_buffer: [1024]u8 = undefined;
     var file_reader = file.reader(&file_buffer);
 
-    var out: std.io.Writer.Allocating = .init(b.allocator);
+    var out: std.Io.Writer.Allocating = .init(b.allocator);
     defer out.deinit();
 
     var template_name_buffer: [32]u8 = undefined; // must be big enough for template names (e.g., build_template)
-    var template_name: std.io.Writer.Allocating = .initOwnedSlice(b.allocator, &template_name_buffer);
+    var template_name: std.Io.Writer.Allocating = .initOwnedSlice(b.allocator, &template_name_buffer);
     defer template_name.deinit();
 
     if (file_reader.getSize()) |size| {

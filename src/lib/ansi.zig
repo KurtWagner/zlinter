@@ -7,7 +7,7 @@ pub const Tty = enum {
     pub fn init(file: std.fs.File) Tty {
         if (builtin.is_test) return .no_color;
 
-        return if (std.io.tty.Config.detect(file) == .escape_codes) .ansi_color else .no_color;
+        return if (std.Io.tty.Config.detect(file) == .escape_codes) .ansi_color else .no_color;
     }
 
     /// Returns the ANSI escape sequence if enabled otherwise an empty string

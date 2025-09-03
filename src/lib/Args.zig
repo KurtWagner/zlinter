@@ -97,7 +97,7 @@ pub fn allocParse(
     args: [][:0]u8,
     available_rules: []const LintRule,
     allocator: std.mem.Allocator,
-    stdin_reader: *std.io.Reader,
+    stdin_reader: *std.Io.Reader,
 ) error{ OutOfMemory, InvalidArgs }!Args {
     var index: usize = 0;
 
@@ -417,7 +417,7 @@ fn notArgKey(arg: []const u8) bool {
 }
 
 test "allocParse with unknown args" {
-    var stdin_fbs = std.io.Reader.fixed("");
+    var stdin_fbs = std.Io.Reader.fixed("");
 
     const args = try allocParse(
         testing.cliArgs(&.{ "-", "-fix", "--a" }),
@@ -434,7 +434,7 @@ test "allocParse with unknown args" {
 }
 
 test "allocParse with fix arg" {
-    var stdin_fbs = std.io.Reader.fixed("");
+    var stdin_fbs = std.Io.Reader.fixed("");
 
     const args = try allocParse(
         testing.cliArgs(&.{"--fix"}),
@@ -450,7 +450,7 @@ test "allocParse with fix arg" {
 }
 
 test "allocParse with verbose arg" {
-    var stdin_fbs = std.io.Reader.fixed("");
+    var stdin_fbs = std.Io.Reader.fixed("");
 
     const args = try allocParse(
         testing.cliArgs(&.{"--verbose"}),
@@ -466,7 +466,7 @@ test "allocParse with verbose arg" {
 }
 
 test "allocParse with help arg" {
-    var stdin_fbs = std.io.Reader.fixed("");
+    var stdin_fbs = std.Io.Reader.fixed("");
 
     const args = try allocParse(
         testing.cliArgs(&.{"--help"}),
@@ -482,7 +482,7 @@ test "allocParse with help arg" {
 }
 
 test "allocParse with fix arg and files" {
-    var stdin_fbs = std.io.Reader.fixed("");
+    var stdin_fbs = std.Io.Reader.fixed("");
 
     const args = try allocParse(
         testing.cliArgs(&.{ "--fix", "--include", "a/b.zig", "--include", "./c.zig" }),
@@ -505,7 +505,7 @@ test "allocParse with duplicate files files" {
         &.{ "--include", "a/b.zig", "a/b.zig", "another.zig" },
         &.{ "--include", "a/b.zig", "--include", "a/b.zig", "--include", "another.zig" },
     }) |raw_args| {
-        var stdin_fbs = std.io.Reader.fixed("");
+        var stdin_fbs = std.Io.Reader.fixed("");
 
         const args = try allocParse(
             testing.cliArgs(raw_args),
@@ -529,7 +529,7 @@ test "allocParse with files" {
         &.{ "--include", "a/b.zig", "./c.zig", "another.zig" },
         &.{ "--include", "a/b.zig", "--include", "./c.zig", "--include", "another.zig" },
     }) |raw_args| {
-        var stdin_fbs = std.io.Reader.fixed("");
+        var stdin_fbs = std.Io.Reader.fixed("");
 
         const args = try allocParse(
             testing.cliArgs(raw_args),
@@ -553,7 +553,7 @@ test "allocParse with exclude files" {
         &.{ "--exclude", "a/b.zig", "./c.zig", "another.zig" },
         &.{ "--exclude", "a/b.zig", "--exclude", "./c.zig", "--exclude", "another.zig" },
     }) |raw_args| {
-        var stdin_fbs = std.io.Reader.fixed("");
+        var stdin_fbs = std.Io.Reader.fixed("");
 
         const args = try allocParse(
             testing.cliArgs(raw_args),
@@ -577,7 +577,7 @@ test "allocParse with filter files" {
         &.{ "--filter", "a/b.zig", "./c.zig", "d.zig" },
         &.{ "--filter", "a/b.zig", "--filter", "./c.zig", "--filter", "d.zig" },
     }) |raw_args| {
-        var stdin_fbs = std.io.Reader.fixed("");
+        var stdin_fbs = std.Io.Reader.fixed("");
 
         const args = try allocParse(
             testing.cliArgs(raw_args),
@@ -601,13 +601,13 @@ test "allocParse with only exclude_paths" {
         \\}
     ;
 
-    var backing: std.io.Writer.Allocating = .init(std.testing.allocator);
+    var backing: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer backing.deinit();
 
     try backing.writer.writeInt(usize, bytes.len, .little);
     try backing.writer.writeAll(bytes);
 
-    var stdin_fbs = std.io.Reader.fixed(backing.written());
+    var stdin_fbs = std.Io.Reader.fixed(backing.written());
     const args = try allocParse(
         testing.cliArgs(&.{"--stdin"}),
         &.{},
@@ -631,13 +631,13 @@ test "allocParse with only include_paths" {
         \\}
     ;
 
-    var backing: std.io.Writer.Allocating = .init(std.testing.allocator);
+    var backing: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer backing.deinit();
 
     try backing.writer.writeInt(usize, bytes.len, .little);
     try backing.writer.writeAll(bytes);
 
-    var stdin_fbs = std.io.Reader.fixed(backing.written());
+    var stdin_fbs = std.Io.Reader.fixed(backing.written());
     const args = try allocParse(
         testing.cliArgs(&.{"--stdin"}),
         &.{},
@@ -662,13 +662,13 @@ test "allocParse with include_paths and exclude_paths" {
         \\}
     ;
 
-    var backing: std.io.Writer.Allocating = .init(std.testing.allocator);
+    var backing: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer backing.deinit();
 
     try backing.writer.writeInt(usize, bytes.len, .little);
     try backing.writer.writeAll(bytes);
 
-    var stdin_fbs = std.io.Reader.fixed(backing.written());
+    var stdin_fbs = std.Io.Reader.fixed(backing.written());
     const args = try allocParse(
         testing.cliArgs(&.{"--stdin"}),
         &.{},
@@ -687,7 +687,7 @@ test "allocParse with include_paths and exclude_paths" {
 }
 
 test "allocParse with exclude and include files" {
-    var stdin_fbs = std.io.Reader.fixed("");
+    var stdin_fbs = std.Io.Reader.fixed("");
 
     const args = try allocParse(
         testing.cliArgs(&.{ "--exclude", "a/b.zig", "--include", "./c.zig", "--exclude", "d.zig" }),
@@ -705,7 +705,7 @@ test "allocParse with exclude and include files" {
 }
 
 test "allocParse with all combinations" {
-    var stdin_fbs = std.io.Reader.fixed("");
+    var stdin_fbs = std.Io.Reader.fixed("");
 
     const args = try allocParse(
         testing.cliArgs(&.{ "--fix", "--unknown", "--include", "a/b.zig", "--include", "./c.zig" }),
@@ -725,7 +725,7 @@ test "allocParse with all combinations" {
 }
 
 test "allocParse with zig_exe arg" {
-    var stdin_fbs = std.io.Reader.fixed("");
+    var stdin_fbs = std.Io.Reader.fixed("");
 
     const args = try allocParse(
         testing.cliArgs(&.{ "--zig_exe", "/some/path here/zig" }),
@@ -741,7 +741,7 @@ test "allocParse with zig_exe arg" {
 }
 
 test "allocParse with global_cache_root arg" {
-    var stdin_fbs = std.io.Reader.fixed("");
+    var stdin_fbs = std.Io.Reader.fixed("");
 
     const args = try allocParse(
         testing.cliArgs(&.{ "--global_cache_root", "/some/path here/cache" }),
@@ -757,7 +757,7 @@ test "allocParse with global_cache_root arg" {
 }
 
 test "allocParse with zig_lib_directory arg" {
-    var stdin_fbs = std.io.Reader.fixed("");
+    var stdin_fbs = std.Io.Reader.fixed("");
 
     const args = try allocParse(
         testing.cliArgs(&.{ "--zig_lib_directory", "/some/path here/lib" }),
@@ -773,7 +773,7 @@ test "allocParse with zig_lib_directory arg" {
 }
 
 test "allocParse with format arg" {
-    var stdin_fbs = std.io.Reader.fixed("");
+    var stdin_fbs = std.Io.Reader.fixed("");
 
     const args = try allocParse(
         testing.cliArgs(&.{ "--format", "default" }),
@@ -789,7 +789,7 @@ test "allocParse with format arg" {
 }
 
 test "allocParse with min fix passes arg" {
-    var stdin_fbs = std.io.Reader.fixed("");
+    var stdin_fbs = std.Io.Reader.fixed("");
 
     const args = try allocParse(
         testing.cliArgs(&.{ "--fix-passes", "1" }),
@@ -805,7 +805,7 @@ test "allocParse with min fix passes arg" {
 }
 
 test "allocParse with max fix passes arg" {
-    var stdin_fbs = std.io.Reader.fixed("");
+    var stdin_fbs = std.Io.Reader.fixed("");
 
     const args = try allocParse(
         testing.cliArgs(&.{ "--fix-passes", "255" }),
@@ -821,9 +821,9 @@ test "allocParse with max fix passes arg" {
 }
 
 test "allocParse with fix passes missing arg" {
-    var stdin_fbs = std.io.Reader.fixed("");
+    var stdin_fbs = std.Io.Reader.fixed("");
 
-    var stderr_sink: std.io.Writer.Allocating = .init(std.testing.allocator);
+    var stderr_sink: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer stderr_sink.deinit();
     rendering.process_printer.stderr = &stderr_sink.writer;
 
@@ -839,9 +839,9 @@ test "allocParse with fix passes missing arg" {
 
 test "allocParse with invalid fix passes arg" {
     inline for (&.{ "-1", "256", "a" }) |arg| {
-        var stdin_fbs = std.io.Reader.fixed("");
+        var stdin_fbs = std.Io.Reader.fixed("");
 
-        var stderr_sink: std.io.Writer.Allocating = .init(std.testing.allocator);
+        var stderr_sink: std.Io.Writer.Allocating = .init(std.testing.allocator);
         defer stderr_sink.deinit();
         rendering.process_printer.stderr = &stderr_sink.writer;
 
@@ -861,7 +861,7 @@ test "allocParse with rule arg" {
         &.{ "--rule", "my_rule_a", "my_rule_b" },
         &.{ "--rule", "my_rule_a", "--rule", "my_rule_b" },
     }) |raw_args| {
-        var stdin_fbs = std.io.Reader.fixed("");
+        var stdin_fbs = std.Io.Reader.fixed("");
 
         const args = try allocParse(
             testing.cliArgs(raw_args),
@@ -884,9 +884,9 @@ test "allocParse with rule arg" {
 }
 
 test "allocParse with invalid rule arg" {
-    var stdin_fbs = std.io.Reader.fixed("");
+    var stdin_fbs = std.Io.Reader.fixed("");
 
-    var stderr_sink: std.io.Writer.Allocating = .init(std.testing.allocator);
+    var stderr_sink: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer stderr_sink.deinit();
     rendering.process_printer.stderr = &stderr_sink.writer;
 
@@ -904,7 +904,7 @@ test "allocParse with invalid rule arg" {
 }
 
 test "allocParse without args" {
-    var stdin_fbs = std.io.Reader.fixed("");
+    var stdin_fbs = std.Io.Reader.fixed("");
 
     const args = try allocParse(
         testing.cliArgs(&.{}),
@@ -940,7 +940,7 @@ test "allocParse fuzz" {
             raw_args[i] = try fba.allocator().dupeZ(u8, buffer[0..]);
         }
 
-        var stdin_fbs = std.io.Reader.fixed("");
+        var stdin_fbs = std.Io.Reader.fixed("");
 
         const args = try allocParse(
             &raw_args,
@@ -953,7 +953,7 @@ test "allocParse fuzz" {
 }
 
 test "allocParse with rule_config arg" {
-    var stdin_fbs = std.io.Reader.fixed("");
+    var stdin_fbs = std.Io.Reader.fixed("");
 
     const args = try allocParse(
         testing.cliArgs(&.{ "--rule-config", "my_rule", "./path/rule_config.zon" }),
@@ -971,9 +971,9 @@ test "allocParse with rule_config arg" {
 }
 
 test "allocParse with invalid rule config rule id arg" {
-    var stdin_fbs = std.io.Reader.fixed("");
+    var stdin_fbs = std.Io.Reader.fixed("");
 
-    var stderr_sink: std.io.Writer.Allocating = .init(std.testing.allocator);
+    var stderr_sink: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer stderr_sink.deinit();
     rendering.process_printer.stderr = &stderr_sink.writer;
 
@@ -991,9 +991,9 @@ test "allocParse with invalid rule config rule id arg" {
 }
 
 test "allocParse with with missing rule config rule id" {
-    var stdin_fbs = std.io.Reader.fixed("");
+    var stdin_fbs = std.Io.Reader.fixed("");
 
-    var stderr_sink: std.io.Writer.Allocating = .init(std.testing.allocator);
+    var stderr_sink: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer stderr_sink.deinit();
     rendering.process_printer.stderr = &stderr_sink.writer;
 
@@ -1008,9 +1008,9 @@ test "allocParse with with missing rule config rule id" {
 }
 
 test "allocParse with with missing rule config rule config path" {
-    var stdin_fbs = std.io.Reader.fixed("");
+    var stdin_fbs = std.Io.Reader.fixed("");
 
-    var stderr_sink: std.io.Writer.Allocating = .init(std.testing.allocator);
+    var stderr_sink: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer stderr_sink.deinit();
     rendering.process_printer.stderr = &stderr_sink.writer;
 

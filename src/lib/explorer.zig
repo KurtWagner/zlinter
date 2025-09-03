@@ -132,7 +132,12 @@ fn errorsToJson(tree: Ast, arena: std.mem.Allocator) !std.json.Array {
                 try tree.renderError(e, render_backing.writer(arena));
                 try json_error.put("message", .{ .string = try render_backing.toOwnedSlice(arena) });
             },
-            .@"0.15", .@"0.16" => {
+            .@"0.15" => {
+                var aw = std.io.Writer.Allocating.init(arena);
+                try tree.renderError(e, &aw.writer);
+                try json_error.put("message", .{ .string = try aw.toOwnedSlice() });
+            },
+            .@"0.16" => {
                 var aw = std.Io.Writer.Allocating.init(arena);
                 try tree.renderError(e, &aw.writer);
                 try json_error.put("message", .{ .string = try aw.toOwnedSlice() });

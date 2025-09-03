@@ -399,7 +399,7 @@ fn runFormatter(
     gpa: std.mem.Allocator,
     dir: std.fs.Dir,
     file_lint_problems: std.AutoArrayHashMap(u32, []zlinter.results.LintResult),
-    output_writer: *std.io.Writer,
+    output_writer: *std.Io.Writer,
     output_tty: zlinter.ansi.Tty,
     formatter: *const zlinter.formatters.Formatter,
 ) !RunResult {
@@ -487,7 +487,7 @@ fn runFixes(
                 var file_reader_buffer: [1024]u8 = undefined;
                 var file_reader = file.readerStreaming(&file_reader_buffer);
 
-                var buffer: std.io.Writer.Allocating = .init(gpa);
+                var buffer: std.Io.Writer.Allocating = .init(gpa);
                 defer buffer.deinit();
 
                 if (file_reader.getSize()) |size| {
@@ -595,7 +595,7 @@ fn allocAstErrorMsg(
             return error_message.toOwnedSlice(allocator);
         },
         .@"0.15", .@"0.16" => {
-            var aw = std.io.Writer.Allocating.init(allocator);
+            var aw = std.Io.Writer.Allocating.init(allocator);
             try tree.renderError(err, &aw.writer);
             return aw.toOwnedSlice();
         },

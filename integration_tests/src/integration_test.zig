@@ -154,9 +154,9 @@ test "integration test rules" {
         };
 
         const actual = try std.fs.cwd().readFileAlloc(
-            allocator,
             temp_path,
-            max_file_size_bytes,
+            allocator,
+            .limited(max_file_size_bytes),
         );
         defer allocator.free(actual);
 
@@ -173,9 +173,9 @@ test "integration test rules" {
 
 fn expectFileContentsEquals(dir: std.fs.Dir, file_path: []const u8, actual: []const u8) !void {
     const contents = dir.readFileAlloc(
-        std.testing.allocator,
         file_path,
-        max_file_size_bytes,
+        std.testing.allocator,
+        .limited(max_file_size_bytes),
     ) catch |err| {
         switch (err) {
             error.FileNotFound => {

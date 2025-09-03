@@ -27,7 +27,7 @@ pub fn deinit(self: BuildInfo, gpa: std.mem.Allocator) void {
 }
 
 pub fn consumeStdinAlloc(
-    stdin_reader: *std.io.Reader,
+    stdin_reader: *std.Io.Reader,
     gpa: std.mem.Allocator,
     printer: *rendering.Printer,
 ) error{ OutOfMemory, InvalidArgs }!?BuildInfo {

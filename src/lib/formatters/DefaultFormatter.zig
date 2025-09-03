@@ -4,7 +4,7 @@ formatter: Formatter = .{
     .formatFn = &format,
 },
 
-fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: *std.io.Writer) Formatter.Error!void {
+fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: *std.Io.Writer) Formatter.Error!void {
     const self: *const DefaultFormatter = @alignCast(@fieldParentPtr("formatter", formatter));
     _ = self;
 
