@@ -6,9 +6,9 @@
 //!
 //! This is powerful, but it can:
 //!
-//!  - Make APIs harder to understand - the possible errors aren’t visible at the signature.
-//!  - Make refactoring risky - adding or changing a failing operation silently changes the function’s error type.
-//!  - Lead to brittle dependencies - downstream callers may break if the inferred error set grows or changes.
+//! * Make APIs harder to understand - the possible errors aren’t visible at the signature.
+//! * Make refactoring risky - adding or changing a failing operation silently changes the function’s error type.
+//! * Lead to brittle dependencies - downstream callers may break if the inferred error set grows or changes.
 //!
 //! The goal of the rule is to keep error contracts clear and stable. If it can fail, say how.
 

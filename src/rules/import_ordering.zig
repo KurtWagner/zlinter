@@ -10,7 +10,6 @@
 //! `import_ordering` supports auto fixes with the `--fix` flag. It may take multiple runs with `--fix` to fix all places.
 //!
 //! **Auto fixing is an experimental feature so only use it if you use source control - always back up your code first!**
-//!
 
 // TODO(#52): Add guard code for declarations appearing on same line - just prevent it
 // from crashing the lint process, really it shouldn't be happening.
