@@ -1,4 +1,4 @@
-//! Enforces that references aren't deprecated (i.e., doc commented with `Deprecated: `)
+//! Enforces that references aren't deprecated (i.e., doc commented with `Deprecated:`)
 //!
 //! If you're indefinitely targetting fixed versions of a dependency or zig
 //! then using deprecated items may not be a big deal. Although, it's still

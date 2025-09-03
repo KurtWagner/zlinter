@@ -4,15 +4,15 @@
 //!
 //! Panics can be replaced with:
 //!
-//! - Proper error handling (error types and try / catch)
-//! - Precondition checks (std.debug.assert) that fail only in debug mode
-//! - Compile-time checks (comptime) when possible
+//! * Proper error handling (error types and try / catch)
+//! * Precondition checks (std.debug.assert) that fail only in debug mode
+//! * Compile-time checks (comptime) when possible
 //!
 //! Panics may be useful during early development, but leaving them in shipped code leads to:
 //!
-//! - Abrupt crashes that break user trust
-//! - Hard-to-debug failures in production
-//! - Missed opportunities for graceful recovery
+//! * Abrupt crashes that break user trust
+//! * Hard-to-debug failures in production
+//! * Missed opportunities for graceful recovery
 //!
 //! By default this will not flag `@panic` found in `test` blocks.
 //!

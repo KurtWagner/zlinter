@@ -46,7 +46,6 @@ pub fn main() !void {
         try writer.writeByte('\n');
 
         try writeFileRuleConfig(content, gpa, writer);
-        try writer.writeByte('\n');
     }
 
     return std.process.cleanExit();
@@ -116,7 +115,9 @@ fn writeFileRuleConfig(content: []const u8, gpa: std.mem.Allocator, writer: anyt
                 }
                 while (start < end) : (start += 1) {
                     try writer.writeAll(trimCommentLine(tree.tokenSlice(start)["///".len..]));
-                    try writer.writeByte(' ');
+                    if (start < end - 1) {
+                        try writer.writeByte(' ');
+                    }
                 }
 
                 const maybe_default: ?[]const u8 = switch (zig_version) {
