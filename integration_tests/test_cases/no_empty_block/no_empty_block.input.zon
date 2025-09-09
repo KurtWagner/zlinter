@@ -1,0 +1,9 @@
+.{
+    .if_block = .warning,
+    .while_block = .warning,
+    .for_block = .warning,
+    .catch_block = .@"error",
+    .switch_case_block = .@"error",
+    .defer_block = .warning,
+    .errdefer_block = .warning,
+}
