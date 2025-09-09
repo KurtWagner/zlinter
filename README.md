@@ -342,7 +342,7 @@ It uses [`zls`](https://github.com/zigtools/zls) (an awesome project, go check i
 
 `zlinter` currently analyzes the Zig AST, which has [limited context](https://github.com/KurtWagner/zlinter/issues/65) without trying to re-implement the Zig compiler (not doing).
 
-A more accurate approach could be to integrate more closely with the Zig build system and compiler (e.g., the proposed Zig compiler server), but for now, using the AST should be sufficient for most cases, and maybe one day `zlinter` can use newer Zig Compiler APIs as they become available. The [milestones](#milestones) will help inform this.
+See [limitations](./LIMITATIONS.md) for more information.
 
 ---
 

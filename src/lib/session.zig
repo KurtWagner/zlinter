@@ -333,8 +333,15 @@ pub const LintDocument = struct {
         while (self.lineage.items(.parent)[next.index]) |parent| {
             switch (shims.nodeTag(self.handle.tree, parent)) {
                 .test_decl => return true,
-                else => next = NodeIndexShim.init(parent),
+                .@"if", .if_simple => if (isGuardingTestOnly(
+                    self.handle.tree,
+                    self.handle.tree.fullIf(parent).?,
+                )) {
+                    return true;
+                },
+                else => {},
             }
+            next = NodeIndexShim.init(parent);
         }
         return false;
     }
@@ -380,6 +387,15 @@ pub const LintDocument = struct {
         }
     }
 };
+
+fn isGuardingTestOnly(tree: Ast, if_statement: Ast.full.If) bool {
+    const cond_node = if_statement.ast.cond_expr;
+    return switch (shims.nodeTag(tree, cond_node)) {
+        .identifier => std.mem.eql(u8, "is_test", tree.getNodeSource(cond_node)),
+        .field_access => ast.isFieldVarAccess(tree, cond_node, &.{"is_test"}),
+        else => false,
+    };
+}
 
 /// The context of all document and rule executions.
 pub const LintContext = struct {
@@ -547,6 +563,120 @@ pub const LintContext = struct {
         return doc;
     }
 };
+
+test "LintDocument.isEnclosedInTestBlock" {
+    var ctx: LintContext = undefined;
+    try ctx.init(.{}, std.testing.allocator);
+    defer ctx.deinit();
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    const source =
+        \\pub fn main() void {
+        \\ const is_not_in_test = 1;
+        \\
+        \\ if (builtin.is_test) {
+        \\  const is_in_test_if_condition_a = 1;  
+        \\ }
+        \\ if (anything.is_test) {
+        \\  const is_in_test_if_condition_b = 1;
+        \\ }
+        \\ if (is_test) {
+        \\  const is_in_test_if_condition_c = 1;
+        \\ }
+        \\ if (something) {
+        \\    if (is_test) {
+        \\      const is_in_test_nested_if_condition_a = 1;
+        \\    }
+        \\ }
+        \\ if (is_test) {
+        \\    if (something) {
+        \\      const is_in_test_nested_if_condition_b = 1;
+        \\    }
+        \\ }
+        \\ if (other) {
+        \\  const is_not_in_test_if_condition = 1;
+        \\ }
+        \\}
+        \\
+        \\test {
+        \\ const is_in_test_without_name = 1;
+        \\}
+        \\
+        \\test "with name" {
+        \\ const is_in_test_with_name = 1;
+        \\}
+    ;
+
+    var doc = (try testing.loadFakeDocument(
+        &ctx,
+        tmp.dir,
+        "test.zig",
+        source,
+        arena.allocator(),
+    )).?;
+    defer doc.deinit(ctx.gpa);
+
+    try std.testing.expect(
+        !doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+            doc.handle.tree,
+            "is_not_in_test",
+        ))),
+    );
+
+    try std.testing.expect(
+        doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+            doc.handle.tree,
+            "is_in_test_without_name",
+        ))),
+    );
+
+    try std.testing.expect(
+        doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+            doc.handle.tree,
+            "is_in_test_if_condition_a",
+        ))),
+    );
+
+    try std.testing.expect(
+        doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+            doc.handle.tree,
+            "is_in_test_if_condition_b",
+        ))),
+    );
+
+    try std.testing.expect(
+        doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+            doc.handle.tree,
+            "is_in_test_if_condition_c",
+        ))),
+    );
+
+    try std.testing.expect(
+        !doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+            doc.handle.tree,
+            "is_not_in_test_if_condition",
+        ))),
+    );
+
+    try std.testing.expect(
+        doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+            doc.handle.tree,
+            "is_in_test_nested_if_condition_a",
+        ))),
+    );
+
+    try std.testing.expect(
+        doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+            doc.handle.tree,
+            "is_in_test_nested_if_condition_b",
+        ))),
+    );
+}
 
 test "LintDocument.resolveTypeKind" {
     const TestCase = struct {
