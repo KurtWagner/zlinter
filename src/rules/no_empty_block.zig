@@ -20,6 +20,8 @@
 //! }
 //! ```
 
+// TODO(#107): Add function blocks
+
 /// Config for no_empty_block rule.
 pub const Config = struct {
     /// Severity for empty `if` blocks
@@ -170,6 +172,396 @@ fn run(
 
 test {
     std.testing.refAllDecls(@This());
+}
+
+test "if blocks" {
+    const source =
+        \\pub fn main() void {
+        \\ if (true) {}
+        \\ else {}
+        \\
+        \\ if (false) {
+        \\ } else {
+        \\ 
+        \\ }
+        \\
+        \\ if (false) {
+        \\  // Deliberate
+        \\ } else {
+        \\  // Ignore
+        \\ }
+        \\
+        \\ if (true) {
+        \\  return;
+        \\ }
+        \\}
+    ;
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
+            source,
+            .{},
+            Config{ .if_block = severity },
+            &.{
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice =
+                    \\{
+                    \\ }
+                    ,
+                    .message = "Empty blocks are discouraged inside of if blocks. If deliberate “do nothing”, include a comment inside the block.",
+                },
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice =
+                    \\{
+                    \\ 
+                    \\ }
+                    ,
+                    .message = "Empty blocks are discouraged inside of if blocks. If deliberate “do nothing”, include a comment inside the block.",
+                },
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty blocks are discouraged inside of if blocks. If deliberate “do nothing”, include a comment inside the block.",
+                },
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty blocks are discouraged inside of if blocks. If deliberate “do nothing”, include a comment inside the block.",
+                },
+            },
+        );
+    }
+
+    // Off:
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{ .if_block = .off },
+        &.{},
+    );
+}
+
+test "while blocks" {
+    const source =
+        \\pub fn main() void {
+        \\ var i: u32 = 0;
+        \\ while (i > 1) {}
+        \\ 
+        \\ while (i > 1) {
+        \\
+        \\ }
+        \\
+        \\ while (i < 10) : (i += 1) {}
+        \\
+        \\ while (i < 10) : (i += 1) {
+        \\   // deliberate
+        \\ }
+        \\}
+    ;
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
+            source,
+            .{},
+            Config{ .while_block = severity },
+            &.{
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty blocks are discouraged inside of while blocks. If deliberate “do nothing”, include a comment inside the block.",
+                },
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice =
+                    \\{
+                    \\
+                    \\ }
+                    ,
+                    .message = "Empty blocks are discouraged inside of while blocks. If deliberate “do nothing”, include a comment inside the block.",
+                },
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty blocks are discouraged inside of while blocks. If deliberate “do nothing”, include a comment inside the block.",
+                },
+            },
+        );
+    }
+
+    // Off:
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{ .while_block = .off },
+        &.{},
+    );
+}
+
+test "for blocks" {
+    const source =
+        \\pub fn main() void {
+        \\ for (0..1) |_| {}
+        \\ 
+        \\ for (0..1) |_| {
+        \\
+        \\ }
+        \\
+        \\ for (0..1) |_| {
+        \\  // deliberate
+        \\ }
+        \\}
+    ;
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
+            source,
+            .{},
+            Config{ .for_block = severity },
+            &.{
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice =
+                    \\{
+                    \\
+                    \\ }
+                    ,
+                    .message = "Empty blocks are discouraged inside of for blocks. If deliberate “do nothing”, include a comment inside the block.",
+                },
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty blocks are discouraged inside of for blocks. If deliberate “do nothing”, include a comment inside the block.",
+                },
+            },
+        );
+    }
+
+    // Off:
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{ .for_block = .off },
+        &.{},
+    );
+}
+
+test "defer blocks" {
+    const source =
+        \\pub fn main() void {
+        \\ defer {}
+        \\
+        \\ defer {
+        \\
+        \\ }
+        \\
+        \\ defer {
+        \\  // Deliberate - maybe a TODO to cleanup
+        \\ }
+        \\}
+    ;
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
+            source,
+            .{},
+            Config{ .defer_block = severity },
+            &.{
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice =
+                    \\{
+                    \\
+                    \\ }
+                    ,
+                    .message = "Empty blocks are discouraged inside of defer blocks. If deliberate “do nothing”, include a comment inside the block.",
+                },
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty blocks are discouraged inside of defer blocks. If deliberate “do nothing”, include a comment inside the block.",
+                },
+            },
+        );
+    }
+
+    // Off:
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{ .defer_block = .off },
+        &.{},
+    );
+}
+
+test "errdefer blocks" {
+    const source =
+        \\pub fn main() void {
+        \\ errdefer {}
+        \\
+        \\ errdefer {
+        \\
+        \\ }
+        \\
+        \\ errdefer {
+        \\  // Deliberate - maybe a TODO to cleanup
+        \\ }
+        \\}
+    ;
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
+            source,
+            .{},
+            Config{ .errdefer_block = severity },
+            &.{
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice =
+                    \\{
+                    \\
+                    \\ }
+                    ,
+                    .message = "Empty blocks are discouraged inside of errdefer blocks. If deliberate “do nothing”, include a comment inside the block.",
+                },
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty blocks are discouraged inside of errdefer blocks. If deliberate “do nothing”, include a comment inside the block.",
+                },
+            },
+        );
+    }
+
+    // Off:
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{ .errdefer_block = .off },
+        &.{},
+    );
+}
+
+test "catch blocks" {
+    const source =
+        \\pub fn main() void {
+        \\ something() catch {};
+        \\
+        \\ something() catch {
+        \\
+        \\ };
+        \\
+        \\ something() catch {
+        \\  // Deliberate - maybe a TODO to cleanup
+        \\ };
+        \\}
+    ;
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
+            source,
+            .{},
+            Config{ .catch_block = severity },
+            &.{
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice =
+                    \\{
+                    \\
+                    \\ }
+                    ,
+                    .message = "Empty blocks are discouraged inside of catch blocks. If deliberate “do nothing”, include a comment inside the block.",
+                },
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty blocks are discouraged inside of catch blocks. If deliberate “do nothing”, include a comment inside the block.",
+                },
+            },
+        );
+    }
+
+    // Off:
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{ .catch_block = .off },
+        &.{},
+    );
+}
+
+test "switch case blocks" {
+    const source =
+        \\pub fn main() void {
+        \\ const something: enum { a, b, c } = .a;
+        \\ switch (something) {
+        \\     .a => {},
+        \\     .b => {
+        \\
+        \\     },
+        \\     .c => {
+        \\         // Ignore
+        \\     },
+        \\ }
+        \\ }
+    ;
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
+            source,
+            .{},
+            Config{ .switch_case_block = severity },
+            &.{
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice =
+                    \\{
+                    \\
+                    \\     }
+                    ,
+                    .message = "Empty blocks are discouraged inside of switch case blocks. If deliberate “do nothing”, include a comment inside the block.",
+                },
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty blocks are discouraged inside of switch case blocks. If deliberate “do nothing”, include a comment inside the block.",
+                },
+            },
+        );
+    }
+
+    // Off:
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{ .switch_case_block = .off },
+        &.{},
+    );
 }
 
 const std = @import("std");
