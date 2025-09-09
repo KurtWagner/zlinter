@@ -952,7 +952,9 @@ fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
 
     if (file_reader.getSize()) |size| {
         try out.ensureTotalCapacity(size);
-    } else |_| {}
+    } else |_| {
+        // Ignore.
+    }
 
     const build_timestamp = b.fmt("{d}", .{std.time.milliTimestamp()});
     const zig_version = zig_version_string;
