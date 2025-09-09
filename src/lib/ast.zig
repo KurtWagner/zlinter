@@ -377,6 +377,66 @@ pub fn isFieldVarAccess(tree: Ast, node: Ast.Node.Index, var_names: []const []co
     return false;
 }
 
+pub const Statement = union(enum) {
+    @"if": Ast.full.If,
+    @"while": Ast.full.While,
+    @"for": Ast.full.For,
+    switch_case: Ast.full.SwitchCase,
+    /// Contains the expression node index (i.e., `catch <expr>`)
+    @"catch": Ast.Node.Index,
+    /// Contains the expression node index (i.e., `defer <expr>`)
+    @"defer": Ast.Node.Index,
+    /// Contains the expression node index (i.e., `errdefer <expr>`)
+    @"errdefer": Ast.Node.Index,
+
+    pub fn name(self: @This()) []const u8 {
+        return switch (self) {
+            .@"if" => "if",
+            .@"while" => "while",
+            .@"for" => "for",
+            .switch_case => "switch case",
+            .@"catch" => "catch",
+            .@"defer" => "defer",
+            .@"errdefer" => "errdefer",
+        };
+    }
+};
+
+/// Returns if, for, while, switch case, defer and errdefer and catch statements
+/// focusing on the expression node attached, which is relevant in whether or not
+/// it's a block enclosed in braces.
+pub fn fullStatement(tree: Ast, node: Ast.Node.Index) ?Statement {
+    return if (tree.fullIf(node)) |ifStatement|
+        .{ .@"if" = ifStatement }
+    else if (tree.fullWhile(node)) |whileStatement|
+        .{ .@"while" = whileStatement }
+    else if (tree.fullFor(node)) |forStatement|
+        .{ .@"for" = forStatement }
+    else if (tree.fullSwitchCase(node)) |switchStatement|
+        .{ .switch_case = switchStatement }
+    else switch (shims.nodeTag(tree, node)) {
+        .@"catch" => .{
+            .@"catch" = switch (version.zig) {
+                .@"0.14" => shims.nodeData(tree, node).rhs,
+                .@"0.15", .@"0.16" => shims.nodeData(tree, node).node_and_node[1],
+            },
+        },
+        .@"defer" => .{
+            .@"defer" = switch (version.zig) {
+                .@"0.14" => shims.nodeData(tree, node).rhs,
+                .@"0.15", .@"0.16" => shims.nodeData(tree, node).node,
+            },
+        },
+        .@"errdefer" => .{
+            .@"errdefer" = switch (version.zig) {
+                .@"0.14" => shims.nodeData(tree, node).rhs,
+                .@"0.15", .@"0.16" => shims.nodeData(tree, node).opt_token_and_node[1],
+            },
+        },
+        else => null,
+    };
+}
+
 test "isFieldVarAccess" {
     inline for (&.{
         .{

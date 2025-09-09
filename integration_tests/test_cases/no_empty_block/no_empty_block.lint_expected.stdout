@@ -1,0 +1,37 @@
+error Empty blocks are discouraged inside of switch case blocks. If deliberate “do nothing”, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:34:17] no_empty_block
+
+ 34 |         else => {},
+    |                 ^^
+
+error Empty blocks are discouraged inside of switch case blocks. If deliberate “do nothing”, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:30:15] no_empty_block
+
+ 30 |         .a => {},
+    |               ^^
+
+warning Empty blocks are discouraged inside of errdefer blocks. If deliberate “do nothing”, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:23:14] no_empty_block
+
+ 23 |     errdefer {}
+    |              ^^
+
+warning Empty blocks are discouraged inside of defer blocks. If deliberate “do nothing”, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:19:11] no_empty_block
+
+ 19 |     defer {}
+    |           ^^
+
+warning Empty blocks are discouraged inside of for blocks. If deliberate “do nothing”, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:17:20] no_empty_block
+
+ 17 |     for (0..1) |_| {}
+    |                    ^^
+
+warning Empty blocks are discouraged inside of while blocks. If deliberate “do nothing”, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:7:31] no_empty_block
+
+ 7 |     while (i < 10) : (i += 1) {}
+   |                               ^^
+
+warning Empty blocks are discouraged inside of if blocks. If deliberate “do nothing”, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:2:15] no_empty_block
+
+ 2 |     if (true) {} else {
+   |               ^^
+
+x 2 errors
+x 5 warnings

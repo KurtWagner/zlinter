@@ -522,12 +522,6 @@ fn runFixes(
                 var buffer: std.ArrayList(u8) = .empty;
                 defer buffer.deinit(gpa);
 
-                // TODO: Work out why this is causing a leak.
-                // if (file_reader.getSize()) |size| {
-                //     const casted_size = std.math.cast(u32, size) orelse return error.StreamTooLong;
-                //     try buffer.ensureTotalCapacityPrecise(gpa, casted_size);
-                // } else |_| {}
-
                 try file_reader.interface.appendRemaining(
                     gpa,
                     &buffer,
@@ -777,7 +771,9 @@ const SlowestItemQueue = struct {
             if (self.queue.count() > self.max) {
                 _ = self.queue.removeMin();
             }
-        } else |_| {}
+        } else |_| {
+            // Ignore.
+        }
     }
 
     fn unloadAndPrint(self: *SlowestItemQueue, name: []const u8, printer: *zlinter.rendering.Printer) void {
