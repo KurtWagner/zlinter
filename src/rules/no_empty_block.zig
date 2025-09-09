@@ -20,7 +20,7 @@
 //! }
 //! ```
 
-// TODO(#107): Add function blocks
+const problem_msg_template = "Empty {s} blocks are discouraged. If deliberately empty, include a comment inside the block.";
 
 /// Config for no_empty_block rule.
 pub const Config = struct {
@@ -44,6 +44,9 @@ pub const Config = struct {
 
     /// Severity for empty `errdefer` blocks
     errdefer_block: zlinter.rules.LintProblemSeverity = .@"error",
+
+    /// Severity for empty `fn` declaration blocks
+    fn_decl_block: zlinter.rules.LintProblemSeverity = .@"error",
 };
 
 /// Builds and returns the no_empty_block rule.
@@ -76,6 +79,23 @@ fn run(
 
     nodes: while (try it.next()) |tuple| {
         const node, _ = tuple;
+
+        if (fnDeclBlock(tree, node.toNodeIndex())) |block| {
+            if (config.fn_decl_block != .off and isEmptyBlock(tree, block)) {
+                try lint_problems.append(allocator, .{
+                    .rule_id = rule.rule_id,
+                    .severity = config.fn_decl_block,
+                    .start = .startOfToken(tree, tree.firstToken(block)),
+                    .end = .endOfToken(tree, tree.lastToken(block)),
+                    .message = try std.fmt.allocPrint(
+                        allocator,
+                        problem_msg_template,
+                        .{"function declaration"},
+                    ),
+                });
+            }
+            continue :nodes;
+        }
 
         const statement = zlinter.ast.fullStatement(tree, node.toNodeIndex()) orelse continue :nodes;
         const severity: zlinter.rules.LintProblemSeverity = switch (statement) {
@@ -121,39 +141,16 @@ fn run(
             // Ignore here as it'll be processed in the outer loop.
             if (zlinter.ast.fullStatement(tree, expr_node) != null) continue :expr_nodes;
 
-            // If it's not a block we assume it's a single statement (i.e., one
-            // child). Keep in mind a block may have zero statement (i.e., empty).
-            // Which this rule does not care about.
-            const has_braces = switch (shims.nodeTag(tree, expr_node)) {
-                .block,
-                .block_semicolon,
-                .block_two,
-                .block_two_semicolon,
-                => true,
-                else => false,
-            };
-            if (!has_braces) continue :expr_nodes;
-
-            const first_token = tree.firstToken(expr_node);
-            const last_token = tree.lastToken(expr_node);
-
-            const start = tree.tokens.items(.start)[first_token] + tree.tokenSlice(last_token).len;
-            const end = tree.tokens.items(.start)[last_token];
-
-            for (start..end) |i| {
-                if (!std.ascii.isWhitespace(tree.source[i])) {
-                    continue :expr_nodes;
-                }
-            }
+            if (!isEmptyBlock(tree, expr_node)) continue :expr_nodes;
 
             try lint_problems.append(allocator, .{
                 .rule_id = rule.rule_id,
                 .severity = severity,
-                .start = .startOfToken(tree, first_token),
-                .end = .endOfToken(tree, last_token),
+                .start = .startOfToken(tree, tree.firstToken(expr_node)),
+                .end = .endOfToken(tree, tree.lastToken(expr_node)),
                 .message = try std.fmt.allocPrint(
                     allocator,
-                    "Empty blocks are discouraged inside of {s} blocks. If deliberate “do nothing”, include a comment inside the block.",
+                    problem_msg_template,
                     .{statement.name()},
                 ),
             });
@@ -168,6 +165,41 @@ fn run(
         )
     else
         null;
+}
+
+fn isEmptyBlock(tree: Ast, node: Ast.Node.Index) bool {
+    const is_block = switch (shims.nodeTag(tree, node)) {
+        .block,
+        .block_semicolon,
+        .block_two,
+        .block_two_semicolon,
+        => true,
+        else => false,
+    };
+    if (!is_block) return false;
+
+    const first_token = tree.firstToken(node);
+    const last_token = tree.lastToken(node);
+
+    const start = tree.tokens.items(.start)[first_token] + tree.tokenSlice(last_token).len;
+    const end = tree.tokens.items(.start)[last_token];
+
+    for (start..end) |i| {
+        if (!std.ascii.isWhitespace(tree.source[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+fn fnDeclBlock(tree: Ast, node: Ast.Node.Index) ?Ast.Node.Index {
+    return switch (shims.nodeTag(tree, node)) {
+        .fn_decl => switch (zlinter.version.zig) {
+            .@"0.14" => shims.nodeData(tree, node).rhs,
+            .@"0.15", .@"0.16" => shims.nodeData(tree, node).node_and_node.@"1",
+        },
+        else => null,
+    };
 }
 
 test {
@@ -210,7 +242,7 @@ test "if blocks" {
                     \\{
                     \\ }
                     ,
-                    .message = "Empty blocks are discouraged inside of if blocks. If deliberate “do nothing”, include a comment inside the block.",
+                    .message = "Empty if blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
                 .{
                     .rule_id = "no_empty_block",
@@ -220,19 +252,19 @@ test "if blocks" {
                     \\ 
                     \\ }
                     ,
-                    .message = "Empty blocks are discouraged inside of if blocks. If deliberate “do nothing”, include a comment inside the block.",
+                    .message = "Empty if blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
                 .{
                     .rule_id = "no_empty_block",
                     .severity = severity,
                     .slice = "{}",
-                    .message = "Empty blocks are discouraged inside of if blocks. If deliberate “do nothing”, include a comment inside the block.",
+                    .message = "Empty if blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
                 .{
                     .rule_id = "no_empty_block",
                     .severity = severity,
                     .slice = "{}",
-                    .message = "Empty blocks are discouraged inside of if blocks. If deliberate “do nothing”, include a comment inside the block.",
+                    .message = "Empty if blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
             },
         );
@@ -276,7 +308,7 @@ test "while blocks" {
                     .rule_id = "no_empty_block",
                     .severity = severity,
                     .slice = "{}",
-                    .message = "Empty blocks are discouraged inside of while blocks. If deliberate “do nothing”, include a comment inside the block.",
+                    .message = "Empty while blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
                 .{
                     .rule_id = "no_empty_block",
@@ -286,13 +318,13 @@ test "while blocks" {
                     \\
                     \\ }
                     ,
-                    .message = "Empty blocks are discouraged inside of while blocks. If deliberate “do nothing”, include a comment inside the block.",
+                    .message = "Empty while blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
                 .{
                     .rule_id = "no_empty_block",
                     .severity = severity,
                     .slice = "{}",
-                    .message = "Empty blocks are discouraged inside of while blocks. If deliberate “do nothing”, include a comment inside the block.",
+                    .message = "Empty while blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
             },
         );
@@ -337,13 +369,13 @@ test "for blocks" {
                     \\
                     \\ }
                     ,
-                    .message = "Empty blocks are discouraged inside of for blocks. If deliberate “do nothing”, include a comment inside the block.",
+                    .message = "Empty for blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
                 .{
                     .rule_id = "no_empty_block",
                     .severity = severity,
                     .slice = "{}",
-                    .message = "Empty blocks are discouraged inside of for blocks. If deliberate “do nothing”, include a comment inside the block.",
+                    .message = "Empty for blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
             },
         );
@@ -388,13 +420,13 @@ test "defer blocks" {
                     \\
                     \\ }
                     ,
-                    .message = "Empty blocks are discouraged inside of defer blocks. If deliberate “do nothing”, include a comment inside the block.",
+                    .message = "Empty defer blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
                 .{
                     .rule_id = "no_empty_block",
                     .severity = severity,
                     .slice = "{}",
-                    .message = "Empty blocks are discouraged inside of defer blocks. If deliberate “do nothing”, include a comment inside the block.",
+                    .message = "Empty defer blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
             },
         );
@@ -439,13 +471,13 @@ test "errdefer blocks" {
                     \\
                     \\ }
                     ,
-                    .message = "Empty blocks are discouraged inside of errdefer blocks. If deliberate “do nothing”, include a comment inside the block.",
+                    .message = "Empty errdefer blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
                 .{
                     .rule_id = "no_empty_block",
                     .severity = severity,
                     .slice = "{}",
-                    .message = "Empty blocks are discouraged inside of errdefer blocks. If deliberate “do nothing”, include a comment inside the block.",
+                    .message = "Empty errdefer blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
             },
         );
@@ -490,13 +522,13 @@ test "catch blocks" {
                     \\
                     \\ }
                     ,
-                    .message = "Empty blocks are discouraged inside of catch blocks. If deliberate “do nothing”, include a comment inside the block.",
+                    .message = "Empty catch blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
                 .{
                     .rule_id = "no_empty_block",
                     .severity = severity,
                     .slice = "{}",
-                    .message = "Empty blocks are discouraged inside of catch blocks. If deliberate “do nothing”, include a comment inside the block.",
+                    .message = "Empty catch blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
             },
         );
@@ -542,13 +574,13 @@ test "switch case blocks" {
                     \\
                     \\     }
                     ,
-                    .message = "Empty blocks are discouraged inside of switch case blocks. If deliberate “do nothing”, include a comment inside the block.",
+                    .message = "Empty switch case blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
                 .{
                     .rule_id = "no_empty_block",
                     .severity = severity,
                     .slice = "{}",
-                    .message = "Empty blocks are discouraged inside of switch case blocks. If deliberate “do nothing”, include a comment inside the block.",
+                    .message = "Empty switch case blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
             },
         );
@@ -560,6 +592,41 @@ test "switch case blocks" {
         source,
         .{},
         Config{ .switch_case_block = .off },
+        &.{},
+    );
+}
+
+test "function declaration blocks" {
+    const source =
+        \\pub fn empty() void {}
+        \\
+        \\pub fn alsoEmpty() void {
+        \\    // Ignore
+        \\}
+    ;
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
+            source,
+            .{},
+            Config{ .fn_decl_block = severity },
+            &.{
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty function declaration blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                },
+            },
+        );
+    }
+
+    // Off:
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{ .fn_decl_block = .off },
         &.{},
     );
 }

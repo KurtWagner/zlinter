@@ -512,6 +512,12 @@ if (something) {
 
   * **Default:** `.@"error"`
 
+* `fn_decl_block`
+
+  * Severity for empty `fn` declaration blocks
+
+  * **Default:** `.@"error"`
+
 ## `no_hidden_allocations`
 
 Avoid encapsulating hidden heap allocations inside functions without
