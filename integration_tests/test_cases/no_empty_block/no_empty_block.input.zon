@@ -6,4 +6,5 @@
     .switch_case_block = .@"error",
     .defer_block = .warning,
     .errdefer_block = .warning,
+    .fn_decl_block = .warning,
 }
