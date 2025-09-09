@@ -15,6 +15,7 @@ pub const BuiltinLintRule = enum {
     import_ordering,
     no_unused,
     no_deprecated,
+    no_empty_block,
     no_inferred_error_unions,
     no_orelse_unreachable,
     no_undefined,
@@ -345,6 +346,7 @@ pub fn build(b: *std.Build) void {
                 buildBuiltinRule(b, .no_unused, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .switch_case_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .no_deprecated, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+                buildBuiltinRule(b, .no_empty_block, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .no_inferred_error_unions, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .no_orelse_unreachable, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .no_undefined, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
@@ -950,7 +952,9 @@ fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
 
     if (file_reader.getSize()) |size| {
         try out.ensureTotalCapacity(size);
-    } else |_| {}
+    } else |_| {
+        // Ignore.
+    }
 
     const build_timestamp = b.fmt("{d}", .{std.time.milliTimestamp()});
     const zig_version = zig_version_string;
