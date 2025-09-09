@@ -493,7 +493,9 @@ fn runFixes(
                 if (file_reader.getSize()) |size| {
                     const casted_size = std.math.cast(u32, size) orelse return error.StreamTooLong;
                     try buffer.ensureTotalCapacity(casted_size);
-                } else |_| {}
+                } else |_| {
+                    // Do nothing.
+                }
 
                 _ = try file_reader.interface.streamRemaining(&buffer.writer);
                 break :file_content try buffer.toOwnedSlice();
@@ -767,7 +769,9 @@ const SlowestItemQueue = struct {
             if (self.queue.count() > self.max) {
                 _ = self.queue.removeMin();
             }
-        } else |_| {}
+        } else |_| {
+            // Ignore.
+        }
     }
 
     fn unloadAndPrint(self: *SlowestItemQueue, name: []const u8, printer: *zlinter.rendering.Printer) void {

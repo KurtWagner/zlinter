@@ -37,7 +37,9 @@ pub fn jsonTree(
                 "render",
                 .{ .string = rendering },
             );
-        } else |_| {}
+        } else |_| {
+            // Ignore.
+        }
     }
 
     const Context = struct {

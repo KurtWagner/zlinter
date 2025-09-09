@@ -116,7 +116,7 @@ fn run(
     nodes: while (try it.next()) |tuple| {
         const node, const connections = tuple;
 
-        const statement = fullStatement(tree, node.toNodeIndex()) orelse continue :nodes;
+        const statement = zlinter.ast.fullStatement(tree, node.toNodeIndex()) orelse continue :nodes;
 
         // Skip if part of an assignment or return statement as braces are omitted
         switch (shims.nodeTag(tree, connections.parent.?)) {
@@ -170,7 +170,7 @@ fn run(
 
         expr_nodes: for (expr_nodes.items) |expr_node| {
             // Ignore here as it'll be processed in the outer loop.
-            if (fullStatement(tree, expr_node) != null) continue :expr_nodes;
+            if (zlinter.ast.fullStatement(tree, expr_node) != null) continue :expr_nodes;
 
             // If it's not a block we assume it's a single statement (i.e., one
             // child). Keep in mind a block may have zero statement (i.e., empty).
@@ -238,54 +238,6 @@ fn run(
         )
     else
         null;
-}
-
-const Statement = union(enum) {
-    @"if": Ast.full.If,
-    @"while": Ast.full.While,
-    @"for": Ast.full.For,
-    switch_case: Ast.full.SwitchCase,
-    /// Contains the expression node index (i.e., `catch <expr>`)
-    @"catch": Ast.Node.Index,
-    /// Contains the expression node index (i.e., `defer <expr>`)
-    @"defer": Ast.Node.Index,
-    /// Contains the expression node index (i.e., `errdefer <expr>`)
-    @"errdefer": Ast.Node.Index,
-};
-
-/// Returns if, for, while, switch case, defer and errdefer and catch statements
-/// focusing on the expression node attached, which is relevant in whether or not
-/// it's a block enclosed in braces.
-fn fullStatement(tree: Ast, node: Ast.Node.Index) ?Statement {
-    return if (tree.fullIf(node)) |ifStatement|
-        .{ .@"if" = ifStatement }
-    else if (tree.fullWhile(node)) |whileStatement|
-        .{ .@"while" = whileStatement }
-    else if (tree.fullFor(node)) |forStatement|
-        .{ .@"for" = forStatement }
-    else if (tree.fullSwitchCase(node)) |switchStatement|
-        .{ .switch_case = switchStatement }
-    else switch (shims.nodeTag(tree, node)) {
-        .@"catch" => .{
-            .@"catch" = switch (zlinter.version.zig) {
-                .@"0.14" => shims.nodeData(tree, node).rhs,
-                .@"0.15", .@"0.16" => shims.nodeData(tree, node).node_and_node[1],
-            },
-        },
-        .@"defer" => .{
-            .@"defer" = switch (zlinter.version.zig) {
-                .@"0.14" => shims.nodeData(tree, node).rhs,
-                .@"0.15", .@"0.16" => shims.nodeData(tree, node).node,
-            },
-        },
-        .@"errdefer" => .{
-            .@"errdefer" = switch (zlinter.version.zig) {
-                .@"0.14" => shims.nodeData(tree, node).rhs,
-                .@"0.15", .@"0.16" => shims.nodeData(tree, node).opt_token_and_node[1],
-            },
-        },
-        else => null,
-    };
 }
 
 test "if statements" {

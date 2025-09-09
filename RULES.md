@@ -444,6 +444,74 @@ with use.
 
   * **Default:** `.warning`
 
+## `no_empty_block`
+
+Disallows empty code blocks `{}` unless explicitly allowed or documented.
+
+Empty blocks are often a sign of incomplete or accidentally removed code.
+They can make intent unclear and mislead maintainers into thinking logic
+is missing.
+
+In some cases, empty blocks are intentional (e.g. placeholder, scoping, or
+looping constructs). This rule helps distinguish between accidental
+emptiness and intentional no-op by requiring either a configuration
+exception or a comment.
+
+For example,
+
+```zig
+// OK - as comment within block.
+if (something) {
+  // do nothing
+} else {
+  doThing();
+}
+```
+
+**Config options:**
+
+* `if_block`
+
+  * Severity for empty `if` blocks
+
+  * **Default:** `.@"error"`
+
+* `while_block`
+
+  * Severity for empty `while` blocks
+
+  * **Default:** `.off`
+
+* `for_block`
+
+  * Severity for empty `for` blocks
+
+  * **Default:** `.@"error"`
+
+* `catch_block`
+
+  * Severity for empty `catch` blocks
+
+  * **Default:** `.off`
+
+* `switch_case_block`
+
+  * Severity for empty switch case blocks
+
+  * **Default:** `.off`
+
+* `defer_block`
+
+  * Severity for empty `defer` blocks
+
+  * **Default:** `.@"error"`
+
+* `errdefer_block`
+
+  * Severity for empty `errdefer` blocks
+
+  * **Default:** `.@"error"`
+
 ## `no_hidden_allocations`
 
 Avoid encapsulating hidden heap allocations inside functions without

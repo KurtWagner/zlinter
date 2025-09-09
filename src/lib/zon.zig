@@ -37,7 +37,9 @@ pub fn parseFileAlloc(
             if (file_reader.getSize()) |size| {
                 const casted_size = std.math.cast(u32, size) orelse return error.StreamTooLong;
                 try buffer.ensureTotalCapacityPrecise(gpa, casted_size + 1); // +1 for null term
-            } else |_| {}
+            } else |_| {
+                // Do nothing.
+            }
 
             try file_reader.interface.appendRemaining(
                 gpa,
