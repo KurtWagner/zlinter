@@ -34,3 +34,9 @@ pub fn main() void {
         else => {},
     }
 }
+
+pub fn emptyFn() void {}
+
+pub fn alsoEmptyFn() void {
+    // This is ok.
+}
