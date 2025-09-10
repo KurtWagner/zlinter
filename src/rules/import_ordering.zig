@@ -314,7 +314,7 @@ test "order" {
                 .rule_id = "import_ordering",
                 .severity = .warning,
                 .slice =
-                \\const b = @import("b");
+                \\const b = @import("b")
                 ,
                 .message = "Import 'b' is not in reverse alphabetical order",
                 .disabled_by_comment = false,
@@ -343,7 +343,7 @@ test "order" {
             .rule_id = "import_ordering",
             .severity = .@"error",
             .slice =
-            \\const b = @import("b");
+            \\const b = @import("b")
             ,
             .message = "Import 'b' is not in alphabetical order",
             .disabled_by_comment = false,
@@ -386,7 +386,7 @@ test "order" {
                 .rule_id = "import_ordering",
                 .severity = .warning,
                 .slice =
-                \\const c = @import("c");
+                \\const c = @import("c")
                 ,
                 .message = "Import 'c' is not in alphabetical order",
                 .disabled_by_comment = false,
@@ -416,7 +416,7 @@ test "order" {
                 .rule_id = "import_ordering",
                 .severity = .warning,
                 .slice =
-                \\const a = @import("a");
+                \\const a = @import("a")
                 ,
                 .message = "Import 'a' is not in alphabetical order",
                 .disabled_by_comment = false,
@@ -456,7 +456,7 @@ test "order" {
                 .rule_id = "import_ordering",
                 .severity = .warning,
                 .slice =
-                \\const a_main = @import("a");
+                \\const a_main = @import("a")
                 ,
                 .message = "Import 'a_main' is not in alphabetical order",
                 .disabled_by_comment = false,
@@ -474,7 +474,7 @@ test "order" {
                 .rule_id = "import_ordering",
                 .severity = .warning,
                 .slice =
-                \\const a_inner = @import("a");
+                \\const a_inner = @import("a")
                 ,
                 .message = "Import 'a_inner' is not in alphabetical order",
                 .disabled_by_comment = false,
@@ -492,7 +492,7 @@ test "order" {
                 .rule_id = "import_ordering",
                 .severity = .warning,
                 .slice =
-                \\const a = @import("a");
+                \\const a = @import("a")
                 ,
                 .message = "Import 'a' is not in alphabetical order",
                 .disabled_by_comment = false,
@@ -567,10 +567,9 @@ test "allow_line_separated_chunks" {
                 .rule_id = "import_ordering",
                 .severity = .warning,
                 .slice =
-                \\const a = @import("a");
+                \\const a = @import("a")
                 ,
                 .message = "Import 'a' should grouped with other imports",
-                .disabled_by_comment = false,
                 .fix = .{
                     .start = 0,
                     .end = 58,
@@ -599,10 +598,9 @@ test "allow_line_separated_chunks" {
                 .rule_id = "import_ordering",
                 .severity = .@"error",
                 .slice =
-                \\const b = @import("b");
+                \\const b = @import("b")
                 ,
                 .message = "Import 'b' should grouped with other imports",
-                .disabled_by_comment = false,
                 .fix = .{
                     .start = 0,
                     .end = 51,

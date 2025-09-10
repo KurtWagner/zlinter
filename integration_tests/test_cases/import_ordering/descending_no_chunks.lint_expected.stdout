@@ -1,11 +1,11 @@
 error Import 'banana_main' is not in reverse alphabetical order [test_cases/import_ordering/descending_no_chunks.input.zig:11:5] import_ordering
 
  11 |     const banana_main = @import("apple_main");
-    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 error Import 'zebra' should grouped with other imports [test_cases/import_ordering/descending_no_chunks.input.zig:6:1] import_ordering
 
  6 | const zebra = @import("zebra");
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 x 2 errors
