@@ -327,13 +327,18 @@ pub const LintDocument = struct {
     }
 
     /// Returns true if the given node appears within a `test {..}` declaration
-    /// block.
+    /// block or a `if (builtin.is_test) {..}` block.
+    ///
+    /// This is an imperfect heuristic but should be good enough for majority
+    /// of cases. A more complete solution would require building tests and
+    /// seeing whats included thats not in non-test builds, which is probably
+    /// out of scope for this linter.
     pub fn isEnclosedInTestBlock(self: LintDocument, node: NodeIndexShim) bool {
         var next = node;
         while (self.lineage.items(.parent)[next.index]) |parent| {
             switch (shims.nodeTag(self.handle.tree, parent)) {
                 .test_decl => return true,
-                .@"if", .if_simple => if (isGuardingTestOnly(
+                .@"if", .if_simple => if (isTestOnlyCondition(
                     self.handle.tree,
                     self.handle.tree.fullIf(parent).?,
                 )) {
@@ -388,7 +393,8 @@ pub const LintDocument = struct {
     }
 };
 
-fn isGuardingTestOnly(tree: Ast, if_statement: Ast.full.If) bool {
+/// Returns true if the if statement appears to enforce that its block is test only
+fn isTestOnlyCondition(tree: Ast, if_statement: Ast.full.If) bool {
     const cond_node = if_statement.ast.cond_expr;
     return switch (shims.nodeTag(tree, cond_node)) {
         .identifier => std.mem.eql(u8, "is_test", tree.getNodeSource(cond_node)),
@@ -589,11 +595,13 @@ test "LintDocument.isEnclosedInTestBlock" {
         \\  const is_in_test_if_condition_c = 1;
         \\ }
         \\ if (something) {
+        \\    const is_not_in_test_nested_if_condition_a = 1;
         \\    if (is_test) {
         \\      const is_in_test_nested_if_condition_a = 1;
         \\    }
         \\ }
         \\ if (is_test) {
+        \\    const is_in_test_nested_if_condition_c = 1;
         \\    if (something) {
         \\      const is_in_test_nested_if_condition_b = 1;
         \\    }
@@ -674,6 +682,20 @@ test "LintDocument.isEnclosedInTestBlock" {
         doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
             doc.handle.tree,
             "is_in_test_nested_if_condition_b",
+        ))),
+    );
+
+    try std.testing.expect(
+        doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+            doc.handle.tree,
+            "is_in_test_nested_if_condition_c",
+        ))),
+    );
+
+    try std.testing.expect(
+        !doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+            doc.handle.tree,
+            "is_not_in_test_nested_if_condition_a",
         ))),
     );
 }
