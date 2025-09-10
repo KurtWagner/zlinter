@@ -388,7 +388,7 @@ test "no_deprecated - regression test for #36" {
             .{
                 .rule_id = "no_deprecated",
                 .severity = .@"error",
-                .slice = ".Stdcall;",
+                .slice = ".Stdcall",
                 .message = "Deprecated: Don't use",
             },
         },
@@ -424,19 +424,19 @@ test "no_deprecated - explicit 0.15.x breaking changes" {
             .{
                 .rule_id = "no_deprecated",
                 .severity = .@"error",
-                .slice = "@frameSize(u32);",
+                .slice = "@frameSize(u32)",
                 .message = "Deprecated - @frameSize builtin is removed in 0.15",
             },
             .{
                 .rule_id = "no_deprecated",
                 .severity = .@"error",
-                .slice = "async func3();",
+                .slice = "async func3()",
                 .message = "Deprecated - `async` keyword is removed in 0.15",
             },
             .{
                 .rule_id = "no_deprecated",
                 .severity = .@"error",
-                .slice = "await frame ",
+                .slice = "await frame",
                 .message = "Deprecated - `await` keyword is removed in 0.15",
             },
         },

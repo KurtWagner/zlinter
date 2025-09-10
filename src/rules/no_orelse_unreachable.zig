@@ -89,7 +89,7 @@ test "no_orelse_unreachable" {
                 .{
                     .rule_id = "no_orelse_unreachable",
                     .severity = severity,
-                    .slice = "b orelse unreachable;",
+                    .slice = "b orelse unreachable",
                     .message = "Prefer `.?` over `orelse unreachable`",
                 },
             },

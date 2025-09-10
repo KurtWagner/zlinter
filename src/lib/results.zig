@@ -37,10 +37,7 @@ pub const LintProblemLocation = struct {
     };
 
     pub fn startOfNode(tree: Ast, index: Ast.Node.Index) LintProblemLocation {
-        const first_token_loc = tree.tokenLocation(0, tree.firstToken(index));
-        return .{
-            .byte_offset = first_token_loc.line_start + first_token_loc.column,
-        };
+        return .startOfToken(tree, tree.firstToken(index));
     }
 
     test startOfNode {
@@ -63,12 +60,7 @@ pub const LintProblemLocation = struct {
     }
 
     pub fn endOfNode(tree: Ast, index: Ast.Node.Index) LintProblemLocation {
-        const last_token = tree.lastToken(index);
-        const last_token_loc = tree.tokenLocation(0, last_token);
-        const column = last_token_loc.column + tree.tokenSlice(last_token).len;
-        return .{
-            .byte_offset = last_token_loc.line_start + column,
-        };
+        return .endOfToken(tree, tree.lastToken(index));
     }
 
     test endOfNode {
@@ -82,18 +74,17 @@ pub const LintProblemLocation = struct {
         const b_decl = tree.rootDecls()[1];
 
         try std.testing.expectEqualDeep(LintProblemLocation{
-            .byte_offset = 15,
+            .byte_offset = 14,
         }, LintProblemLocation.endOfNode(tree, a_decl));
 
         try std.testing.expectEqualDeep(LintProblemLocation{
-            .byte_offset = 32,
+            .byte_offset = 31,
         }, LintProblemLocation.endOfNode(tree, b_decl));
     }
 
     pub fn startOfToken(tree: Ast, index: Ast.TokenIndex) LintProblemLocation {
-        const loc = tree.tokenLocation(0, index);
         return .{
-            .byte_offset = loc.line_start + loc.column,
+            .byte_offset = tree.tokenStart(index),
         };
     }
 
@@ -126,10 +117,9 @@ pub const LintProblemLocation = struct {
     }
 
     pub fn endOfToken(tree: Ast, index: Ast.TokenIndex) LintProblemLocation {
-        const loc = tree.tokenLocation(0, index);
-        const column = loc.column + tree.tokenSlice(index).len - 1;
         return .{
-            .byte_offset = loc.line_start + column,
+            // Minus 1 as inclusive
+            .byte_offset = tree.tokenStart(index) + tree.tokenSlice(index).len - 1,
         };
     }
 

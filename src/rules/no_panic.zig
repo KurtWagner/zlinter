@@ -168,7 +168,7 @@ test "excludes based on configurable contents" {
                 .rule_id = "no_panic",
                 .severity = .warning,
                 .slice =
-                \\@panic("oom");
+                \\@panic("oom")
                 ,
                 .message = "`@panic` forcibly stops the program at runtime and should be avoided",
             },
@@ -190,7 +190,7 @@ test "excludes based on configurable contents" {
                 .rule_id = "no_panic",
                 .severity = .warning,
                 .slice =
-                \\@panic("OTHER");
+                \\@panic("OTHER")
                 ,
                 .message = "`@panic` forcibly stops the program at runtime and should be avoided",
             },
@@ -246,7 +246,7 @@ test "no_panic" {
                     .rule_id = "no_panic",
                     .severity = severity,
                     .slice =
-                    \\@panic("Main not implemented");
+                    \\@panic("Main not implemented")
                     ,
                     .message = "`@panic` forcibly stops the program at runtime and should be avoided",
                 },

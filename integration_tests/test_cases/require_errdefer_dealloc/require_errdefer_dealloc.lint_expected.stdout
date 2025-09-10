@@ -1,51 +1,51 @@
 warning Missing `errdefer` cleanup [test_cases/require_errdefer_dealloc/require_errdefer_dealloc.input.zig:54:5] require_errdefer_dealloc
 
  54 |     var bad_a = MyHash.init(std.heap.page_allocator);
-    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 warning Missing `errdefer` cleanup [test_cases/require_errdefer_dealloc/require_errdefer_dealloc.input.zig:56:5] require_errdefer_dealloc
 
  56 |     var bad_c: MyHashUmanaged = .empty;
-    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 warning Missing `errdefer` cleanup [test_cases/require_errdefer_dealloc/require_errdefer_dealloc.input.zig:60:5] require_errdefer_dealloc
 
  60 |     var bad_e: MyBufSet = .init(ambiguous_name);
-    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 warning Missing `errdefer` cleanup [test_cases/require_errdefer_dealloc/require_errdefer_dealloc.input.zig:55:5] require_errdefer_dealloc
 
  55 |     var bad_b: MyHash = .init(std.heap.page_allocator);
-    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 warning Missing `errdefer` cleanup [test_cases/require_errdefer_dealloc/require_errdefer_dealloc.input.zig:61:5] require_errdefer_dealloc
 
  61 |     var bad_f = MyBufSet.init(ambiguous_name);
-    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 warning Missing `errdefer` cleanup [test_cases/require_errdefer_dealloc/require_errdefer_dealloc.input.zig:57:5] require_errdefer_dealloc
 
  57 |     var bad_d = MyHashUmanaged.empty;
-    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 warning Missing `errdefer` cleanup [test_cases/require_errdefer_dealloc/require_errdefer_dealloc.input.zig:36:5] require_errdefer_dealloc
 
  36 |     var bad_a = std.AutoHashMap(u8, void).init(std.heap.page_allocator);
-    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 warning Missing `errdefer` cleanup [test_cases/require_errdefer_dealloc/require_errdefer_dealloc.input.zig:38:5] require_errdefer_dealloc
 
  38 |     var bad_c: std.AutoHashMapUnmanaged(u8, void) = .empty;
-    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 warning Missing `errdefer` cleanup [test_cases/require_errdefer_dealloc/require_errdefer_dealloc.input.zig:37:5] require_errdefer_dealloc
 
  37 |     var bad_b: std.AutoHashMap(u8, void) = .init(std.heap.page_allocator);
-    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 warning Missing `errdefer` cleanup [test_cases/require_errdefer_dealloc/require_errdefer_dealloc.input.zig:39:5] require_errdefer_dealloc
 
  39 |     var bad_d = std.AutoHashMapUnmanaged(u8, void).empty;
-    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 x 10 warnings

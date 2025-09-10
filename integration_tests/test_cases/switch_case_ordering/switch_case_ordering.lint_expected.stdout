@@ -1,16 +1,16 @@
 warning `else` should be last in switch statements [test_cases/switch_case_ordering/switch_case_ordering.input.zig:5:5] switch_case_ordering
 
  5 |     else => {},
-   |     ^^^^^^^^^^^
+   |     ^^^^^^^^^^
 
 warning `else` should be last in switch statements [test_cases/switch_case_ordering/switch_case_ordering.input.zig:16:5] switch_case_ordering
 
  16 |     else => {},
-    |     ^^^^^^^^^^^
+    |     ^^^^^^^^^^
 
 warning `else` should be last in switch statements [test_cases/switch_case_ordering/switch_case_ordering.input.zig:27:5] switch_case_ordering
 
  27 |     else => {},
-    |     ^^^^^^^^^^^
+    |     ^^^^^^^^^^
 
 x 3 warnings
