@@ -185,13 +185,13 @@ test "bool" {
                 .{
                     .rule_id = "no_literal_args",
                     .severity = severity,
-                    .slice = "true,",
+                    .slice = "true",
                     .message = "Avoid bool literal arguments as they're ambiguous.",
                 },
                 .{
                     .rule_id = "no_literal_args",
                     .severity = severity,
-                    .slice = "false)",
+                    .slice = "false",
                     .message = "Avoid bool literal arguments as they're ambiguous.",
                 },
             },
@@ -237,13 +237,13 @@ test "number" {
                 .{
                     .rule_id = "no_literal_args",
                     .severity = severity,
-                    .slice = "0,",
+                    .slice = "0",
                     .message = "Avoid number literal arguments as they're ambiguous.",
                 },
                 .{
                     .rule_id = "no_literal_args",
                     .severity = severity,
-                    .slice = "0.5)",
+                    .slice = "0.5",
                     .message = "Avoid number literal arguments as they're ambiguous.",
                 },
             },
@@ -289,7 +289,7 @@ test "char" {
                 .{
                     .rule_id = "no_literal_args",
                     .severity = severity,
-                    .slice = "'a')",
+                    .slice = "'a'",
                     .message = "Avoid char literal arguments as they're ambiguous.",
                 },
             },
@@ -336,7 +336,7 @@ test "string" {
                     .rule_id = "no_literal_args",
                     .severity = severity,
                     .slice =
-                    \\"hello")
+                    \\"hello"
                     ,
                     .message = "Avoid string literal arguments as they're ambiguous.",
                 },
@@ -383,26 +383,26 @@ test "exclude tests" {
                 .rule_id = "no_literal_args",
                 .severity = .@"error",
                 .slice =
-                \\"hello",
+                \\"hello"
                 ,
                 .message = "Avoid string literal arguments as they're ambiguous.",
             },
             .{
                 .rule_id = "no_literal_args",
                 .severity = .warning,
-                .slice = "1,",
+                .slice = "1",
                 .message = "Avoid number literal arguments as they're ambiguous.",
             },
             .{
                 .rule_id = "no_literal_args",
                 .severity = .warning,
-                .slice = "true,",
+                .slice = "true",
                 .message = "Avoid bool literal arguments as they're ambiguous.",
             },
             .{
                 .rule_id = "no_literal_args",
                 .severity = .warning,
-                .slice = "'a')",
+                .slice = "'a'",
                 .message = "Avoid char literal arguments as they're ambiguous.",
             },
         },

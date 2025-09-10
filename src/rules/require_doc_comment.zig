@@ -180,7 +180,7 @@ test "require_doc_comment - public" {
                 .{
                     .rule_id = "require_doc_comment",
                     .severity = severity,
-                    .slice = "pub fn noDoc() void ",
+                    .slice = "pub fn noDoc() void",
                     .message = "Public function is missing a doc comment",
                 },
             },
@@ -229,7 +229,7 @@ test "require_doc_comment - private" {
                 .{
                     .rule_id = "require_doc_comment",
                     .severity = severity,
-                    .slice = "fn noDoc() void ",
+                    .slice = "fn noDoc() void",
                     .message = "Private function is missing a doc comment",
                 },
             },

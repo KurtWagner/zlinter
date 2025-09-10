@@ -141,7 +141,7 @@ test "no_panic" {
                     .rule_id = "no_panic",
                     .severity = severity,
                     .slice =
-                    \\@panic("Main not implemented");
+                    \\@panic("Main not implemented")
                     ,
                     .message = "`@panic` forcibly stops the program at runtime and should be avoided",
                 },

@@ -156,20 +156,20 @@ test "bad cases" {
     const rule = buildRule(.{});
     inline for (&.{ .warning, .@"error" }) |severity| {
         inline for (&.{
-            .{ "if (1 == 1) {}", "1 == 1)" },
-            .{ "if (1 <= 2) {}", "1 <= 2)" },
-            .{ "if (true) {}", "true)" },
-            .{ "if (false) {}", "false)" },
-            .{ "if (1 > 2) {}", "1 > 2)" },
-            .{ "if (2 >= 2) {}", "2 >= 2)" },
-            .{ "if (2 != 1) {}", "2 != 1)" },
-            .{ "if (1 == 1 or 1 >= a) {}", "1 == 1 " },
-            .{ "if (1 == a and 2 == 3) {}", "2 == 3)" },
-            .{ "const a = 1 == 2;", "1 == 2;" },
-            .{ "const a = 1 <= 2;", "1 <= 2;" },
-            .{ "while (false) {}", "false)" },
-            .{ "while (1 == 1) {}", "1 == 1)" },
-            .{ "while (2 == 1) {}", "2 == 1)" },
+            .{ "if (1 == 1) {}", "1 == 1" },
+            .{ "if (1 <= 2) {}", "1 <= 2" },
+            .{ "if (true) {}", "true" },
+            .{ "if (false) {}", "false" },
+            .{ "if (1 > 2) {}", "1 > 2" },
+            .{ "if (2 >= 2) {}", "2 >= 2" },
+            .{ "if (2 != 1) {}", "2 != 1" },
+            .{ "if (1 == 1 or 1 >= a) {}", "1 == 1" },
+            .{ "if (1 == a and 2 == 3) {}", "2 == 3" },
+            .{ "const a = 1 == 2;", "1 == 2" },
+            .{ "const a = 1 <= 2;", "1 <= 2" },
+            .{ "while (false) {}", "false" },
+            .{ "while (1 == 1) {}", "1 == 1" },
+            .{ "while (2 == 1) {}", "2 == 1" },
         }) |tuple| {
             const source, const problem = tuple;
             try zlinter.testing.testRunRule(

@@ -189,7 +189,7 @@ test "exclude configs" {
                 .{
                     .rule_id = "no_undefined",
                     .severity = severity,
-                    .slice = "undefined;",
+                    .slice = "undefined",
                     .message = "Take care when using `undefined`",
                 },
             },
@@ -226,7 +226,7 @@ test "exclude tests" {
             .{
                 .rule_id = "no_undefined",
                 .severity = .warning,
-                .slice = "undefined;",
+                .slice = "undefined",
                 .message = "Take care when using `undefined`",
             },
         },
@@ -264,7 +264,7 @@ test "init methods" {
             .{
                 .rule_id = "no_undefined",
                 .severity = .warning,
-                .slice = "undefined;",
+                .slice = "undefined",
                 .message = "Take care when using `undefined`",
             },
         },

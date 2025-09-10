@@ -166,7 +166,7 @@ test "no_inferred_error_unions - Invalid function declarations - defaults" {
             .{
                 .rule_id = "no_inferred_error_unions",
                 .severity = .warning,
-                .slice = "pub fn inferred() !void ",
+                .slice = "pub fn inferred() !void",
                 .message = "Function returns an inferred error union. Prefer an explicit error set",
             },
         },
@@ -186,7 +186,7 @@ test "no_inferred_error_unions - Invalid function declarations - allow_private =
             .{
                 .rule_id = "no_inferred_error_unions",
                 .severity = .warning,
-                .slice = "fn inferred() !void ",
+                .slice = "fn inferred() !void",
                 .message = "Function returns an inferred error union. Prefer an explicit error set",
             },
         },
@@ -206,7 +206,7 @@ test "no_inferred_error_unions - Invalid function declarations - allow_anyerror 
             .{
                 .rule_id = "no_inferred_error_unions",
                 .severity = .@"error",
-                .slice = "pub fn inferred() anyerror!void ",
+                .slice = "pub fn inferred() anyerror!void",
                 .message = "Function returns an inferred error union. Prefer an explicit error set",
             },
         },

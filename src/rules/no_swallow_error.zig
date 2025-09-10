@@ -197,43 +197,37 @@ test "no_swallow_error" {
                 .{
                     .rule_id = "no_swallow_error",
                     .severity = severity,
-                    .slice =
-                    \\if (method()) {} else |_| {}
-                    \\
-                    ,
+                    .slice = "if (method()) {} else |_| {}",
                     .message = "Avoid swallowing error with empty else",
                 },
                 .{
                     .rule_id = "no_swallow_error",
                     .severity = severity,
-                    .slice =
-                    \\if (method()) {} else |_| { unreachable; }
-                    \\
-                    ,
+                    .slice = "if (method()) {} else |_| { unreachable; }",
                     .message = "Avoid swallowing error with else unreachable",
                 },
                 .{
                     .rule_id = "no_swallow_error",
                     .severity = severity,
-                    .slice = "if (method()) {} else |_| unreachable;",
+                    .slice = "if (method()) {} else |_| unreachable",
                     .message = "Avoid swallowing error with else unreachable",
                 },
                 .{
                     .rule_id = "no_swallow_error",
                     .severity = severity,
-                    .slice = "method() catch { unreachable; };",
+                    .slice = "method() catch { unreachable; }",
                     .message = "Avoid swallowing error with catch unreachable",
                 },
                 .{
                     .rule_id = "no_swallow_error",
                     .severity = severity,
-                    .slice = "method() catch unreachable;",
+                    .slice = "method() catch unreachable",
                     .message = "Avoid swallowing error with catch unreachable",
                 },
                 .{
                     .rule_id = "no_swallow_error",
                     .severity = severity,
-                    .slice = "method() catch {};",
+                    .slice = "method() catch {}",
                     .message = "Avoid swallowing error with empty catch",
                 },
             },

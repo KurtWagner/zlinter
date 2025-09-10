@@ -126,7 +126,7 @@ test "export included" {
             .{
                 .rule_id = "max_positional_args",
                 .severity = .warning,
-                .slice = "u32, u32)",
+                .slice = "u32, u32",
                 .message = "Exceeded maximum positional arguments of 1.",
             },
         },
@@ -155,7 +155,7 @@ test "extern included" {
             .{
                 .rule_id = "max_positional_args",
                 .severity = .warning,
-                .slice = "u32, u32)",
+                .slice = "u32, u32",
                 .message = "Exceeded maximum positional arguments of 1.",
             },
         },
@@ -175,7 +175,7 @@ test "general" {
             .{
                 .rule_id = "max_positional_args",
                 .severity = .@"error",
-                .slice = "u32, a2:u32, a3:u32, a4:u32, a5:u32, a6:u32)",
+                .slice = "u32, a2:u32, a3:u32, a4:u32, a5:u32, a6:u32",
                 .message = "Exceeded maximum positional arguments of 5.",
             },
         },
