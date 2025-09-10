@@ -83,12 +83,12 @@ fn run(
             }
         }
 
+        // We expect any undefined with a test to simply be ignored as really we expect
+        // the test to fail if there's issues
+        if (config.exclude_tests and doc.isEnclosedInTestBlock(node)) continue :nodes;
+
         var next_parent = connections.parent;
         while (next_parent) |parent| {
-            // We expect any undefined with a test to simply be ignored as really we expect
-            // the test to fail if there's issues
-            if (config.exclude_tests and shims.nodeTag(tree, parent) == .test_decl) continue :nodes;
-
             // If assigned undefined in a deinit, ignore as it's a common pattern
             // assign undefined after freeing memory
             if (config.exclude_in_fn.len > 0) {
