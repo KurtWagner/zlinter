@@ -129,6 +129,31 @@ pub fn expectNodeSlices(
     }
 }
 
+/// Expects a single var declaration to be found with a given name and returns it.
+///
+/// This is for testing to quickly to look up a node in a tree for running
+/// tests against it relative to the entire tree.
+///
+/// This method will return a collision error if more than one var declaration
+/// matches the name.
+pub fn expectVarDecl(tree: Ast, name: []const u8) !Ast.Node.Index {
+    assertTestOnly();
+
+    var found: ?Ast.Node.Index = null;
+    var i = NodeIndexShim.root;
+    while (i.index < tree.nodes.len) : (i.index += 1) {
+        if (tree.fullVarDecl(i.toNodeIndex())) |var_decl| {
+            const name_token = var_decl.ast.mut_token + 1;
+            if (std.mem.eql(u8, tree.tokenSlice(name_token), name)) {
+                if (found != null) return error.TestExpectedSingleVarDeclWithName;
+                found = i.toNodeIndex();
+            }
+        }
+    }
+
+    return found orelse error.TestExpectedVarDeclWithName;
+}
+
 /// Expects and returns a the single node matching given tag(s)
 ///
 /// This is to encourage smaller unit tests and to ensure that the order does
