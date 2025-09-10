@@ -1,8 +1,12 @@
-//! Disallow passing primitive literal numbers and booleans directly as function arguments.
+//! Disallow passing primitive literal numbers and booleans directly as
+//! function arguments.
 //!
-//! Passing literal `1`, `0`, `true`, or `false` directly to a function is ambiguous.
+//! Passing literal `1`, `0`, `true`, or `false` directly to a function is
+//! ambiguous.
 //!
-//! These magic literals don’t explain what they mean. Consider using named constants or if you're the owner of the API and there's multiple arguments, consider introducing a struct argument
+//! These magic literals don’t explain what they mean. Consider using named
+//! constants or if you're the owner of the API and there's multiple arguments,
+//! consider introducing a struct argument
 
 /// Config for no_literal_args rule.
 pub const Config = struct {
@@ -157,13 +161,12 @@ test {
     std.testing.refAllDecls(@This());
 }
 
-test "no_literal_args" {
+test "bool" {
     const rule = buildRule(.{});
     const source: [:0]const u8 =
         \\pub fn main() void {
-        \\  const num = 10;
         \\  const flag = false;
-        \\  call(true, 0, num, 0.5, flag, false);
+        \\  doSomething(0, "hello", 'a', true, flag, false);
         \\}
     ;
 
@@ -173,11 +176,10 @@ test "no_literal_args" {
             source,
             .{},
             Config{
-                // TODO: Split this into different tests to ensure severity doesn't leak between
-                .detect_number_literal = severity,
+                .detect_number_literal = .off,
                 .detect_bool_literal = severity,
-                .detect_char_literal = severity,
-                .detect_string_literal = severity,
+                .detect_char_literal = .off,
+                .detect_string_literal = .off,
             },
             &.{
                 .{
@@ -185,18 +187,6 @@ test "no_literal_args" {
                     .severity = severity,
                     .slice = "true,",
                     .message = "Avoid bool literal arguments as they're ambiguous.",
-                },
-                .{
-                    .rule_id = "no_literal_args",
-                    .severity = severity,
-                    .slice = "0,",
-                    .message = "Avoid number literal arguments as they're ambiguous.",
-                },
-                .{
-                    .rule_id = "no_literal_args",
-                    .severity = severity,
-                    .slice = "0.5,",
-                    .message = "Avoid number literal arguments as they're ambiguous.",
                 },
                 .{
                     .rule_id = "no_literal_args",
@@ -218,6 +208,217 @@ test "no_literal_args" {
             .detect_bool_literal = .off,
             .detect_char_literal = .off,
             .detect_string_literal = .off,
+        },
+        &.{},
+    );
+}
+
+test "number" {
+    const rule = buildRule(.{});
+    const source: [:0]const u8 =
+        \\pub fn main() void {
+        \\  const num = 10;
+        \\  a.b.c('a', "hello", false, true, 0, num, 0.5);
+        \\}
+    ;
+
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            rule,
+            source,
+            .{},
+            Config{
+                .detect_number_literal = severity,
+                .detect_bool_literal = .off,
+                .detect_char_literal = .off,
+                .detect_string_literal = .off,
+            },
+            &.{
+                .{
+                    .rule_id = "no_literal_args",
+                    .severity = severity,
+                    .slice = "0,",
+                    .message = "Avoid number literal arguments as they're ambiguous.",
+                },
+                .{
+                    .rule_id = "no_literal_args",
+                    .severity = severity,
+                    .slice = "0.5)",
+                    .message = "Avoid number literal arguments as they're ambiguous.",
+                },
+            },
+        );
+    }
+
+    // Off:
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{
+            .detect_number_literal = .off,
+            .detect_bool_literal = .off,
+            .detect_char_literal = .off,
+            .detect_string_literal = .off,
+        },
+        &.{},
+    );
+}
+
+test "char" {
+    const rule = buildRule(.{});
+    const source: [:0]const u8 =
+        \\pub fn main() void {
+        \\  const c = 'a';
+        \\  call("hello", 1, true, false, c, 'a');
+        \\}
+    ;
+
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            rule,
+            source,
+            .{},
+            Config{
+                .detect_number_literal = .off,
+                .detect_bool_literal = .off,
+                .detect_char_literal = severity,
+                .detect_string_literal = .off,
+            },
+            &.{
+                .{
+                    .rule_id = "no_literal_args",
+                    .severity = severity,
+                    .slice = "'a')",
+                    .message = "Avoid char literal arguments as they're ambiguous.",
+                },
+            },
+        );
+    }
+
+    // Off:
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{
+            .detect_number_literal = .off,
+            .detect_bool_literal = .off,
+            .detect_char_literal = .off,
+            .detect_string_literal = .off,
+        },
+        &.{},
+    );
+}
+
+test "string" {
+    const rule = buildRule(.{});
+    const source: [:0]const u8 =
+        \\pub fn main() void {
+        \\  const str = "hello";
+        \\  field.call('a', false, 1, str, "hello");
+        \\}
+    ;
+
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            rule,
+            source,
+            .{},
+            Config{
+                .detect_number_literal = .off,
+                .detect_bool_literal = .off,
+                .detect_char_literal = .off,
+                .detect_string_literal = severity,
+            },
+            &.{
+                .{
+                    .rule_id = "no_literal_args",
+                    .severity = severity,
+                    .slice =
+                    \\"hello")
+                    ,
+                    .message = "Avoid string literal arguments as they're ambiguous.",
+                },
+            },
+        );
+    }
+
+    // Off:
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{
+            .detect_number_literal = .off,
+            .detect_bool_literal = .off,
+            .detect_char_literal = .off,
+            .detect_string_literal = .off,
+        },
+        &.{},
+    );
+}
+
+test "exclude tests" {
+    const rule = buildRule(.{});
+    const source: [:0]const u8 =
+        \\test {
+        \\  call("hello", 1, true, 'a');
+        \\}
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{
+            .detect_number_literal = .warning,
+            .detect_bool_literal = .warning,
+            .detect_char_literal = .warning,
+            .detect_string_literal = .@"error",
+            .exclude_tests = false,
+        },
+        &.{
+            .{
+                .rule_id = "no_literal_args",
+                .severity = .@"error",
+                .slice =
+                \\"hello",
+                ,
+                .message = "Avoid string literal arguments as they're ambiguous.",
+            },
+            .{
+                .rule_id = "no_literal_args",
+                .severity = .warning,
+                .slice = "1,",
+                .message = "Avoid number literal arguments as they're ambiguous.",
+            },
+            .{
+                .rule_id = "no_literal_args",
+                .severity = .warning,
+                .slice = "true,",
+                .message = "Avoid bool literal arguments as they're ambiguous.",
+            },
+            .{
+                .rule_id = "no_literal_args",
+                .severity = .warning,
+                .slice = "'a')",
+                .message = "Avoid char literal arguments as they're ambiguous.",
+            },
+        },
+    );
+
+    // Off:
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{
+            .detect_number_literal = .warning,
+            .detect_bool_literal = .warning,
+            .detect_char_literal = .warning,
+            .detect_string_literal = .warning,
+            .exclude_tests = true,
         },
         &.{},
     );
