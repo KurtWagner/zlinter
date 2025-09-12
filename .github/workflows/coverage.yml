@@ -3,7 +3,7 @@ run-name: Coverage
 on:
   push:
     branches:
-      - master
+      - 0.15.x
     paths:
       - '**.zig'
       - '**.zon'
