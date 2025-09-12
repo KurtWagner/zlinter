@@ -6,7 +6,6 @@ on:
     types:
       - completed
     branches:
-      - master
       - 0.14.x
 jobs:
   coverage:
