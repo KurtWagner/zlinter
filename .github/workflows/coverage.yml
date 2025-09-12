@@ -1,14 +1,18 @@
 name: coverage
 run-name: Coverage
 on:
-  workflow_run:
-    workflows: ["linux"]
-    types:
-      - completed
+  push:
     branches:
       - master
-      - 0.15.x
-      - 0.14.x
+    paths:
+      - '**.zig'
+      - '**.zon'
+      - 'integration_tests/test_cases/**'
+  pull_request:
+    paths:
+      - '**.zig'
+      - '**.zon'
+      - 'integration_tests/test_cases/**'
 jobs:
   coverage:
     if: github.event.workflow_run.conclusion == 'success' && github.repository_owner == 'KurtWagner'
