@@ -7,6 +7,8 @@ on:
       - completed
     branches:
       - master
+      - 0.15.x
+      - 0.14.x
 jobs:
   coverage:
     if: github.event.workflow_run.conclusion == 'success' && github.repository_owner == 'KurtWagner'
