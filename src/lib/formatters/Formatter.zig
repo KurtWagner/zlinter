@@ -8,6 +8,9 @@ pub const FormatInput = struct {
     arena: std.mem.Allocator,
 
     tty: zlinter.ansi.Tty = .no_color,
+
+    /// Only print this severity and above. e.g., set to error to only format errors
+    min_severity: zlinter.rules.LintProblemSeverity = .warning,
 };
 
 pub const Error = error{

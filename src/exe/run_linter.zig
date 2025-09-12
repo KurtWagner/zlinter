@@ -202,6 +202,8 @@ fn run(
             switch (args.format) {
                 .default => &default_formatter.formatter,
             },
+            args.quiet,
+            args.max_warnings,
         );
 }
 
@@ -402,32 +404,49 @@ fn runFormatter(
     output_writer: *std.io.Writer,
     output_tty: zlinter.ansi.Tty,
     formatter: *const zlinter.formatters.Formatter,
+    quiet: bool,
+    max_warnings: ?u32,
 ) !RunResult {
     var arena = std.heap.ArenaAllocator.init(gpa);
     defer arena.deinit();
     const arena_allocator = arena.allocator();
 
-    var flattened = shims.ArrayList(zlinter.results.LintResult).empty;
+    var run_result: RunResult = .success;
+    var warning_count: usize = 0;
+    var results_count: usize = 0;
     for (file_lint_problems.values()) |results| {
-        try flattened.appendSlice(arena_allocator, results);
-    }
-
-    const run_result: RunResult = run_result: {
-        for (flattened.items) |result| {
+        results_count += results.len;
+        for (results) |result| {
             for (result.problems) |problem| {
-                if (problem.severity == .@"error" and !problem.disabled_by_comment) {
-                    break :run_result .lint_error;
+                if (problem.disabled_by_comment) continue;
+                switch (problem.severity) {
+                    .@"error" => run_result = .lint_error,
+                    .warning => warning_count += 1,
+                    .off => {},
                 }
             }
         }
-        break :run_result .success;
-    };
+    }
+    if (max_warnings) |max| {
+        if (warning_count > max) {
+            run_result = .lint_error;
+        }
+    }
+
+    var flattened = try shims.ArrayList(zlinter.results.LintResult).initCapacity(
+        arena_allocator,
+        results_count,
+    );
+    for (file_lint_problems.values()) |results| {
+        flattened.appendSliceAssumeCapacity(results);
+    }
 
     try formatter.format(.{
         .results = try flattened.toOwnedSlice(arena_allocator),
         .dir = dir,
         .arena = arena_allocator,
         .tty = output_tty,
+        .min_severity = if (quiet) .@"error" else .warning,
     }, output_writer);
 
     return run_result;

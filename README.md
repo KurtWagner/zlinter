@@ -287,12 +287,14 @@ If you omit `zlinter-enable`, all lines until EOF will be disabled.
 ### Command-Line Arguments
 
 ```shell
-zig build lint -- [--include <path> ...] [--exclude <path> ...] [--filter <path> ...] [--rule <name> ...] [--fix]
+zig build lint -- [--include <path> ...] [--exclude <path> ...] [--filter <path> ...] [--rule <name> ...] [--fix] [--quiet] [--max-warnings <u32>]
 ```
 
 - `--include` run the linter on these path ignoring the includes and excludes defined in the `build.zig` forcing these paths to be resolved and linted (if they exist).
 - `--exclude` exclude these paths from linting. This argument will be used in conjunction with the excludes defined in the `build.zig` unless used with `--include`.
 - `--filter` used to filter the run to a specific set of already resolved paths. Unlike `--include` this leaves the includes and excludes defined in the `build.zig` as is.
+- `--quiet` only report errors (not warnings).
+- `--max-warnings` fail if there are more than this number of warnings.
 - `--fix` used to automatically fix some issues (e.g., removal of unused container declarations) - **Only use this feature if you use source control as it can result loss of code!**
 
 For example
