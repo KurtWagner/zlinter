@@ -188,13 +188,13 @@ pub const LenAndSeverity = struct {
     };
 };
 
-pub const LintProblemSeverity = enum {
+pub const LintProblemSeverity = enum(u8) {
     /// Exit zero
-    off,
+    off = 0,
     /// Exit zero with warning
-    warning,
+    warning = 1,
     /// Exit non-zero
-    @"error",
+    @"error" = 2,
 
     pub inline fn name(
         self: LintProblemSeverity,

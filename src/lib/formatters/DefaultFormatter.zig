@@ -31,6 +31,10 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: *st
         ) catch |e| return logAndReturnWriteFailure("Render", e);
 
         for (file_result.problems) |problem| {
+            if (@intFromEnum(problem.severity) < @intFromEnum(input.min_severity)) {
+                continue;
+            }
+
             if (problem.disabled_by_comment) {
                 total_disabled_by_comment += 1;
                 continue;

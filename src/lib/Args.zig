@@ -17,6 +17,17 @@ zig_lib_directory: ?[]const u8 = null,
 /// fix any discovered issues instead of reporting them.
 fix: bool = false,
 
+/// If set to true only errors will be reported. Warnings are silently ignored.
+///
+/// By default, zlinter reports both warnings and errors. In some workflows,
+/// you may only want to report errors and ignore warnings — for example, in
+/// continuous Integration (CI) pipelines where only correctness issues.
+quiet: bool = false,
+
+/// If set, zlinter will fail (non-zero exit code) if more than the given number
+/// of warnings are reported.
+max_warnings: ?u32 = null,
+
 /// Only lint or fix (if using the fix argument) the given files. These
 /// are owned by the struct and should be freed by calling deinit. This will
 /// replace any file resolution provided by the build file.
@@ -135,6 +146,7 @@ pub fn allocParse(
     const State = enum {
         parsing,
         fix_arg,
+        quiet_arg,
         verbose_arg,
         help_arg,
         zig_exe_arg,
@@ -149,11 +161,13 @@ pub fn allocParse(
         rule_config_arg,
         stdin_arg,
         fix_passes_arg,
+        max_warnings_arg,
     };
 
     const flags: std.StaticStringMap(State) = .initComptime(.{
         .{ "", .parsing },
         .{ "--fix", .fix_arg },
+        .{ "--quiet", .quiet_arg },
         .{ "--verbose", .verbose_arg },
         .{ "--rule", .rule_arg },
         .{ "--include", .include_path_arg },
@@ -168,6 +182,7 @@ pub fn allocParse(
         .{ "--help", .help_arg },
         .{ "-h", .help_arg },
         .{ "--fix-passes", .fix_passes_arg },
+        .{ "--max-warnings", .max_warnings_arg },
     });
 
     state: switch (State.parsing) {
@@ -272,6 +287,22 @@ pub fn allocParse(
             }});
             return error.InvalidArgs;
         },
+        .max_warnings_arg => {
+            index += 1;
+
+            if (index == args.len) {
+                rendering.process_printer.println(.err, "--max-warnings missing value", .{});
+                return error.InvalidArgs;
+            }
+
+            const error_message = "--max-warnings expects a u32";
+            lint_args.max_warnings = std.fmt.parseInt(u32, args[index], 10) catch {
+                rendering.process_printer.println(.err, error_message, .{});
+                return error.InvalidArgs;
+            };
+
+            continue :state State.parsing;
+        },
         .fix_passes_arg => {
             index += 1;
             if (index == args.len) {
@@ -293,6 +324,10 @@ pub fn allocParse(
         },
         .fix_arg => {
             lint_args.fix = true;
+            continue :state State.parsing;
+        },
+        .quiet_arg => {
+            lint_args.quiet = true;
             continue :state State.parsing;
         },
         .verbose_arg => {
@@ -388,6 +423,8 @@ pub fn printHelp(printer: *rendering.Printer) void {
         .{ "--include", "Only lint these paths, ignoring build.zig includes/excludes" },
         .{ "--exclude", "Skip linting for these paths" },
         .{ "--filter", "Limit linting to the specified resolved paths" },
+        .{ "--quiet", "Only report errors (not warnings)" },
+        .{ "--max-warnings", "Fail if there are more than this number of warnings" },
         .{ "--fix", "Automatically fix some issues (only use with source control)" },
         .{ "--fix-passes", std.fmt.comptimePrint("Repeat fix this many times or until no more fixes are applied (Default {d})", .{default_fix_passes}) },
     };
@@ -396,7 +433,7 @@ pub fn printHelp(printer: *rendering.Printer) void {
     inline for (0..flags.len) |i| width = @max(flags[i][0].len, width);
 
     printer.print(.out, "{s}Usage:{s} ", .{ printer.tty.ansiOrEmpty(&.{ .underline, .bold }), printer.tty.ansiOrEmpty(&.{.reset}) });
-    printer.print(.out, "zig build <lint step> -- [--include <path>...] [--exclude <path>...] [--filter <path>...] [--rule <name>...] [--fix]\n\n", .{});
+    printer.print(.out, "zig build <lint step> -- [--include <path>...] [--exclude <path>...] [--filter <path>...] [--rule <name>...] [--fix] [--quiet] [--max-warnings <u32>]\n\n", .{});
     printer.print(.out, "{s}Options:{s}\n", .{ printer.tty.ansiOrEmpty(&.{ .underline, .bold }), printer.tty.ansiOrEmpty(&.{.reset}) });
     for (flags) |tuple| {
         printer.print(
@@ -410,6 +447,7 @@ pub fn printHelp(printer: *rendering.Printer) void {
             },
         );
     }
+    printer.flush() catch @panic("Failed to flush help docs");
 }
 
 fn notArgKey(arg: []const u8) bool {
@@ -446,6 +484,22 @@ test "allocParse with fix arg" {
 
     try std.testing.expectEqualDeep(Args{
         .fix = true,
+    }, args);
+}
+
+test "allocParse with quiet arg" {
+    var stdin_fbs = std.Io.Reader.fixed("");
+
+    const args = try allocParse(
+        testing.cliArgs(&.{"--quiet"}),
+        &.{},
+        std.testing.allocator,
+        &stdin_fbs,
+    );
+    defer args.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualDeep(Args{
+        .quiet = true,
     }, args);
 }
 
@@ -838,7 +892,7 @@ test "allocParse with fix passes missing arg" {
 }
 
 test "allocParse with invalid fix passes arg" {
-    inline for (&.{ "-1", "256", "a" }) |arg| {
+    inline for (&.{ "-1", "0", "256", "a" }) |arg| {
         var stdin_fbs = std.Io.Reader.fixed("");
 
         var stderr_sink: std.Io.Writer.Allocating = .init(std.testing.allocator);
@@ -1025,6 +1079,74 @@ test "allocParse with with missing rule config rule config path" {
     ));
 
     try std.testing.expectEqualStrings("--rule-config arg missing zon file path\n", stderr_sink.written());
+}
+
+test "allocParse with min --max-warnings arg" {
+    var stdin_fbs = std.Io.Reader.fixed("");
+
+    const args = try allocParse(
+        testing.cliArgs(&.{ "--max-warnings", "0" }),
+        &.{},
+        std.testing.allocator,
+        &stdin_fbs,
+    );
+    defer args.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualDeep(Args{
+        .max_warnings = 0,
+    }, args);
+}
+
+test "allocParse with max --max-warnings arg" {
+    var stdin_fbs = std.Io.Reader.fixed("");
+
+    const args = try allocParse(
+        testing.cliArgs(&.{ "--max-warnings", "4294967295" }),
+        &.{},
+        std.testing.allocator,
+        &stdin_fbs,
+    );
+    defer args.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualDeep(Args{
+        .max_warnings = 4294967295,
+    }, args);
+}
+
+test "allocParse with fix --max-warnings arg" {
+    var stdin_fbs = std.Io.Reader.fixed("");
+
+    var stderr_sink: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer stderr_sink.deinit();
+    rendering.process_printer.stderr = &stderr_sink.writer;
+
+    try std.testing.expectError(error.InvalidArgs, allocParse(
+        testing.cliArgs(&.{"--max-warnings"}),
+        &.{},
+        std.testing.allocator,
+        &stdin_fbs,
+    ));
+
+    try std.testing.expectEqualStrings("--max-warnings missing value\n", stderr_sink.written());
+}
+
+test "allocParse with invalid --max-warnings arg" {
+    inline for (&.{ "-1", "4294967296", "a" }) |arg| {
+        var stdin_fbs = std.Io.Reader.fixed("");
+
+        var stderr_sink: std.Io.Writer.Allocating = .init(std.testing.allocator);
+        defer stderr_sink.deinit();
+        rendering.process_printer.stderr = &stderr_sink.writer;
+
+        try std.testing.expectError(error.InvalidArgs, allocParse(
+            testing.cliArgs(&.{ "--max-warnings", arg }),
+            &.{},
+            std.testing.allocator,
+            &stdin_fbs,
+        ));
+
+        try std.testing.expectEqualStrings("--max-warnings expects a u32\n", stderr_sink.written());
+    }
 }
 
 const testing = struct {
