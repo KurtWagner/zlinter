@@ -8,11 +8,13 @@ on:
       - '**.zig'
       - '**.zon'
       - 'integration_tests/test_cases/**'
+      - '.github/workflows/coverage.yml'
   pull_request:
     paths:
       - '**.zig'
       - '**.zon'
       - 'integration_tests/test_cases/**'
+      - '.github/workflows/coverage.yml'
 jobs:
   coverage:
     if: github.event.workflow_run.conclusion == 'success' && github.repository_owner == 'KurtWagner'
