@@ -160,7 +160,7 @@ const StepBuilder = struct {
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const coverage = b.option(bool, "coverage", "Generate a coverage report with kcov") orelse false;
+    const coverage = b.option(bool, "coverage", "Generate a coverage report with kcov");
 
     const zlinter_lib_module = b.addModule("zlinter", .{
         .root_source_file = b.path("src/lib/zlinter.zig"),
@@ -184,8 +184,10 @@ pub fn build(b: *std.Build) void {
         .module = zlinter_lib_module,
     };
 
-    const unit_tests_exe = b.addTest(.{ .root_module = zlinter_lib_module });
-    const run_unit_tests = b.addRunArtifact(unit_tests_exe);
+    const unit_tests_exe = b.addTest(.{
+        .root_module = zlinter_lib_module,
+        .use_llvm = coverage,
+    });
 
     // --------------------------------------------------------------------
     // Generate dynamic rules list and configs
@@ -245,7 +247,7 @@ pub fn build(b: *std.Build) void {
     integration_test_step.dependOn(&run_integration_tests.step);
 
     const unit_test_step = b.step("unit-test", "Run unit tests");
-    if (coverage) {
+    if (coverage orelse false) {
         const cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
         cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only" });
         cover_run.addPrefixedDirectoryArg("--include-pattern=", b.path("src"));
@@ -254,6 +256,7 @@ pub fn build(b: *std.Build) void {
 
         unit_test_step.dependOn(&install_coverage.step);
     } else {
+        const run_unit_tests = b.addRunArtifact(unit_tests_exe);
         unit_test_step.dependOn(&run_unit_tests.step);
     }
 
@@ -261,10 +264,10 @@ pub fn build(b: *std.Build) void {
         const test_rule_exe = b.addTest(.{
             .name = b.fmt("{s}_unit_test_coverage", .{rule_import.name}),
             .root_module = rule_import.module,
+            .use_llvm = coverage,
         });
-        const run_test_rule_exe = b.addRunArtifact(test_rule_exe);
 
-        if (coverage) {
+        if (coverage orelse false) {
             const cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
             cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only" });
             cover_run.addPrefixedDirectoryArg("--include-pattern=", b.path("src"));
@@ -273,6 +276,7 @@ pub fn build(b: *std.Build) void {
 
             unit_test_step.dependOn(&install_coverage.step);
         } else {
+            const run_test_rule_exe = b.addRunArtifact(test_rule_exe);
             unit_test_step.dependOn(&run_test_rule_exe.step);
         }
     }

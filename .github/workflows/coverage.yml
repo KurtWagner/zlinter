@@ -32,7 +32,9 @@ jobs:
           sudo tar xf kcov-amd64.tar.gz -C /
 
       - name: "Run unit tests with coverage"
-        run: zig build unit-test -Dcoverage=true
+        run: |
+          kcov --version
+          zig build unit-test -Dcoverage=true
 
       - name: "Upload coverage"
         uses: coverallsapp/github-action@v2
