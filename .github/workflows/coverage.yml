@@ -6,6 +6,8 @@ on:
     types:
       - completed
     branches:
+      - master
+      - 0.15.x
       - 0.14.x
 jobs:
   coverage:
@@ -17,6 +19,8 @@ jobs:
     steps:
       - name: "Checkout repo"
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
 
       - name: "Setup zig environment"
         uses: mlugg/setup-zig@v2
