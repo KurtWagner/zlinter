@@ -8,11 +8,13 @@ on:
       - '**.zig'
       - '**.zon'
       - 'integration_tests/test_cases/**'
+      - '.github/workflows/linux.yml'
   pull_request:
     paths:
       - '**.zig'
       - '**.zon'
       - 'integration_tests/test_cases/**'
+      - '.github/workflows/linux.yml'
 jobs:
   test:
     runs-on: ubuntu-latest
