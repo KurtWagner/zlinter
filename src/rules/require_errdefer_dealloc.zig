@@ -63,7 +63,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 fn run(
     rule: zlinter.rules.LintRule,
     doc: zlinter.session.LintDocument,
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
@@ -72,41 +72,60 @@ fn run(
     const tree = doc.handle.tree;
 
     var problem_nodes = shims.ArrayList(Ast.Node.Index).empty;
-    defer problem_nodes.deinit(allocator);
+    defer problem_nodes.deinit(gpa);
 
     const root: NodeIndexShim = .root;
-    var it = try doc.nodeLineageIterator(root, allocator);
+    var it = try doc.nodeLineageIterator(
+        root,
+        gpa,
+    );
     defer it.deinit();
 
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+
     nodes: while (try it.next()) |tuple| {
-        const node, _ = tuple;
+        const node = tuple[0].toNodeIndex();
 
-        var fn_proto_buffer: [1]Ast.Node.Index = undefined;
-        const fn_decl = zlinter.ast.fnDecl(tree, node.toNodeIndex(), &fn_proto_buffer) orelse continue :nodes;
+        var buffer: [1]Ast.Node.Index = undefined;
+        const fn_decl = zlinter.ast.fnDecl(
+            tree,
+            node,
+            &buffer,
+        ) orelse continue :nodes;
 
-        if (!zlinter.ast.fnProtoReturnsError(tree, fn_decl.proto)) continue :nodes;
+        if (!zlinter.ast.fnProtoReturnsError(tree, fn_decl.proto))
+            continue :nodes;
 
-        try processBlock(doc, fn_decl.block, &problem_nodes, allocator);
+        try processBlock(
+            doc,
+            fn_decl.block,
+            &problem_nodes,
+            gpa,
+            arena.allocator(),
+        );
+
+        _ = arena.reset(.retain_capacity);
     }
 
     var lint_problems: shims.ArrayList(zlinter.results.LintProblem) = .empty;
-    defer lint_problems.deinit(allocator);
+    defer lint_problems.deinit(gpa);
 
     for (problem_nodes.items) |node| {
-        try lint_problems.append(allocator, .{
+        try lint_problems.append(gpa, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
             .start = .startOfNode(tree, node),
             .end = .endOfNode(tree, node),
-            .message = try std.fmt.allocPrint(allocator, "Missing `errdefer` cleanup", .{}),
+            .message = try std.fmt.allocPrint(gpa, "Missing `errdefer` cleanup", .{}),
         });
     }
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            allocator,
+            gpa,
             doc.path,
-            try lint_problems.toOwnedSlice(allocator),
+            try lint_problems.toOwnedSlice(gpa),
         )
     else
         null;
@@ -117,40 +136,56 @@ fn processBlock(
     block_node: Ast.Node.Index,
     problems: *shims.ArrayList(Ast.Node.Index),
     gpa: std.mem.Allocator,
+    arena: std.mem.Allocator,
 ) !void {
     const tree = doc.handle.tree;
 
-    var cleanup_symbols: std.StringHashMap(Ast.Node.Index) = .init(gpa);
-    defer {
-        var it = cleanup_symbols.keyIterator();
-        while (it.next()) |k| gpa.free(k.*);
-        cleanup_symbols.deinit();
-    }
+    // Populated with declarations that look like they should be cleaned up.
+    var cleanup_symbols: std.StringHashMap(Ast.Node.Index) = .init(arena);
 
     var call_buffer: [1]Ast.Node.Index = undefined;
     for (doc.lineage.items(.children)[NodeIndexShim.init(block_node).index] orelse &.{}) |child_node| {
         if (try declRef(doc, child_node)) |decl_ref| {
-            if (decl_ref.hasDeinit())
-                try cleanup_symbols.put(try gpa.dupe(u8, decl_ref.var_name), child_node);
-        } else if (try zlinter.ast.deferBlock(doc, child_node, gpa)) |defer_block| {
-            defer defer_block.deinit(gpa);
+            // Track declarations that look like they need to be cleaned up.
+            if (!decl_ref.requiresCleanup()) continue;
 
+            try cleanup_symbols.put(
+                try arena.dupe(u8, decl_ref.var_name),
+                child_node,
+            );
+        } else if (try zlinter.ast.deferBlock(
+            doc,
+            child_node,
+            arena,
+        )) |defer_block| {
+            // Remove any tracked declarations that are cleaned up within defer/errdefer
             for (defer_block.children) |defer_block_child| {
-                const cleanup_call = callWithName(doc, defer_block_child, &call_buffer, &.{"deinit"}) orelse continue;
-                switch (cleanup_call.kind) {
+                const call = callWithName(
+                    doc,
+                    defer_block_child,
+                    &call_buffer,
+                    &.{"deinit"},
+                ) orelse continue;
+                switch (call.kind) {
                     .single_field => |info| {
-                        if (cleanup_symbols.fetchRemove(tree.tokenSlice(info.field_main_token))) |e| gpa.free(e.key);
+                        _ = cleanup_symbols.remove(tree.tokenSlice(info.field_main_token));
                     },
                     .enum_literal, .other => {},
                 }
             }
         } else if (zlinter.ast.isBlock(tree, child_node)) {
-            try processBlock(doc, child_node, problems, gpa);
+            try processBlock(
+                doc,
+                child_node,
+                problems,
+                gpa,
+                arena,
+            );
         }
     }
 
-    var leftover_it = cleanup_symbols.valueIterator();
-    while (leftover_it.next()) |node| {
+    var remaining_it = cleanup_symbols.valueIterator();
+    while (remaining_it.next()) |node| {
         try problems.append(gpa, node.*);
     }
 }
@@ -270,6 +305,8 @@ const DeclRef = struct {
     name: []const u8,
     uri: []const u8,
 
+    // TODO: This really need a lot of work, it's just a quick hack to get
+    // something going to see how useful such a rule is.
     const deinit_references = std.StaticStringMap([]const u8).initComptime(.{
         .{ "ArrayHashMap", "std/array_hash_map.zig" },
         .{ "ArrayHashMapUnmanaged", "std/array_hash_map.zig" },
@@ -299,7 +336,7 @@ const DeclRef = struct {
         .{ "StringHashMapUnmanaged", "std/hash_map.zig" },
     });
 
-    fn hasDeinit(self: DeclRef) bool {
+    fn requiresCleanup(self: DeclRef) bool {
         if (deinit_references.get(self.name)) |uri_suffix| {
             return std.mem.endsWith(u8, self.uri, uri_suffix);
         }
@@ -308,21 +345,37 @@ const DeclRef = struct {
 };
 
 fn declRef(doc: zlinter.session.LintDocument, var_decl_node: Ast.Node.Index) !?DeclRef {
-    const var_decl = doc.handle.tree.fullVarDecl(var_decl_node) orelse return null;
-
-    const init_node = NodeIndexShim.initOptional(var_decl.ast.init_node) orelse return null;
+    const tree = doc.handle.tree;
+    const var_decl = tree.fullVarDecl(var_decl_node) orelse return null;
+    const init_node = (NodeIndexShim.initOptional(var_decl.ast.init_node) orelse return null).toNodeIndex();
 
     var call_buffer: [1]Ast.Node.Index = undefined;
-    if (!switch (shims.nodeTag(doc.handle.tree, init_node.toNodeIndex())) {
-        .field_access => zlinter.ast.isFieldVarAccess(doc.handle.tree, init_node.toNodeIndex(), &.{"empty"}),
-        .enum_literal => zlinter.ast.isEnumLiteral(doc.handle.tree, init_node.toNodeIndex(), &.{"empty"}),
+    if (!switch (shims.nodeTag(tree, init_node)) {
+        // e.g., `ArrayList(u8).empty`
+        .field_access => zlinter.ast.isFieldVarAccess(
+            tree,
+            init_node,
+            &.{"empty"},
+        ),
+        // e.g., `.empty`
+        .enum_literal => zlinter.ast.isEnumLiteral(
+            tree,
+            init_node,
+            &.{"empty"},
+        ),
         else =>
         // This will also handle optional and array accesses, which shouldn't occur
         // but shouldn't be a problem to us anyway as we do strict checks on the
         // type anyway.
         //
-        // e.g., `array[0].init()` and `optional.?.init()`
-        if (callWithName(doc, init_node.toNodeIndex(), &call_buffer, &.{"init"})) |call|
+        // e.g., `array[0].init(gpa)` and `optional.?.init(allocator)`
+        if (callWithName(
+            doc,
+            init_node,
+            &call_buffer,
+            &.{"init"},
+        )) |call|
+            // TODO: This is fine for managed but what about unmanaged, which is now the standard?
             !hasArenaParam(doc, call.params)
         else
             false,
@@ -345,42 +398,42 @@ fn declRef(doc: zlinter.session.LintDocument, var_decl_node: Ast.Node.Index) !?D
                 .container_decl_two,
                 .container_decl_two_trailing,
                 => {
-                    const tree = scope_handle.handle.tree;
-                    const first_token = tree.firstToken(node);
+                    const scope_tree = scope_handle.handle.tree;
+                    const first_token = scope_tree.firstToken(node);
 
                     // `Foo = struct`
-                    if (first_token > 1 and tree.tokens.items(.tag)[first_token - 2] == .identifier and tree.tokens.items(.tag)[first_token - 1] == .equal) {
+                    if (first_token > 1 and scope_tree.tokens.items(.tag)[first_token - 2] == .identifier and scope_tree.tokens.items(.tag)[first_token - 1] == .equal) {
                         var str_token = first_token - 2;
                         // `Foo: type = struct`
-                        if (first_token > 3 and tree.tokens.items(.tag)[first_token - 4] == .identifier and tree.tokens.items(.tag)[first_token - 3] == .colon) {
+                        if (first_token > 3 and scope_tree.tokens.items(.tag)[first_token - 4] == .identifier and scope_tree.tokens.items(.tag)[first_token - 3] == .colon) {
                             str_token = first_token - 4;
                         }
                         return .{
-                            .var_name = doc.handle.tree.tokenSlice(var_decl.ast.mut_token + 1),
-                            .name = tree.tokenSlice(str_token),
+                            .var_name = tree.tokenSlice(var_decl.ast.mut_token + 1),
+                            .name = scope_tree.tokenSlice(str_token),
                             .uri = scope_handle.handle.uri,
                         };
-                    } else if (first_token > 0 and tree.tokens.items(.tag)[first_token - 1] == .keyword_return) {
+                    } else if (first_token > 0 and scope_tree.tokens.items(.tag)[first_token - 1] == .keyword_return) {
                         const doc_scope = try scope_handle.handle.getDocumentScope();
 
                         const function_scope = switch (zlinter.version.zig) {
                             .@"0.14" => zlinter.zls.Analyser.innermostFunctionScopeAtIndex(
                                 doc_scope,
-                                tree.tokens.items(.start)[first_token - 1],
+                                scope_tree.tokens.items(.start)[first_token - 1],
                             ).unwrap(),
                             .@"0.15", .@"0.16" => zlinter.zls.Analyser.innermostScopeAtIndexWithTag(
                                 doc_scope,
-                                tree.tokenStart(first_token - 1),
+                                scope_tree.tokenStart(first_token - 1),
                                 .initOne(.function),
                             ).unwrap(),
                         } orelse return null;
 
                         var fn_proto_buffer: [1]Ast.Node.Index = undefined;
-                        const func = tree.fullFnProto(&fn_proto_buffer, doc_scope.getScopeAstNode(function_scope).?).?;
+                        const func = scope_tree.fullFnProto(&fn_proto_buffer, doc_scope.getScopeAstNode(function_scope).?).?;
 
                         return .{
-                            .var_name = doc.handle.tree.tokenSlice(var_decl.ast.mut_token + 1),
-                            .name = tree.tokenSlice(func.name_token orelse return null),
+                            .var_name = tree.tokenSlice(var_decl.ast.mut_token + 1),
+                            .name = scope_tree.tokenSlice(func.name_token orelse return null),
                             .uri = scope_handle.handle.uri,
                         };
                     }
