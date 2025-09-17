@@ -437,6 +437,24 @@ pub fn fullStatement(tree: Ast, node: Ast.Node.Index) ?Statement {
     };
 }
 
+// TODO: Add unit tests for this
+pub fn isFnPrivate(tree: Ast, fn_decl: Ast.full.FnProto) bool {
+    const visibility_token = fn_decl.visib_token orelse return true;
+    return switch (tree.tokens.items(.tag)[visibility_token]) {
+        .keyword_pub => false,
+        else => true,
+    };
+}
+
+// TODO: Add unit tests for this
+pub fn isVarPrivate(tree: Ast, var_decl: Ast.full.VarDecl) bool {
+    const visibility_token = var_decl.visib_token orelse return true;
+    return switch (tree.tokens.items(.tag)[visibility_token]) {
+        .keyword_pub => false,
+        else => true,
+    };
+}
+
 test "isFieldVarAccess" {
     inline for (&.{
         .{

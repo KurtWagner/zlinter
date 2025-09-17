@@ -145,12 +145,9 @@ fn processBlock(
 
     var call_buffer: [1]Ast.Node.Index = undefined;
     for (doc.lineage.items(.children)[NodeIndexShim.init(block_node).index] orelse &.{}) |child_node| {
-        if (try declRef(doc, child_node)) |decl_ref| {
-            // Track declarations that look like they need to be cleaned up.
-            if (!decl_ref.requiresCleanup()) continue;
-
+        if (try declRequiringCleanup(doc, child_node)) |decl_ref| {
             try cleanup_symbols.put(
-                try arena.dupe(u8, decl_ref.var_name),
+                try arena.dupe(u8, doc.handle.tree.tokenSlice(decl_ref.decl_name_token)),
                 child_node,
             );
         } else if (try zlinter.ast.deferBlock(
@@ -301,87 +298,16 @@ fn callWithName(doc: zlinter.session.LintDocument, node: Ast.Node.Index, buffer:
 }
 
 const DeclRef = struct {
-    var_name: []const u8,
-    name: []const u8,
-    uri: []const u8,
-
-    // TODO: This really need a lot of work, it's just a quick hack to get
-    // something going to see how useful such a rule is.
-    const deinit_references = std.StaticStringMap([]const u8).initComptime(.{
-        .{ "ArrayHashMap", "std/array_hash_map.zig" },
-        .{ "ArrayHashMapUnmanaged", "std/array_hash_map.zig" },
-        .{ "ArrayList", "std/array_list.zig" },
-        .{ "ArrayListAligned", "std/array_list.zig" },
-        .{ "ArrayListAlignedUnmanaged", "std/array_list.zig" },
-        .{ "ArrayListUnmanaged", "std/array_list.zig" },
-        .{ "AutoArrayHashMap", "std/hash_map.zig" },
-        .{ "AutoArrayHashMapUnmanaged", "std/hash_map.zig" },
-        .{ "AutoHashMap", "std/hash_map.zig" },
-        .{ "AutoHashMapUnmanaged", "std/hash_map.zig" },
-        .{ "BufSet", "std/buf_set.zig" },
-        .{ "DoublyLinkedList", "std/doubly_linked_list.zig" },
-        .{ "EnumArray", "std/enum_array.zig" },
-        .{ "EnumIndex", "std/enum_index.zig" },
-        .{ "EnumMap", "std/enum_map.zig" },
-        .{ "HashMap", "std/hash_map.zig" },
-        .{ "HashMapUnmanaged", "std/hash_map.zig" },
-        .{ "List", "std/singly_linked_list.zig" },
-        .{ "MultiArrayList", "std/multi_array_list.zig" },
-        .{ "PriorityDequeue", "std/priority_dequeue.zig" },
-        .{ "PriorityQueue", "std/priority_queue.zig" },
-        .{ "SinglyLinkedList", "std/singly_linked_list.zig" },
-        .{ "StringArrayHashMap", "std/hash_map.zig" },
-        .{ "StringArrayHashMapUnmanaged", "std/hash_map.zig" },
-        .{ "StringHashMap", "std/hash_map.zig" },
-        .{ "StringHashMapUnmanaged", "std/hash_map.zig" },
-    });
-
-    fn requiresCleanup(self: DeclRef) bool {
-        if (deinit_references.get(self.name)) |uri_suffix| {
-            return std.mem.endsWith(u8, self.uri, uri_suffix);
-        }
-        return false;
-    }
+    decl_name_token: Ast.TokenIndex,
 };
 
-fn declRef(doc: zlinter.session.LintDocument, var_decl_node: Ast.Node.Index) !?DeclRef {
+/// Returns a declaration reference if the given node is a declaration node
+/// that looks like it needs to be cleaned up (e.g., if it has a deinit method)
+fn declRequiringCleanup(doc: zlinter.session.LintDocument, maybe_var_decl_node: Ast.Node.Index) !?DeclRef {
     const tree = doc.handle.tree;
-    const var_decl = tree.fullVarDecl(var_decl_node) orelse return null;
-    const init_node = (NodeIndexShim.initOptional(var_decl.ast.init_node) orelse return null).toNodeIndex();
+    const var_decl = tree.fullVarDecl(maybe_var_decl_node) orelse return null;
 
-    var call_buffer: [1]Ast.Node.Index = undefined;
-    if (!switch (shims.nodeTag(tree, init_node)) {
-        // e.g., `ArrayList(u8).empty`
-        .field_access => zlinter.ast.isFieldVarAccess(
-            tree,
-            init_node,
-            &.{"empty"},
-        ),
-        // e.g., `.empty`
-        .enum_literal => zlinter.ast.isEnumLiteral(
-            tree,
-            init_node,
-            &.{"empty"},
-        ),
-        else =>
-        // This will also handle optional and array accesses, which shouldn't occur
-        // but shouldn't be a problem to us anyway as we do strict checks on the
-        // type anyway.
-        //
-        // e.g., `array[0].init(gpa)` and `optional.?.init(allocator)`
-        if (callWithName(
-            doc,
-            init_node,
-            &call_buffer,
-            &.{"init"},
-        )) |call|
-            // TODO: This is fine for managed but what about unmanaged, which is now the standard?
-            !hasArenaParam(doc, call.params)
-        else
-            false,
-    }) return null;
-
-    const var_decl_type = try doc.resolveTypeOfNode(var_decl_node) orelse return null;
+    const var_decl_type = try doc.resolveTypeOfNode(maybe_var_decl_node) orelse return null;
     switch (var_decl_type.data) {
         .container => |container| {
             const scope_handle = switch (zlinter.version.zig) {
@@ -399,44 +325,26 @@ fn declRef(doc: zlinter.session.LintDocument, var_decl_node: Ast.Node.Index) !?D
                 .container_decl_two_trailing,
                 => {
                     const scope_tree = scope_handle.handle.tree;
-                    const first_token = scope_tree.firstToken(node);
 
-                    // `Foo = struct`
-                    if (first_token > 1 and scope_tree.tokens.items(.tag)[first_token - 2] == .identifier and scope_tree.tokens.items(.tag)[first_token - 1] == .equal) {
-                        var str_token = first_token - 2;
-                        // `Foo: type = struct`
-                        if (first_token > 3 and scope_tree.tokens.items(.tag)[first_token - 4] == .identifier and scope_tree.tokens.items(.tag)[first_token - 3] == .colon) {
-                            str_token = first_token - 4;
+                    const has_deinit_method: bool = has_deinit_method: {
+                        var buffer: [2]Ast.Node.Index = undefined;
+                        const container_decl = scope_tree.fullContainerDecl(&buffer, node).?;
+                        for (container_decl.ast.members) |member| {
+                            var fn_proto_buffer: [1]Ast.Node.Index = undefined;
+                            const fn_decl = zlinter.ast.fnDecl(scope_tree, member, &fn_proto_buffer) orelse continue;
+
+                            if (zlinter.ast.isFnPrivate(scope_tree, fn_decl.proto)) continue;
+
+                            const name_token = fn_decl.proto.name_token orelse continue;
+                            const name = scope_tree.tokenSlice(name_token);
+
+                            if (std.mem.eql(u8, name, "deinit")) break :has_deinit_method true;
                         }
-                        return .{
-                            .var_name = tree.tokenSlice(var_decl.ast.mut_token + 1),
-                            .name = scope_tree.tokenSlice(str_token),
-                            .uri = scope_handle.handle.uri,
-                        };
-                    } else if (first_token > 0 and scope_tree.tokens.items(.tag)[first_token - 1] == .keyword_return) {
-                        const doc_scope = try scope_handle.handle.getDocumentScope();
+                        break :has_deinit_method false;
+                    };
+                    if (!has_deinit_method) return null;
 
-                        const function_scope = switch (zlinter.version.zig) {
-                            .@"0.14" => zlinter.zls.Analyser.innermostFunctionScopeAtIndex(
-                                doc_scope,
-                                scope_tree.tokens.items(.start)[first_token - 1],
-                            ).unwrap(),
-                            .@"0.15", .@"0.16" => zlinter.zls.Analyser.innermostScopeAtIndexWithTag(
-                                doc_scope,
-                                scope_tree.tokenStart(first_token - 1),
-                                .initOne(.function),
-                            ).unwrap(),
-                        } orelse return null;
-
-                        var fn_proto_buffer: [1]Ast.Node.Index = undefined;
-                        const func = scope_tree.fullFnProto(&fn_proto_buffer, doc_scope.getScopeAstNode(function_scope).?).?;
-
-                        return .{
-                            .var_name = tree.tokenSlice(var_decl.ast.mut_token + 1),
-                            .name = scope_tree.tokenSlice(func.name_token orelse return null),
-                            .uri = scope_handle.handle.uri,
-                        };
-                    }
+                    return .{ .decl_name_token = var_decl.ast.mut_token + 1 };
                 },
                 else => {},
             }
@@ -445,156 +353,6 @@ fn declRef(doc: zlinter.session.LintDocument, var_decl_node: Ast.Node.Index) !?D
     }
 
     return null;
-}
-
-/// Returns true if it looks like based on parameters that the given call use
-/// leveraging an arena like allocator and thus should be excluded from checks
-/// by `require_errdefer_dealloc`.
-///
-/// For example, `.init(arena.allocator())` or `.init(arena)` look like they're
-/// accepting an arena so requiring cleanup in `errdefer` is not strictly necessary
-/// and may even cause confuion.
-///
-/// Where as `.init(allocator)` or `.init(std.heap.c_allocator)` should be checked
-/// for stricter cleanup on error as it won't automatically clear itself.
-fn hasArenaParam(doc: zlinter.session.LintDocument, params: []const Ast.Node.Index) bool {
-    const tree = doc.handle.tree;
-    const skip_var_and_field_names: []const []const u8 = &.{
-        "arena",
-        "fba",
-        "fixed_buffer_allocator",
-        "arena_allocator",
-    };
-    var call_buffer: [1]Ast.Node.Index = undefined;
-    for (params) |param_node| {
-        const tag = shims.nodeTag(tree, param_node);
-        switch (tag) {
-            .identifier => {
-                const slice = tree.tokenSlice(shims.nodeMainToken(tree, param_node));
-                for (skip_var_and_field_names) |str| {
-                    if (std.mem.eql(u8, slice, str)) return true;
-                }
-            },
-            .field_access => if (zlinter.ast.isFieldVarAccess(tree, param_node, skip_var_and_field_names)) return true,
-            else => if (callWithName(doc, param_node, &call_buffer, &.{"allocator"})) |call| {
-                switch (call.kind) {
-                    // e.g., checking for `arena.allocator()` call. Unfortunately
-                    // currently won't capture deeply nested, like `parent.arena.allocator()`
-                    // but this seems super unlikely so who cares for a linter...
-                    .single_field => |info| {
-                        for (skip_var_and_field_names) |str|
-                            if (std.mem.eql(u8, tree.tokenSlice(info.field_main_token), str)) return true;
-                    },
-                    .enum_literal, .other => {},
-                }
-            },
-        }
-    }
-    return false;
-}
-
-test "hasArenaParam" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-
-    var buffer: [1]Ast.Node.Index = undefined;
-    inline for (&.{
-        .{
-            \\ var a = .init();
-            ,
-            false,
-        },
-        .{
-            \\ var a = .init(allocator);
-            ,
-            false,
-        },
-        .{
-            \\ var a = .init(std.heap.c_allocator);
-            ,
-            false,
-        },
-        .{
-            \\ var a = .init(gpa);
-            ,
-            false,
-        },
-        .{
-            \\ var a = .init(arena);
-            ,
-            true,
-        },
-        .{
-            \\ var a = .init(arena_allocator);
-            ,
-            true,
-        },
-        .{
-            \\ var a = .init(fixed_buffer_allocator);
-            ,
-            true,
-        },
-        .{
-            \\ var a = .init(fba);
-            ,
-            true,
-        },
-        .{
-            \\ var a = .init(arena.allocator());
-            ,
-            true,
-        },
-        .{
-            \\ var a = .init(fba.allocator());
-            ,
-            true,
-        },
-        .{
-            \\ var a = .init(fixed_buffer_allocator.allocator());
-            ,
-            true,
-        },
-    }) |tuple| {
-        const source, const expected = tuple;
-        errdefer std.debug.print("Failed source: '{s}' expected {}\n", .{ source, expected });
-
-        defer _ = arena.reset(.retain_capacity);
-
-        var ctx: zlinter.session.LintContext = undefined;
-        try ctx.init(.{}, std.testing.allocator);
-        defer ctx.deinit();
-
-        var tmp = std.testing.tmpDir(.{});
-        defer tmp.cleanup();
-
-        var doc = (try zlinter.testing.loadFakeDocument(
-            &ctx,
-            tmp.dir,
-            "test.zig",
-            "fn main() void {\n" ++ source ++ "\n}",
-            arena.allocator(),
-        )).?;
-        defer doc.deinit(ctx.gpa);
-
-        const tree = doc.handle.tree;
-        const actual = hasArenaParam(
-            doc,
-            tree.fullCall(&buffer, try zlinter.testing.expectNodeOfTagFirst(
-                doc,
-                &.{
-                    .call,
-                    .call_comma,
-                    .call_one,
-                    .call_one_comma,
-                },
-            )).?.ast.params,
-        );
-        try std.testing.expectEqual(expected, actual);
-    }
-}
-
-test {
-    std.testing.refAllDecls(@This());
 }
 
 const std = @import("std");
