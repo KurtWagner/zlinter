@@ -75,10 +75,10 @@ fn run(
 
         switch (tag) {
             .fn_decl => if (tree.fullFnProto(&fn_decl_buffer, node.toNodeIndex())) |fn_decl| {
-                const severity, const label = if (isFnPrivate(tree, fn_decl))
-                    .{ config.private_severity, "Private" }
-                else
-                    .{ config.public_severity, "Public" };
+                const severity, const label = switch (zlinter.ast.fnProtoVisibility(tree, fn_decl)) {
+                    .private => .{ config.private_severity, "Private" },
+                    .public => .{ config.public_severity, "Public" },
+                };
                 if (severity == .off) continue :nodes;
 
                 if (try hasDocComments(arena, tree, node.toNodeIndex())) continue :nodes;
@@ -92,10 +92,10 @@ fn run(
                 });
             },
             else => if (tree.fullVarDecl(node.toNodeIndex())) |var_decl| {
-                const severity, const label = if (isVarPrivate(tree, var_decl))
-                    .{ config.private_severity, "Private" }
-                else
-                    .{ config.public_severity, "Public" };
+                const severity, const label = switch (zlinter.ast.varDeclVisibility(tree, var_decl)) {
+                    .private => .{ config.private_severity, "Private" },
+                    .public => .{ config.public_severity, "Public" },
+                };
                 if (severity == .off) continue :nodes;
 
                 if (try hasDocComments(arena, tree, node.toNodeIndex())) continue :nodes;
@@ -130,22 +130,6 @@ fn hasDocComments(arena: std.mem.Allocator, tree: Ast, node: Ast.Node.Index) !bo
         node,
     ) orelse return false;
     return comments.len > 0;
-}
-
-fn isFnPrivate(tree: Ast, fn_decl: Ast.full.FnProto) bool {
-    const visibility_token = fn_decl.visib_token orelse return true;
-    return switch (tree.tokens.items(.tag)[visibility_token]) {
-        .keyword_pub => false,
-        else => true,
-    };
-}
-
-fn isVarPrivate(tree: Ast, var_decl: Ast.full.VarDecl) bool {
-    const visibility_token = var_decl.visib_token orelse return true;
-    return switch (tree.tokens.items(.tag)[visibility_token]) {
-        .keyword_pub => false,
-        else => true,
-    };
 }
 
 test "require_doc_comment - public" {

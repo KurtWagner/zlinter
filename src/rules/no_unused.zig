@@ -64,9 +64,7 @@ fn run(
     for (tree.rootDecls()) |decl| {
         const problem: ?struct { first: Ast.TokenIndex, last: Ast.TokenIndex } = problem: {
             if (tree.fullVarDecl(decl)) |var_decl| {
-                if (var_decl.visib_token) |visib_token|
-                    if (token_tags[visib_token] == .keyword_pub)
-                        break :problem null;
+                if (zlinter.ast.varDeclVisibility(tree, var_decl) == .public) break :problem null;
 
                 if (var_decl.extern_export_token) |extern_export_token|
                     if (token_tags[extern_export_token] == .keyword_export)
@@ -81,9 +79,7 @@ fn run(
             } else {
                 var buffer: [1]Ast.Node.Index = undefined;
                 if (namedFnDeclProto(tree, &buffer, decl)) |fn_proto| {
-                    if (fn_proto.visib_token) |token|
-                        if (token_tags[token] == .keyword_pub)
-                            break :problem null;
+                    if (zlinter.ast.fnProtoVisibility(tree, fn_proto) == .public) break :problem null;
 
                     if (fn_proto.extern_export_inline_token) |token|
                         if (token_tags[token] == .keyword_export)
