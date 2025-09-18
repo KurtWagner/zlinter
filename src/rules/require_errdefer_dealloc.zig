@@ -144,6 +144,7 @@ fn processBlock(
     var cleanup_symbols: std.StringHashMap(Ast.Node.Index) = .init(arena);
 
     var call_buffer: [1]Ast.Node.Index = undefined;
+
     for (doc.lineage.items(.children)[NodeIndexShim.init(block_node).index] orelse &.{}) |child_node| {
         if (try declRequiringCleanup(doc, child_node)) |decl_ref| {
             try cleanup_symbols.put(
@@ -157,18 +158,18 @@ fn processBlock(
         )) |defer_block| {
             // Remove any tracked declarations that are cleaned up within defer/errdefer
             for (defer_block.children) |defer_block_child| {
-                // TODO: Check if call in assignment or conditional
-                const call = fnCall(
+                if (containsFnCallNoBlock(
                     doc,
                     defer_block_child,
                     &call_buffer,
                     &.{"deinit"},
-                ) orelse continue;
-                switch (call.kind) {
-                    .single_field => |info| {
-                        _ = cleanup_symbols.remove(tree.tokenSlice(info.field_main_token));
-                    },
-                    .enum_literal, .other => {},
+                )) |call| {
+                    switch (call.kind) {
+                        .single_field => |info| {
+                            _ = cleanup_symbols.remove(tree.tokenSlice(info.field_main_token));
+                        },
+                        .enum_literal, .other => {},
+                    }
                 }
             }
         } else if (zlinter.ast.isBlock(tree, child_node)) {
@@ -186,6 +187,37 @@ fn processBlock(
     while (remaining_it.next()) |node| {
         try problems.append(gpa, node.*);
     }
+}
+
+// TODO: Needs tests:
+/// Checks whether the current node is a function call or contains one in its
+/// children without walking any new blocks.
+fn containsFnCallNoBlock(
+    doc: zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+    call_buffer: *[1]Ast.Node.Index,
+    comptime names: []const []const u8,
+) ?Call {
+    if (zlinter.ast.isBlock(doc.handle.tree, node)) return null;
+
+    if (fnCall(
+        doc,
+        node,
+        call_buffer,
+        names,
+    )) |call| {
+        return call;
+    }
+
+    for (doc.lineage.items(.children)[shims.NodeIndexShim.init(node).index] orelse &.{}) |child| {
+        if (containsFnCallNoBlock(
+            doc,
+            child,
+            call_buffer,
+            names,
+        )) |call| return call;
+    }
+    return null;
 }
 
 // TODO(#48): Write unit tests for helpers and consider whether some should be moved to ast
@@ -328,24 +360,37 @@ const DeclRef = struct {
 fn declRequiringCleanup(doc: zlinter.session.LintDocument, maybe_var_decl_node: Ast.Node.Index) !?DeclRef {
     const tree = doc.handle.tree;
     const var_decl = tree.fullVarDecl(maybe_var_decl_node) orelse return null;
-
+    const init_node = (NodeIndexShim.initOptional(var_decl.ast.init_node) orelse
+        return null).toNodeIndex();
     var call_buffer: [1]Ast.Node.Index = undefined;
+
+    if (!switch (shims.nodeTag(tree, init_node)) {
+        // e.g., `ArrayList(u8).empty`
+        .field_access => zlinter.ast.isFieldVarAccess(
+            tree,
+            init_node,
+            &.{"empty"},
+        ),
+        // e.g., `.empty`
+        .enum_literal => zlinter.ast.isEnumLiteral(
+            tree,
+            init_node,
+            &.{"empty"},
+        ),
+        else => if (fnCall(
+            doc,
+            init_node,
+            &call_buffer,
+            &.{ "init", "initCapacity" },
+        )) |call|
+            !hasNonFreeingAllocatorParam(doc, call.params)
+        else
+            false,
+    }) return null;
 
     // Skip if the initialization call is accepting an argument that looks like
     // an allocator that is normally non-freeing (e.g., arena allocator).
     // e.g., `array[0].init(gpa)` and `optional.?.init(allocator)`
-    const init_node = (NodeIndexShim.initOptional(var_decl.ast.init_node) orelse
-        return null).toNodeIndex();
-    if (fnCall(
-        doc,
-        init_node,
-        &call_buffer,
-        &.{},
-    )) |call| {
-        if (hasNonFreeingAllocatorParam(doc, call.params)) {
-            return null;
-        }
-    }
 
     const var_decl_type = try doc.resolveTypeOfNode(maybe_var_decl_node) orelse return null;
     switch (var_decl_type.data) {
