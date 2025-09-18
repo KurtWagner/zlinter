@@ -92,4 +92,22 @@ pub fn hasErrorButWithArena(input: u32) error{NotOk}!void {
     has_arena_d.deinit(std.heap.page_allocator);
 }
 
+pub fn cleanupInConditionBlock(allocator: std.mem.Allocator) !void {
+    const deinit_wip = true;
+    var wip = try std.ArrayList(u8).initCapacity(allocator, 10);
+    defer if (deinit_wip) wip.deinit();
+}
+
+pub fn cleanupInAssignment() !void {
+    var debug_gpa_state: std.heap.DebugAllocator(.{}) = .init;
+    defer _ = debug_gpa_state.deinit();
+}
+
+pub fn cleanupInCondition() !void {
+    var debug_gpa_state: std.heap.DebugAllocator(.{}) = .init;
+    defer {
+        if (debug_gpa_state.deinit() == .leak) {}
+    }
+}
+
 const std = @import("std");

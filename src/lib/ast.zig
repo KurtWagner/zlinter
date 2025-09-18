@@ -437,6 +437,27 @@ pub fn fullStatement(tree: Ast, node: Ast.Node.Index) ?Statement {
     };
 }
 
+/// Visibility of a node in the AST (e.g., a function or variable declaration).
+pub const Visibility = enum { public, private };
+
+/// Returns the visibility of a given function proto.
+pub fn fnProtoVisibility(tree: Ast, fn_decl: Ast.full.FnProto) Visibility {
+    const visibility_token = fn_decl.visib_token orelse return .private;
+    return switch (tree.tokens.items(.tag)[visibility_token]) {
+        .keyword_pub => .public,
+        else => .private,
+    };
+}
+
+/// Returns the visibility of a given variable declaration.
+pub fn varDeclVisibility(tree: Ast, var_decl: Ast.full.VarDecl) Visibility {
+    const visibility_token = var_decl.visib_token orelse return .private;
+    return switch (tree.tokens.items(.tag)[visibility_token]) {
+        .keyword_pub => .public,
+        else => .private,
+    };
+}
+
 test "isFieldVarAccess" {
     inline for (&.{
         .{
