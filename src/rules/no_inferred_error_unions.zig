@@ -62,7 +62,7 @@ fn run(
         if (tag != .fn_decl) continue :nodes;
 
         const fn_decl = tree.fullFnProto(&fn_decl_buffer, node.toNodeIndex()) orelse continue :nodes;
-        if (config.allow_private and zlinter.ast.isFnPrivate(tree, fn_decl)) continue :nodes;
+        if (config.allow_private and zlinter.ast.fnProtoVisibility(tree, fn_decl) == .private) continue :nodes;
 
         const return_type = NodeIndexShim.initOptional(fn_decl.ast.return_type) orelse continue :nodes;
 

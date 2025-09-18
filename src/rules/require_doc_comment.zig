@@ -75,10 +75,10 @@ fn run(
 
         switch (tag) {
             .fn_decl => if (tree.fullFnProto(&fn_decl_buffer, node.toNodeIndex())) |fn_decl| {
-                const severity, const label = if (zlinter.ast.isFnPrivate(tree, fn_decl))
-                    .{ config.private_severity, "Private" }
-                else
-                    .{ config.public_severity, "Public" };
+                const severity, const label = switch (zlinter.ast.fnProtoVisibility(tree, fn_decl)) {
+                    .private => .{ config.private_severity, "Private" },
+                    .public => .{ config.public_severity, "Public" },
+                };
                 if (severity == .off) continue :nodes;
 
                 if (try hasDocComments(arena, tree, node.toNodeIndex())) continue :nodes;
@@ -92,10 +92,10 @@ fn run(
                 });
             },
             else => if (tree.fullVarDecl(node.toNodeIndex())) |var_decl| {
-                const severity, const label = if (zlinter.ast.isVarPrivate(tree, var_decl))
-                    .{ config.private_severity, "Private" }
-                else
-                    .{ config.public_severity, "Public" };
+                const severity, const label = switch (zlinter.ast.varDeclVisibility(tree, var_decl)) {
+                    .private => .{ config.private_severity, "Private" },
+                    .public => .{ config.public_severity, "Public" },
+                };
                 if (severity == .off) continue :nodes;
 
                 if (try hasDocComments(arena, tree, node.toNodeIndex())) continue :nodes;

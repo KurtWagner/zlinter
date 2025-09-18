@@ -333,7 +333,7 @@ fn declRequiringCleanup(doc: zlinter.session.LintDocument, maybe_var_decl_node: 
                             var fn_proto_buffer: [1]Ast.Node.Index = undefined;
                             const fn_decl = zlinter.ast.fnDecl(scope_tree, member, &fn_proto_buffer) orelse continue;
 
-                            if (zlinter.ast.isFnPrivate(scope_tree, fn_decl.proto)) continue;
+                            if (zlinter.ast.fnProtoVisibility(scope_tree, fn_decl.proto) == .private) continue;
 
                             const name_token = fn_decl.proto.name_token orelse continue;
                             const name = scope_tree.tokenSlice(name_token);
