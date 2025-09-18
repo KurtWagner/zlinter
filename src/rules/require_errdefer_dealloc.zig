@@ -15,9 +15,7 @@
 //! **Caveats:**
 //!
 //! * This rule is not exhaustive. It makes a best-effort attempt to detect known
-//!   object declarations that require cleanup, but a complete check is
-//!   impractical at this level. It currently only looks at std library containers
-//!   like `ArrayList` and `HashMap`.
+//!   object declarations that require cleanup.
 //!
 //! * This rule cannot always reliably detect usage of fixed buffer allocators or
 //!   arenas; however, using `errdefer array.deinit(arena);` in these cases is
@@ -158,7 +156,7 @@ fn processBlock(
         )) |defer_block| {
             // Remove any tracked declarations that are cleaned up within defer/errdefer
             for (defer_block.children) |defer_block_child| {
-                if (containsFnCallNoBlock(
+                if (containsFnCall(
                     doc,
                     defer_block_child,
                     &call_buffer,
@@ -191,15 +189,13 @@ fn processBlock(
 
 // TODO: Needs tests:
 /// Checks whether the current node is a function call or contains one in its
-/// children without walking any new blocks.
-fn containsFnCallNoBlock(
+/// children
+fn containsFnCall(
     doc: zlinter.session.LintDocument,
     node: Ast.Node.Index,
     call_buffer: *[1]Ast.Node.Index,
     comptime names: []const []const u8,
 ) ?Call {
-    if (zlinter.ast.isBlock(doc.handle.tree, node)) return null;
-
     if (fnCall(
         doc,
         node,
@@ -210,7 +206,7 @@ fn containsFnCallNoBlock(
     }
 
     for (doc.lineage.items(.children)[shims.NodeIndexShim.init(node).index] orelse &.{}) |child| {
-        if (containsFnCallNoBlock(
+        if (containsFnCall(
             doc,
             child,
             call_buffer,
@@ -356,7 +352,7 @@ const DeclRef = struct {
 };
 
 /// Returns a declaration reference if the given node is a declaration node
-/// that looks like it needs to be cleaned up (e.g., if it has a deinit method)
+/// that looks like it needs to be cleaned up (e.g., if it has a `deinit` method)
 fn declRequiringCleanup(doc: zlinter.session.LintDocument, maybe_var_decl_node: Ast.Node.Index) !?DeclRef {
     const tree = doc.handle.tree;
     const var_decl = tree.fullVarDecl(maybe_var_decl_node) orelse return null;
@@ -364,18 +360,22 @@ fn declRequiringCleanup(doc: zlinter.session.LintDocument, maybe_var_decl_node: 
         return null).toNodeIndex();
     var call_buffer: [1]Ast.Node.Index = undefined;
 
+    // In an attempt to reduce noise we only care if initialized to `empty` or
+    // `init` field or through an `init` or `initCapacity` call. I'm torn by
+    // this as maybe this rule should just be pedantic with a block list
+    // configuration as only those most pedantic would care about this rule?
     if (!switch (shims.nodeTag(tree, init_node)) {
         // e.g., `ArrayList(u8).empty`
         .field_access => zlinter.ast.isFieldVarAccess(
             tree,
             init_node,
-            &.{"empty"},
+            &.{ "empty", "init" },
         ),
         // e.g., `.empty`
         .enum_literal => zlinter.ast.isEnumLiteral(
             tree,
             init_node,
-            &.{"empty"},
+            &.{ "empty", "init" },
         ),
         else => if (fnCall(
             doc,
@@ -383,14 +383,13 @@ fn declRequiringCleanup(doc: zlinter.session.LintDocument, maybe_var_decl_node: 
             &call_buffer,
             &.{ "init", "initCapacity" },
         )) |call|
+            // Try and reduce some noise when using arenas although for anyone
+            // using this rule being pedantic and calling deinit on errdefer
+            // isnt the absolute worst...?
             !hasNonFreeingAllocatorParam(doc, call.params)
         else
             false,
     }) return null;
-
-    // Skip if the initialization call is accepting an argument that looks like
-    // an allocator that is normally non-freeing (e.g., arena allocator).
-    // e.g., `array[0].init(gpa)` and `optional.?.init(allocator)`
 
     const var_decl_type = try doc.resolveTypeOfNode(maybe_var_decl_node) orelse return null;
     switch (var_decl_type.data) {
