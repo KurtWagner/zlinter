@@ -6,8 +6,8 @@
     .dependencies = .{
         .zls = .{
             // Update with `zig fetch --save git+https://github.com/zigtools/zls#master`
-            .url = "git+https://github.com/zigtools/zls?ref=master#173ad110c180145b048647a9fbf0e37b3b553138",
-            .hash = "zls-0.16.0-dev-rmm5fv7wIwCSObkYBy5Fn6Vz2gKIyOVHkIMbnbn2RT-3",
+            .url = "git+https://github.com/zigtools/zls?ref=master#83ae7b133d3a0869d076593e2176d4f3c844760d",
+            .hash = "zls-0.16.0-dev-rmm5flLwIwB8pCvNJ9hOO16KO4SiHxoSneif7SgQAdJf",
         },
     },
     .paths = .{
