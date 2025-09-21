@@ -156,7 +156,7 @@ fn processBlock(
         )) |defer_block| {
             // Remove any tracked declarations that are cleaned up within defer/errdefer
             for (defer_block.children) |defer_block_child| {
-                if (containsFnCall(
+                if (zlinter.ast.findFnCall(
                     doc,
                     defer_block_child,
                     &call_buffer,
@@ -166,7 +166,7 @@ fn processBlock(
                         .single_field => |info| {
                             _ = cleanup_symbols.remove(tree.tokenSlice(info.field_main_token));
                         },
-                        .enum_literal, .other => {},
+                        .enum_literal, .other, .direct => {},
                     }
                 }
             }
@@ -185,166 +185,6 @@ fn processBlock(
     while (remaining_it.next()) |node| {
         try problems.append(gpa, node.*);
     }
-}
-
-// TODO: Needs tests:
-/// Checks whether the current node is a function call or contains one in its
-/// children
-fn containsFnCall(
-    doc: zlinter.session.LintDocument,
-    node: Ast.Node.Index,
-    call_buffer: *[1]Ast.Node.Index,
-    comptime names: []const []const u8,
-) ?Call {
-    if (fnCall(
-        doc,
-        node,
-        call_buffer,
-        names,
-    )) |call| {
-        return call;
-    }
-
-    for (doc.lineage.items(.children)[shims.NodeIndexShim.init(node).index] orelse &.{}) |child| {
-        if (containsFnCall(
-            doc,
-            child,
-            call_buffer,
-            names,
-        )) |call| return call;
-    }
-    return null;
-}
-
-// TODO(#48): Write unit tests for helpers and consider whether some should be moved to ast
-
-const Call = struct {
-    params: []const Ast.Node.Index,
-
-    kind: union(enum) {
-        /// e.g., `parent.call()` not `parent.child.call()`
-        single_field: struct {
-            /// e.g., `parent.call()` would have `parent` as the main token here.
-            field_main_token: Ast.TokenIndex,
-            /// e.g., `parent.call()` would have `call` as the identifier token here.
-            call_identifier_token: Ast.TokenIndex,
-        },
-        /// array_access, unwrap_optional, nested field_access
-        ///
-        /// e.g., `parent.child.call()`, `optional.?.call()` and `array[0].call()`
-        ///
-        /// If there's value this can be broken up in the future but for now we do
-        /// not need the separation.
-        other: struct {
-            /// e.g., `parent.child.call()` would have `call` as the identifier token here.
-            call_identifier_token: Ast.TokenIndex,
-        },
-        /// e.g., `.init()`
-        enum_literal: struct {
-            /// e.g., `.init()` would have `init` here
-            call_identifier_token: Ast.TokenIndex,
-        },
-    },
-};
-
-/// Returns call information for cases handled by the `require_errdefer_dealloc`
-/// Not all calls are handled so this method is not generally useful
-///
-/// If names is empty, then it'll match all function names.
-fn fnCall(
-    doc: zlinter.session.LintDocument,
-    node: Ast.Node.Index,
-    buffer: *[1]Ast.Node.Index,
-    comptime names: []const []const u8,
-) ?Call {
-    const tree = doc.handle.tree;
-
-    const call = tree.fullCall(buffer, node) orelse return null;
-
-    const fn_expr_node = call.ast.fn_expr;
-    const fn_expr_node_data = shims.nodeData(tree, fn_expr_node);
-    const fn_expr_node_tag = shims.nodeTag(tree, fn_expr_node);
-
-    switch (fn_expr_node_tag) {
-        // e.g., `parent.*`
-        .field_access => {
-            const field_node, const fn_name = switch (zlinter.version.zig) {
-                .@"0.14" => .{ fn_expr_node_data.lhs, fn_expr_node_data.rhs },
-                .@"0.15", .@"0.16" => .{ fn_expr_node_data.node_and_token[0], fn_expr_node_data.node_and_token[1] },
-            };
-            std.debug.assert(shims.tokenTag(tree, fn_name) == .identifier);
-
-            if (names.len > 0) {
-                var match: bool = false;
-                const fn_name_slice = tree.tokenSlice(fn_name);
-                for (names) |name| {
-                    if (std.mem.eql(u8, name, fn_name_slice)) {
-                        match = true;
-                        break;
-                    }
-                }
-                if (!match) return null;
-            }
-
-            const field_node_tag = shims.nodeTag(tree, field_node);
-            if (field_node_tag != .identifier) {
-                // e.g, array_access, unwrap_optional, field_access
-                return .{
-                    .params = call.ast.params,
-                    .kind = .{
-                        .other = .{
-                            .call_identifier_token = fn_name,
-                        },
-                    },
-                };
-            }
-            // e.g., `parent.call()` not `parent.child.call()`
-            return .{
-                .params = call.ast.params,
-                .kind = .{
-                    .single_field = .{
-                        .field_main_token = shims.nodeMainToken(tree, field_node),
-                        .call_identifier_token = fn_name,
-                    },
-                },
-            };
-        },
-        // e.g., `.init()`
-        .enum_literal => {
-            const fn_name = shims.nodeMainToken(tree, fn_expr_node);
-            std.debug.assert(shims.tokenTag(tree, fn_name) == .identifier);
-
-            const identfier_slice = tree.tokenSlice(fn_name);
-
-            if (names.len > 0) {
-                for (names) |name| {
-                    if (std.mem.eql(u8, name, identfier_slice)) {
-                        return .{
-                            .params = call.ast.params,
-                            .kind = .{
-                                .enum_literal = .{
-                                    .call_identifier_token = fn_name,
-                                },
-                            },
-                        };
-                    }
-                }
-            } else {
-                return .{
-                    .params = call.ast.params,
-                    .kind = .{
-                        .enum_literal = .{
-                            .call_identifier_token = fn_name,
-                        },
-                    },
-                };
-            }
-        },
-        // .identifier => {},
-        else => std.log.debug("fnCall does not handle fn_expr of tag {s}", .{@tagName(fn_expr_node_tag)}),
-    }
-
-    return null;
 }
 
 const DeclRef = struct {
@@ -377,7 +217,7 @@ fn declRequiringCleanup(doc: zlinter.session.LintDocument, maybe_var_decl_node: 
             init_node,
             &.{ "empty", "init" },
         ),
-        else => if (fnCall(
+        else => if (zlinter.ast.fnCall(
             doc,
             init_node,
             &call_buffer,
@@ -468,7 +308,7 @@ fn hasNonFreeingAllocatorParam(doc: zlinter.session.LintDocument, params: []cons
                 }
             },
             .field_access => if (zlinter.ast.isFieldVarAccess(tree, param_node, skip_var_and_field_names)) return true,
-            else => if (fnCall(doc, param_node, &call_buffer, &.{"allocator"})) |call| {
+            else => if (zlinter.ast.fnCall(doc, param_node, &call_buffer, &.{"allocator"})) |call| {
                 switch (call.kind) {
                     // e.g., checking for `arena.allocator()` call. Unfortunately
                     // currently won't capture deeply nested, like `parent.arena.allocator()`
@@ -477,7 +317,7 @@ fn hasNonFreeingAllocatorParam(doc: zlinter.session.LintDocument, params: []cons
                         for (skip_var_and_field_names) |str|
                             if (std.mem.eql(u8, tree.tokenSlice(info.field_main_token), str)) return true;
                     },
-                    .enum_literal, .other => {},
+                    .enum_literal, .other, .direct => {},
                 }
             },
         }

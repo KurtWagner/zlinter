@@ -213,7 +213,7 @@ test "deferBlock - has expected children" {
         defer _ = arena.reset(.retain_capacity);
 
         var ctx: session.LintContext = undefined;
-        try ctx.init(.{}, std.testing.allocator);
+        try ctx.init(.{}, arena.allocator());
         defer ctx.deinit();
 
         var tmp = std.testing.tmpDir(.{});
@@ -226,7 +226,7 @@ test "deferBlock - has expected children" {
             "fn main() void {\n" ++ source ++ "\n}",
             arena.allocator(),
         )).?;
-        defer doc.deinit(ctx.gpa);
+        defer doc.deinit(arena.allocator());
 
         const decl_ref = try deferBlock(
             doc,
@@ -604,6 +604,207 @@ test "isEnumLiteral" {
         try std.testing.expectEqual(expected, actual);
     }
 }
+
+/// Checks whether the current node is a function call or contains one in its
+/// children.
+pub fn findFnCall(
+    doc: session.LintDocument,
+    node: Ast.Node.Index,
+    call_buffer: *[1]Ast.Node.Index,
+    comptime names: []const []const u8,
+) ?FnCall {
+    if (fnCall(
+        doc,
+        node,
+        call_buffer,
+        names,
+    )) |call| return call;
+
+    for (doc.lineage.items(.children)[shims.NodeIndexShim.init(node).index] orelse &.{}) |child| {
+        if (findFnCall(
+            doc,
+            child,
+            call_buffer,
+            names,
+        )) |call| return call;
+    }
+    return null;
+}
+
+pub const FnCall = struct {
+    params: []const Ast.Node.Index,
+
+    kind: union(enum) {
+        /// e.g., `parent.call()` not `parent.child.call()`
+        single_field: struct {
+            /// e.g., `parent.call()` would have `parent` as the main token here.
+            field_main_token: Ast.TokenIndex,
+            /// e.g., `parent.call()` would have `call` as the identifier token here.
+            call_identifier_token: Ast.TokenIndex,
+        },
+        /// array_access, unwrap_optional, nested field_access
+        ///
+        /// e.g., `parent.child.call()`, `optional.?.call()` and `array[0].call()`
+        ///
+        /// If there's value this can be broken up in the future but for now we do
+        /// not need the separation.
+        other: struct {
+            /// e.g., `parent.child.call()` would have `call` as the identifier token here.
+            call_identifier_token: Ast.TokenIndex,
+        },
+        /// e.g., `.init()`
+        enum_literal: struct {
+            /// e.g., `.init()` would have `init` here
+            call_identifier_token: Ast.TokenIndex,
+        },
+        /// e.g., `doSomething()`
+        direct: struct {
+            /// e.g., `doSomething()` would have `doSomething` here
+            call_identifier_token: Ast.TokenIndex,
+        },
+    },
+};
+
+/// Returns call information for cases handled by the `require_errdefer_dealloc`
+/// Not all calls are handled so this method is not generally useful
+///
+/// If names is empty, then it'll match all function names.
+pub fn fnCall(
+    doc: session.LintDocument,
+    node: Ast.Node.Index,
+    buffer: *[1]Ast.Node.Index,
+    comptime names: []const []const u8,
+) ?FnCall {
+    const tree = doc.handle.tree;
+
+    const call = tree.fullCall(buffer, node) orelse return null;
+
+    const fn_expr_node = call.ast.fn_expr;
+    const fn_expr_node_data = shims.nodeData(tree, fn_expr_node);
+    const fn_expr_node_tag = shims.nodeTag(tree, fn_expr_node);
+
+    switch (fn_expr_node_tag) {
+        // e.g., `parent.*`
+        .field_access => {
+            const field_node, const fn_name = switch (version.zig) {
+                .@"0.14" => .{ fn_expr_node_data.lhs, fn_expr_node_data.rhs },
+                .@"0.15", .@"0.16" => .{ fn_expr_node_data.node_and_token[0], fn_expr_node_data.node_and_token[1] },
+            };
+            std.debug.assert(shims.tokenTag(tree, fn_name) == .identifier);
+
+            if (names.len > 0) {
+                var match: bool = false;
+                const fn_name_slice = tree.tokenSlice(fn_name);
+                for (names) |name| {
+                    if (std.mem.eql(u8, name, fn_name_slice)) {
+                        match = true;
+                        break;
+                    }
+                }
+                if (!match) return null;
+            }
+
+            const field_node_tag = shims.nodeTag(tree, field_node);
+            if (field_node_tag != .identifier) {
+                // e.g, array_access, unwrap_optional, field_access
+                return .{
+                    .params = call.ast.params,
+                    .kind = .{
+                        .other = .{
+                            .call_identifier_token = fn_name,
+                        },
+                    },
+                };
+            }
+            // e.g., `parent.call()` not `parent.child.call()`
+            return .{
+                .params = call.ast.params,
+                .kind = .{
+                    .single_field = .{
+                        .field_main_token = shims.nodeMainToken(tree, field_node),
+                        .call_identifier_token = fn_name,
+                    },
+                },
+            };
+        },
+        // e.g., `.init()`
+        .enum_literal => {
+            const fn_name = shims.nodeMainToken(tree, fn_expr_node);
+            std.debug.assert(shims.tokenTag(tree, fn_name) == .identifier);
+
+            const identfier_slice = tree.tokenSlice(fn_name);
+
+            if (names.len > 0) {
+                for (names) |name| {
+                    if (std.mem.eql(u8, name, identfier_slice)) {
+                        return .{
+                            .params = call.ast.params,
+                            .kind = .{
+                                .enum_literal = .{
+                                    .call_identifier_token = fn_name,
+                                },
+                            },
+                        };
+                    }
+                }
+            } else {
+                return .{
+                    .params = call.ast.params,
+                    .kind = .{
+                        .enum_literal = .{
+                            .call_identifier_token = fn_name,
+                        },
+                    },
+                };
+            }
+        },
+        .identifier => {
+            return .{
+                .params = call.ast.params,
+                .kind = .{
+                    .direct = .{
+                        .call_identifier_token = shims.nodeMainToken(tree, fn_expr_node),
+                    },
+                },
+            };
+        },
+        else => std.log.debug("fnCall does not handle fn_expr of tag {s}", .{@tagName(fn_expr_node_tag)}),
+    }
+
+    return null;
+}
+
+// test "fnCall - direct call without params" {
+//     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+//     defer arena.deinit();
+
+//     const doc = (try testing.initDocForTesting(
+//         \\fn main() void {
+//         \\  call();
+//         \\}
+//     ,
+//         arena.allocator(),
+//         .{},
+//     )).*;
+
+//     const fn_node = try testing.expectSingleNodeOfTag(
+//         doc.handle.tree,
+//         &.{ .call, .call_comma, .call_one, .call_one_comma },
+//     );
+//     var buffer: [1]Ast.Node.Index = undefined;
+//     const call = fnCall(
+//         doc,
+//         fn_node,
+//         &buffer,
+//         &.{},
+//     ).?;
+
+//     try std.testing.expectEqualDeep(&.{}, call.params);
+//     try std.testing.expectEqualStrings(
+//         "call",
+//         doc.handle.tree.tokenSlice(call.kind.direct.call_identifier_token),
+//     );
+// }
 
 const session = @import("session.zig");
 const shims = @import("shims.zig");
