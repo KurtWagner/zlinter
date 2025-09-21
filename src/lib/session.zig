@@ -30,10 +30,13 @@ pub const LintDocument = struct {
         self.skipper.deinit();
     }
 
+    /// Returns true if the problem should be skipped based on line level
+    /// disable comments.
     pub fn shouldSkipProblem(self: *LintDocument, problem: LintProblem) error{OutOfMemory}!bool {
         return self.skipper.shouldSkip(problem);
     }
 
+    /// Resolves the type of node or null if it can't be resolved.
     pub inline fn resolveTypeOfNode(self: *LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
         return switch (version.zig) {
             .@"0.15", .@"0.16" => self.analyser.resolveTypeOfNode(.of(node, self.handle)),
@@ -41,6 +44,8 @@ pub const LintDocument = struct {
         };
     }
 
+    /// Resolves the type of a node that points to a type (e.g., return type) or
+    /// null if it cannot be resolved.
     pub inline fn resolveTypeOfTypeNode(self: *LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
         const resolved_type = try self.resolveTypeOfNode(node) orelse return null;
         const instance_type = if (resolved_type.isMetaType()) resolved_type else switch (version.zig) {
@@ -310,6 +315,9 @@ pub const LintDocument = struct {
         };
     }
 
+    /// Walks down from the current node does its children.
+    ///
+    /// This includes the given node in the traversal.
     pub fn nodeLineageIterator(
         self: *const LintDocument,
         node: NodeIndexShim,
