@@ -319,8 +319,14 @@ fn runLinterRules(
         defer arena.deinit();
         const arena_allocator = arena.allocator();
 
-        var doc = try ctx.loadDocument(lint_file.pathname, ctx.gpa, arena_allocator) orelse {
-            printer.println(.err, "Unable to open file: {s}", .{lint_file.pathname});
+        var doc: zlinter.session.LintDocument = undefined;
+        ctx.initDocument(
+            lint_file.pathname,
+            ctx.gpa,
+            arena_allocator,
+            &doc,
+        ) catch |e| {
+            printer.println(.err, "Unable to open file: {s} ({s})", .{ lint_file.pathname, @errorName(e) });
             continue :files;
         };
         defer doc.deinit(ctx.gpa);

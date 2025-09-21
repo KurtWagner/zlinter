@@ -16,7 +16,7 @@ pub const NodeAncestorIterator = struct {
     const Self = @This();
 
     current: NodeIndexShim,
-    lineage: *NodeLineage,
+    lineage: *const NodeLineage,
     done: bool = false,
 
     pub fn next(self: *Self) ?Ast.Node.Index {
@@ -37,7 +37,7 @@ pub const NodeLineageIterator = struct {
     const Self = @This();
 
     queue: shims.ArrayList(NodeIndexShim) = .empty,
-    lineage: *NodeLineage,
+    lineage: *const NodeLineage,
     gpa: std.mem.Allocator,
 
     pub fn deinit(self: *NodeLineageIterator) void {

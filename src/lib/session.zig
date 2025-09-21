@@ -11,7 +11,7 @@ pub const LintDocument = struct {
     path: []const u8,
     handle: *zls.DocumentStore.Handle,
     analyser: *zls.Analyser,
-    lineage: *ast.NodeLineage,
+    lineage: ast.NodeLineage,
     comments: comments.CommentsDocument,
     skipper: comments.LazyRuleSkipper,
 
@@ -21,7 +21,6 @@ pub const LintDocument = struct {
         }
 
         self.lineage.deinit(gpa);
-        gpa.destroy(self.lineage);
 
         self.analyser.deinit();
         gpa.destroy(self.analyser);
@@ -303,24 +302,24 @@ pub const LintDocument = struct {
     ///
     /// This will not include the given node, only its ancestors.
     pub fn nodeAncestorIterator(
-        self: LintDocument,
+        self: *const LintDocument,
         node: Ast.Node.Index,
     ) ast.NodeAncestorIterator {
         return .{
             .current = NodeIndexShim.init(node),
-            .lineage = self.lineage,
+            .lineage = &self.lineage,
         };
     }
 
     pub fn nodeLineageIterator(
-        self: LintDocument,
+        self: *const LintDocument,
         node: NodeIndexShim,
         gpa: std.mem.Allocator,
     ) error{OutOfMemory}!ast.NodeLineageIterator {
         var it = ast.NodeLineageIterator{
             .gpa = gpa,
             .queue = .empty,
-            .lineage = self.lineage,
+            .lineage = &self.lineage,
         };
         try it.queue.append(gpa, node);
         return it;
@@ -478,29 +477,29 @@ pub const LintContext = struct {
     /// Loads and parses zig file into the document store.
     ///
     /// Caller is responsible for calling deinit once done.
-    pub fn loadDocument(self: *LintContext, path: []const u8, gpa: std.mem.Allocator, arena: std.mem.Allocator) !?LintDocument {
+    pub fn initDocument(
+        self: *LintContext,
+        path: []const u8,
+        gpa: std.mem.Allocator,
+        arena: std.mem.Allocator,
+        doc: *LintDocument,
+    ) !void {
         var mem: [4096]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&mem);
         const uri = try zls.URI.fromPath(
             fba.allocator(),
-            std.fs.cwd().realpathAlloc(
+            try std.fs.cwd().realpathAlloc(
                 fba.allocator(),
                 path,
-            ) catch |e| {
-                std.log.err("{s} - '{s}'", .{ @errorName(e), path });
-                return null;
-            },
+            ),
         );
 
-        const lineage = try gpa.create(ast.NodeLineage);
-        lineage.* = .empty;
-
-        const handle = self.document_store.getOrLoadHandle(uri) orelse return null;
-        var doc: LintDocument = .{
+        const handle = self.document_store.getOrLoadHandle(uri) orelse return error.HandleError;
+        doc.* = .{
             .path = try gpa.dupe(u8, path),
             .handle = handle,
             .analyser = try gpa.create(zls.Analyser),
-            .lineage = lineage,
+            .lineage = .empty,
             .comments = try comments.allocParse(handle.tree.source, gpa),
             .skipper = undefined, // zlinter-disable-current-line no_undefined - set below
         };
@@ -566,7 +565,6 @@ pub const LintContext = struct {
                 }
             }
         }
-        return doc;
     }
 };
 

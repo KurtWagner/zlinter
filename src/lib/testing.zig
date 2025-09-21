@@ -24,7 +24,9 @@ pub fn loadFakeDocument(
     try file_writer.interface.writeAll(contents);
     try file_writer.interface.flush();
 
-    return (try ctx.loadDocument(real_path, ctx.gpa, arena)).?;
+    const doc = try arena.create(LintDocument);
+    try ctx.initDocument(real_path, ctx.gpa, arena, doc);
+    return doc.*;
 }
 
 pub fn writeFile(dir: std.fs.Dir, file_name: []const u8, contents: []const u8) !void {
