@@ -33,7 +33,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the no_swallow_error rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    doc: zlinter.session.LintDocument,
+    doc: *zlinter.session.LintDocument,
     allocator: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {

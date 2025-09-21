@@ -58,7 +58,7 @@ const LiteralKind = enum { bool, string, number, char };
 /// Runs the no_literal_args rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    doc: zlinter.session.LintDocument,
+    doc: *zlinter.session.LintDocument,
     allocator: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {

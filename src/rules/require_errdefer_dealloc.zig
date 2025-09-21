@@ -60,7 +60,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the require_errdefer_dealloc rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    doc: zlinter.session.LintDocument,
+    doc: *zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
@@ -130,7 +130,7 @@ fn run(
 }
 
 fn processBlock(
-    doc: zlinter.session.LintDocument,
+    doc: *zlinter.session.LintDocument,
     block_node: Ast.Node.Index,
     problems: *shims.ArrayList(Ast.Node.Index),
     gpa: std.mem.Allocator,
@@ -193,7 +193,7 @@ const DeclRef = struct {
 
 /// Returns a declaration reference if the given node is a declaration node
 /// that looks like it needs to be cleaned up (e.g., if it has a `deinit` method)
-fn declRequiringCleanup(doc: zlinter.session.LintDocument, maybe_var_decl_node: Ast.Node.Index) !?DeclRef {
+fn declRequiringCleanup(doc: *zlinter.session.LintDocument, maybe_var_decl_node: Ast.Node.Index) !?DeclRef {
     const tree = doc.handle.tree;
     const var_decl = tree.fullVarDecl(maybe_var_decl_node) orelse return null;
     const init_node = (NodeIndexShim.initOptional(var_decl.ast.init_node) orelse
@@ -289,7 +289,7 @@ fn declRequiringCleanup(doc: zlinter.session.LintDocument, maybe_var_decl_node: 
 ///
 /// Where as `.init(allocator)` or `.init(std.heap.c_allocator)` should be checked
 /// for stricter cleanup on error as it won't automatically clear itself.
-fn hasNonFreeingAllocatorParam(doc: zlinter.session.LintDocument, params: []const Ast.Node.Index) bool {
+fn hasNonFreeingAllocatorParam(doc: *zlinter.session.LintDocument, params: []const Ast.Node.Index) bool {
     const tree = doc.handle.tree;
     const skip_var_and_field_names: []const []const u8 = &.{
         "arena",
@@ -410,7 +410,7 @@ test "hasNonFreeingAllocatorParam" {
 
         const tree = doc.handle.tree;
         const actual = hasNonFreeingAllocatorParam(
-            doc,
+            &doc,
             tree.fullCall(&buffer, try zlinter.testing.expectNodeOfTagFirst(
                 doc,
                 &.{

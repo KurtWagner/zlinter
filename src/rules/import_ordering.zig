@@ -54,7 +54,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the import_ordering rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    doc: zlinter.session.LintDocument,
+    doc: *zlinter.session.LintDocument,
     allocator: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
@@ -146,7 +146,7 @@ fn deinitScopedImports(scoped_imports: *std.AutoArrayHashMap(Ast.Node.Index, Imp
 }
 
 fn swapNodesFix(
-    doc: zlinter.session.LintDocument,
+    doc: *zlinter.session.LintDocument,
     first: Ast.Node.Index,
     second: Ast.Node.Index,
     allocator: std.mem.Allocator,
@@ -179,7 +179,7 @@ fn swapNodesFix(
 
 /// Returns declarations initialised as imports grouped by their parent (i.e., their scope).
 fn resolveScopedImports(
-    doc: zlinter.session.LintDocument,
+    doc: *zlinter.session.LintDocument,
     allocator: std.mem.Allocator,
 ) !std.AutoArrayHashMap(Ast.Node.Index, ImportsQueueLinesAscending) {
     const tree = doc.handle.tree;
@@ -261,7 +261,7 @@ fn classifyImportPath(path: []const u8) ImportDecl.Classification {
 
 // TODO(#52): Move to ast module
 // zlinter-disable-next-line
-// fn getScopedNode(doc: zlinter.session.LintDocument, node: Ast.Node.Index) Ast.Node.Index {
+// fn getScopedNode(doc: *zlinter.session.LintDocument, node: Ast.Node.Index) Ast.Node.Index {
 //     var parent = doc.lineage.items(.parent)[node];
 //     while (parent) |parent_node| {
 //         switch (shims.nodeTag(doc.handle.tree, parent_node)) {

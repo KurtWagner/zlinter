@@ -10,7 +10,7 @@ pub const max_zig_file_size_bytes = bytes: {
 pub const LintDocument = struct {
     path: []const u8,
     handle: *zls.DocumentStore.Handle,
-    analyser: *zls.Analyser,
+    analyser: zls.Analyser,
     lineage: ast.NodeLineage,
     comments: comments.CommentsDocument,
     skipper: comments.LazyRuleSkipper,
@@ -23,7 +23,6 @@ pub const LintDocument = struct {
         self.lineage.deinit(gpa);
 
         self.analyser.deinit();
-        gpa.destroy(self.analyser);
         gpa.free(self.path);
 
         self.comments.deinit(gpa);
@@ -31,22 +30,22 @@ pub const LintDocument = struct {
         self.skipper.deinit();
     }
 
-    pub fn shouldSkipProblem(self: *@This(), problem: LintProblem) error{OutOfMemory}!bool {
+    pub fn shouldSkipProblem(self: *LintDocument, problem: LintProblem) error{OutOfMemory}!bool {
         return self.skipper.shouldSkip(problem);
     }
 
-    pub inline fn resolveTypeOfNode(self: @This(), node: Ast.Node.Index) !?zls.Analyser.Type {
+    pub inline fn resolveTypeOfNode(self: *LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
         return switch (version.zig) {
             .@"0.15", .@"0.16" => self.analyser.resolveTypeOfNode(.of(node, self.handle)),
             .@"0.14" => self.analyser.resolveTypeOfNode(.{ .handle = self.handle, .node = node }),
         };
     }
 
-    pub inline fn resolveTypeOfTypeNode(self: @This(), node: Ast.Node.Index) !?zls.Analyser.Type {
+    pub inline fn resolveTypeOfTypeNode(self: *LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
         const resolved_type = try self.resolveTypeOfNode(node) orelse return null;
         const instance_type = if (resolved_type.isMetaType()) resolved_type else switch (version.zig) {
-            .@"0.14" => resolved_type.instanceTypeVal(self.analyser) orelse resolved_type,
-            .@"0.15", .@"0.16" => try resolved_type.instanceTypeVal(self.analyser) orelse resolved_type,
+            .@"0.14" => resolved_type.instanceTypeVal(&self.analyser) orelse resolved_type,
+            .@"0.15", .@"0.16" => try resolved_type.instanceTypeVal(&self.analyser) orelse resolved_type,
         };
 
         return instance_type.resolveDeclLiteralResultType();
@@ -113,7 +112,7 @@ pub const LintDocument = struct {
     ///
     /// This will return null if the kind could not be resolved, usually indicating
     /// that the input was unexpected / invalid.
-    pub fn resolveTypeKind(self: @This(), input: union(enum) {
+    pub fn resolveTypeKind(self: *LintDocument, input: union(enum) {
         var_decl: Ast.full.VarDecl,
         container_field: Ast.full.ContainerField,
     }) !?TypeKind {
@@ -241,7 +240,7 @@ pub const LintDocument = struct {
 
                 const is_error_container =
                     if (std.meta.hasMethod(@TypeOf(decl), "isErrorSetType"))
-                        decl.isErrorSetType(self.analyser)
+                        decl.isErrorSetType(&self.analyser)
                     else switch (decl.data) {
                         .container => |container| result: {
                             const container_node, const container_tree = switch (version.zig) {
@@ -280,7 +279,7 @@ pub const LintDocument = struct {
                     return .type;
                 } else {
                     if (init_node_type.is_type_val) {
-                        if (init_node_type.isErrorSetType(self.analyser)) {
+                        if (init_node_type.isErrorSetType(&self.analyser)) {
                             return .error_type;
                         }
                         switch (init_node_type.data) {
@@ -332,7 +331,7 @@ pub const LintDocument = struct {
     /// of cases. A more complete solution would require building tests and
     /// seeing whats included thats not in non-test builds, which is probably
     /// out of scope for this linter.
-    pub fn isEnclosedInTestBlock(self: LintDocument, node: NodeIndexShim) bool {
+    pub fn isEnclosedInTestBlock(self: *const LintDocument, node: NodeIndexShim) bool {
         var next = node;
         while (self.lineage.items(.parent)[next.index]) |parent| {
             switch (shims.nodeTag(self.handle.tree, parent)) {
@@ -351,7 +350,7 @@ pub const LintDocument = struct {
     }
 
     /// For debugging purposes only, should never be left in
-    pub fn dumpType(self: @This(), t: zls.Analyser.Type, indent_size: u32) !void {
+    pub fn dumpType(self: *const LintDocument, t: zls.Analyser.Type, indent_size: u32) !void {
         var buffer: [128]u8 = @splat(' ');
         const indent = buffer[0..indent_size];
 
@@ -498,14 +497,14 @@ pub const LintContext = struct {
         doc.* = .{
             .path = try gpa.dupe(u8, path),
             .handle = handle,
-            .analyser = try gpa.create(zls.Analyser),
+            .analyser = undefined, // zlinter-disable-current-line no_undefined - set below
             .lineage = .empty,
             .comments = try comments.allocParse(handle.tree.source, gpa),
             .skipper = undefined, // zlinter-disable-current-line no_undefined - set below
         };
         doc.skipper = .init(doc.comments, doc.handle.tree.source, gpa);
 
-        doc.analyser.* = switch (version.zig) {
+        doc.analyser = switch (version.zig) {
             .@"0.14" => zls.Analyser.init(
                 gpa,
                 &self.document_store,

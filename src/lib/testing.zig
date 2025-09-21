@@ -239,7 +239,7 @@ fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8, option
 
     return try rule.run(
         rule,
-        doc,
+        &doc,
         std.testing.allocator,
         options,
     );

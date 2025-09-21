@@ -23,7 +23,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the no_unused rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    doc: zlinter.session.LintDocument,
+    doc: *zlinter.session.LintDocument,
     allocator: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
@@ -150,7 +150,7 @@ fn namedFnDeclProto(
     return null;
 }
 
-fn isFieldAccessOfRootContainer(doc: zlinter.session.LintDocument, node: Ast.Node.Index) error{OutOfMemory}!bool {
+fn isFieldAccessOfRootContainer(doc: *zlinter.session.LintDocument, node: Ast.Node.Index) error{OutOfMemory}!bool {
     std.debug.assert(shims.nodeTag(doc.handle.tree, node) == .field_access);
 
     const tree = doc.handle.tree;

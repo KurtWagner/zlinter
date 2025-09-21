@@ -376,7 +376,7 @@ fn runLinterRules(
             const rule = rules[rule_index];
             if (try rule.run(
                 rule,
-                doc,
+                &doc,
                 gpa,
                 .{ .config = rule_configs[rule_index] },
             )) |result| {
