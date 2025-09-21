@@ -219,13 +219,13 @@ test "deferBlock - has expected children" {
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
 
-        var doc = (try testing.loadFakeDocument(
+        var doc = try testing.loadFakeDocument(
             &ctx,
             tmp.dir,
             "test.zig",
             "fn main() void {\n" ++ source ++ "\n}",
             arena.allocator(),
-        )).?;
+        );
         defer doc.deinit(arena.allocator());
 
         const decl_ref = try deferBlock(

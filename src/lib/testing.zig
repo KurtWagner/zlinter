@@ -7,7 +7,7 @@ pub fn loadFakeDocument(
     file_name: []const u8,
     contents: [:0]const u8,
     arena: std.mem.Allocator,
-) !?LintDocument {
+) !LintDocument {
     assertTestOnly();
 
     if (std.fs.path.dirname(file_name)) |dir_name|
@@ -198,13 +198,13 @@ fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8, option
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var doc = (try loadFakeDocument(
+    var doc = try loadFakeDocument(
         &ctx,
         tmp.dir,
         file_name,
         contents,
         arena.allocator(),
-    )).?;
+    );
     defer doc.deinit(ctx.gpa);
 
     const tree = doc.handle.tree;
@@ -369,13 +369,13 @@ pub fn initDocForTesting(
     const doc = try arena.create(LintDocument);
     errdefer arena.destroy(doc);
 
-    doc.* = (try loadFakeDocument(
+    doc.* = try loadFakeDocument(
         ctx,
         tmp.dir,
         "test.zig",
         source,
         arena,
-    )).?;
+    );
 
     return doc;
 }

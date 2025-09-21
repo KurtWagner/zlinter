@@ -622,13 +622,13 @@ test "LintDocument.isEnclosedInTestBlock" {
         \\}
     ;
 
-    var doc = (try testing.loadFakeDocument(
+    var doc = try testing.loadFakeDocument(
         &ctx,
         tmp.dir,
         "test.zig",
         source,
         arena.allocator(),
-    )).?;
+    );
     defer doc.deinit(ctx.gpa);
 
     try std.testing.expect(
@@ -990,13 +990,13 @@ test "LintDocument.resolveTypeKind" {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
 
-        var doc = (try testing.loadFakeDocument(
+        var doc = try testing.loadFakeDocument(
             &ctx,
             tmp.dir,
             "test.zig",
             test_case.contents,
             arena.allocator(),
-        )).?;
+        );
         defer doc.deinit(ctx.gpa);
 
         const node = doc.handle.tree.rootDecls()[0];
