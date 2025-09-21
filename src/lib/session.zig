@@ -502,15 +502,23 @@ pub const LintContext = struct {
         );
 
         const handle = self.document_store.getOrLoadHandle(uri) orelse return error.HandleError;
+
+        var src_comments = try comments.allocParse(handle.tree.source, gpa);
+        errdefer src_comments.deinit(gpa);
+
         doc.* = .{
             .path = try gpa.dupe(u8, path),
             .handle = handle,
             .analyser = undefined, // zlinter-disable-current-line no_undefined - set below
             .lineage = .empty,
-            .comments = try comments.allocParse(handle.tree.source, gpa),
+            .comments = src_comments,
             .skipper = undefined, // zlinter-disable-current-line no_undefined - set below
         };
+        errdefer gpa.free(doc.path);
+        errdefer doc.lineage.deinit(gpa);
+
         doc.skipper = .init(doc.comments, doc.handle.tree.source, gpa);
+        errdefer doc.skipper.deinit();
 
         doc.analyser = switch (version.zig) {
             .@"0.14" => zls.Analyser.init(
