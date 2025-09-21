@@ -1,7 +1,13 @@
 //! Test only utilities
 
 /// See `runRule` for example (test only)
-pub fn loadFakeDocument(ctx: *LintContext, dir: std.fs.Dir, file_name: []const u8, contents: [:0]const u8, arena: std.mem.Allocator) !?LintDocument {
+pub fn loadFakeDocument(
+    ctx: *LintContext,
+    dir: std.fs.Dir,
+    file_name: []const u8,
+    contents: [:0]const u8,
+    arena: std.mem.Allocator,
+) !?LintDocument {
     assertTestOnly();
 
     if (std.fs.path.dirname(file_name)) |dir_name|
@@ -342,10 +348,43 @@ pub fn testRunRule(
     try expectDeepEquals(LintProblemExpectation, expected, actual.items);
 }
 
+/// WIP: Initializes a context and document for testing only.
+pub fn initDocForTesting(
+    source: [:0]const u8,
+    arena: std.mem.Allocator,
+    options: struct {},
+) !*LintDocument {
+    _ = options;
+
+    var ctx: *LintContext = try arena.create(LintContext);
+    errdefer arena.destroy(ctx);
+
+    ctx.* = undefined;
+    try ctx.init(.{}, arena);
+    errdefer ctx.deinit();
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const doc = try arena.create(LintDocument);
+    errdefer arena.destroy(doc);
+
+    doc.* = (try loadFakeDocument(
+        ctx,
+        tmp.dir,
+        "test.zig",
+        source,
+        arena,
+    )).?;
+
+    return doc;
+}
+
 const builtin = @import("builtin");
 const std = @import("std");
-const LintContext = @import("session.zig").LintContext;
-const LintDocument = @import("session.zig").LintDocument;
+const session = @import("session.zig");
+const LintContext = session.LintContext;
+const LintDocument = session.LintDocument;
 const LintRule = @import("rules.zig").LintRule;
 const LintProblemSeverity = @import("rules.zig").LintProblemSeverity;
 const LintProblem = @import("results.zig").LintProblem;
