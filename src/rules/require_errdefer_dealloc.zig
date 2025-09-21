@@ -399,13 +399,13 @@ test "hasNonFreeingAllocatorParam" {
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
 
-        var doc = (try zlinter.testing.loadFakeDocument(
+        var doc = try zlinter.testing.loadFakeDocument(
             &ctx,
             tmp.dir,
             "test.zig",
             "fn main() void {\n" ++ source ++ "\n}",
             arena.allocator(),
-        )).?;
+        );
         defer doc.deinit(ctx.gpa);
 
         const tree = doc.handle.tree;
