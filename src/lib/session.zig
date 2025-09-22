@@ -638,14 +638,13 @@ test "LintDocument.isEnclosedInTestBlock" {
         \\}
     ;
 
-    var doc = try testing.loadFakeDocument(
+    const doc = try testing.loadFakeDocument(
         &context,
         tmp.dir,
         "test.zig",
         source,
         arena.allocator(),
     );
-    _ = &doc;
 
     try std.testing.expect(
         !doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
@@ -1006,14 +1005,13 @@ test "LintContext.resolveTypeKind" {
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
 
-        var doc = try testing.loadFakeDocument(
+        const doc = try testing.loadFakeDocument(
             &context,
             tmp.dir,
             "test.zig",
             test_case.contents,
             arena.allocator(),
         );
-        _ = &doc;
 
         const node = doc.handle.tree.rootDecls()[0];
         const actual_kind = if (doc.handle.tree.fullVarDecl(node)) |var_decl|

@@ -216,14 +216,13 @@ fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8, option
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
-    var doc = try loadFakeDocument(
+    const doc = try loadFakeDocument(
         &context,
         tmp.dir,
         file_name,
         contents,
         arena.allocator(),
     );
-    _ = &doc;
 
     const tree = doc.handle.tree;
     std.testing.expectEqual(tree.errors.len, 0) catch |err| {

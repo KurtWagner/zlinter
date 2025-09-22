@@ -407,14 +407,13 @@ test "hasNonFreeingAllocatorParam" {
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
 
-        var doc = try zlinter.testing.loadFakeDocument(
+        const doc = try zlinter.testing.loadFakeDocument(
             &context,
             tmp.dir,
             "test.zig",
             "fn main() void {\n" ++ source ++ "\n}",
             arena.allocator(),
         );
-        _ = &doc;
 
         const tree = doc.handle.tree;
         const actual = hasNonFreeingAllocatorParam(
