@@ -221,6 +221,9 @@ fn runLinterRules(
         slowest_files.unloadAndPrint("Files", printer);
     };
 
+    var arena = std.heap.ArenaAllocator.init(gpa);
+    defer arena.deinit();
+
     var maybe_rule_elapsed_times: ?[rules.len]usize = if (args.verbose)
         @splat(0)
     else
@@ -238,13 +241,13 @@ fn runLinterRules(
         item_timers.unloadAndPrint("Rules", printer);
     };
 
-    var ctx: zlinter.session.LintContext = undefined;
-    try ctx.init(.{
+    var context: zlinter.session.LintContext = undefined;
+    try context.init(.{
         .zig_exe_path = args.zig_exe,
         .zig_lib_path = args.zig_lib_directory,
         .global_cache_path = args.global_cache_root,
-    }, gpa);
-    defer ctx.deinit();
+    }, gpa, arena.allocator());
+    defer context.deinit();
 
     var enabled_rules = enabledRules(args.rules);
 
@@ -260,9 +263,9 @@ fn runLinterRules(
                     if (rule_config_overrides.get(rules[rule_index].rule_id)) |zon_path| {
                         inline for (0..rules_configs_types.len) |i| {
                             if (i == rule_index) {
-                                const arena = config_overrides_arena.allocator();
-                                const config = try arena.create(rules_configs_types[i]);
-                                errdefer arena.destroy(config);
+                                const config_arena = config_overrides_arena.allocator();
+                                const config = try config_arena.create(rules_configs_types[i]);
+                                errdefer config_arena.destroy(config);
 
                                 var diagnostics: zlinter.zon.Diagnostics = .{};
 
@@ -271,7 +274,7 @@ fn runLinterRules(
                                     std.fs.cwd(),
                                     zon_path,
                                     &diagnostics,
-                                    arena,
+                                    config_arena,
                                 ) catch |e| {
                                     switch (e) {
                                         error.ParseZon => {
@@ -315,15 +318,16 @@ fn runLinterRules(
             }
         }
 
-        var arena = std.heap.ArenaAllocator.init(gpa);
-        defer arena.deinit();
-        const arena_allocator = arena.allocator();
-
-        var doc = try ctx.loadDocument(lint_file.pathname, ctx.gpa, arena_allocator) orelse {
-            printer.println(.err, "Unable to open file: {s}", .{lint_file.pathname});
+        var doc: zlinter.session.LintDocument = undefined;
+        context.initDocument(
+            lint_file.pathname,
+            context.gpa,
+            &doc,
+        ) catch |e| {
+            printer.println(.err, "Unable to open file: {s} ({s})", .{ lint_file.pathname, @errorName(e) });
             continue :files;
         };
-        defer doc.deinit(ctx.gpa);
+        defer doc.deinit(context.gpa);
 
         if (timer.lapMilliseconds()) |ms|
             printer.println(.verbose, "  - Load document: {d}ms", .{ms})
@@ -370,7 +374,8 @@ fn runLinterRules(
             const rule = rules[rule_index];
             if (try rule.run(
                 rule,
-                doc,
+                &context,
+                &doc,
                 gpa,
                 .{ .config = rule_configs[rule_index] },
             )) |result| {

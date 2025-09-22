@@ -2,12 +2,12 @@
 
 /// See `runRule` for example (test only)
 pub fn loadFakeDocument(
-    ctx: *LintContext,
+    context: *LintContext,
     dir: std.fs.Dir,
     file_name: []const u8,
     contents: [:0]const u8,
     arena: std.mem.Allocator,
-) !LintDocument {
+) !*LintDocument {
     assertTestOnly();
 
     if (std.fs.path.dirname(file_name)) |dir_name|
@@ -24,7 +24,9 @@ pub fn loadFakeDocument(
     try file_writer.interface.writeAll(contents);
     try file_writer.interface.flush();
 
-    return (try ctx.loadDocument(real_path, ctx.gpa, arena)).?;
+    const doc = try arena.create(LintDocument);
+    try context.initDocument(real_path, arena, doc);
+    return doc;
 }
 
 pub fn writeFile(dir: std.fs.Dir, file_name: []const u8, contents: []const u8) !void {
@@ -182,7 +184,7 @@ pub fn expectSingleNodeOfTag(tree: Ast, comptime tags: []const Ast.Node.Tag) !As
 }
 
 /// Expects at least one node and returns it matching a set of tags
-pub fn expectNodeOfTagFirst(doc: LintDocument, comptime tags: []const Ast.Node.Tag) !Ast.Node.Index {
+pub fn expectNodeOfTagFirst(doc: *const LintDocument, comptime tags: []const Ast.Node.Tag) !Ast.Node.Index {
     assertTestOnly();
 
     var it = try doc.nodeLineageIterator(.root, std.testing.allocator);
@@ -204,24 +206,23 @@ pub fn expectNodeOfTagFirst(doc: LintDocument, comptime tags: []const Ast.Node.T
 fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8, options: RunOptions) !?LintResult {
     assertTestOnly();
 
-    var ctx: LintContext = undefined;
-    try ctx.init(.{}, std.testing.allocator);
-    defer ctx.deinit();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    var context: LintContext = undefined;
+    try context.init(.{}, std.testing.allocator, arena.allocator());
+    defer context.deinit();
 
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-
-    var doc = try loadFakeDocument(
-        &ctx,
+    const doc = try loadFakeDocument(
+        &context,
         tmp.dir,
         file_name,
         contents,
         arena.allocator(),
     );
-    defer doc.deinit(ctx.gpa);
 
     const tree = doc.handle.tree;
     std.testing.expectEqual(tree.errors.len, 0) catch |err| {
@@ -237,6 +238,7 @@ fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8, option
 
     return try rule.run(
         rule,
+        &context,
         doc,
         std.testing.allocator,
         options,
@@ -375,12 +377,12 @@ pub fn initDocForTesting(
 ) !*LintDocument {
     _ = options;
 
-    var ctx: *LintContext = try arena.create(LintContext);
-    errdefer arena.destroy(ctx);
+    var context: *LintContext = try arena.create(LintContext);
+    errdefer arena.destroy(context);
 
-    ctx.* = undefined;
-    try ctx.init(.{}, arena);
-    errdefer ctx.deinit();
+    context.* = undefined;
+    try context.init(.{}, arena);
+    errdefer context.deinit();
 
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -389,7 +391,7 @@ pub fn initDocForTesting(
     errdefer arena.destroy(doc);
 
     doc.* = try loadFakeDocument(
-        ctx,
+        context,
         tmp.dir,
         "test.zig",
         source,
@@ -400,8 +402,8 @@ pub fn initDocForTesting(
 }
 
 const builtin = @import("builtin");
-const std = @import("std");
 const session = @import("session.zig");
+const std = @import("std");
 const LintContext = session.LintContext;
 const LintDocument = session.LintDocument;
 const LintRule = @import("rules.zig").LintRule;
