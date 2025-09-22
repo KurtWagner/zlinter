@@ -64,18 +64,18 @@ fn run(
     rule: zlinter.rules.LintRule,
     _: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
     var lint_problems: shims.ArrayList(zlinter.results.LintProblem) = .empty;
-    defer lint_problems.deinit(allocator);
+    defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
 
     const root: NodeIndexShim = .root;
-    var it = try doc.nodeLineageIterator(root, allocator);
+    var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
     nodes: while (try it.next()) |tuple| {
@@ -83,13 +83,13 @@ fn run(
 
         if (fnDeclBlock(tree, node.toNodeIndex())) |block| {
             if (config.fn_decl_block != .off and isEmptyBlock(tree, block)) {
-                try lint_problems.append(allocator, .{
+                try lint_problems.append(gpa, .{
                     .rule_id = rule.rule_id,
                     .severity = config.fn_decl_block,
                     .start = .startOfToken(tree, tree.firstToken(block)),
                     .end = .endOfToken(tree, tree.lastToken(block)),
                     .message = try std.fmt.allocPrint(
-                        allocator,
+                        gpa,
                         problem_msg_template,
                         .{"function declaration"},
                     ),
@@ -144,13 +144,13 @@ fn run(
 
             if (!isEmptyBlock(tree, expr_node)) continue :expr_nodes;
 
-            try lint_problems.append(allocator, .{
+            try lint_problems.append(gpa, .{
                 .rule_id = rule.rule_id,
                 .severity = severity,
                 .start = .startOfToken(tree, tree.firstToken(expr_node)),
                 .end = .endOfToken(tree, tree.lastToken(expr_node)),
                 .message = try std.fmt.allocPrint(
-                    allocator,
+                    gpa,
                     problem_msg_template,
                     .{statement.name()},
                 ),
@@ -160,9 +160,9 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            allocator,
+            gpa,
             doc.path,
-            try lint_problems.toOwnedSlice(allocator),
+            try lint_problems.toOwnedSlice(gpa),
         )
     else
         null;

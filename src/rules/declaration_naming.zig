@@ -92,13 +92,13 @@ fn run(
     rule: zlinter.rules.LintRule,
     context: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
     var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(allocator);
+    defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
 
@@ -137,24 +137,24 @@ fn run(
                 if (std.mem.eql(u8, name, exclude_name)) continue :nodes;
             }
 
-            try lint_problems.append(allocator, .{
+            try lint_problems.append(gpa, .{
                 .rule_id = rule.rule_id,
                 .severity = config.decl_name_min_len.severity,
                 .start = .startOfToken(tree, name_token),
                 .end = .endOfToken(tree, name_token),
-                .message = try std.fmt.allocPrint(allocator, "Declaration names should have a length greater or equal to {d}", .{config.decl_name_min_len.len}),
+                .message = try std.fmt.allocPrint(gpa, "Declaration names should have a length greater or equal to {d}", .{config.decl_name_min_len.len}),
             });
         } else if (config.decl_name_max_len.severity != .off and name.len > config.decl_name_max_len.len) {
             for (config.decl_name_exclude_len) |exclude_name| {
                 if (std.mem.eql(u8, name, exclude_name)) continue :nodes;
             }
 
-            try lint_problems.append(allocator, .{
+            try lint_problems.append(gpa, .{
                 .rule_id = rule.rule_id,
                 .severity = config.decl_name_max_len.severity,
                 .start = .startOfToken(tree, name_token),
                 .end = .endOfToken(tree, name_token),
-                .message = try std.fmt.allocPrint(allocator, "Declaration names should have a length less or equal to {d}", .{config.decl_name_max_len.len}),
+                .message = try std.fmt.allocPrint(gpa, "Declaration names should have a length less or equal to {d}", .{config.decl_name_max_len.len}),
             });
         }
 
@@ -179,21 +179,21 @@ fn run(
             };
 
         if (!style_with_severity.style.check(name)) {
-            try lint_problems.append(allocator, .{
+            try lint_problems.append(gpa, .{
                 .rule_id = rule.rule_id,
                 .severity = style_with_severity.severity,
                 .start = .startOfToken(tree, name_token),
                 .end = .endOfToken(tree, name_token),
-                .message = try std.fmt.allocPrint(allocator, "{s} declaration should be {s}", .{ var_desc, style_with_severity.style.name() }),
+                .message = try std.fmt.allocPrint(gpa, "{s} declaration should be {s}", .{ var_desc, style_with_severity.style.name() }),
             });
         }
     }
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            allocator,
+            gpa,
             doc.path,
-            try lint_problems.toOwnedSlice(allocator),
+            try lint_problems.toOwnedSlice(gpa),
         )
     else
         null;

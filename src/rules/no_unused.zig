@@ -25,7 +25,7 @@ fn run(
     rule: zlinter.rules.LintRule,
     context: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
@@ -33,7 +33,7 @@ fn run(
     if (config.container_declaration == .off) return null;
 
     var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(allocator);
+    defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
     const token_tags = tree.tokens.items(.tag);
@@ -47,10 +47,10 @@ fn run(
         var node: NodeIndexShim = .root;
         while (node.index < tree.nodes.len) : (node.index += 1) {
             switch (shims.nodeTag(tree, node.toNodeIndex())) {
-                .identifier => try map.put(allocator, tree.tokenSlice(shims.nodeMainToken(tree, node.toNodeIndex())), {}),
+                .identifier => try map.put(gpa, tree.tokenSlice(shims.nodeMainToken(tree, node.toNodeIndex())), {}),
                 .field_access => if (try isFieldAccessOfRootContainer(context, doc, node.toNodeIndex())) {
                     const node_data = shims.nodeData(tree, node.toNodeIndex());
-                    try map.put(allocator, tree.tokenSlice(switch (zlinter.version.zig) {
+                    try map.put(gpa, tree.tokenSlice(switch (zlinter.version.zig) {
                         .@"0.14" => node_data.rhs,
                         .@"0.15", .@"0.16" => node_data.node_and_token.@"1",
                     }), {});
@@ -60,7 +60,7 @@ fn run(
         }
         break :map map;
     };
-    defer container_references.deinit(allocator);
+    defer container_references.deinit(gpa);
 
     for (tree.rootDecls()) |decl| {
         const problem: ?struct { first: Ast.TokenIndex, last: Ast.TokenIndex } = problem: {
@@ -108,12 +108,12 @@ fn run(
             const end_newline: bool = if (last_token + 1 < tree.tokens.len) tree.tokenLocation(0, last_token + 1).line > end.line else true;
             const end_offset: usize = if (start_newline and end_newline) 1 else 0;
 
-            try lint_problems.append(allocator, .{
+            try lint_problems.append(gpa, .{
                 .rule_id = rule.rule_id,
                 .severity = config.container_declaration,
                 .start = .startOfToken(tree, first_token),
                 .end = .endOfToken(tree, last_token),
-                .message = try allocator.dupe(u8, "Unused declaration"),
+                .message = try gpa.dupe(u8, "Unused declaration"),
                 .fix = .{
                     .start = start.line_start,
                     .end = end.line_end + end_offset,
@@ -125,9 +125,9 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            allocator,
+            gpa,
             doc.path,
-            try lint_problems.toOwnedSlice(allocator),
+            try lint_problems.toOwnedSlice(gpa),
         )
     else
         null;

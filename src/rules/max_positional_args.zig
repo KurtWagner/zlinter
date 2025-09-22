@@ -44,14 +44,14 @@ fn run(
     rule: zlinter.rules.LintRule,
     _: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
     var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(allocator);
+    defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
     var fn_buffer: [1]Ast.Node.Index = undefined;
@@ -72,20 +72,20 @@ fn run(
 
         if (fn_proto.ast.params.len <= config.max) continue :nodes;
 
-        try lint_problems.append(allocator, .{
+        try lint_problems.append(gpa, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
             .start = .startOfNode(tree, fn_proto.ast.params[0]),
             .end = .endOfNode(tree, fn_proto.ast.params[fn_proto.ast.params.len - 1]),
-            .message = try std.fmt.allocPrint(allocator, "Exceeded maximum positional arguments of {d}.", .{config.max}),
+            .message = try std.fmt.allocPrint(gpa, "Exceeded maximum positional arguments of {d}.", .{config.max}),
         });
     }
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            allocator,
+            gpa,
             doc.path,
-            try lint_problems.toOwnedSlice(allocator),
+            try lint_problems.toOwnedSlice(gpa),
         )
     else
         null;

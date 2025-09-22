@@ -31,7 +31,7 @@ fn run(
     rule: zlinter.rules.LintRule,
     _: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
@@ -41,20 +41,20 @@ fn run(
         if (shims.isRootImplicitStruct(doc.handle.tree)) {
             if (config.file_struct.severity != .off and !config.file_struct.style.check(basename)) {
                 break :msg .{
-                    try std.fmt.allocPrint(allocator, "File is struct so name should be {s}", .{config.file_struct.style.name()}),
+                    try std.fmt.allocPrint(gpa, "File is struct so name should be {s}", .{config.file_struct.style.name()}),
                     config.file_struct.severity,
                 };
             }
         } else if (config.file_namespace.severity != .off and !config.file_namespace.style.check(basename)) {
             break :msg .{
-                try std.fmt.allocPrint(allocator, "File is namespace so name should be {s}", .{config.file_namespace.style.name()}),
+                try std.fmt.allocPrint(gpa, "File is namespace so name should be {s}", .{config.file_namespace.style.name()}),
                 config.file_namespace.severity,
             };
         }
         return null;
     };
 
-    var lint_problems = try allocator.alloc(zlinter.results.LintProblem, 1);
+    var lint_problems = try gpa.alloc(zlinter.results.LintProblem, 1);
     lint_problems[0] = .{
         .severity = severity,
         .rule_id = rule.rule_id,
@@ -63,7 +63,7 @@ fn run(
         .message = message,
     };
     return try zlinter.results.LintResult.init(
-        allocator,
+        gpa,
         doc.path,
         lint_problems,
     );

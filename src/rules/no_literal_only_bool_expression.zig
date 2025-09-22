@@ -44,19 +44,19 @@ fn run(
     rule: zlinter.rules.LintRule,
     _: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
     var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(allocator);
+    defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
 
     const root: NodeIndexShim = .root;
-    var it = try doc.nodeLineageIterator(root, allocator);
+    var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
     nodes: while (try it.next()) |tuple| {
@@ -77,35 +77,35 @@ fn run(
                     .@"0.15", .@"0.16" => .{ data.node_and_node[0], data.node_and_node[1] },
                 };
                 if (isLiteral(tree, lhs) != null and isLiteral(tree, rhs) != null) {
-                    try lint_problems.append(allocator, .{
+                    try lint_problems.append(gpa, .{
                         .rule_id = rule.rule_id,
                         .severity = config.severity,
                         .start = .startOfNode(tree, node.toNodeIndex()),
                         .end = .endOfNode(tree, node.toNodeIndex()),
-                        .message = try allocator.dupe(u8, "Useless condition"),
+                        .message = try gpa.dupe(u8, "Useless condition"),
                     });
                 }
             },
             else => if (tree.fullIf(node.toNodeIndex())) |full_if| {
                 if (isLiteral(tree, full_if.ast.cond_expr)) |_| {
-                    try lint_problems.append(allocator, .{
+                    try lint_problems.append(gpa, .{
                         .rule_id = rule.rule_id,
                         .severity = config.severity,
                         .start = .startOfNode(tree, full_if.ast.cond_expr),
                         .end = .endOfNode(tree, full_if.ast.cond_expr),
-                        .message = try allocator.dupe(u8, "Useless condition"),
+                        .message = try gpa.dupe(u8, "Useless condition"),
                     });
                 }
             } else if (tree.fullWhile(node.toNodeIndex())) |full_while| {
                 if (isLiteral(tree, full_while.ast.cond_expr)) |literal| {
                     if (literal == .true) continue :nodes;
 
-                    try lint_problems.append(allocator, .{
+                    try lint_problems.append(gpa, .{
                         .rule_id = rule.rule_id,
                         .severity = config.severity,
                         .start = .startOfNode(tree, full_while.ast.cond_expr),
                         .end = .endOfNode(tree, full_while.ast.cond_expr),
-                        .message = try allocator.dupe(u8, "Useless condition"),
+                        .message = try gpa.dupe(u8, "Useless condition"),
                     });
                 }
             },
@@ -120,9 +120,9 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            allocator,
+            gpa,
             doc.path,
-            try lint_problems.toOwnedSlice(allocator),
+            try lint_problems.toOwnedSlice(gpa),
         )
     else
         null;
