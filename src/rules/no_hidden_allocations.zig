@@ -52,19 +52,19 @@ fn run(
     rule: zlinter.rules.LintRule,
     context: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
     var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(allocator);
+    defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
 
     const root: NodeIndexShim = .root;
-    var it = try doc.nodeLineageIterator(root, allocator);
+    var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
     nodes: while (try it.next()) |tuple| {
@@ -137,20 +137,20 @@ fn run(
         }
         if (!is_problem) continue :nodes;
 
-        try lint_problems.append(allocator, .{
+        try lint_problems.append(gpa, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
             .start = .startOfNode(tree, node.toNodeIndex()),
             .end = .endOfNode(tree, node.toNodeIndex()),
-            .message = try allocator.dupe(u8, "Avoid hidden heap memory management. Instead pass in an Allocator so that the caller knows where memory is being allocated."),
+            .message = try gpa.dupe(u8, "Avoid hidden heap memory management. Instead pass in an Allocator so that the caller knows where memory is being allocated."),
         });
     }
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            allocator,
+            gpa,
             doc.path,
-            try lint_problems.toOwnedSlice(allocator),
+            try lint_problems.toOwnedSlice(gpa),
         )
     else
         null;

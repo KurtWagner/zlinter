@@ -43,19 +43,19 @@ fn run(
     rule: zlinter.rules.LintRule,
     _: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
     var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(allocator);
+    defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
 
     const root: NodeIndexShim = .root;
-    var it = try doc.nodeLineageIterator(root, allocator);
+    var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
     var fn_proto_buffer: [1]Ast.Node.Index = undefined;
@@ -114,7 +114,7 @@ fn run(
                     => true,
                     else => false,
                 }) {
-                    var block_it = try doc.nodeLineageIterator(NodeIndexShim.init(parent), allocator);
+                    var block_it = try doc.nodeLineageIterator(NodeIndexShim.init(parent), gpa);
                     defer block_it.deinit();
 
                     while (try block_it.next()) |block_tuple| {
@@ -142,20 +142,20 @@ fn run(
             next_parent = doc.lineage.items(.parent)[NodeIndexShim.init(parent).index];
         }
 
-        try lint_problems.append(allocator, .{
+        try lint_problems.append(gpa, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
             .start = .startOfNode(tree, node.toNodeIndex()),
             .end = .endOfNode(tree, node.toNodeIndex()),
-            .message = try allocator.dupe(u8, "Take care when using `undefined`"),
+            .message = try gpa.dupe(u8, "Take care when using `undefined`"),
         });
     }
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            allocator,
+            gpa,
             doc.path,
-            try lint_problems.toOwnedSlice(allocator),
+            try lint_problems.toOwnedSlice(gpa),
         )
     else
         null;
