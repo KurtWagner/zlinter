@@ -146,7 +146,7 @@ fn deinitScopedImports(scoped_imports: *std.AutoArrayHashMap(Ast.Node.Index, Imp
 }
 
 fn swapNodesFix(
-    doc: *zlinter.session.LintDocument,
+    doc: *const zlinter.session.LintDocument,
     first: Ast.Node.Index,
     second: Ast.Node.Index,
     allocator: std.mem.Allocator,
@@ -261,7 +261,7 @@ fn classifyImportPath(path: []const u8) ImportDecl.Classification {
 
 // TODO(#52): Move to ast module
 // zlinter-disable-next-line
-// fn getScopedNode(doc: *zlinter.session.LintDocument, node: Ast.Node.Index) Ast.Node.Index {
+// fn getScopedNode(doc: *const zlinter.session.LintDocument, node: Ast.Node.Index) Ast.Node.Index {
 //     var parent = doc.lineage.items(.parent)[node];
 //     while (parent) |parent_node| {
 //         switch (shims.nodeTag(doc.handle.tree, parent_node)) {

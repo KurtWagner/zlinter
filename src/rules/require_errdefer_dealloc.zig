@@ -289,7 +289,7 @@ fn declRequiringCleanup(doc: *zlinter.session.LintDocument, maybe_var_decl_node:
 ///
 /// Where as `.init(allocator)` or `.init(std.heap.c_allocator)` should be checked
 /// for stricter cleanup on error as it won't automatically clear itself.
-fn hasNonFreeingAllocatorParam(doc: *zlinter.session.LintDocument, params: []const Ast.Node.Index) bool {
+fn hasNonFreeingAllocatorParam(doc: *const zlinter.session.LintDocument, params: []const Ast.Node.Index) bool {
     const tree = doc.handle.tree;
     const skip_var_and_field_names: []const []const u8 = &.{
         "arena",

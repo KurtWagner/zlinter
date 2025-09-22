@@ -402,8 +402,8 @@ pub fn initDocForTesting(
 }
 
 const builtin = @import("builtin");
-const std = @import("std");
 const session = @import("session.zig");
+const std = @import("std");
 const LintContext = session.LintContext;
 const LintDocument = session.LintDocument;
 const LintRule = @import("rules.zig").LintRule;

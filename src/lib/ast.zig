@@ -121,7 +121,7 @@ pub const DeferBlock = struct {
     }
 };
 
-pub fn deferBlock(doc: *session.LintDocument, node: Ast.Node.Index, allocator: std.mem.Allocator) !?DeferBlock {
+pub fn deferBlock(doc: *const session.LintDocument, node: Ast.Node.Index, allocator: std.mem.Allocator) !?DeferBlock {
     const tree = doc.handle.tree;
 
     const data = shims.nodeData(tree, node);
@@ -608,7 +608,7 @@ test "isEnumLiteral" {
 /// Checks whether the current node is a function call or contains one in its
 /// children.
 pub fn findFnCall(
-    doc: *session.LintDocument,
+    doc: *const session.LintDocument,
     node: Ast.Node.Index,
     call_buffer: *[1]Ast.Node.Index,
     comptime names: []const []const u8,
@@ -670,7 +670,7 @@ pub const FnCall = struct {
 ///
 /// If names is empty, then it'll match all function names.
 pub fn fnCall(
-    doc: *session.LintDocument,
+    doc: *const session.LintDocument,
     node: Ast.Node.Index,
     buffer: *[1]Ast.Node.Index,
     comptime names: []const []const u8,
