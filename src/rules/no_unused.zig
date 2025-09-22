@@ -23,7 +23,8 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the no_unused rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    doc: zlinter.session.LintDocument,
+    context: *zlinter.session.LintContext,
+    doc: *const zlinter.session.LintDocument,
     allocator: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
@@ -47,7 +48,7 @@ fn run(
         while (node.index < tree.nodes.len) : (node.index += 1) {
             switch (shims.nodeTag(tree, node.toNodeIndex())) {
                 .identifier => try map.put(allocator, tree.tokenSlice(shims.nodeMainToken(tree, node.toNodeIndex())), {}),
-                .field_access => if (try isFieldAccessOfRootContainer(doc, node.toNodeIndex())) {
+                .field_access => if (try isFieldAccessOfRootContainer(context, doc, node.toNodeIndex())) {
                     const node_data = shims.nodeData(tree, node.toNodeIndex());
                     try map.put(allocator, tree.tokenSlice(switch (zlinter.version.zig) {
                         .@"0.14" => node_data.rhs,
@@ -150,7 +151,11 @@ fn namedFnDeclProto(
     return null;
 }
 
-fn isFieldAccessOfRootContainer(doc: zlinter.session.LintDocument, node: Ast.Node.Index) error{OutOfMemory}!bool {
+fn isFieldAccessOfRootContainer(
+    context: *zlinter.session.LintContext,
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+) error{OutOfMemory}!bool {
     std.debug.assert(shims.nodeTag(doc.handle.tree, node) == .field_access);
 
     const tree = doc.handle.tree;
@@ -161,7 +166,7 @@ fn isFieldAccessOfRootContainer(doc: zlinter.session.LintDocument, node: Ast.Nod
         .@"0.15", .@"0.16" => node_data.node_and_token.@"0",
     };
 
-    if (try doc.resolveTypeOfNode(lhs)) |t| {
+    if (try context.resolveTypeOfNode(doc, lhs)) |t| {
         switch (t.resolveDeclLiteralResultType().data) {
             .container => |scope_handle| return isContainerRoot(scope_handle),
             else => {},

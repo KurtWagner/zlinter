@@ -3,8 +3,9 @@ pub const LintRule = struct {
     rule_id: []const u8,
     run: *const fn (
         self: LintRule,
-        doc: session.LintDocument,
-        allocator: std.mem.Allocator,
+        context: *session.LintContext,
+        doc: *const session.LintDocument,
+        gpa: std.mem.Allocator,
         options: RunOptions,
     ) error{OutOfMemory}!?results.LintResult,
 };

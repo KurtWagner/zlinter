@@ -50,7 +50,8 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the no_hidden_allocations rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    doc: zlinter.session.LintDocument,
+    context: *zlinter.session.LintContext,
+    doc: *const zlinter.session.LintDocument,
     allocator: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
@@ -97,7 +98,7 @@ fn run(
         if (!is_allocator_method) continue :nodes;
 
         const decl_name, const uri = decl_name_and_uri: {
-            if (try doc.analyser.resolveVarDeclAlias(switch (zlinter.version.zig) {
+            if (try context.analyser.resolveVarDeclAlias(switch (zlinter.version.zig) {
                 .@"0.14" => .{ .node = lhs, .handle = doc.handle },
                 .@"0.15", .@"0.16" => .{ .node_handle = .{ .node = lhs, .handle = doc.handle }, .container_type = null },
             })) |decl_handle| {

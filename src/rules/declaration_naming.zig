@@ -90,7 +90,8 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the declaration_naming rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    doc: zlinter.session.LintDocument,
+    context: *zlinter.session.LintContext,
+    doc: *const zlinter.session.LintDocument,
     allocator: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
@@ -116,7 +117,7 @@ fn run(
             if (token_tag == .keyword_export) continue :nodes;
         }
 
-        const type_kind = try doc.resolveTypeKind(.{ .var_decl = var_decl }) orelse continue :nodes;
+        const type_kind = try context.resolveTypeKind(doc, .{ .var_decl = var_decl }) orelse continue :nodes;
         const name_token = var_decl.ast.mut_token + 1;
         const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
 
