@@ -16,7 +16,7 @@ pub const NodeAncestorIterator = struct {
     const Self = @This();
 
     current: NodeIndexShim,
-    lineage: *NodeLineage,
+    lineage: *const NodeLineage,
     done: bool = false,
 
     pub fn next(self: *Self) ?Ast.Node.Index {
@@ -37,7 +37,7 @@ pub const NodeLineageIterator = struct {
     const Self = @This();
 
     queue: shims.ArrayList(NodeIndexShim) = .empty,
-    lineage: *NodeLineage,
+    lineage: *const NodeLineage,
     gpa: std.mem.Allocator,
 
     pub fn deinit(self: *NodeLineageIterator) void {
@@ -121,7 +121,7 @@ pub const DeferBlock = struct {
     }
 };
 
-pub fn deferBlock(doc: session.LintDocument, node: Ast.Node.Index, allocator: std.mem.Allocator) !?DeferBlock {
+pub fn deferBlock(doc: *const session.LintDocument, node: Ast.Node.Index, allocator: std.mem.Allocator) !?DeferBlock {
     const tree = doc.handle.tree;
 
     const data = shims.nodeData(tree, node);
@@ -212,21 +212,20 @@ test "deferBlock - has expected children" {
 
         defer _ = arena.reset(.retain_capacity);
 
-        var ctx: session.LintContext = undefined;
-        try ctx.init(.{}, arena.allocator());
-        defer ctx.deinit();
+        var context: session.LintContext = undefined;
+        try context.init(.{}, std.testing.allocator, arena.allocator());
+        defer context.deinit();
 
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
 
-        var doc = try testing.loadFakeDocument(
-            &ctx,
+        const doc = try testing.loadFakeDocument(
+            &context,
             tmp.dir,
             "test.zig",
             "fn main() void {\n" ++ source ++ "\n}",
             arena.allocator(),
         );
-        defer doc.deinit(arena.allocator());
 
         const decl_ref = try deferBlock(
             doc,
@@ -608,7 +607,7 @@ test "isEnumLiteral" {
 /// Checks whether the current node is a function call or contains one in its
 /// children.
 pub fn findFnCall(
-    doc: session.LintDocument,
+    doc: *const session.LintDocument,
     node: Ast.Node.Index,
     call_buffer: *[1]Ast.Node.Index,
     comptime names: []const []const u8,
@@ -670,7 +669,7 @@ pub const FnCall = struct {
 ///
 /// If names is empty, then it'll match all function names.
 pub fn fnCall(
-    doc: session.LintDocument,
+    doc: *const session.LintDocument,
     node: Ast.Node.Index,
     buffer: *[1]Ast.Node.Index,
     comptime names: []const []const u8,

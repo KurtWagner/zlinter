@@ -24,7 +24,8 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the no_deprecated rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    doc: zlinter.session.LintDocument,
+    context: *zlinter.session.LintContext,
+    doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
@@ -51,6 +52,7 @@ fn run(
                 rule,
                 gpa,
                 arena,
+                context,
                 doc,
                 node.toNodeIndex(),
                 shims.nodeMainToken(tree, node.toNodeIndex()),
@@ -61,6 +63,7 @@ fn run(
                 rule,
                 gpa,
                 arena,
+                context,
                 doc,
                 node.toNodeIndex(),
                 switch (zlinter.version.zig) {
@@ -74,6 +77,7 @@ fn run(
                 rule,
                 gpa,
                 arena,
+                context,
                 doc,
                 node.toNodeIndex(),
                 shims.nodeMainToken(tree, node.toNodeIndex()),
@@ -153,19 +157,19 @@ fn handleIdentifierAccess(
     rule: zlinter.rules.LintRule,
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
-    doc: zlinter.session.LintDocument,
+    context: *zlinter.session.LintContext,
+    doc: *const zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     identifier_token: Ast.TokenIndex,
     lint_problems: *shims.ArrayList(zlinter.results.LintProblem),
     config: Config,
 ) !void {
     const handle = doc.handle;
-    const analyser = doc.analyser;
     const tree = doc.handle.tree;
 
     const source_index = handle.tree.tokens.items(.start)[identifier_token];
 
-    const decl_with_handle = (try analyser.lookupSymbolGlobal(
+    const decl_with_handle = (try context.analyser.lookupSymbolGlobal(
         handle,
         tree.tokenSlice(identifier_token),
         source_index,
@@ -206,13 +210,15 @@ fn handleEnumLiteral(
     rule: zlinter.rules.LintRule,
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
-    doc: zlinter.session.LintDocument,
+    context: *zlinter.session.LintContext,
+    doc: *const zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     identifier_token: Ast.TokenIndex,
     lint_problems: *shims.ArrayList(zlinter.results.LintProblem),
     config: Config,
 ) !void {
     const decl_with_handle = try getSymbolEnumLiteral(
+        context,
         doc,
         node_index,
         doc.handle.tree.tokenSlice(identifier_token),
@@ -232,7 +238,8 @@ fn handleEnumLiteral(
 }
 
 fn getSymbolEnumLiteral(
-    doc: zlinter.session.LintDocument,
+    context: *zlinter.session.LintContext,
+    doc: *const zlinter.session.LintDocument,
     node: Ast.Node.Index,
     name: []const u8,
     gpa: std.mem.Allocator,
@@ -257,12 +264,12 @@ fn getSymbolEnumLiteral(
     }
 
     return switch (zlinter.version.zig) {
-        .@"0.14" => doc.analyser.lookupSymbolFieldInit(
+        .@"0.14" => context.analyser.lookupSymbolFieldInit(
             doc.handle,
             name,
             ancestors.items[0..],
         ),
-        .@"0.15", .@"0.16" => doc.analyser.lookupSymbolFieldInit(
+        .@"0.15", .@"0.16" => context.analyser.lookupSymbolFieldInit(
             doc.handle,
             name,
             ancestors.items[0],
@@ -275,14 +282,14 @@ fn handleFieldAccess(
     rule: zlinter.rules.LintRule,
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
-    doc: zlinter.session.LintDocument,
+    context: *zlinter.session.LintContext,
+    doc: *const zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     identifier_token: Ast.TokenIndex,
     lint_problems: *shims.ArrayList(zlinter.results.LintProblem),
     config: Config,
 ) !void {
     const handle = doc.handle;
-    const analyser = doc.analyser;
     const tree = doc.handle.tree;
     const token_starts = handle.tree.tokens.items(.start);
 
@@ -296,7 +303,7 @@ fn handleFieldAccess(
         };
     };
 
-    if (try analyser.getSymbolFieldAccesses(
+    if (try context.analyser.getSymbolFieldAccesses(
         arena,
         handle,
         token_starts[identifier_token],
