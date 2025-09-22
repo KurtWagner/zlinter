@@ -60,19 +60,19 @@ fn run(
     rule: zlinter.rules.LintRule,
     _: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
     var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(allocator);
+    defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
     var call_buffer: [1]Ast.Node.Index = undefined;
 
     const root: NodeIndexShim = .root;
-    var it = try doc.nodeLineageIterator(root, allocator);
+    var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
     nodes: while (try it.next()) |tuple| {
@@ -113,36 +113,36 @@ fn run(
 
             switch (kind) {
                 .bool => if (config.detect_bool_literal != .off)
-                    try lint_problems.append(allocator, .{
+                    try lint_problems.append(gpa, .{
                         .rule_id = rule.rule_id,
                         .severity = config.detect_bool_literal,
                         .start = .startOfNode(tree, param_node),
                         .end = .endOfNode(tree, param_node),
-                        .message = try std.fmt.allocPrint(allocator, "Avoid bool literal arguments as they're ambiguous.", .{}),
+                        .message = try std.fmt.allocPrint(gpa, "Avoid bool literal arguments as they're ambiguous.", .{}),
                     }),
                 .string => if (config.detect_string_literal != .off)
-                    try lint_problems.append(allocator, .{
+                    try lint_problems.append(gpa, .{
                         .rule_id = rule.rule_id,
                         .severity = config.detect_string_literal,
                         .start = .startOfNode(tree, param_node),
                         .end = .endOfNode(tree, param_node),
-                        .message = try std.fmt.allocPrint(allocator, "Avoid string literal arguments as they're ambiguous.", .{}),
+                        .message = try std.fmt.allocPrint(gpa, "Avoid string literal arguments as they're ambiguous.", .{}),
                     }),
                 .char => if (config.detect_char_literal != .off)
-                    try lint_problems.append(allocator, .{
+                    try lint_problems.append(gpa, .{
                         .rule_id = rule.rule_id,
                         .severity = config.detect_char_literal,
                         .start = .startOfNode(tree, param_node),
                         .end = .endOfNode(tree, param_node),
-                        .message = try std.fmt.allocPrint(allocator, "Avoid char literal arguments as they're ambiguous.", .{}),
+                        .message = try std.fmt.allocPrint(gpa, "Avoid char literal arguments as they're ambiguous.", .{}),
                     }),
                 .number => if (config.detect_number_literal != .off)
-                    try lint_problems.append(allocator, .{
+                    try lint_problems.append(gpa, .{
                         .rule_id = rule.rule_id,
                         .severity = config.detect_number_literal,
                         .start = .startOfNode(tree, param_node),
                         .end = .endOfNode(tree, param_node),
-                        .message = try std.fmt.allocPrint(allocator, "Avoid number literal arguments as they're ambiguous.", .{}),
+                        .message = try std.fmt.allocPrint(gpa, "Avoid number literal arguments as they're ambiguous.", .{}),
                     }),
             }
         }
@@ -150,9 +150,9 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            allocator,
+            gpa,
             doc.path,
-            try lint_problems.toOwnedSlice(allocator),
+            try lint_problems.toOwnedSlice(gpa),
         )
     else
         null;

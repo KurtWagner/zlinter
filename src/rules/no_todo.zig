@@ -37,14 +37,14 @@ fn run(
     rule: zlinter.rules.LintRule,
     _: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
     var lint_problems: shims.ArrayList(zlinter.results.LintProblem) = .empty;
-    defer lint_problems.deinit(allocator);
+    defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
     const source = tree.source;
@@ -74,12 +74,12 @@ fn run(
             }
         }
 
-        try lint_problems.append(allocator, .{
+        try lint_problems.append(gpa, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
             .start = .startOfComment(doc.comments, comment),
             .end = .endOfComment(doc.comments, comment),
-            .message = try allocator.dupe(u8, if (config.exclude_if_contains_issue_number or !config.exclude_if_contains_url)
+            .message = try gpa.dupe(u8, if (config.exclude_if_contains_issue_number or !config.exclude_if_contains_url)
                 "Avoid todo comments that don't link to a tracked issue"
             else
                 "Avoid todo comments"),
@@ -88,9 +88,9 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            allocator,
+            gpa,
             doc.path,
-            try lint_problems.toOwnedSlice(allocator),
+            try lint_problems.toOwnedSlice(gpa),
         )
     else
         null;

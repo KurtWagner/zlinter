@@ -39,19 +39,19 @@ fn run(
     rule: zlinter.rules.LintRule,
     _: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
     var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(allocator);
+    defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
 
     const root: NodeIndexShim = .root;
-    var it = try doc.nodeLineageIterator(root, allocator);
+    var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
     var fn_decl_buffer: [1]Ast.Node.Index = undefined;
@@ -79,20 +79,20 @@ fn run(
             else => continue :nodes,
         }
 
-        try lint_problems.append(allocator, .{
+        try lint_problems.append(gpa, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
             .start = .startOfToken(tree, tree.firstToken(node.toNodeIndex())),
             .end = .endOfNode(tree, return_type.toNodeIndex()),
-            .message = try allocator.dupe(u8, "Function returns an inferred error union. Prefer an explicit error set"),
+            .message = try gpa.dupe(u8, "Function returns an inferred error union. Prefer an explicit error set"),
         });
     }
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            allocator,
+            gpa,
             doc.path,
-            try lint_problems.toOwnedSlice(allocator),
+            try lint_problems.toOwnedSlice(gpa),
         )
     else
         null;

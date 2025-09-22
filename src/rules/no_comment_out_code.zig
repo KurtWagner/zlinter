@@ -44,17 +44,17 @@ fn run(
     rule: zlinter.rules.LintRule,
     _: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
     var lint_problems: shims.ArrayList(zlinter.results.LintProblem) = .empty;
-    defer lint_problems.deinit(allocator);
+    defer lint_problems.deinit(gpa);
 
     var content_accumulator: shims.ArrayList(u8) = .empty;
-    defer content_accumulator.deinit(allocator);
+    defer content_accumulator.deinit(gpa);
 
     var first_comment: ?zlinter.comments.Comment = null;
     var last_comment: ?zlinter.comments.Comment = null;
@@ -69,28 +69,28 @@ fn run(
 
         if (content_accumulator.items.len == 0 or prev_line == line - 1) {
             if (content_accumulator.items.len == 0) {
-                try content_accumulator.appendSlice(allocator, "fn container() void {");
+                try content_accumulator.appendSlice(gpa, "fn container() void {");
             }
-            try content_accumulator.appendSlice(allocator, contents);
-            try content_accumulator.append(allocator, '\n');
+            try content_accumulator.appendSlice(gpa, contents);
+            try content_accumulator.append(gpa, '\n');
         } else {
             if (content_accumulator.items.len > 0) {
-                if (try looksLikeCode(content_accumulator.items[0..], allocator)) {
-                    try lint_problems.append(allocator, .{
+                if (try looksLikeCode(content_accumulator.items[0..], gpa)) {
+                    try lint_problems.append(gpa, .{
                         .rule_id = rule.rule_id,
                         .severity = config.severity,
                         .start = .startOfComment(doc.comments, first_comment.?),
                         .end = .endOfComment(doc.comments, last_comment.?),
-                        .message = try allocator.dupe(u8, "Avoid code in comments"),
+                        .message = try gpa.dupe(u8, "Avoid code in comments"),
                     });
                 }
 
-                content_accumulator.clearAndFree(allocator);
+                content_accumulator.clearAndFree(gpa);
                 first_comment = null;
                 last_comment = null;
             }
-            try content_accumulator.appendSlice(allocator, contents);
-            try content_accumulator.append(allocator, '\n');
+            try content_accumulator.appendSlice(gpa, contents);
+            try content_accumulator.append(gpa, '\n');
         }
 
         first_comment = first_comment orelse comment;
@@ -98,26 +98,26 @@ fn run(
     }
 
     if (content_accumulator.items.len > 0) {
-        if (try looksLikeCode(content_accumulator.items[0..], allocator)) {
-            try lint_problems.append(allocator, .{
+        if (try looksLikeCode(content_accumulator.items[0..], gpa)) {
+            try lint_problems.append(gpa, .{
                 .rule_id = rule.rule_id,
                 .severity = config.severity,
                 .start = .startOfComment(doc.comments, first_comment.?),
                 .end = .endOfComment(doc.comments, last_comment.?),
-                .message = try allocator.dupe(u8, "Avoid code in comments"),
+                .message = try gpa.dupe(u8, "Avoid code in comments"),
             });
         }
 
-        content_accumulator.clearAndFree(allocator);
+        content_accumulator.clearAndFree(gpa);
         first_comment = null;
         last_comment = null;
     }
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            allocator,
+            gpa,
             doc.path,
-            try lint_problems.toOwnedSlice(allocator),
+            try lint_problems.toOwnedSlice(gpa),
         )
     else
         null;

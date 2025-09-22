@@ -56,16 +56,16 @@ fn run(
     rule: zlinter.rules.LintRule,
     _: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
     var lint_problems: shims.ArrayList(zlinter.results.LintProblem) = .empty;
-    defer lint_problems.deinit(allocator);
+    defer lint_problems.deinit(gpa);
 
-    var scoped_imports = try resolveScopedImports(doc, allocator);
+    var scoped_imports = try resolveScopedImports(doc, gpa);
     defer deinitScopedImports(&scoped_imports);
 
     const tree = doc.handle.tree;
@@ -79,13 +79,13 @@ fn run(
                 const is_same_chunk = (p.last_line + 1) == import.first_line;
 
                 if (!config.allow_line_separated_chunks and !is_same_chunk) {
-                    try lint_problems.append(allocator, .{
+                    try lint_problems.append(gpa, .{
                         .rule_id = rule.rule_id,
                         .severity = config.severity,
                         .start = .startOfNode(tree, import.decl_node),
                         .end = .endOfNode(tree, import.decl_node),
-                        .message = try std.fmt.allocPrint(allocator, "Import '{s}' should grouped with other imports", .{import.decl_name}),
-                        .fix = try swapNodesFix(doc, p.decl_node, import.decl_node, allocator),
+                        .message = try std.fmt.allocPrint(gpa, "Import '{s}' should grouped with other imports", .{import.decl_name}),
+                        .fix = try swapNodesFix(doc, p.decl_node, import.decl_node, gpa),
                     });
                     continue :scopes;
                 }
@@ -93,13 +93,13 @@ fn run(
                 if (is_same_chunk) {
                     const order = config.order.cmp(import.decl_name, p.decl_name);
                     if (order == .lt) {
-                        try lint_problems.append(allocator, .{
+                        try lint_problems.append(gpa, .{
                             .rule_id = rule.rule_id,
                             .severity = config.severity,
                             .start = .startOfNode(tree, import.decl_node),
                             .end = .endOfNode(tree, import.decl_node),
-                            .message = try std.fmt.allocPrint(allocator, "Import '{s}' is not in {s} order", .{ import.decl_name, config.order.name() }),
-                            .fix = try swapNodesFix(doc, p.decl_node, import.decl_node, allocator),
+                            .message = try std.fmt.allocPrint(gpa, "Import '{s}' is not in {s} order", .{ import.decl_name, config.order.name() }),
+                            .fix = try swapNodesFix(doc, p.decl_node, import.decl_node, gpa),
                         });
                         continue :scopes;
                     }
@@ -111,9 +111,9 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            allocator,
+            gpa,
             doc.path,
-            try lint_problems.toOwnedSlice(allocator),
+            try lint_problems.toOwnedSlice(gpa),
         )
     else
         null;
@@ -150,7 +150,7 @@ fn swapNodesFix(
     doc: *const zlinter.session.LintDocument,
     first: Ast.Node.Index,
     second: Ast.Node.Index,
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
 ) error{OutOfMemory}!zlinter.results.LintProblemFix {
     const tree = doc.handle.tree;
     const source = tree.source;
@@ -159,20 +159,20 @@ fn swapNodesFix(
     const second_line_start = tree.tokenLocation(0, tree.firstToken(second)).line_start;
     const second_line_end = tree.tokenLocation(0, tree.lastToken(second)).line_end;
 
-    var text = try shims.ArrayList(u8).initCapacity(allocator, second_line_start - first_line_start);
-    errdefer text.deinit(allocator);
+    var text = try shims.ArrayList(u8).initCapacity(gpa, second_line_start - first_line_start);
+    errdefer text.deinit(gpa);
 
     if (source[second_line_end] == 0) {
-        try text.appendSlice(allocator, source[second_line_start..second_line_end]);
-        try text.append(allocator, '\n');
-        try text.appendSlice(allocator, source[first_line_start .. second_line_start - 1]);
+        try text.appendSlice(gpa, source[second_line_start..second_line_end]);
+        try text.append(gpa, '\n');
+        try text.appendSlice(gpa, source[first_line_start .. second_line_start - 1]);
     } else {
-        try text.appendSlice(allocator, source[second_line_start .. second_line_end + 1]);
-        try text.appendSlice(allocator, source[first_line_start..second_line_start]);
+        try text.appendSlice(gpa, source[second_line_start .. second_line_end + 1]);
+        try text.appendSlice(gpa, source[first_line_start..second_line_start]);
     }
 
     return .{
-        .text = try text.toOwnedSlice(allocator),
+        .text = try text.toOwnedSlice(gpa),
         .start = first_line_start,
         .end = second_line_end + 1,
     };
@@ -181,15 +181,15 @@ fn swapNodesFix(
 /// Returns declarations initialised as imports grouped by their parent (i.e., their scope).
 fn resolveScopedImports(
     doc: *const zlinter.session.LintDocument,
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
 ) !std.AutoArrayHashMap(Ast.Node.Index, ImportsQueueLinesAscending) {
     const tree = doc.handle.tree;
 
     const root: NodeIndexShim = .root;
-    var node_it = try doc.nodeLineageIterator(root, allocator);
+    var node_it = try doc.nodeLineageIterator(root, gpa);
     defer node_it.deinit();
 
-    var scoped_imports: std.AutoArrayHashMap(Ast.Node.Index, ImportsQueueLinesAscending) = .init(allocator);
+    var scoped_imports: std.AutoArrayHashMap(Ast.Node.Index, ImportsQueueLinesAscending) = .init(gpa);
     while (try node_it.next()) |tuple| {
         const node, const connections = tuple;
 
@@ -217,7 +217,7 @@ fn resolveScopedImports(
         if (gop.found_existing) {
             try gop.value_ptr.add(import);
         } else {
-            var imports = ImportsQueueLinesAscending.init(allocator, {});
+            var imports = ImportsQueueLinesAscending.init(gpa, {});
             errdefer imports.deinit();
 
             try imports.add(import);

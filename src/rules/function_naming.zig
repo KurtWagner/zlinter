@@ -67,13 +67,13 @@ fn run(
     rule: zlinter.rules.LintRule,
     context: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
     var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(allocator);
+    defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
 
@@ -105,14 +105,14 @@ fn run(
                 if (return_type.isMetaType()) {
                     if (!config.function_that_returns_type.style.check(fn_name)) {
                         break :msg .{
-                            try std.fmt.allocPrint(allocator, "Callable returning `type` should be {s}", .{config.function_that_returns_type.style.name()}),
+                            try std.fmt.allocPrint(gpa, "Callable returning `type` should be {s}", .{config.function_that_returns_type.style.name()}),
                             config.function_that_returns_type.severity,
                         };
                     }
                 } else {
                     if (!config.function.style.check(fn_name)) {
                         break :msg .{
-                            try std.fmt.allocPrint(allocator, "Callable should be {s}", .{config.function.style.name()}),
+                            try std.fmt.allocPrint(gpa, "Callable should be {s}", .{config.function.style.name()}),
                             config.function.severity,
                         };
                     }
@@ -122,7 +122,7 @@ fn run(
 
             if (error_message) |message| {
                 try lint_problems.append(
-                    allocator,
+                    gpa,
                     .{
                         .severity = severity.?,
                         .rule_id = rule.rule_id,
@@ -167,12 +167,12 @@ fn run(
                             .{ config.function_arg, "Function argument" };
 
                     if (!style_with_severity.style.check(identifier)) {
-                        try lint_problems.append(allocator, .{
+                        try lint_problems.append(gpa, .{
                             .rule_id = rule.rule_id,
                             .severity = style_with_severity.severity,
                             .start = .startOfToken(tree, identifer_token),
                             .end = .endOfToken(tree, identifer_token),
-                            .message = try std.fmt.allocPrint(allocator, "{s} should be {s}", .{ desc, style_with_severity.style.name() }),
+                            .message = try std.fmt.allocPrint(gpa, "{s} should be {s}", .{ desc, style_with_severity.style.name() }),
                         });
                     }
                 }
@@ -182,9 +182,9 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            allocator,
+            gpa,
             doc.path,
-            try lint_problems.toOwnedSlice(allocator),
+            try lint_problems.toOwnedSlice(gpa),
         )
     else
         null;

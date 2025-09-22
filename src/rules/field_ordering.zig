@@ -50,18 +50,18 @@ fn run(
     rule: zlinter.rules.LintRule,
     _: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
     var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(allocator);
+    defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
 
     const root: NodeIndexShim = .root;
-    var it = try doc.nodeLineageIterator(root, allocator);
+    var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
     var container_decl_buffer: [2]Ast.Node.Index = undefined;
@@ -99,16 +99,16 @@ fn run(
         }
 
         var actual_order = shims.ArrayList(Ast.Node.Index).empty;
-        defer actual_order.deinit(allocator);
+        defer actual_order.deinit(gpa);
 
         var expected_order = shims.ArrayList(Ast.Node.Index).empty;
-        defer expected_order.deinit(allocator);
+        defer expected_order.deinit(gpa);
 
         var sorted_queue = std.PriorityQueue(
             Field,
             struct { zlinter.rules.LintTextOrder },
             Field.cmp,
-        ).init(allocator, .{order_with_severity.order});
+        ).init(gpa, .{order_with_severity.order});
         defer sorted_queue.deinit();
 
         var seen_field: bool = false;
@@ -127,7 +127,7 @@ fn run(
                 else => if (seen_field) break :children else continue :children,
             };
 
-            try actual_order.append(allocator, container_child);
+            try actual_order.append(gpa, container_child);
             try sorted_queue.add(.{
                 .name = tree.tokenSlice(name_token),
                 .node = container_child,
@@ -139,7 +139,7 @@ fn run(
         var maybe_first_problem_index: ?usize = null; // Inclusive
         var maybe_last_problem_index: ?usize = null; // Inclusive
         while (sorted_queue.removeOrNull()) |field| : (i += 1) {
-            try expected_order.append(allocator, field.node);
+            try expected_order.append(gpa, field.node);
             if (field.node != actual_order.items[i]) {
                 maybe_first_problem_index = maybe_first_problem_index orelse i;
                 maybe_last_problem_index = i;
@@ -160,7 +160,7 @@ fn run(
                 );
 
             var expected_source = shims.ArrayList(u8).empty;
-            defer expected_source.deinit(allocator);
+            defer expected_source.deinit(gpa);
 
             const last_node = expected_order.items[expected_order.items.len - 1];
             for (expected_order.items[first_problem_index .. last_problem_index + 1]) |current_node| {
@@ -179,25 +179,25 @@ fn run(
                     break :is_multiline false;
                 };
 
-                try expected_source.appendSlice(allocator, tree.source[expected_start.byte_offset .. expected_end.byte_offset + 1]);
+                try expected_source.appendSlice(gpa, tree.source[expected_start.byte_offset .. expected_end.byte_offset + 1]);
                 if (!is_last_field or is_multiline) {
-                    try expected_source.append(allocator, ',');
+                    try expected_source.append(gpa, ',');
                 }
             }
 
-            try lint_problems.append(allocator, .{
+            try lint_problems.append(gpa, .{
                 .rule_id = rule.rule_id,
                 .severity = order_with_severity.severity,
                 .start = actual_start,
                 .end = actual_end,
-                .message = try std.fmt.allocPrint(allocator, "{s} fields should be in {s} order", .{
+                .message = try std.fmt.allocPrint(gpa, "{s} fields should be in {s} order", .{
                     container_kind_name,
                     order_with_severity.order.name(),
                 }),
                 .fix = .{
                     .start = actual_start.byte_offset,
                     .end = actual_end.byte_offset + 1, // + 1 as fix is exclusive
-                    .text = try expected_source.toOwnedSlice(allocator),
+                    .text = try expected_source.toOwnedSlice(gpa),
                 },
             });
         }
@@ -205,9 +205,9 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            allocator,
+            gpa,
             doc.path,
-            try lint_problems.toOwnedSlice(allocator),
+            try lint_problems.toOwnedSlice(gpa),
         )
     else
         null;

@@ -143,13 +143,13 @@ fn run(
     rule: zlinter.rules.LintRule,
     context: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
     var lint_problems: shims.ArrayList(zlinter.results.LintProblem) = .empty;
-    defer lint_problems.deinit(allocator);
+    defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
     var buffer: [2]Ast.Node.Index = undefined;
@@ -181,34 +181,34 @@ fn run(
                                 if (std.mem.eql(u8, name, exclude_name)) continue :tokens;
                             }
 
-                            try lint_problems.append(allocator, .{
+                            try lint_problems.append(gpa, .{
                                 .rule_id = rule.rule_id,
                                 .severity = min_len.severity,
                                 .start = .startOfToken(tree, token),
                                 .end = .endOfToken(tree, token),
-                                .message = try std.fmt.allocPrint(allocator, "Error field names should have a length greater or equal to {d}", .{min_len.len}),
+                                .message = try std.fmt.allocPrint(gpa, "Error field names should have a length greater or equal to {d}", .{min_len.len}),
                             });
                         } else if (max_len.severity != .off and name_len > max_len.len) {
                             for (exclude_len) |exclude_name| {
                                 if (std.mem.eql(u8, name, exclude_name)) continue :tokens;
                             }
 
-                            try lint_problems.append(allocator, .{
+                            try lint_problems.append(gpa, .{
                                 .rule_id = rule.rule_id,
                                 .severity = max_len.severity,
                                 .start = .startOfToken(tree, token),
                                 .end = .endOfToken(tree, token),
-                                .message = try std.fmt.allocPrint(allocator, "Error field names should have a length less or equal to {d}", .{max_len.len}),
+                                .message = try std.fmt.allocPrint(gpa, "Error field names should have a length less or equal to {d}", .{max_len.len}),
                             });
                         }
 
                         if (!config.error_field.style.check(name)) {
-                            try lint_problems.append(allocator, .{
+                            try lint_problems.append(gpa, .{
                                 .rule_id = rule.rule_id,
                                 .severity = config.error_field.severity,
                                 .start = .startOfToken(tree, token),
                                 .end = .endOfToken(tree, token),
-                                .message = try std.fmt.allocPrint(allocator, "Error fields should be {s}", .{config.error_field.style.name()}),
+                                .message = try std.fmt.allocPrint(gpa, "Error fields should be {s}", .{config.error_field.style.name()}),
                             });
                         }
                     },
@@ -261,34 +261,34 @@ fn run(
                             if (std.mem.eql(u8, name, exclude_name)) continue :fields;
                         }
 
-                        try lint_problems.append(allocator, .{
+                        try lint_problems.append(gpa, .{
                             .rule_id = rule.rule_id,
                             .severity = min_len.severity,
                             .start = .startOfToken(tree, name_token),
                             .end = .endOfToken(tree, name_token),
-                            .message = try std.fmt.allocPrint(allocator, "{s} field names should have a length greater or equal to {d}", .{ container_kind.name(), min_len.len }),
+                            .message = try std.fmt.allocPrint(gpa, "{s} field names should have a length greater or equal to {d}", .{ container_kind.name(), min_len.len }),
                         });
                     } else if (max_len.severity != .off and name_len > max_len.len) {
                         for (exclude_len) |exclude_name| {
                             if (std.mem.eql(u8, name, exclude_name)) continue :fields;
                         }
 
-                        try lint_problems.append(allocator, .{
+                        try lint_problems.append(gpa, .{
                             .rule_id = rule.rule_id,
                             .severity = max_len.severity,
                             .start = .startOfToken(tree, name_token),
                             .end = .endOfToken(tree, name_token),
-                            .message = try std.fmt.allocPrint(allocator, "{s} field names should have a length less or equal to {d}", .{ container_kind.name(), max_len.len }),
+                            .message = try std.fmt.allocPrint(gpa, "{s} field names should have a length less or equal to {d}", .{ container_kind.name(), max_len.len }),
                         });
                     }
 
                     if (!style_with_severity.style.check(name)) {
-                        try lint_problems.append(allocator, .{
+                        try lint_problems.append(gpa, .{
                             .rule_id = rule.rule_id,
                             .severity = style_with_severity.severity,
                             .start = .startOfToken(tree, name_token),
                             .end = .endOfToken(tree, name_token),
-                            .message = try std.fmt.allocPrint(allocator, "{s} fields should be {s}", .{ container_kind.name(), style_with_severity.style.name() }),
+                            .message = try std.fmt.allocPrint(gpa, "{s} fields should be {s}", .{ container_kind.name(), style_with_severity.style.name() }),
                         });
                     }
                 }
@@ -298,9 +298,9 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            allocator,
+            gpa,
             doc.path,
-            try lint_problems.toOwnedSlice(allocator),
+            try lint_problems.toOwnedSlice(gpa),
         )
     else
         null;
