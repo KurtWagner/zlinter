@@ -10,7 +10,6 @@ pub const max_zig_file_size_bytes = bytes: {
 pub const LintDocument = struct {
     path: []const u8,
     handle: *zls.DocumentStore.Handle,
-    analyser: zls.Analyser,
     lineage: ast.NodeLineage,
     comments: comments.CommentsDocument,
     skipper: comments.LazyRuleSkipper,
@@ -22,7 +21,6 @@ pub const LintDocument = struct {
 
         self.lineage.deinit(gpa);
 
-        self.analyser.deinit();
         gpa.free(self.path);
 
         self.comments.deinit(gpa);
@@ -34,271 +32,6 @@ pub const LintDocument = struct {
     /// disable comments.
     pub fn shouldSkipProblem(self: *LintDocument, problem: LintProblem) error{OutOfMemory}!bool {
         return self.skipper.shouldSkip(problem);
-    }
-
-    /// Resolves the type of node or null if it can't be resolved.
-    pub inline fn resolveTypeOfNode(self: *LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
-        return switch (version.zig) {
-            .@"0.15", .@"0.16" => self.analyser.resolveTypeOfNode(.of(node, self.handle)),
-            .@"0.14" => self.analyser.resolveTypeOfNode(.{ .handle = self.handle, .node = node }),
-        };
-    }
-
-    /// Resolves the type of a node that points to a type (e.g., return type) or
-    /// null if it cannot be resolved.
-    pub inline fn resolveTypeOfTypeNode(self: *LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
-        const resolved_type = try self.resolveTypeOfNode(node) orelse return null;
-        const instance_type = if (resolved_type.isMetaType()) resolved_type else switch (version.zig) {
-            .@"0.14" => resolved_type.instanceTypeVal(&self.analyser) orelse resolved_type,
-            .@"0.15", .@"0.16" => try resolved_type.instanceTypeVal(&self.analyser) orelse resolved_type,
-        };
-
-        return instance_type.resolveDeclLiteralResultType();
-    }
-
-    // TODO: Write tests and clean this up as they're not really all needed
-    pub const TypeKind = enum {
-        /// Fallback when it's not a type or any of the identifiable `*_instance`
-        /// kinds - usually this means its a primitive. e.g., `var age: u32 = 24;`
-        other,
-        /// e.g., has type `fn () void`
-        @"fn",
-        /// e.g., has type `fn () type`
-        fn_returns_type,
-        opaque_instance,
-        /// e.g., has type `enum { ... }`
-        enum_instance,
-        /// e.g., has type `struct { field: u32 }`
-        struct_instance,
-        /// e.g., has type `union { a: u32, b: u32 }`
-        union_instance,
-        /// e.g., `const MyError = error { NotFound, Invalid };`
-        error_type,
-        /// e.g., `const Callback = *const fn () void;`
-        fn_type,
-        /// e.g., `const Callback = *const fn () void;`
-        fn_type_returns_type,
-        /// Is type `type` and not categorized as any other `*_type`
-        type,
-        /// e.g., `const Result = enum { good, bad };`
-        enum_type,
-        /// e.g., `const Person = struct { name: [] const u8 };`
-        struct_type,
-        /// e.g., `const colors = struct { const color = "red"; };`
-        namespace_type,
-        /// e.g., `const Color = union { rgba: Rgba, rgb: Rgb };`
-        union_type,
-        opaque_type,
-
-        pub fn name(self: TypeKind) []const u8 {
-            return switch (self) {
-                .other => "Other",
-                .@"fn" => "Function",
-                .fn_returns_type => "Type function",
-                .opaque_instance => "Opaque instance",
-                .enum_instance => "Enum instance",
-                .struct_instance => "Struct instance",
-                .union_instance => "Union instance",
-                .error_type => "Error",
-                .fn_type => "Function type",
-                .fn_type_returns_type => "Type function type",
-                .type => "Type",
-                .enum_type => "Enum",
-                .struct_type => "Struct",
-                .namespace_type => "Namespace",
-                .union_type => "Union",
-                .opaque_type => "Opaque",
-            };
-        }
-    };
-
-    /// Resolves a given declaration or container field by looking at the type
-    /// node (if any) and then the value node (if any) to resolve the type.
-    ///
-    /// This will return null if the kind could not be resolved, usually indicating
-    /// that the input was unexpected / invalid.
-    pub fn resolveTypeKind(self: *LintDocument, input: union(enum) {
-        var_decl: Ast.full.VarDecl,
-        container_field: Ast.full.ContainerField,
-    }) !?TypeKind {
-        const maybe_type_node, const maybe_value_node = inputs: {
-            const t, const v = switch (input) {
-                .var_decl => |var_decl| .{
-                    var_decl.ast.type_node,
-                    var_decl.ast.init_node,
-                },
-                .container_field => |container_field| .{
-                    container_field.ast.type_expr,
-                    container_field.ast.value_expr,
-                },
-            };
-            break :inputs .{
-                NodeIndexShim.initOptional(t),
-                NodeIndexShim.initOptional(v),
-            };
-        };
-
-        var container_decl_buffer: [2]Ast.Node.Index = undefined;
-        var fn_proto_buffer: [1]Ast.Node.Index = undefined;
-
-        const tree = self.handle.tree;
-
-        // First we try looking for a type node in the declaration
-        if (maybe_type_node) |type_node| {
-            // std.debug.print("TypeNode - Before: {s}\n", .{tree.getNodeSource(type_node.toNodeIndex())});
-            // std.debug.print("TypeNode - Tag Before: {}\n", .{shims.nodeTag(tree, type_node.toNodeIndex())});
-
-            const node = shims.unwrapNode(tree, type_node.toNodeIndex(), .{});
-            // std.debug.print("TypeNode - After: {s}\n", .{tree.getNodeSource(node)});
-            // std.debug.print("TypeNode - Tag After: {}\n", .{shims.nodeTag(tree, node)});
-
-            if (tree.fullFnProto(&fn_proto_buffer, node)) |fn_proto| {
-                if (NodeIndexShim.initOptional(fn_proto.ast.return_type)) |return_node_shim| {
-                    const return_node = shims.unwrapNode(tree, return_node_shim.toNodeIndex(), .{});
-
-                    // std.debug.print("TypeNode - Return unwrapped: {s}\n", .{tree.getNodeSource(return_node)});
-                    // std.debug.print("TypeNode - Return unwrapped tag: {}\n", .{shims.nodeTag(tree, return_node)});
-
-                    // If it's a function proto, then return whether or not the function returns a type
-                    return if (shims.isIdentiferKind(tree, shims.unwrapNode(tree, return_node, .{}), .type))
-                        .fn_returns_type
-                    else
-                        .@"fn";
-                } else {
-                    return .@"fn";
-                }
-            } else if (tree.fullContainerDecl(&container_decl_buffer, node)) |container_decl| {
-
-                // If's it's a container declaration (e.g., struct {}) then resolve what type of container
-                switch (tree.tokens.items(.tag)[container_decl.ast.main_token]) {
-                    // Instance of namespace should be impossible but to be safe
-                    // we will just return null to say we couldn't resolve the kind
-                    .keyword_struct => return if (shims.isContainerNamespace(tree, container_decl)) null else .struct_instance,
-                    .keyword_union => return .union_instance,
-                    .keyword_opaque => return .opaque_instance,
-                    .keyword_enum => return .enum_instance,
-                    inline else => |token| @panic("Unexpected container main token: " ++ @tagName(token)),
-                }
-            } else if (shims.isIdentiferKind(tree, node, .type)) {
-                return .type;
-            } else if (try self.resolveTypeOfNode(node)) |type_node_type| {
-                const decl = type_node_type.resolveDeclLiteralResultType();
-                if (decl.isUnionType()) {
-                    return .union_instance;
-                } else if (decl.isEnumType()) {
-                    return .enum_instance;
-                } else if (decl.isStructType()) {
-                    return .struct_instance;
-                } else if (decl.isTypeFunc()) {
-                    return .fn_returns_type;
-                } else if (decl.isFunc()) {
-                    return .@"fn";
-                }
-            }
-            return .other;
-        }
-
-        // Then we look at the initialisation value if a type couldn't be used
-        if (maybe_value_node) |value_node| {
-            // std.debug.print("InitNode - Before: {s}\n", .{tree.getNodeSource(value_node.toNodeIndex())});
-            // std.debug.print("InitNode - Tag Before: {}\n", .{shims.nodeTag(tree, value_node.toNodeIndex())});
-
-            const node = shims.unwrapNode(tree, value_node.toNodeIndex(), .{});
-            // std.debug.print("InitNode - After: {s}\n", .{tree.getNodeSource(node)});
-            // std.debug.print("InitNode - Tag After: {}\n", .{shims.nodeTag(tree, node)});
-
-            // LIMITATION: All builtin calls to type of and type will return
-            // `type` without any resolution.
-            switch (shims.nodeTag(tree, node)) {
-                .builtin_call_two,
-                .builtin_call_two_comma,
-                .builtin_call,
-                .builtin_call_comma,
-                => {
-                    inline for (&.{ "@Type", "@TypeOf" }) |builtin_name| {
-                        if (std.mem.eql(u8, builtin_name, tree.tokenSlice(shims.nodeMainToken(tree, node)))) {
-                            return .type;
-                        }
-                    }
-                },
-                .error_set_decl,
-                .merge_error_sets,
-                => return .error_type,
-                else => {},
-            }
-
-            if (tree.fullContainerDecl(&container_decl_buffer, node)) |container_decl| {
-                switch (tree.tokens.items(.tag)[container_decl.ast.main_token]) {
-                    .keyword_struct => return if (shims.isContainerNamespace(tree, container_decl)) .namespace_type else .struct_type,
-                    .keyword_union => return .union_type,
-                    .keyword_opaque => return .opaque_type,
-                    .keyword_enum => return .enum_type,
-                    inline else => |token| @panic("Unexpected container main token: " ++ @tagName(token)),
-                }
-            } else if (try self.resolveTypeOfNode(node)) |init_node_type| {
-                // std.debug.print("InitNode - ResolvedNode type: {}\n", .{init_node_type});
-
-                const decl = init_node_type.resolveDeclLiteralResultType();
-
-                // std.debug.print("InitNode - Resolved type: {}\n", .{decl});
-                // try self.dumpType(decl, 0);
-
-                const is_error_container =
-                    if (std.meta.hasMethod(@TypeOf(decl), "isErrorSetType"))
-                        decl.isErrorSetType(&self.analyser)
-                    else switch (decl.data) {
-                        .container => |container| result: {
-                            const container_node, const container_tree = switch (version.zig) {
-                                .@"0.14" => .{ container.toNode(), container.handle.tree },
-                                .@"0.15", .@"0.16" => .{ container.scope_handle.toNode(), container.scope_handle.handle.tree },
-                            };
-
-                            if (!NodeIndexShim.init(container_node).isRoot()) {
-                                switch (shims.nodeTag(container_tree, container_node)) {
-                                    .error_set_decl => break :result true,
-                                    else => {},
-                                }
-                            }
-                            break :result false;
-                        },
-                        else => false,
-                    };
-
-                if (is_error_container) {
-                    return .error_type;
-                } else if (decl.isNamespace()) {
-                    return if (init_node_type.is_type_val) .namespace_type else null;
-                } else if (decl.isUnionType()) {
-                    return if (init_node_type.is_type_val) .union_type else .union_instance;
-                } else if (decl.isEnumType()) {
-                    return if (init_node_type.is_type_val) .enum_type else .enum_instance;
-                } else if (decl.isOpaqueType()) {
-                    return if (init_node_type.is_type_val) .opaque_type else null;
-                } else if (decl.isStructType()) {
-                    return if (init_node_type.is_type_val) .struct_type else .struct_instance;
-                } else if (decl.isTypeFunc()) {
-                    return if (init_node_type.is_type_val) .fn_type_returns_type else .fn_returns_type;
-                } else if (decl.isFunc()) {
-                    return if (init_node_type.is_type_val) .fn_type else .@"fn";
-                } else if (decl.isMetaType()) {
-                    return .type;
-                } else {
-                    if (init_node_type.is_type_val) {
-                        if (init_node_type.isErrorSetType(&self.analyser)) {
-                            return .error_type;
-                        }
-                        switch (init_node_type.data) {
-                            // TODO: Maybe this can be merged with what isErrorSet
-                            // is doing to be less branches.
-                            .ip_index => return .type,
-                            else => {},
-                        }
-                    }
-                    return .other;
-                }
-            }
-        }
-        return null;
     }
 
     /// Walks up from a current node up its ansesters (e.g., parent,
@@ -416,15 +149,23 @@ pub const LintContext = struct {
     intern_pool: zls.analyser.InternPool,
     document_store: zls.DocumentStore,
     gpa: std.mem.Allocator,
+    analyser: zls.Analyser,
 
-    pub fn init(self: *LintContext, config: zls.Config, gpa: std.mem.Allocator) !void {
+    pub fn init(
+        self: *LintContext,
+        config: zls.Config,
+        gpa: std.mem.Allocator,
+        arena: std.mem.Allocator,
+    ) !void {
         self.* = .{
             .gpa = gpa,
             .diagnostics_collection = .{ .allocator = gpa },
             .intern_pool = try .init(gpa),
             .thread_pool = undefined, // zlinter-disable-current-line no_undefined - set below
             .document_store = undefined, // zlinter-disable-current-line no_undefined - set below
+            .analyser = undefined, // zlinter-disable-current-line no_undefined - set below
         };
+        errdefer self.intern_pool.deinit(gpa);
 
         if (!builtin.single_threaded) {
             self.thread_pool.init(.{
@@ -469,8 +210,23 @@ pub const LintContext = struct {
                 },
                 .@"0.14" => .fromMainConfig(config),
             },
-
             .thread_pool = &self.thread_pool,
+        };
+
+        self.analyser = switch (version.zig) {
+            .@"0.14" => zls.Analyser.init(
+                gpa,
+                &self.document_store,
+                &self.intern_pool,
+                null,
+            ),
+            .@"0.15", .@"0.16" => zls.Analyser.init(
+                gpa,
+                arena,
+                &self.document_store,
+                &self.intern_pool,
+                null,
+            ),
         };
     }
 
@@ -478,6 +234,8 @@ pub const LintContext = struct {
         self.diagnostics_collection.deinit();
         self.intern_pool.deinit(self.gpa);
         self.document_store.deinit();
+        self.analyser.deinit();
+
         if (!builtin.single_threaded) self.thread_pool.deinit();
     }
 
@@ -488,7 +246,6 @@ pub const LintContext = struct {
         self: *LintContext,
         path: []const u8,
         gpa: std.mem.Allocator,
-        arena: std.mem.Allocator,
         doc: *LintDocument,
     ) !void {
         var mem: [4096]u8 = undefined;
@@ -509,7 +266,6 @@ pub const LintContext = struct {
         doc.* = .{
             .path = try gpa.dupe(u8, path),
             .handle = handle,
-            .analyser = undefined, // zlinter-disable-current-line no_undefined - set below
             .lineage = .empty,
             .comments = src_comments,
             .skipper = undefined, // zlinter-disable-current-line no_undefined - set below
@@ -519,22 +275,6 @@ pub const LintContext = struct {
 
         doc.skipper = .init(doc.comments, doc.handle.tree.source, gpa);
         errdefer doc.skipper.deinit();
-
-        doc.analyser = switch (version.zig) {
-            .@"0.14" => zls.Analyser.init(
-                gpa,
-                &self.document_store,
-                &self.intern_pool,
-                handle,
-            ),
-            .@"0.15", .@"0.16" => zls.Analyser.init(
-                gpa,
-                arena,
-                &self.document_store,
-                &self.intern_pool,
-                handle,
-            ),
-        };
 
         {
             try doc.lineage.resize(gpa, doc.handle.tree.nodes.len);
@@ -581,18 +321,283 @@ pub const LintContext = struct {
             }
         }
     }
+
+    /// Resolves the type of node or null if it can't be resolved.
+    pub inline fn resolveTypeOfNode(self: *LintContext, doc: *const LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
+        return switch (version.zig) {
+            .@"0.15", .@"0.16" => self.analyser.resolveTypeOfNode(.of(node, doc.handle)),
+            .@"0.14" => self.analyser.resolveTypeOfNode(.{ .handle = doc.handle, .node = node }),
+        };
+    }
+
+    /// Resolves the type of a node that points to a type (e.g., return type) or
+    /// null if it cannot be resolved.
+    pub inline fn resolveTypeOfTypeNode(self: *LintContext, doc: *const LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
+        const resolved_type = try self.resolveTypeOfNode(doc, node) orelse return null;
+        const instance_type = if (resolved_type.isMetaType()) resolved_type else switch (version.zig) {
+            .@"0.14" => resolved_type.instanceTypeVal(&self.analyser) orelse resolved_type,
+            .@"0.15", .@"0.16" => try resolved_type.instanceTypeVal(&self.analyser) orelse resolved_type,
+        };
+
+        return instance_type.resolveDeclLiteralResultType();
+    }
+
+    // TODO: Write tests and clean this up as they're not really all needed
+    pub const TypeKind = enum {
+        /// Fallback when it's not a type or any of the identifiable `*_instance`
+        /// kinds - usually this means its a primitive. e.g., `var age: u32 = 24;`
+        other,
+        /// e.g., has type `fn () void`
+        @"fn",
+        /// e.g., has type `fn () type`
+        fn_returns_type,
+        opaque_instance,
+        /// e.g., has type `enum { ... }`
+        enum_instance,
+        /// e.g., has type `struct { field: u32 }`
+        struct_instance,
+        /// e.g., has type `union { a: u32, b: u32 }`
+        union_instance,
+        /// e.g., `const MyError = error { NotFound, Invalid };`
+        error_type,
+        /// e.g., `const Callback = *const fn () void;`
+        fn_type,
+        /// e.g., `const Callback = *const fn () void;`
+        fn_type_returns_type,
+        /// Is type `type` and not categorized as any other `*_type`
+        type,
+        /// e.g., `const Result = enum { good, bad };`
+        enum_type,
+        /// e.g., `const Person = struct { name: [] const u8 };`
+        struct_type,
+        /// e.g., `const colors = struct { const color = "red"; };`
+        namespace_type,
+        /// e.g., `const Color = union { rgba: Rgba, rgb: Rgb };`
+        union_type,
+        opaque_type,
+
+        pub fn name(self: TypeKind) []const u8 {
+            return switch (self) {
+                .other => "Other",
+                .@"fn" => "Function",
+                .fn_returns_type => "Type function",
+                .opaque_instance => "Opaque instance",
+                .enum_instance => "Enum instance",
+                .struct_instance => "Struct instance",
+                .union_instance => "Union instance",
+                .error_type => "Error",
+                .fn_type => "Function type",
+                .fn_type_returns_type => "Type function type",
+                .type => "Type",
+                .enum_type => "Enum",
+                .struct_type => "Struct",
+                .namespace_type => "Namespace",
+                .union_type => "Union",
+                .opaque_type => "Opaque",
+            };
+        }
+    };
+
+    /// Resolves a given declaration or container field by looking at the type
+    /// node (if any) and then the value node (if any) to resolve the type.
+    ///
+    /// This will return null if the kind could not be resolved, usually indicating
+    /// that the input was unexpected / invalid.
+    pub fn resolveTypeKind(self: *LintContext, doc: *const LintDocument, input: union(enum) {
+        var_decl: Ast.full.VarDecl,
+        container_field: Ast.full.ContainerField,
+    }) !?TypeKind {
+        const maybe_type_node, const maybe_value_node = inputs: {
+            const t, const v = switch (input) {
+                .var_decl => |var_decl| .{
+                    var_decl.ast.type_node,
+                    var_decl.ast.init_node,
+                },
+                .container_field => |container_field| .{
+                    container_field.ast.type_expr,
+                    container_field.ast.value_expr,
+                },
+            };
+            break :inputs .{
+                NodeIndexShim.initOptional(t),
+                NodeIndexShim.initOptional(v),
+            };
+        };
+
+        var container_decl_buffer: [2]Ast.Node.Index = undefined;
+        var fn_proto_buffer: [1]Ast.Node.Index = undefined;
+
+        const tree = doc.handle.tree;
+
+        // First we try looking for a type node in the declaration
+        if (maybe_type_node) |type_node| {
+            // std.debug.print("TypeNode - Before: {s}\n", .{tree.getNodeSource(type_node.toNodeIndex())});
+            // std.debug.print("TypeNode - Tag Before: {}\n", .{shims.nodeTag(tree, type_node.toNodeIndex())});
+
+            const node = shims.unwrapNode(tree, type_node.toNodeIndex(), .{});
+            // std.debug.print("TypeNode - After: {s}\n", .{tree.getNodeSource(node)});
+            // std.debug.print("TypeNode - Tag After: {}\n", .{shims.nodeTag(tree, node)});
+
+            if (tree.fullFnProto(&fn_proto_buffer, node)) |fn_proto| {
+                if (NodeIndexShim.initOptional(fn_proto.ast.return_type)) |return_node_shim| {
+                    const return_node = shims.unwrapNode(tree, return_node_shim.toNodeIndex(), .{});
+
+                    // std.debug.print("TypeNode - Return unwrapped: {s}\n", .{tree.getNodeSource(return_node)});
+                    // std.debug.print("TypeNode - Return unwrapped tag: {}\n", .{shims.nodeTag(tree, return_node)});
+
+                    // If it's a function proto, then return whether or not the function returns a type
+                    return if (shims.isIdentiferKind(tree, shims.unwrapNode(tree, return_node, .{}), .type))
+                        .fn_returns_type
+                    else
+                        .@"fn";
+                } else {
+                    return .@"fn";
+                }
+            } else if (tree.fullContainerDecl(&container_decl_buffer, node)) |container_decl| {
+
+                // If's it's a container declaration (e.g., struct {}) then resolve what type of container
+                switch (tree.tokens.items(.tag)[container_decl.ast.main_token]) {
+                    // Instance of namespace should be impossible but to be safe
+                    // we will just return null to say we couldn't resolve the kind
+                    .keyword_struct => return if (shims.isContainerNamespace(tree, container_decl)) null else .struct_instance,
+                    .keyword_union => return .union_instance,
+                    .keyword_opaque => return .opaque_instance,
+                    .keyword_enum => return .enum_instance,
+                    inline else => |token| @panic("Unexpected container main token: " ++ @tagName(token)),
+                }
+            } else if (shims.isIdentiferKind(tree, node, .type)) {
+                return .type;
+            } else if (try self.resolveTypeOfNode(doc, node)) |type_node_type| {
+                const decl = type_node_type.resolveDeclLiteralResultType();
+                if (decl.isUnionType()) {
+                    return .union_instance;
+                } else if (decl.isEnumType()) {
+                    return .enum_instance;
+                } else if (decl.isStructType()) {
+                    return .struct_instance;
+                } else if (decl.isTypeFunc()) {
+                    return .fn_returns_type;
+                } else if (decl.isFunc()) {
+                    return .@"fn";
+                }
+            }
+            return .other;
+        }
+
+        // Then we look at the initialisation value if a type couldn't be used
+        if (maybe_value_node) |value_node| {
+            // std.debug.print("InitNode - Before: {s}\n", .{tree.getNodeSource(value_node.toNodeIndex())});
+            // std.debug.print("InitNode - Tag Before: {}\n", .{shims.nodeTag(tree, value_node.toNodeIndex())});
+
+            const node = shims.unwrapNode(tree, value_node.toNodeIndex(), .{});
+            // std.debug.print("InitNode - After: {s}\n", .{tree.getNodeSource(node)});
+            // std.debug.print("InitNode - Tag After: {}\n", .{shims.nodeTag(tree, node)});
+
+            // LIMITATION: All builtin calls to type of and type will return
+            // `type` without any resolution.
+            switch (shims.nodeTag(tree, node)) {
+                .builtin_call_two,
+                .builtin_call_two_comma,
+                .builtin_call,
+                .builtin_call_comma,
+                => {
+                    inline for (&.{ "@Type", "@TypeOf" }) |builtin_name| {
+                        if (std.mem.eql(u8, builtin_name, tree.tokenSlice(shims.nodeMainToken(tree, node)))) {
+                            return .type;
+                        }
+                    }
+                },
+                .error_set_decl,
+                .merge_error_sets,
+                => return .error_type,
+                else => {},
+            }
+
+            if (tree.fullContainerDecl(&container_decl_buffer, node)) |container_decl| {
+                switch (tree.tokens.items(.tag)[container_decl.ast.main_token]) {
+                    .keyword_struct => return if (shims.isContainerNamespace(tree, container_decl)) .namespace_type else .struct_type,
+                    .keyword_union => return .union_type,
+                    .keyword_opaque => return .opaque_type,
+                    .keyword_enum => return .enum_type,
+                    inline else => |token| @panic("Unexpected container main token: " ++ @tagName(token)),
+                }
+            } else if (try self.resolveTypeOfNode(doc, node)) |init_node_type| {
+                // std.debug.print("InitNode - ResolvedNode type: {}\n", .{init_node_type});
+
+                const decl = init_node_type.resolveDeclLiteralResultType();
+
+                // std.debug.print("InitNode - Resolved type: {}\n", .{decl});
+                // try self.dumpType(decl, 0);
+
+                const is_error_container =
+                    if (std.meta.hasMethod(@TypeOf(decl), "isErrorSetType"))
+                        decl.isErrorSetType(&self.analyser)
+                    else switch (decl.data) {
+                        .container => |container| result: {
+                            const container_node, const container_tree = switch (version.zig) {
+                                .@"0.14" => .{ container.toNode(), container.handle.tree },
+                                .@"0.15", .@"0.16" => .{ container.scope_handle.toNode(), container.scope_handle.handle.tree },
+                            };
+
+                            if (!NodeIndexShim.init(container_node).isRoot()) {
+                                switch (shims.nodeTag(container_tree, container_node)) {
+                                    .error_set_decl => break :result true,
+                                    else => {},
+                                }
+                            }
+                            break :result false;
+                        },
+                        else => false,
+                    };
+
+                if (is_error_container) {
+                    return .error_type;
+                } else if (decl.isNamespace()) {
+                    return if (init_node_type.is_type_val) .namespace_type else null;
+                } else if (decl.isUnionType()) {
+                    return if (init_node_type.is_type_val) .union_type else .union_instance;
+                } else if (decl.isEnumType()) {
+                    return if (init_node_type.is_type_val) .enum_type else .enum_instance;
+                } else if (decl.isOpaqueType()) {
+                    return if (init_node_type.is_type_val) .opaque_type else null;
+                } else if (decl.isStructType()) {
+                    return if (init_node_type.is_type_val) .struct_type else .struct_instance;
+                } else if (decl.isTypeFunc()) {
+                    return if (init_node_type.is_type_val) .fn_type_returns_type else .fn_returns_type;
+                } else if (decl.isFunc()) {
+                    return if (init_node_type.is_type_val) .fn_type else .@"fn";
+                } else if (decl.isMetaType()) {
+                    return .type;
+                } else {
+                    if (init_node_type.is_type_val) {
+                        if (init_node_type.isErrorSetType(&self.analyser)) {
+                            return .error_type;
+                        }
+                        switch (init_node_type.data) {
+                            // TODO: Maybe this can be merged with what isErrorSet
+                            // is doing to be less branches.
+                            .ip_index => return .type,
+                            else => {},
+                        }
+                    }
+                    return .other;
+                }
+            }
+        }
+        return null;
+    }
 };
 
 test "LintDocument.isEnclosedInTestBlock" {
-    var ctx: LintContext = undefined;
-    try ctx.init(.{}, std.testing.allocator);
-    defer ctx.deinit();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    var context: LintContext = undefined;
+    try context.init(.{}, std.testing.allocator, arena.allocator());
+    defer context.deinit();
 
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
 
     const source =
         \\pub fn main() void {
@@ -634,13 +639,13 @@ test "LintDocument.isEnclosedInTestBlock" {
     ;
 
     var doc = try testing.loadFakeDocument(
-        &ctx,
+        &context,
         tmp.dir,
         "test.zig",
         source,
         arena.allocator(),
     );
-    defer doc.deinit(ctx.gpa);
+    _ = &doc;
 
     try std.testing.expect(
         !doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
@@ -713,10 +718,10 @@ test "LintDocument.isEnclosedInTestBlock" {
     );
 }
 
-test "LintDocument.resolveTypeKind" {
+test "LintContext.resolveTypeKind" {
     const TestCase = struct {
         contents: [:0]const u8,
-        kind: ?LintDocument.TypeKind,
+        kind: ?LintContext.TypeKind,
     };
 
     for ([_]TestCase{
@@ -991,30 +996,30 @@ test "LintDocument.resolveTypeKind" {
             .kind = .other,
         },
     }) |test_case| {
-        var ctx: LintContext = undefined;
-        try ctx.init(.{}, std.testing.allocator);
-        defer ctx.deinit();
+        var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+        defer arena.deinit();
+
+        var context: LintContext = undefined;
+        try context.init(.{}, std.testing.allocator, arena.allocator());
+        defer context.deinit();
 
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
 
-        var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-        defer arena.deinit();
-
         var doc = try testing.loadFakeDocument(
-            &ctx,
+            &context,
             tmp.dir,
             "test.zig",
             test_case.contents,
             arena.allocator(),
         );
-        defer doc.deinit(ctx.gpa);
+        _ = &doc;
 
         const node = doc.handle.tree.rootDecls()[0];
         const actual_kind = if (doc.handle.tree.fullVarDecl(node)) |var_decl|
-            try doc.resolveTypeKind(.{ .var_decl = var_decl })
+            try context.resolveTypeKind(doc, .{ .var_decl = var_decl })
         else if (doc.handle.tree.fullContainerField(node)) |container_field|
-            try doc.resolveTypeKind(.{ .container_field = container_field })
+            try context.resolveTypeKind(doc, .{ .container_field = container_field })
         else
             @panic("Fail");
 

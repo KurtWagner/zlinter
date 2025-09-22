@@ -212,24 +212,24 @@ test "deferBlock - has expected children" {
 
         defer _ = arena.reset(.retain_capacity);
 
-        var ctx: session.LintContext = undefined;
-        try ctx.init(.{}, arena.allocator());
-        defer ctx.deinit();
+        var context: session.LintContext = undefined;
+        try context.init(.{}, std.testing.allocator, arena.allocator());
+        defer context.deinit();
 
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
 
         var doc = try testing.loadFakeDocument(
-            &ctx,
+            &context,
             tmp.dir,
             "test.zig",
             "fn main() void {\n" ++ source ++ "\n}",
             arena.allocator(),
         );
-        defer doc.deinit(arena.allocator());
+        _ = &doc;
 
         const decl_ref = try deferBlock(
-            &doc,
+            doc,
             try testing.expectSingleNodeOfTag(doc.handle.tree, &.{ .@"defer", .@"errdefer" }),
             std.testing.allocator,
         );

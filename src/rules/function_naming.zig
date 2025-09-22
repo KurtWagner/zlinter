@@ -65,7 +65,8 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the function_naming rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    doc: *zlinter.session.LintDocument,
+    context: *zlinter.session.LintContext,
+    doc: *const zlinter.session.LintDocument,
     allocator: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
@@ -92,7 +93,8 @@ fn run(
             const fn_name_token = fn_proto.name_token.?;
             const fn_name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(fn_name_token));
 
-            const return_type = (try doc.resolveTypeOfTypeNode(
+            const return_type = (try context.resolveTypeOfTypeNode(
+                doc,
                 switch (zlinter.version.zig) {
                     .@"0.14" => fn_proto.ast.return_type,
                     .@"0.15", .@"0.16" => fn_proto.ast.return_type.unwrap().?,
@@ -153,7 +155,7 @@ fn run(
 
                 if (identifier.len == 1 and identifier[0] == '_') continue;
 
-                if (try doc.resolveTypeOfTypeNode(param)) |param_type| {
+                if (try context.resolveTypeOfTypeNode(doc, param)) |param_type| {
                     const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const desc: []const u8 =
                         if (param_type.isTypeFunc())
                             .{ config.function_arg_that_is_type_fn, "Function argument of type function" }

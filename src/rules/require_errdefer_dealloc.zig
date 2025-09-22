@@ -60,7 +60,8 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the require_errdefer_dealloc rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    doc: *zlinter.session.LintDocument,
+    context: *zlinter.session.LintContext,
+    doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
@@ -96,6 +97,7 @@ fn run(
             continue :nodes;
 
         try processBlock(
+            context,
             doc,
             fn_decl.block,
             &problem_nodes,
@@ -130,7 +132,8 @@ fn run(
 }
 
 fn processBlock(
-    doc: *zlinter.session.LintDocument,
+    context: *zlinter.session.LintContext,
+    doc: *const zlinter.session.LintDocument,
     block_node: Ast.Node.Index,
     problems: *shims.ArrayList(Ast.Node.Index),
     gpa: std.mem.Allocator,
@@ -144,7 +147,7 @@ fn processBlock(
     var call_buffer: [1]Ast.Node.Index = undefined;
 
     for (doc.lineage.items(.children)[NodeIndexShim.init(block_node).index] orelse &.{}) |child_node| {
-        if (try declRequiringCleanup(doc, child_node)) |decl_ref| {
+        if (try declRequiringCleanup(context, doc, child_node)) |decl_ref| {
             try cleanup_symbols.put(
                 try arena.dupe(u8, doc.handle.tree.tokenSlice(decl_ref.decl_name_token)),
                 child_node,
@@ -172,6 +175,7 @@ fn processBlock(
             }
         } else if (zlinter.ast.isBlock(tree, child_node)) {
             try processBlock(
+                context,
                 doc,
                 child_node,
                 problems,
@@ -193,7 +197,11 @@ const DeclRef = struct {
 
 /// Returns a declaration reference if the given node is a declaration node
 /// that looks like it needs to be cleaned up (e.g., if it has a `deinit` method)
-fn declRequiringCleanup(doc: *zlinter.session.LintDocument, maybe_var_decl_node: Ast.Node.Index) !?DeclRef {
+fn declRequiringCleanup(
+    context: *zlinter.session.LintContext,
+    doc: *const zlinter.session.LintDocument,
+    maybe_var_decl_node: Ast.Node.Index,
+) !?DeclRef {
     const tree = doc.handle.tree;
     const var_decl = tree.fullVarDecl(maybe_var_decl_node) orelse return null;
     const init_node = (NodeIndexShim.initOptional(var_decl.ast.init_node) orelse
@@ -231,7 +239,7 @@ fn declRequiringCleanup(doc: *zlinter.session.LintDocument, maybe_var_decl_node:
             false,
     }) return null;
 
-    const var_decl_type = try doc.resolveTypeOfNode(maybe_var_decl_node) orelse return null;
+    const var_decl_type = try context.resolveTypeOfNode(doc, maybe_var_decl_node) orelse return null;
     switch (var_decl_type.data) {
         .container => |container| {
             const scope_handle = switch (zlinter.version.zig) {
@@ -392,25 +400,25 @@ test "hasNonFreeingAllocatorParam" {
 
         defer _ = arena.reset(.retain_capacity);
 
-        var ctx: zlinter.session.LintContext = undefined;
-        try ctx.init(.{}, std.testing.allocator);
-        defer ctx.deinit();
+        var context: zlinter.session.LintContext = undefined;
+        try context.init(.{}, std.testing.allocator, arena.allocator());
+        defer context.deinit();
 
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
 
         var doc = try zlinter.testing.loadFakeDocument(
-            &ctx,
+            &context,
             tmp.dir,
             "test.zig",
             "fn main() void {\n" ++ source ++ "\n}",
             arena.allocator(),
         );
-        defer doc.deinit(ctx.gpa);
+        _ = &doc;
 
         const tree = doc.handle.tree;
         const actual = hasNonFreeingAllocatorParam(
-            &doc,
+            doc,
             tree.fullCall(&buffer, try zlinter.testing.expectNodeOfTagFirst(
                 doc,
                 &.{

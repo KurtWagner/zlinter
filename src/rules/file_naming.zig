@@ -29,7 +29,8 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the file_naming rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    doc: *zlinter.session.LintDocument,
+    _: *zlinter.session.LintContext,
+    doc: *const zlinter.session.LintDocument,
     allocator: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) error{OutOfMemory}!?zlinter.results.LintResult {
