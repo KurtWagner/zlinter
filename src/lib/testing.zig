@@ -369,38 +369,6 @@ pub fn testRunRule(
     try expectDeepEquals(LintProblemExpectation, expected, actual.items);
 }
 
-/// WIP: Initializes a context and document for testing only.
-pub fn initDocForTesting(
-    source: [:0]const u8,
-    arena: std.mem.Allocator,
-    options: struct {},
-) !*LintDocument {
-    _ = options;
-
-    var context: *LintContext = try arena.create(LintContext);
-    errdefer arena.destroy(context);
-
-    context.* = undefined;
-    try context.init(.{}, arena);
-    errdefer context.deinit();
-
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-
-    const doc = try arena.create(LintDocument);
-    errdefer arena.destroy(doc);
-
-    doc.* = try loadFakeDocument(
-        context,
-        tmp.dir,
-        "test.zig",
-        source,
-        arena,
-    );
-
-    return doc;
-}
-
 const builtin = @import("builtin");
 const session = @import("session.zig");
 const std = @import("std");

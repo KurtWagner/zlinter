@@ -605,19 +605,23 @@ test "isEnumLiteral" {
 }
 
 /// Checks whether the current node is a function call or contains one in its
-/// children.
+/// children matching given case sensitive names.
 pub fn findFnCall(
     doc: *const session.LintDocument,
     node: Ast.Node.Index,
     call_buffer: *[1]Ast.Node.Index,
-    comptime names: []const []const u8,
+    names: []const []const u8,
 ) ?FnCall {
+    std.debug.assert(names.len > 0);
+
     if (fnCall(
         doc,
         node,
         call_buffer,
         names,
-    )) |call| return call;
+    )) |call| {
+        return call;
+    }
 
     for (doc.lineage.items(.children)[shims.NodeIndexShim.init(node).index] orelse &.{}) |child| {
         if (findFnCall(
@@ -633,13 +637,18 @@ pub fn findFnCall(
 pub const FnCall = struct {
     params: []const Ast.Node.Index,
 
+    /// The name of the function. For example,
+    /// - single field: `parent.call()` would have `call` as the identifier token here.
+    /// - other: `parent.child.call()` would have `call` as the identifier token here.
+    /// - enum literal: `.init()` would have `init` here
+    /// - direct: `doSomething()` would have `doSomething` here
+    call_identifier_token: Ast.TokenIndex,
+
     kind: union(enum) {
         /// e.g., `parent.call()` not `parent.child.call()`
         single_field: struct {
             /// e.g., `parent.call()` would have `parent` as the main token here.
             field_main_token: Ast.TokenIndex,
-            /// e.g., `parent.call()` would have `call` as the identifier token here.
-            call_identifier_token: Ast.TokenIndex,
         },
         /// array_access, unwrap_optional, nested field_access
         ///
@@ -647,163 +656,260 @@ pub const FnCall = struct {
         ///
         /// If there's value this can be broken up in the future but for now we do
         /// not need the separation.
-        other: struct {
-            /// e.g., `parent.child.call()` would have `call` as the identifier token here.
-            call_identifier_token: Ast.TokenIndex,
-        },
+        other: void,
         /// e.g., `.init()`
-        enum_literal: struct {
-            /// e.g., `.init()` would have `init` here
-            call_identifier_token: Ast.TokenIndex,
-        },
+        enum_literal: void,
         /// e.g., `doSomething()`
-        direct: struct {
-            /// e.g., `doSomething()` would have `doSomething` here
-            call_identifier_token: Ast.TokenIndex,
-        },
+        direct: void,
     },
 };
 
-/// Returns call information for cases handled by the `require_errdefer_dealloc`
-/// Not all calls are handled so this method is not generally useful
+/// If the given node is a call this returns call information, otherwise returns
+/// null.
 ///
-/// If names is empty, then it'll match all function names.
+/// If names is empty, then it'll match all function names. Function names are
+/// case sensitive.
 pub fn fnCall(
     doc: *const session.LintDocument,
     node: Ast.Node.Index,
     buffer: *[1]Ast.Node.Index,
-    comptime names: []const []const u8,
+    names: []const []const u8,
 ) ?FnCall {
     const tree = doc.handle.tree;
-
     const call = tree.fullCall(buffer, node) orelse return null;
 
     const fn_expr_node = call.ast.fn_expr;
     const fn_expr_node_data = shims.nodeData(tree, fn_expr_node);
     const fn_expr_node_tag = shims.nodeTag(tree, fn_expr_node);
 
-    switch (fn_expr_node_tag) {
-        // e.g., `parent.*`
-        .field_access => {
-            const field_node, const fn_name = switch (version.zig) {
-                .@"0.14" => .{ fn_expr_node_data.lhs, fn_expr_node_data.rhs },
-                .@"0.15", .@"0.16" => .{ fn_expr_node_data.node_and_token[0], fn_expr_node_data.node_and_token[1] },
-            };
-            std.debug.assert(shims.tokenTag(tree, fn_name) == .identifier);
-
-            if (names.len > 0) {
-                var match: bool = false;
-                const fn_name_slice = tree.tokenSlice(fn_name);
-                for (names) |name| {
-                    if (std.mem.eql(u8, name, fn_name_slice)) {
-                        match = true;
-                        break;
-                    }
-                }
-                if (!match) return null;
-            }
-
-            const field_node_tag = shims.nodeTag(tree, field_node);
-            if (field_node_tag != .identifier) {
-                // e.g, array_access, unwrap_optional, field_access
-                return .{
-                    .params = call.ast.params,
-                    .kind = .{
-                        .other = .{
-                            .call_identifier_token = fn_name,
-                        },
-                    },
+    const maybe_fn_call: ?FnCall = maybe_fn_call: {
+        switch (fn_expr_node_tag) {
+            // e.g., `parent.*`
+            .field_access => {
+                const field_node, const fn_name = switch (version.zig) {
+                    .@"0.14" => .{ fn_expr_node_data.lhs, fn_expr_node_data.rhs },
+                    .@"0.15", .@"0.16" => .{ fn_expr_node_data.node_and_token[0], fn_expr_node_data.node_and_token[1] },
                 };
-            }
-            // e.g., `parent.call()` not `parent.child.call()`
-            return .{
-                .params = call.ast.params,
-                .kind = .{
-                    .single_field = .{
-                        .field_main_token = shims.nodeMainToken(tree, field_node),
+                std.debug.assert(shims.tokenTag(tree, fn_name) == .identifier);
+
+                const field_node_tag = shims.nodeTag(tree, field_node);
+                if (field_node_tag != .identifier) {
+                    // e.g, array_access, unwrap_optional, field_access
+                    break :maybe_fn_call .{
+                        .params = call.ast.params,
                         .call_identifier_token = fn_name,
-                    },
-                },
-            };
-        },
-        // e.g., `.init()`
-        .enum_literal => {
-            const fn_name = shims.nodeMainToken(tree, fn_expr_node);
-            std.debug.assert(shims.tokenTag(tree, fn_name) == .identifier);
-
-            const identfier_slice = tree.tokenSlice(fn_name);
-
-            if (names.len > 0) {
-                for (names) |name| {
-                    if (std.mem.eql(u8, name, identfier_slice)) {
-                        return .{
-                            .params = call.ast.params,
-                            .kind = .{
-                                .enum_literal = .{
-                                    .call_identifier_token = fn_name,
-                                },
-                            },
-                        };
-                    }
+                        .kind = .{
+                            .other = {},
+                        },
+                    };
                 }
-            } else {
-                return .{
+                // e.g., `parent.call()` not `parent.child.call()`
+                break :maybe_fn_call .{
                     .params = call.ast.params,
+                    .call_identifier_token = fn_name,
                     .kind = .{
-                        .enum_literal = .{
-                            .call_identifier_token = fn_name,
+                        .single_field = .{
+                            .field_main_token = shims.nodeMainToken(tree, field_node),
                         },
                     },
                 };
-            }
-        },
-        .identifier => {
-            return .{
-                .params = call.ast.params,
-                .kind = .{
-                    .direct = .{
-                        .call_identifier_token = shims.nodeMainToken(tree, fn_expr_node),
-                    },
-                },
-            };
-        },
-        else => std.log.debug("fnCall does not handle fn_expr of tag {s}", .{@tagName(fn_expr_node_tag)}),
-    }
+            },
+            // e.g., `.init()`
+            .enum_literal => {
+                const fn_name = shims.nodeMainToken(tree, fn_expr_node);
+                std.debug.assert(shims.tokenTag(tree, fn_name) == .identifier);
 
+                break :maybe_fn_call .{
+                    .params = call.ast.params,
+                    .call_identifier_token = fn_name,
+                    .kind = .{
+                        .enum_literal = {},
+                    },
+                };
+            },
+            .identifier => {
+                break :maybe_fn_call .{
+                    .params = call.ast.params,
+                    .call_identifier_token = shims.nodeMainToken(tree, fn_expr_node),
+                    .kind = .{
+                        .direct = {},
+                    },
+                };
+            },
+            else => std.log.debug("fnCall does not handle fn_expr of tag {s}", .{@tagName(fn_expr_node_tag)}),
+        }
+        break :maybe_fn_call null;
+    };
+
+    if (maybe_fn_call) |fn_call| {
+        const fn_name_slice = doc.handle.tree.tokenSlice(fn_call.call_identifier_token);
+        if (names.len == 0) return fn_call;
+
+        for (names) |name| {
+            if (std.mem.eql(u8, name, fn_name_slice)) {
+                return fn_call;
+            }
+        }
+    }
     return null;
 }
 
-// test "fnCall - direct call without params" {
-//     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-//     defer arena.deinit();
+test "fnCall - direct call without params" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
 
-//     const doc = (try testing.initDocForTesting(
-//         \\fn main() void {
-//         \\  call();
-//         \\}
-//     ,
-//         arena.allocator(),
-//         .{},
-//     )).*;
+    var context: session.LintContext = undefined;
+    try context.init(.{}, std.testing.allocator, arena.allocator());
+    defer context.deinit();
 
-//     const fn_node = try testing.expectSingleNodeOfTag(
-//         doc.handle.tree,
-//         &.{ .call, .call_comma, .call_one, .call_one_comma },
-//     );
-//     var buffer: [1]Ast.Node.Index = undefined;
-//     const call = fnCall(
-//         doc,
-//         fn_node,
-//         &buffer,
-//         &.{},
-//     ).?;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
 
-//     try std.testing.expectEqualDeep(&.{}, call.params);
-//     try std.testing.expectEqualStrings(
-//         "call",
-//         doc.handle.tree.tokenSlice(call.kind.direct.call_identifier_token),
-//     );
-// }
+    const doc = try testing.loadFakeDocument(
+        &context,
+        tmp.dir,
+        "test.zig",
+        \\fn main() void {
+        \\  call();
+        \\}
+    ,
+        arena.allocator(),
+    );
+
+    const fn_node = try testing.expectSingleNodeOfTag(
+        doc.handle.tree,
+        &.{ .call, .call_comma, .call_one, .call_one_comma },
+    );
+    var buffer: [1]Ast.Node.Index = undefined;
+    const call = fnCall(
+        doc,
+        fn_node,
+        &buffer,
+        &.{},
+    ).?;
+
+    try std.testing.expectEqualDeep(&.{}, call.params);
+    try std.testing.expectEqualStrings(
+        "call",
+        doc.handle.tree.tokenSlice(call.call_identifier_token),
+    );
+    try std.testing.expectEqualStrings("direct", @tagName(call.kind));
+}
+
+test "fnCall - single field call with params" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    var context: session.LintContext = undefined;
+    try context.init(.{}, std.testing.allocator, arena.allocator());
+    defer context.deinit();
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const doc = try testing.loadFakeDocument(
+        &context,
+        tmp.dir,
+        "test.zig",
+        \\fn main() void {
+        \\  single.fnName(1, abc);
+        \\}
+    ,
+        arena.allocator(),
+    );
+
+    const fn_node = try testing.expectSingleNodeOfTag(
+        doc.handle.tree,
+        &.{ .call, .call_comma, .call_one, .call_one_comma },
+    );
+    var buffer: [1]Ast.Node.Index = undefined;
+    const call = fnCall(
+        doc,
+        fn_node,
+        &buffer,
+        &.{},
+    ).?;
+
+    try std.testing.expectEqual(2, call.params.len);
+    try std.testing.expectEqualStrings("1", doc.handle.tree.getNodeSource(call.params[0]));
+    try std.testing.expectEqualStrings("abc", doc.handle.tree.getNodeSource(call.params[1]));
+    try std.testing.expectEqualStrings(
+        "single",
+        doc.handle.tree.tokenSlice(call.kind.single_field.field_main_token),
+    );
+    try std.testing.expectEqualStrings(
+        "fnName",
+        doc.handle.tree.tokenSlice(call.call_identifier_token),
+    );
+}
+
+test "findFnCall" {
+    inline for (&.{
+        \\fn main() void {
+        \\  fnName();
+        \\}
+        ,
+        \\fn main(age: u32) void {
+        \\  if (age > 10) {
+        \\    single.fnName();
+        \\  }
+        \\}
+        ,
+        \\fn main() void {
+        \\  defer {
+        \\    deep[0].?.fnName();
+        \\  }
+        \\}
+        ,
+        \\fn main(age: u32) void {
+        \\  defer {
+        \\    if (age > 10) .fnName();
+        \\  }
+        \\}
+    }) |source| {
+        var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+        defer arena.deinit();
+
+        errdefer std.debug.print("Failed source: '{s}'\n", .{source});
+
+        var context: session.LintContext = undefined;
+        try context.init(.{}, std.testing.allocator, arena.allocator());
+        defer context.deinit();
+
+        var tmp = std.testing.tmpDir(.{});
+        defer tmp.cleanup();
+
+        const doc = try testing.loadFakeDocument(
+            &context,
+            tmp.dir,
+            "test.zig",
+            source,
+            arena.allocator(),
+        );
+
+        var buffer: [1]Ast.Node.Index = undefined;
+
+        try std.testing.expectEqualStrings(
+            "fnName",
+            doc.handle.tree.tokenSlice(findFnCall(
+                doc,
+                shims.NodeIndexShim.root.toNodeIndex(),
+                &buffer,
+                &.{"fnName"},
+            ).?.call_identifier_token),
+        );
+
+        try std.testing.expectEqual(
+            null,
+            findFnCall(
+                doc,
+                shims.NodeIndexShim.root.toNodeIndex(),
+                &buffer,
+                &.{ "fn", "Name", "fnname" },
+            ),
+        );
+    }
+}
 
 const session = @import("session.zig");
 const shims = @import("shims.zig");
