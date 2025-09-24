@@ -2,7 +2,7 @@
 
 > This is a work in progress document of limitations.
 
-`zlinter` currently analyzes the Zig AST, which has [limited context](https://github.com/KurtWagner/zlinter/issues/65) without trying to re-implement the Zig compiler (not doing).
+`zlinter` currently analyzes the Zig AST, which has limited context without trying to re-implement the Zig compiler (not doing).
 
 A more accurate approach could be to integrate more closely with the Zig build system and compiler (e.g., the proposed Zig compiler server), but for now, using the AST should be sufficient for most cases, and maybe one day `zlinter` can use newer Zig Compiler APIs as they become available.
 
@@ -21,3 +21,17 @@ It will not detect:
 
 1. More complex conditionals (e.g., `if (something or builtin.is_test)`)
 2. If a piece of code is only ever included in tests
+
+## Exclude debug only code
+
+Similar to [test only code](#exclude-test-only-code), we can't reliably detect based on `builtin.mode` is debug.
+
+## Unused code
+
+Detecting unused code is limited in that it can't inform you whether it's truly unused in all builds except tests, which will give false negatives if your project is well tested, i.e., always referenced by some test.
+
+Potentially this could be improved by ignoring references in `test { ... }` blocks but it wouldn't be bullet proof.
+
+## No unnecessary branches
+
+A potential `no_unnecessary_branches` rule has a similar issue to `no_unused` in that without analysing all test and non-test build variants you can't be certain something is truly dead.
