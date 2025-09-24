@@ -340,13 +340,13 @@ It uses [`zls`](https://github.com/zigtools/zls) (an awesome project, go check i
 
 ### Current limitations
 
-`zlinter` currently analyzes the Zig AST, which has [limited context](https://github.com/KurtWagner/zlinter/issues/65) without trying to re-implement the Zig compiler (not doing).
+`zlinter` currently analyzes the Zig AST, which has limited context without trying to re-implement the Zig compiler (not doing).
 
 See [limitations](./LIMITATIONS.md) for more information.
 
 ---
 
-1. [done] **Rough implementaton of 20 diverse linter rules** - this is important to understanding limitations (e.g., [the AST](https://github.com/KurtWagner/zlinter/issues/65) and design patterns to a stable API.)
+1. [done] **Rough implementaton of 20 diverse linter rules** - this is important to understanding limitations (e.g., the AST and design patterns to a stable API.)
   
 1. [in-progress] **Run and review the results on at least 5 large open source Zig projects** - this is to discover unknown unknowns to populate caveats and limitations of current approach.
 
