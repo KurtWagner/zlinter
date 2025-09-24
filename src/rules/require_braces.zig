@@ -197,8 +197,8 @@ fn run(
                     },
                     .multi_statement_only => {
                         if (has_braces) {
-                            const children_count = (doc.lineage.items(.children)[shims.NodeIndexShim.init(expr_node).index] orelse &.{}).len;
-                            if (children_count == 1) {
+                            const children = doc.lineage.items(.children)[shims.NodeIndexShim.init(expr_node).index] orelse &.{};
+                            if (children.len == 1) {
                                 break :error_msg try gpa.dupe(u8, "Expects no braces when there's only one statement");
                             }
                         }
@@ -206,8 +206,8 @@ fn run(
                     .multi_line_only => {
                         const on_single_line = tree.tokensOnSameLine(first_token, last_token);
                         if (on_single_line) {
-                            const children_count = (doc.lineage.items(.children)[shims.NodeIndexShim.init(expr_node).index] orelse &.{}).len;
-                            if (has_braces and children_count > 0) { // We allow empy blocks / no children
+                            const children = doc.lineage.items(.children)[shims.NodeIndexShim.init(expr_node).index] orelse &.{};
+                            if (has_braces and children.len > 0) { // We allow empy blocks / no children
                                 break :error_msg try gpa.dupe(u8, "Expects no braces when on a single line");
                             }
                         } else if (!has_braces) {
