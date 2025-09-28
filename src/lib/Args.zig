@@ -1150,13 +1150,14 @@ test "allocParse with invalid --max-warnings arg" {
 }
 
 const testing = struct {
-    inline fn cliArgs(args: []const [:0]const u8) [][:0]u8 {
+    var buffer: [32][:0]u8 = undefined;
+
+    inline fn cliArgs(comptime args: []const [:0]const u8) [][:0]u8 {
         assertTestOnly();
 
-        var buffer: [args.len + 1][:0]u8 = undefined;
         buffer[0] = @constCast("lint-exe");
-        for (0..args.len) |i| buffer[i + 1] = @constCast(args[i]);
-        return &buffer;
+        inline for (0..args.len) |i| buffer[i + 1] = @constCast(args[i]);
+        return buffer[0 .. args.len + 1];
     }
 
     inline fn assertTestOnly() void {
