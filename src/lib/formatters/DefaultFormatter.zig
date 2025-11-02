@@ -23,7 +23,7 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: *st
             .{ .mode = .read_only },
         ) catch |e| return logAndReturnWriteFailure("Open file", e);
 
-        var file_reader = file.reader(&file_buffer);
+        var file_reader = file.reader(input.io, &file_buffer);
 
         const file_renderer = zlinter.rendering.LintFileRenderer.init(
             file_arena.allocator(),

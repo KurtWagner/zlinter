@@ -129,7 +129,7 @@ fn run(
 
         var is_problem: bool = false;
         for (config.detect_allocators) |allocator_kind| {
-            if (!std.mem.endsWith(u8, uri, allocator_kind.file_ends_with)) continue;
+            if (!std.mem.endsWith(u8, uri.raw, allocator_kind.file_ends_with)) continue;
             if (!std.mem.eql(u8, decl_name, allocator_kind.decl_name)) continue;
 
             is_problem = true;

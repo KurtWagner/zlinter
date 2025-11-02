@@ -8,6 +8,7 @@ pub fn parseFileAlloc(
     dir: std.fs.Dir,
     cwd_file_path: []const u8,
     diagnostics: ?*Diagnostics,
+    io: std.Io,
     gpa: std.mem.Allocator,
 ) !T {
     const file = try dir.openFile(cwd_file_path, .{
@@ -29,7 +30,7 @@ pub fn parseFileAlloc(
         },
         .@"0.15", .@"0.16" => {
             var file_reader_buffer: [1024]u8 = undefined;
-            var file_reader = file.reader(&file_reader_buffer);
+            var file_reader = file.reader(io, &file_reader_buffer);
 
             var buffer: std.ArrayList(u8) = .empty;
             defer buffer.deinit(gpa);
@@ -89,6 +90,7 @@ test "parseFileAlloc" {
             tmp_dir.dir,
             "a.zon",
             null,
+            std.testing.io,
             arena.allocator(),
         ),
     );
@@ -112,6 +114,7 @@ test "parseFileAlloc" {
             tmp_dir.dir,
             "b.zon",
             null,
+            std.testing.io,
             arena.allocator(),
         ),
     );
@@ -128,6 +131,7 @@ test "parseFileAlloc" {
         tmp_dir.dir,
         "b.zon",
         &diagnostics,
+        std.testing.io,
         arena.allocator(),
     );
     try std.testing.expectError(
