@@ -250,7 +250,7 @@ pub const LintContext = struct {
     ) !void {
         var mem: [std.fs.max_path_bytes]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&mem);
-        const uri = try zls.URI.fromPath(
+        const uri = try zls.Uri.fromPath(
             fba.allocator(),
             try std.fs.cwd().realpathAlloc(
                 fba.allocator(),

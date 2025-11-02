@@ -4,6 +4,9 @@ const default_formatter = zlinter.formatters.DefaultFormatter{};
 pub const std_options: std.Options = .{ .log_level = .err };
 
 pub fn main() !u8 {
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    const io = threaded.io();
+
     const gpa, const is_debug = switch (builtin.mode) {
         .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
         .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, false },
@@ -18,7 +21,7 @@ pub fn main() !u8 {
 
     var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
     var stderr_writer = std.fs.File.stderr().writer(&stderr_buffer);
-    var stdin_reader = std.fs.File.stdin().reader(&stdin_buffer);
+    var stdin_reader = std.fs.File.stdin().reader(io, &stdin_buffer);
 
     var printer: *zlinter.rendering.Printer = zlinter.rendering.process_printer;
     printer.init(
@@ -68,7 +71,7 @@ pub fn main() !u8 {
     const result = result: {
         var remaining_fix_passes = @max(1, args.fix_passes);
         while (remaining_fix_passes > 0) {
-            if (run(gpa, args, printer)) |r| {
+            if (run(io, gpa, args, printer)) |r| {
                 total_fixes += r.fixes_applied;
                 if (r.fixes_applied == 0 or remaining_fix_passes == 1) {
                     break :result r;
@@ -108,6 +111,7 @@ pub fn main() !u8 {
 }
 
 fn run(
+    io: std.Io,
     gpa: std.mem.Allocator,
     args: zlinter.Args,
     printer: *zlinter.rendering.Printer,
@@ -167,6 +171,7 @@ fn run(
     if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "Resolving {d} files took: {d}ms", .{ lint_files.len, ms });
 
     try runLinterRules(
+        io,
         gpa,
         lint_files,
         printer,
@@ -186,6 +191,7 @@ fn run(
 
     return if (args.fix)
         try runFixes(
+            io,
             gpa,
             dir,
             lint_files,
@@ -194,6 +200,7 @@ fn run(
         )
     else
         try runFormatter(
+            io,
             gpa,
             dir,
             file_lint_problems,
@@ -208,6 +215,7 @@ fn run(
 }
 
 fn runLinterRules(
+    io: std.Io,
     gpa: std.mem.Allocator,
     lint_files: []zlinter.files.LintFile,
     printer: *zlinter.rendering.Printer,
@@ -274,6 +282,7 @@ fn runLinterRules(
                                     std.fs.cwd(),
                                     zon_path,
                                     &diagnostics,
+                                    io,
                                     config_arena,
                                 ) catch |e| {
                                     switch (e) {
@@ -403,6 +412,7 @@ fn runLinterRules(
 }
 
 fn runFormatter(
+    io: std.Io,
     gpa: std.mem.Allocator,
     dir: std.fs.Dir,
     file_lint_problems: std.AutoArrayHashMap(u32, []zlinter.results.LintResult),
@@ -452,6 +462,7 @@ fn runFormatter(
         .arena = arena_allocator,
         .tty = output_tty,
         .min_severity = if (quiet) .@"error" else .warning,
+        .io = io,
     }, output_writer);
 
     return run_result;
@@ -462,6 +473,7 @@ fn cmpFix(context: void, a: zlinter.results.LintProblemFix, b: zlinter.results.L
 }
 
 fn runFixes(
+    io: std.Io,
     gpa: std.mem.Allocator,
     dir: std.fs.Dir,
     lint_files: []zlinter.files.LintFile,
@@ -509,7 +521,7 @@ fn runFixes(
             .@"0.14" => try file.reader().readAllAlloc(gpa, zlinter.session.max_zig_file_size_bytes),
             .@"0.15", .@"0.16" => file_content: {
                 var file_reader_buffer: [1024]u8 = undefined;
-                var file_reader = file.readerStreaming(&file_reader_buffer);
+                var file_reader = file.readerStreaming(io, &file_reader_buffer);
 
                 var buffer: std.Io.Writer.Allocating = .init(gpa);
                 defer buffer.deinit();
