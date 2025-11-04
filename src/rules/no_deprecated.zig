@@ -217,15 +217,13 @@ fn handleEnumLiteral(
     lint_problems: *shims.ArrayList(zlinter.results.LintProblem),
     config: Config,
 ) !void {
-    const decl_with_handle = try getSymbolEnumLiteral(
+    const doc_comment = try getSymbolEnumLiteralDocComment(
         context,
         doc,
         node_index,
         doc.handle.tree.tokenSlice(identifier_token),
-        gpa,
+        arena,
     ) orelse return;
-
-    const doc_comment = try decl_with_handle.docComments(arena) orelse return;
     const deprecated_message = getDeprecationFromDoc(doc_comment) orelse return;
 
     try lint_problems.append(gpa, .{
@@ -237,45 +235,47 @@ fn handleEnumLiteral(
     });
 }
 
-fn getSymbolEnumLiteral(
+fn getSymbolEnumLiteralDocComment(
     context: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
     node: Ast.Node.Index,
     name: []const u8,
-    gpa: std.mem.Allocator,
-) error{OutOfMemory}!?zlinter.zls.Analyser.DeclWithHandle {
+    arena: std.mem.Allocator,
+) error{OutOfMemory}!?[]const u8 {
     std.debug.assert(shims.nodeTag(doc.handle.tree, node) == .enum_literal);
 
     var ancestors = shims.ArrayList(Ast.Node.Index).empty;
-    defer ancestors.deinit(gpa);
+    defer ancestors.deinit(arena);
 
     var current = node;
-    try ancestors.append(gpa, current);
+    try ancestors.append(arena, current);
 
     var it = doc.nodeAncestorIterator(current);
     while (it.next()) |ancestor| {
         if (NodeIndexShim.init(ancestor).isRoot()) break;
         if (shims.isNodeOverlapping(doc.handle.tree, current, ancestor)) {
-            try ancestors.append(gpa, ancestor);
+            try ancestors.append(arena, ancestor);
             current = ancestor;
         } else {
             break;
         }
     }
 
-    return switch (zlinter.version.zig) {
-        .@"0.14" => context.analyser.lookupSymbolFieldInit(
+    var decl_with_handle = switch (zlinter.version.zig) {
+        .@"0.14" => try context.analyser.lookupSymbolFieldInit(
             doc.handle,
             name,
             ancestors.items[0..],
         ),
-        .@"0.15", .@"0.16" => context.analyser.lookupSymbolFieldInit(
+        .@"0.15", .@"0.16" => try context.analyser.lookupSymbolFieldInit(
             doc.handle,
             name,
             ancestors.items[0],
             ancestors.items[1..],
         ),
-    };
+    } orelse return null;
+
+    return try decl_with_handle.docComments(arena);
 }
 
 fn handleFieldAccess(
