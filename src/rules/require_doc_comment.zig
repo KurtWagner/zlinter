@@ -41,15 +41,10 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    var arena_mem: [32 * 1024]u8 = undefined;
-    var arena_buffer = std.heap.FixedBufferAllocator.init(&arena_mem);
-    const arena = arena_buffer.allocator();
-
     const root: NodeIndexShim = .root;
 
     if (config.file_severity != .off) {
-        defer arena_buffer.reset();
-        if (!try hasDocComments(arena, tree, root.toNodeIndex())) {
+        if (!try hasDocComments(tree, root.toNodeIndex())) {
             try lint_problems.append(gpa, .{
                 .rule_id = rule.rule_id,
                 .severity = config.file_severity,
@@ -67,8 +62,6 @@ fn run(
     var fn_decl_buffer: [1]Ast.Node.Index = undefined;
 
     nodes: while (try it.next()) |tuple| {
-        defer arena_buffer.reset();
-
         const node, const connections = tuple;
         _ = connections;
 
@@ -82,7 +75,7 @@ fn run(
                 };
                 if (severity == .off) continue :nodes;
 
-                if (try hasDocComments(arena, tree, node.toNodeIndex())) continue :nodes;
+                if (try hasDocComments(tree, node.toNodeIndex())) continue :nodes;
 
                 try lint_problems.append(gpa, .{
                     .rule_id = rule.rule_id,
@@ -99,7 +92,7 @@ fn run(
                 };
                 if (severity == .off) continue :nodes;
 
-                if (try hasDocComments(arena, tree, node.toNodeIndex())) continue :nodes;
+                if (try hasDocComments(tree, node.toNodeIndex())) continue :nodes;
 
                 try lint_problems.append(gpa, .{
                     .rule_id = rule.rule_id,
@@ -124,13 +117,20 @@ fn run(
         null;
 }
 
-fn hasDocComments(arena: std.mem.Allocator, tree: Ast, node: Ast.Node.Index) !bool {
-    const comments = try zlinter.zls.Analyser.getDocComments(
-        arena,
-        tree,
-        node,
-    ) orelse return false;
-    return comments.len > 0;
+fn hasDocComments(tree: Ast, node: Ast.Node.Index) !bool {
+    return switch (tree.nodeTag(node)) {
+        .root => tree.tokenTag(0) == .container_doc_comment,
+        .global_var_decl,
+        .local_var_decl,
+        .aligned_var_decl,
+        .simple_var_decl,
+        .fn_decl,
+        => zlinter.zls.Analyser.getDocCommentTokenIndex(
+            &tree,
+            tree.nodeMainToken(node),
+        ) != null,
+        inline else => |v| @panic("Unhandled tag " ++ @tagName(v)),
+    };
 }
 
 test "require_doc_comment - public" {
