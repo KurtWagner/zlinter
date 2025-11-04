@@ -125,10 +125,11 @@ fn hasDocComments(tree: Ast, node: Ast.Node.Index) !bool {
         .aligned_var_decl,
         .simple_var_decl,
         .fn_decl,
-        => zlinter.zls.Analyser.getDocCommentTokenIndex(
-            &tree,
-            tree.nodeMainToken(node),
-        ) != null,
+        => has_doc_comments: {
+            const first = tree.firstToken(node);
+            if (first == 0) break :has_doc_comments false;
+            break :has_doc_comments tree.tokenTag(first - 1) == .doc_comment;
+        },
         inline else => |v| @panic("Unhandled tag " ++ @tagName(v)),
     };
 }
