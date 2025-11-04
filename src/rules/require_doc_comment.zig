@@ -118,8 +118,8 @@ fn run(
 }
 
 fn hasDocComments(tree: Ast, node: Ast.Node.Index) !bool {
-    return switch (tree.nodeTag(node)) {
-        .root => tree.tokenTag(0) == .container_doc_comment,
+    return switch (shims.nodeTag(tree, node)) {
+        .root => shims.tokenTag(tree, 0) == .container_doc_comment,
         .global_var_decl,
         .local_var_decl,
         .aligned_var_decl,
@@ -128,7 +128,7 @@ fn hasDocComments(tree: Ast, node: Ast.Node.Index) !bool {
         => has_doc_comments: {
             const first = tree.firstToken(node);
             if (first == 0) break :has_doc_comments false;
-            break :has_doc_comments tree.tokenTag(first - 1) == .doc_comment;
+            break :has_doc_comments shims.tokenTag(tree, first - 1) == .doc_comment;
         },
         inline else => |v| @panic("Unhandled tag " ++ @tagName(v)),
     };
