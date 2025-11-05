@@ -64,7 +64,15 @@ pub fn main() !u8 {
         return ExitCode.usage_error.int();
     }
 
-    std.debug.print("Build args: {}\n", .{args.build_info});
+    // DO NOT SUBMIT: just playing around
+    if (args.build_info.imports) |imports| {
+        for (imports) |import| {
+            std.debug.print(
+                "Import {s} at {s}\n",
+                .{ import.name, import.path },
+            );
+        }
+    }
 
     var total_fixes: usize = 0;
     const result = result: {
