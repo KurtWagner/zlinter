@@ -66,11 +66,21 @@ pub fn main() !u8 {
 
     // DO NOT SUBMIT: just playing around
     if (args.build_info.imports) |imports| {
+        var arena = std.heap.ArenaAllocator.init(gpa);
+        defer arena.deinit();
+
+        var symbols: zlinter.ast.SymbolTable = .init(gpa);
+        defer symbols.deinit();
+
         for (imports) |import| {
+            defer _ = arena.reset(.retain_capacity);
+
             std.debug.print(
                 "Import {s} at {s}\n",
                 .{ import.name, import.path },
             );
+
+            symbols.consumeFile(import.path, arena.allocator()) catch @panic("todo");
         }
     }
 
