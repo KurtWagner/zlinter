@@ -80,7 +80,38 @@ pub fn main() !u8 {
                 .{ import.name, import.path },
             );
 
-            symbols.consumeFile(import.path, arena.allocator()) catch @panic("todo");
+            _ = symbols.getOrCreateFile(import.path, arena.allocator()) catch @panic("todo");
+        }
+
+        var it = symbols.files.iterator();
+        while (it.next()) |entry| {
+            defer _ = arena.reset(.retain_capacity);
+
+            const symbol_file_path = entry.key_ptr.*;
+            const symbol_file = entry.value_ptr.*;
+
+            const source = try zlinter.ast.readSource(arena.allocator(), symbol_file_path);
+            const tree = try Ast.parse(arena.allocator(), source, .zig);
+
+            std.debug.print("{s}:\n", .{symbol_file_path});
+            for (symbol_file.scopes.items, 0..) |scope, i| {
+                std.debug.print("\tScope: {d}:\n", .{i});
+                // std.debug.print("\tSource: \n\t\t{s}\n", .{tree.getNodeSource(scope.node_index)});
+                var symbol_it = scope.symbols.iterator();
+                while (symbol_it.next()) |s_entry| {
+                    const s_name = s_entry.key_ptr.*;
+                    const s_node_idx = s_entry.value_ptr.*;
+                    std.debug.print(
+                        "\t\t{s} {d} {}\n",
+                        .{
+                            s_name,
+                            s_node_idx,
+                            tree.nodeTag(s_node_idx),
+                        },
+                    );
+                    std.debug.print("\t\tSource: \n\t\t{s}\n", .{tree.getNodeSource(s_node_idx)});
+                }
+            }
         }
     }
 
