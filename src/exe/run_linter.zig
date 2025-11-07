@@ -109,7 +109,7 @@ pub fn main() !u8 {
                             tree.nodeTag(s_node_idx),
                         },
                     );
-                    std.debug.print("\t\tSource: \n\t\t{s}\n", .{tree.getNodeSource(s_node_idx)});
+                    // std.debug.print("\t\tSource: \n\t\t{s}\n", .{tree.getNodeSource(s_node_idx)});
                 }
             }
         }
