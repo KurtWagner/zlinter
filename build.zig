@@ -94,8 +94,10 @@ const StepBuilder = struct {
         comptime source: BuildRuleSource,
         config: anytype,
     ) void {
+        const arena = self.b.allocator;
+
         self.rules.append(
-            self.b.allocator,
+            arena,
             buildRule(
                 self.b,
                 source,
@@ -120,39 +122,44 @@ const StepBuilder = struct {
             exclude: ?[]const std.Build.LazyPath = null,
         },
     ) void {
+        const arena = self.b.allocator;
+
         if (paths.include) |includes|
-            for (includes) |path| self.include_paths.append(self.b.allocator, path) catch @panic("OOM");
+            for (includes) |path| self.include_paths.append(arena, path) catch @panic("OOM");
         if (paths.exclude) |excludes|
-            for (excludes) |path| self.exclude_paths.append(self.b.allocator, path) catch @panic("OOM");
+            for (excludes) |path| self.exclude_paths.append(arena, path) catch @panic("OOM");
     }
 
-    /// Returns a build step and cleans itself up.
     pub fn build(self: *StepBuilder) *std.Build.Step {
-        defer self.deinit();
+        const b = self.b;
+        const arena = b.allocator;
+
+        const include_paths = include_paths: {
+            if (self.include_paths.items.len > 0) {
+                break :include_paths self.include_paths.items;
+            } else {
+                var list = arena.alloc(std.Build.LazyPath, 1) catch @panic("OOM");
+                list[0] = b.path("./");
+                break :include_paths list;
+            }
+        };
 
         return buildStep(
-            self.b,
+            b,
             self.rules.items,
             .{
                 .target = self.target,
                 .optimize = self.optimize,
                 .zlinter = .{
-                    .dependency = self.b.dependencyFromBuildZig(
+                    .dependency = b.dependencyFromBuildZig(
                         @"build.zig",
                         .{},
                     ),
                 },
-                .include_paths = self.include_paths,
-                .exclude_paths = self.exclude_paths,
+                .include_paths = include_paths,
+                .exclude_paths = self.exclude_paths.items,
             },
         );
-    }
-
-    fn deinit(self: *StepBuilder) void {
-        self.include_paths.deinit(self.b.allocator);
-        self.exclude_paths.deinit(self.b.allocator);
-        for (self.rules.items) |*r| r.deinit(self.b.allocator);
-        self.* = undefined;
     }
 };
 
@@ -332,8 +339,8 @@ pub fn build(b: *std.Build) void {
 
     const lint_cmd = b.step("lint", "Lint the linters own source code.");
     lint_cmd.dependOn(step: {
+        const include_paths = shims.ArrayList(std.Build.LazyPath).empty;
         var exclude_paths = shims.ArrayList(std.Build.LazyPath).empty;
-        defer exclude_paths.deinit(b.allocator);
 
         exclude_paths.append(b.allocator, b.path("integration_tests/test_cases")) catch @panic("OOM");
         exclude_paths.append(b.allocator, b.path("integration_tests/src/test_case_references.zig")) catch @panic("OOM");
@@ -393,7 +400,8 @@ pub fn build(b: *std.Build) void {
             .{
                 .target = target,
                 .optimize = optimize,
-                .exclude_paths = exclude_paths,
+                .include_paths = include_paths.items,
+                .exclude_paths = exclude_paths.items,
                 .zlinter = .{ .module = zlinter_lib_module },
             },
         );
@@ -457,8 +465,8 @@ fn buildStep(
             dependency: *std.Build.Dependency,
             module: *std.Build.Module,
         },
-        include_paths: ?shims.ArrayList(std.Build.LazyPath) = null,
-        exclude_paths: ?shims.ArrayList(std.Build.LazyPath) = null,
+        include_paths: []const std.Build.LazyPath,
+        exclude_paths: []const std.Build.LazyPath,
     },
 ) *std.Build.Step {
     const zlinter_lib_module: *std.Build.Module, const exe_file: std.Build.LazyPath, const build_rules_exe_file: std.Build.LazyPath = switch (options.zlinter) {
@@ -506,32 +514,12 @@ fn buildStep(
         .use_llvm = true,
     });
 
-    const zlinter_run = ZlinterRun.create(b, zlinter_exe);
-
-    if (b.args) |args| zlinter_run.addArgs(args);
-    if (b.verbose) zlinter_run.addArgs(&.{"--verbose"});
-
-    var include_path_added = false;
-    if (options.include_paths) |include_paths| {
-        include_path_added = include_paths.items.len > 0;
-        for (include_paths.items) |path| {
-            zlinter_run.addIncludePath(b, path);
-        }
-    }
-    if (!include_path_added)
-        zlinter_run.addIncludePath(b, b.path("./"));
-
-    if (options.exclude_paths) |exclude_paths| {
-        for (exclude_paths.items) |path|
-            zlinter_run.addExcludePath(path.getPath3(b, &zlinter_run.step).subPathOrDot());
-    }
-
-    zlinter_run.addArgs(&.{ "--zig_exe", b.graph.zig_exe });
-    if (b.graph.global_cache_root.path) |p|
-        zlinter_run.addArgs(&.{ "--global_cache_root", p });
-
-    if (b.graph.zig_lib_directory.path) |p|
-        zlinter_run.addArgs(&.{ "--zig_lib_directory", p });
+    const zlinter_run = ZlinterRun.create(
+        b,
+        zlinter_exe,
+        options.include_paths,
+        options.exclude_paths,
+    );
 
     return &zlinter_run.step;
 }
@@ -732,17 +720,22 @@ const ZlinterRun = struct {
     argv: shims.ArrayList(Arg),
 
     /// Include paths configured within the build file.
-    include_paths: shims.ArrayList([]const u8),
+    include_paths: []const std.Build.LazyPath,
 
     /// Exclude paths confiured within the build file.
-    exclude_paths: shims.ArrayList([]const u8),
+    exclude_paths: []const std.Build.LazyPath,
 
     const Arg = union(enum) {
         artifact: *std.Build.Step.Compile,
         bytes: []const u8,
     };
 
-    pub fn create(owner: *std.Build, exe: *std.Build.Step.Compile) *ZlinterRun {
+    pub fn create(
+        owner: *std.Build,
+        exe: *std.Build.Step.Compile,
+        include_paths: []const std.Build.LazyPath,
+        exclude_paths: []const std.Build.LazyPath,
+    ) *ZlinterRun {
         const arena = owner.allocator;
 
         const self = arena.create(ZlinterRun) catch @panic("OOM");
@@ -754,11 +747,25 @@ const ZlinterRun = struct {
                 .makeFn = make,
             }),
             .argv = .empty,
-            .exclude_paths = .empty,
-            .include_paths = .empty,
+            .exclude_paths = exclude_paths,
+            .include_paths = include_paths,
         };
 
+        for (include_paths) |path| {
+            addWatchInput(owner, &self.step, path, .lintable_file) catch @panic("OOM");
+        }
+
         self.argv.append(arena, .{ .artifact = exe }) catch @panic("OOM");
+
+        if (owner.args) |args| self.addArgs(args);
+        if (owner.verbose) self.addArgs(&.{"--verbose"});
+
+        self.addArgs(&.{ "--zig_exe", owner.graph.zig_exe });
+        if (owner.graph.global_cache_root.path) |p|
+            self.addArgs(&.{ "--global_cache_root", p });
+
+        if (owner.graph.zig_lib_directory.path) |p|
+            self.addArgs(&.{ "--zig_lib_directory", p });
 
         const bin_file = exe.getEmittedBin();
         bin_file.addStepDependencies(&self.step);
@@ -766,19 +773,31 @@ const ZlinterRun = struct {
         return self;
     }
 
-    pub fn addArgs(run: *ZlinterRun, args: []const []const u8) void {
+    fn addArgs(run: *ZlinterRun, args: []const []const u8) void {
         const b = run.step.owner;
         for (args) |arg|
             run.argv.append(b.allocator, .{ .bytes = b.dupe(arg) }) catch @panic("OOM");
     }
 
-    pub fn addIncludePath(run: *ZlinterRun, owner: *std.Build, path: std.Build.LazyPath) void {
-        addWatchInput(owner, &run.step, path, .lintable_file) catch @panic("OOM");
-        run.include_paths.append(run.step.owner.allocator, run.step.owner.dupe(path.getPath3(owner, &run.step).subPathOrDot())) catch @panic("OOM");
-    }
+    fn subPaths(
+        step: *std.Build.Step,
+        paths: []const std.Build.LazyPath,
+    ) error{OutOfMemory}![]const []const u8 {
+        const b = step.owner;
 
-    pub fn addExcludePath(run: *ZlinterRun, exclude_path: []const u8) void {
-        run.exclude_paths.append(run.step.owner.allocator, run.step.owner.dupe(exclude_path)) catch @panic("OOM");
+        var list: shims.ArrayList([]const u8) = try .initCapacity(
+            b.allocator,
+            paths.len,
+        );
+        errdefer list.deinit(b.allocator);
+
+        for (paths) |path| {
+            list.appendAssumeCapacity(
+                path.getPath3(b, step).subPathOrDot(),
+            );
+        }
+
+        return try list.toOwnedSlice(b.allocator);
     }
 
     fn make(step: *std.Build.Step, _: std.Build.Step.MakeOptions) !void {
@@ -787,8 +806,8 @@ const ZlinterRun = struct {
         const arena = b.allocator;
 
         const build_info_zon_bytes: []const u8 = toZonString(BuildInfo{
-            .include_paths = if (run.include_paths.items.len > 0) run.include_paths.items else null,
-            .exclude_paths = if (run.exclude_paths.items.len > 0) run.exclude_paths.items else null,
+            .include_paths = if (run.include_paths.len > 0) try subPaths(&run.step, run.include_paths) else null,
+            .exclude_paths = if (run.exclude_paths.len > 0) try subPaths(&run.step, run.exclude_paths) else null,
         }, b.allocator);
 
         const env_map = arena.create(std.process.EnvMap) catch @panic("OOM");
