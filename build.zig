@@ -554,6 +554,12 @@ fn buildStep(
         exclude,
     );
 
+    if (options.compiled_steps) |compiled| {
+        for (compiled.items) |c| {
+            zlinter_run.addCompiled(c);
+        }
+    }
+
     return &zlinter_run.step;
 }
 
@@ -757,6 +763,8 @@ const ZlinterRun = struct {
 
     /// The sources to lint (e.g., an executable or library).
     include: []const LintIncludeSource,
+
+    compiled_steps: shims.ArrayList(*std.Build.Step.Compile),
 
     const Arg = union(enum) {
         artifact: *std.Build.Step.Compile,
