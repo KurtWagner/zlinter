@@ -987,10 +987,6 @@ pub const File = struct {
         const node_tag = tree.nodeTag(node_index);
 
         if (symbolNameSlice(tree, node_index)) |name| {
-            std.debug.print(
-                "Symbol Scope: {d}, Node: {d} {s} {}\n",
-                .{ scope_index, node_index, name, node_tag },
-            );
             var scope_ref = &self.scopes.items[scope_index];
             try scope_ref.addSymbol(gpa, name, node_index);
         }
@@ -1480,38 +1476,48 @@ pub const SymbolTable = struct {
         self.files.deinit();
     }
 
-    pub fn consumeFile(
+    pub fn getOrCreateFile(
         self: *SymbolTable,
         path: []const u8,
         arena: std.mem.Allocator,
-    ) !void {
-        if (self.files.contains(path)) return;
+    ) !*const File {
+        if (self.files.getPtr(path)) |f| return f;
 
-        var file = try std.fs.openFileAbsolute(path, .{});
-        defer file.close();
-
-        var file_reader_buffer: [1024]u8 = undefined;
-        var file_reader = file.readerStreaming(&file_reader_buffer);
-
-        var buffer: std.io.Writer.Allocating = .init(arena);
-
-        if (file_reader.getSize()) |size| {
-            const casted_size = std.math.cast(u32, size) orelse return error.StreamTooLong;
-            try buffer.ensureTotalCapacity(casted_size);
-        } else |_| {
-            // Do nothing.
-        }
-
-        _ = try file_reader.interface.streamRemaining(&buffer.writer);
-
-        const contents = try buffer.toOwnedSliceSentinel(0);
-
-        var tree = try std.zig.Ast.parse(arena, contents, .zig);
+        const source = try readSource(arena, path);
+        var tree = try Ast.parse(arena, source, .zig);
 
         try self.files.put(try self.gpa.dupe(u8, path), .init);
-        try self.files.getPtr(path).?.visitNode(self.gpa, &tree, 0, .root);
+
+        var file = self.files.getPtr(path).?;
+        try file.visitNode(self.gpa, &tree, 0, .root);
+        return file;
     }
 };
+
+pub fn readSource(
+    allocator: std.mem.Allocator,
+    path: []const u8,
+) ![:0]const u8 {
+    var file = try std.fs.openFileAbsolute(path, .{});
+    defer file.close();
+
+    var file_reader_buffer: [1024]u8 = undefined;
+    var file_reader = file.readerStreaming(&file_reader_buffer);
+
+    var buffer: std.io.Writer.Allocating = .init(allocator);
+    errdefer buffer.deinit();
+
+    if (file_reader.getSize()) |size| {
+        const casted_size = std.math.cast(u32, size) orelse return error.StreamTooLong;
+        try buffer.ensureTotalCapacity(casted_size);
+    } else |_| {
+        // Do nothing.
+    }
+
+    _ = try file_reader.interface.streamRemaining(&buffer.writer);
+
+    return try buffer.toOwnedSliceSentinel(0);
+}
 
 const session = @import("session.zig");
 const shims = @import("shims.zig");
