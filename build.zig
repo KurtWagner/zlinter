@@ -100,6 +100,7 @@ pub const LintSource = union(enum) {
 
 const StepBuilder = struct {
     rules: shims.ArrayList(BuiltRule),
+    // TODO: Collapse paths and sources into one array for union `LintSource`.
     include_paths: shims.ArrayList(std.Build.LazyPath),
     exclude_paths: shims.ArrayList(std.Build.LazyPath),
     sources: shims.ArrayList(LintSource),
