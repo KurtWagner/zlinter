@@ -861,7 +861,7 @@ const ZlinterRun = struct {
         var cwd_buff: [std.fs.max_path_bytes]u8 = undefined;
         const cwd: BuildCwd = .init(&cwd_buff);
 
-        var includes: std.ArrayList(std.Build.LazyPath) = try .initCapacity(
+        var includes: shims.ArrayList(std.Build.LazyPath) = try .initCapacity(
             b.allocator,
             @max(1, run.include_paths.len),
         );
