@@ -144,7 +144,7 @@ const StepBuilder = struct {
     /// Unless a source is set, includes defaults to the current working
     /// directory.
     ///
-    /// If a source is set than paths included here included in combination with
+    /// If a source is set then paths included here included in combination with
     /// the inputs resolved from the set source.
     ///
     /// `zig-out` and `.zig-cache` are always excluded - you don't need to
