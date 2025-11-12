@@ -12,6 +12,20 @@ include_paths: ?[]const []const u8 = null,
 /// piped into the zlinter execution.
 exclude_paths: ?[]const []const u8 = null,
 
+/// Used to match imports to zig source files. e.g., `@import("module")`
+imports: ?[]const Import = null,
+
+pub const Import = struct {
+    name: []const u8,
+    path: []const u8,
+
+    pub fn deinit(self: *Import, gpa: std.mem.Allocator) void {
+        gpa.free(self.name);
+        gpa.free(self.path);
+        self.* = undefined;
+    }
+};
+
 pub const default: BuildInfo = .{};
 
 pub fn deinit(self: BuildInfo, gpa: std.mem.Allocator) void {
@@ -23,6 +37,11 @@ pub fn deinit(self: BuildInfo, gpa: std.mem.Allocator) void {
     if (self.include_paths) |paths| {
         for (paths) |p| gpa.free(p);
         gpa.free(paths);
+    }
+
+    if (self.imports) |imports| {
+        for (imports) |*i| @constCast(i).deinit(gpa);
+        gpa.free(imports);
     }
 }
 
