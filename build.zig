@@ -75,7 +75,7 @@ pub fn builder(b: *std.Build, options: BuilderOptions) StepBuilder {
         .rules = .empty,
         .include_paths = .empty,
         .exclude_paths = .empty,
-        .source = null,
+        .sources = .empty,
         .b = b,
         .optimize = options.optimize,
         .target = options.target orelse b.graph.host,
@@ -83,13 +83,13 @@ pub fn builder(b: *std.Build, options: BuilderOptions) StepBuilder {
 }
 
 /// Represents a source that can be linted.
-pub const Source = union(enum) {
+pub const LintSource = union(enum) {
     /// e.g., library or executable.
     compiled_unit: struct {
         compile_step: *std.Build.Step.Compile,
     },
 
-    pub fn compiled(compile: *std.Build.Step.Compile) Source {
+    pub fn compiled(compile: *std.Build.Step.Compile) LintSource {
         return .{
             .compiled_unit = .{
                 .compile_step = compile,
@@ -102,7 +102,7 @@ const StepBuilder = struct {
     rules: shims.ArrayList(BuiltRule),
     include_paths: shims.ArrayList(std.Build.LazyPath),
     exclude_paths: shims.ArrayList(std.Build.LazyPath),
-    source: ?Source,
+    sources: shims.ArrayList(LintSource),
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
@@ -128,15 +128,15 @@ const StepBuilder = struct {
         ) catch @panic("OOM");
     }
 
-    /// Sets the source to be linted (e.g., library or executable). Only inputs
+    /// Adds a source to be linted (e.g., library or executable). Only inputs
     /// resolved to this source within the projects path will be linted.
     ///
     /// If a source is not set then it falls back to linting the include paths.
     /// If no include paths are given then it falls back to linting all source
     /// files under the current working directory.
-    pub fn setSource(self: *StepBuilder, source: Source) void {
-        if (self.source != null) @panic("Source already set");
-        self.source = source;
+    pub fn addSource(self: *StepBuilder, source: LintSource) void {
+        const arena = self.b.allocator;
+        self.sources.append(arena, source) catch @panic("OOM");
     }
 
     /// Set the paths to include or exclude when running the linter.
@@ -181,7 +181,7 @@ const StepBuilder = struct {
                 },
                 .include_paths = self.include_paths.items,
                 .exclude_paths = self.exclude_paths.items,
-                .source = self.source,
+                .sources = self.sources.items,
             },
         );
     }
@@ -363,10 +363,12 @@ pub fn build(b: *std.Build) void {
 
     const lint_cmd = b.step("lint", "Lint the linters own source code.");
     lint_cmd.dependOn(step: {
-        const source: Source = .compiled(b.addLibrary(.{
+        var sources = shims.ArrayList(LintSource).empty;
+        sources.append(b.allocator, .compiled(b.addLibrary(.{
             .name = "zlinter",
             .root_module = zlinter_lib_module,
-        }));
+        }))) catch @panic("OOM");
+
         var include_paths = shims.ArrayList(std.Build.LazyPath).empty;
         var exclude_paths = shims.ArrayList(std.Build.LazyPath).empty;
 
@@ -428,7 +430,7 @@ pub fn build(b: *std.Build) void {
                 ),
             },
             .{
-                .source = source,
+                .sources = sources.items,
                 .target = target,
                 .optimize = optimize,
                 .include_paths = include_paths.items,
@@ -498,7 +500,7 @@ fn buildStep(
         },
         include_paths: []const std.Build.LazyPath,
         exclude_paths: []const std.Build.LazyPath,
-        source: ?Source,
+        sources: []const LintSource,
     },
 ) *std.Build.Step {
     const zlinter_lib_module: *std.Build.Module, const exe_file: std.Build.LazyPath, const build_rules_exe_file: std.Build.LazyPath = switch (options.zlinter) {
@@ -551,7 +553,7 @@ fn buildStep(
         zlinter_exe,
         options.include_paths,
         options.exclude_paths,
-        options.source,
+        options.sources,
     );
 
     return &zlinter_run.step;
@@ -758,8 +760,8 @@ const ZlinterRun = struct {
     /// Exclude paths confiured within the build file.
     exclude_paths: []const std.Build.LazyPath,
 
-    /// The source to lint (e.g., an executable or library).
-    source: ?Source,
+    /// The sources to lint (e.g., an executable or library).
+    sources: []const LintSource,
 
     const Arg = union(enum) {
         artifact: *std.Build.Step.Compile,
@@ -771,7 +773,7 @@ const ZlinterRun = struct {
         exe: *std.Build.Step.Compile,
         include_paths: []const std.Build.LazyPath,
         exclude_paths: []const std.Build.LazyPath,
-        source: ?Source,
+        sources: []const LintSource,
     ) *ZlinterRun {
         const arena = owner.allocator;
 
@@ -786,7 +788,7 @@ const ZlinterRun = struct {
             .argv = .empty,
             .exclude_paths = exclude_paths,
             .include_paths = include_paths,
-            .source = source,
+            .sources = sources,
         };
 
         for (include_paths) |path| {
@@ -808,7 +810,7 @@ const ZlinterRun = struct {
         const bin_file = exe.getEmittedBin();
         bin_file.addStepDependencies(&self.step);
 
-        if (source) |s| {
+        for (sources) |s| {
             switch (s) {
                 .compiled_unit => |info| {
                     self.step.dependOn(&info.compile_step.step);
@@ -835,7 +837,7 @@ const ZlinterRun = struct {
             b.allocator,
             paths.len,
         );
-        errdefer list.deinit(b.allocator);
+        defer list.deinit(b.allocator);
 
         for (paths) |path| {
             list.appendAssumeCapacity(
@@ -862,7 +864,7 @@ const ZlinterRun = struct {
 
         includes.appendSliceAssumeCapacity(run.include_paths);
 
-        if (run.source) |source| {
+        for (run.sources) |source| {
             switch (source) {
                 .compiled_unit => |info| {
                     var exe = info.compile_step;
