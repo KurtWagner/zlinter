@@ -64,6 +64,8 @@ pub fn main() !u8 {
         return ExitCode.usage_error.int();
     }
 
+    std.debug.print("Build args: {}\n", .{args.build_info});
+
     var total_fixes: usize = 0;
     const result = result: {
         var remaining_fix_passes = @max(1, args.fix_passes);
