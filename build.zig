@@ -894,6 +894,8 @@ const ZlinterRun = struct {
                             };
                             std.debug.assert(joined_path.len > 0);
 
+                            if (!try isLintableFilePath(joined_path)) continue :sub_paths;
+
                             if (cwd.relativePath(b, joined_path)) |path| {
                                 try includes.append(b.allocator, path);
                             }
