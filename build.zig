@@ -50,6 +50,11 @@ const BuiltRule = struct {
     }
 };
 
+const BuildOptions = struct {
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+};
+
 pub const BuilderOptions = struct {
     /// You should never need to set this. Defaults to native host.
     target: ?std.Build.ResolvedTarget = null,
@@ -69,15 +74,17 @@ pub const BuilderOptions = struct {
     optimize: std.builtin.OptimizeMode = .Debug,
 };
 
-/// Creater a step builder for zlinter
+/// Create a step builder for zlinter
 pub fn builder(b: *std.Build, options: BuilderOptions) StepBuilder {
     return .{
         .rules = .empty,
         .exclude = .empty,
         .include = .empty,
+        .options = .{
+            .optimize = options.optimize,
+            .target = options.target orelse b.graph.host,
+        },
         .b = b,
-        .optimize = options.optimize,
-        .target = options.target orelse b.graph.host,
     };
 }
 
@@ -107,9 +114,8 @@ const StepBuilder = struct {
     rules: shims.ArrayList(BuiltRule),
     include: shims.ArrayList(LintIncludeSource),
     exclude: shims.ArrayList(LintExcludeSource),
+    options: BuildOptions,
     b: *std.Build,
-    target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
 
     pub fn addRule(
         self: *StepBuilder,
@@ -124,8 +130,8 @@ const StepBuilder = struct {
                 self.b,
                 source,
                 .{
-                    .optimize = self.optimize,
-                    .target = self.target,
+                    .optimize = self.options.optimize,
+                    .target = self.options.target,
                 },
                 config,
             ),
@@ -174,17 +180,14 @@ const StepBuilder = struct {
             b,
             self.rules.items,
             .{
-                .target = self.target,
-                .optimize = self.optimize,
-                .zlinter = .{
-                    .dependency = b.dependencyFromBuildZig(
-                        @"build.zig",
-                        .{},
-                    ),
-                },
-                .exclude = self.exclude.items,
-                .include = self.include.items,
+                .dependency = b.dependencyFromBuildZig(
+                    @"build.zig",
+                    .{},
+                ),
             },
+            self.include.items,
+            self.exclude.items,
+            self.options,
         );
     }
 };
@@ -430,12 +433,12 @@ pub fn build(b: *std.Build) void {
                     },
                 ),
             },
+            .{ .module = zlinter_lib_module },
+            include.items,
+            exclude.items,
             .{
-                .include = include.items,
-                .exclude = exclude.items,
                 .target = target,
                 .optimize = optimize,
-                .zlinter = .{ .module = zlinter_lib_module },
             },
         );
     });
@@ -491,18 +494,15 @@ fn toZonString(val: anytype, allocator: std.mem.Allocator) []const u8 {
 fn buildStep(
     b: *std.Build,
     rules: []const BuiltRule,
-    options: struct {
-        target: std.Build.ResolvedTarget,
-        optimize: std.builtin.OptimizeMode,
-        zlinter: union(enum) {
-            dependency: *std.Build.Dependency,
-            module: *std.Build.Module,
-        },
-        exclude: []const LintExcludeSource,
-        include: []const LintIncludeSource,
+    zlinter: union(enum) {
+        dependency: *std.Build.Dependency,
+        module: *std.Build.Module,
     },
+    include: []const LintIncludeSource,
+    exclude: []const LintExcludeSource,
+    options: BuildOptions,
 ) *std.Build.Step {
-    const zlinter_lib_module: *std.Build.Module, const exe_file: std.Build.LazyPath, const build_rules_exe_file: std.Build.LazyPath = switch (options.zlinter) {
+    const zlinter_lib_module: *std.Build.Module, const exe_file: std.Build.LazyPath, const build_rules_exe_file: std.Build.LazyPath = switch (zlinter) {
         .dependency => |d| .{ d.module("zlinter"), d.path("src/exe/run_linter.zig"), d.path("build_rules.zig") },
         .module => |m| .{ m, b.path("src/exe/run_linter.zig"), b.path("build_rules.zig") },
     };
@@ -550,8 +550,8 @@ fn buildStep(
     const zlinter_run = ZlinterRun.create(
         b,
         zlinter_exe,
-        options.exclude,
-        options.include,
+        include,
+        exclude,
     );
 
     return &zlinter_run.step;
@@ -766,8 +766,8 @@ const ZlinterRun = struct {
     pub fn create(
         owner: *std.Build,
         exe: *std.Build.Step.Compile,
-        exclude: []const LintExcludeSource,
         include: []const LintIncludeSource,
+        exclude: []const LintExcludeSource,
     ) *ZlinterRun {
         const arena = owner.allocator;
 
