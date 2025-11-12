@@ -73,23 +73,23 @@ pub const BuilderOptions = struct {
 pub fn builder(b: *std.Build, options: BuilderOptions) StepBuilder {
     return .{
         .rules = .empty,
-        .include_paths = .empty,
-        .exclude_paths = .empty,
-        .sources = .empty,
+        .exclude = .empty,
+        .include = .empty,
         .b = b,
         .optimize = options.optimize,
         .target = options.target orelse b.graph.host,
     };
 }
 
-/// Represents a source that can be linted.
-pub const LintSource = union(enum) {
+/// Represents something that should be linted.
+const LintIncludeSource = union(enum) {
     /// e.g., library or executable.
     compiled_unit: struct {
         compile_step: *std.Build.Step.Compile,
     },
+    path: std.Build.LazyPath,
 
-    pub fn compiled(compile: *std.Build.Step.Compile) LintSource {
+    fn compiled(compile: *std.Build.Step.Compile) LintIncludeSource {
         return .{
             .compiled_unit = .{
                 .compile_step = compile,
@@ -98,12 +98,15 @@ pub const LintSource = union(enum) {
     }
 };
 
+/// Represents something that should be excluded from linting.
+const LintExcludeSource = union(enum) {
+    path: std.Build.LazyPath,
+};
+
 const StepBuilder = struct {
     rules: shims.ArrayList(BuiltRule),
-    // TODO: Collapse paths and sources into one array for union `LintSource`.
-    include_paths: shims.ArrayList(std.Build.LazyPath),
-    exclude_paths: shims.ArrayList(std.Build.LazyPath),
-    sources: shims.ArrayList(LintSource),
+    include: shims.ArrayList(LintIncludeSource),
+    exclude: shims.ArrayList(LintExcludeSource),
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
@@ -129,15 +132,17 @@ const StepBuilder = struct {
         ) catch @panic("OOM");
     }
 
-    /// Adds a source to be linted (e.g., library or executable). Only inputs
-    /// resolved to this source within the projects path will be linted.
+    /// Adds a compiled source to be linted (e.g., library or executable). Only
+    /// inputs resolved to this source within the projects path will be linted.
     ///
     /// If a source is not set then it falls back to linting the include paths.
     /// If no include paths are given then it falls back to linting all source
     /// files under the current working directory.
-    pub fn addSource(self: *StepBuilder, source: LintSource) void {
+    pub fn addCompiled(self: *StepBuilder, compile: []const *std.Build.Step.Compile) void {
         const arena = self.b.allocator;
-        self.sources.append(arena, source) catch @panic("OOM");
+
+        for (compile) |c|
+            self.include.append(arena, .compiled(c)) catch @panic("OOM");
     }
 
     /// Set the paths to include or exclude when running the linter.
@@ -160,9 +165,9 @@ const StepBuilder = struct {
         const arena = self.b.allocator;
 
         if (paths.include) |includes|
-            for (includes) |path| self.include_paths.append(arena, path) catch @panic("OOM");
+            for (includes) |path| self.include.append(arena, .{ .path = path }) catch @panic("OOM");
         if (paths.exclude) |excludes|
-            for (excludes) |path| self.exclude_paths.append(arena, path) catch @panic("OOM");
+            for (excludes) |path| self.exclude.append(arena, .{ .path = path }) catch @panic("OOM");
     }
 
     pub fn build(self: *StepBuilder) *std.Build.Step {
@@ -180,9 +185,8 @@ const StepBuilder = struct {
                         .{},
                     ),
                 },
-                .include_paths = self.include_paths.items,
-                .exclude_paths = self.exclude_paths.items,
-                .sources = self.sources.items,
+                .exclude = self.exclude.items,
+                .include = self.include.items,
             },
         );
     }
@@ -364,19 +368,18 @@ pub fn build(b: *std.Build) void {
 
     const lint_cmd = b.step("lint", "Lint the linters own source code.");
     lint_cmd.dependOn(step: {
-        var sources = shims.ArrayList(LintSource).empty;
-        sources.append(b.allocator, .compiled(b.addLibrary(.{
+        var include = shims.ArrayList(LintIncludeSource).empty;
+        include.append(b.allocator, .compiled(b.addLibrary(.{
             .name = "zlinter",
             .root_module = zlinter_lib_module,
         }))) catch @panic("OOM");
 
-        var include_paths = shims.ArrayList(std.Build.LazyPath).empty;
-        var exclude_paths = shims.ArrayList(std.Build.LazyPath).empty;
+        var exclude = shims.ArrayList(LintExcludeSource).empty;
 
         // Also lint all files within project, not just those resolved to our compiled source.
-        include_paths.append(b.allocator, b.path("./")) catch @panic("OOM");
-        exclude_paths.append(b.allocator, b.path("integration_tests/test_cases")) catch @panic("OOM");
-        exclude_paths.append(b.allocator, b.path("integration_tests/src/test_case_references.zig")) catch @panic("OOM");
+        include.append(b.allocator, .{ .path = b.path("./") }) catch @panic("OOM");
+        exclude.append(b.allocator, .{ .path = b.path("integration_tests/test_cases") }) catch @panic("OOM");
+        exclude.append(b.allocator, .{ .path = b.path("integration_tests/src/test_case_references.zig") }) catch @panic("OOM");
 
         break :step buildStep(
             b,
@@ -431,11 +434,10 @@ pub fn build(b: *std.Build) void {
                 ),
             },
             .{
-                .sources = sources.items,
+                .include = include.items,
+                .exclude = exclude.items,
                 .target = target,
                 .optimize = optimize,
-                .include_paths = include_paths.items,
-                .exclude_paths = exclude_paths.items,
                 .zlinter = .{ .module = zlinter_lib_module },
             },
         );
@@ -499,9 +501,8 @@ fn buildStep(
             dependency: *std.Build.Dependency,
             module: *std.Build.Module,
         },
-        include_paths: []const std.Build.LazyPath,
-        exclude_paths: []const std.Build.LazyPath,
-        sources: []const LintSource,
+        exclude: []const LintExcludeSource,
+        include: []const LintIncludeSource,
     },
 ) *std.Build.Step {
     const zlinter_lib_module: *std.Build.Module, const exe_file: std.Build.LazyPath, const build_rules_exe_file: std.Build.LazyPath = switch (options.zlinter) {
@@ -552,9 +553,8 @@ fn buildStep(
     const zlinter_run = ZlinterRun.create(
         b,
         zlinter_exe,
-        options.include_paths,
-        options.exclude_paths,
-        options.sources,
+        options.exclude,
+        options.include,
     );
 
     return &zlinter_run.step;
@@ -755,14 +755,11 @@ const ZlinterRun = struct {
     /// CLI arguments to be passed to zlinter when executed
     argv: shims.ArrayList(Arg),
 
-    /// Include paths configured within the build file.
-    include_paths: []const std.Build.LazyPath,
-
     /// Exclude paths confiured within the build file.
-    exclude_paths: []const std.Build.LazyPath,
+    exclude: []const LintExcludeSource,
 
     /// The sources to lint (e.g., an executable or library).
-    sources: []const LintSource,
+    include: []const LintIncludeSource,
 
     const Arg = union(enum) {
         artifact: *std.Build.Step.Compile,
@@ -772,9 +769,8 @@ const ZlinterRun = struct {
     pub fn create(
         owner: *std.Build,
         exe: *std.Build.Step.Compile,
-        include_paths: []const std.Build.LazyPath,
-        exclude_paths: []const std.Build.LazyPath,
-        sources: []const LintSource,
+        exclude: []const LintExcludeSource,
+        include: []const LintIncludeSource,
     ) *ZlinterRun {
         const arena = owner.allocator;
 
@@ -787,14 +783,9 @@ const ZlinterRun = struct {
                 .makeFn = make,
             }),
             .argv = .empty,
-            .exclude_paths = exclude_paths,
-            .include_paths = include_paths,
-            .sources = sources,
+            .exclude = exclude,
+            .include = include,
         };
-
-        for (include_paths) |path| {
-            addWatchInput(owner, &self.step, path, .lintable_file) catch @panic("OOM");
-        }
 
         self.argv.append(arena, .{ .artifact = exe }) catch @panic("OOM");
 
@@ -811,11 +802,17 @@ const ZlinterRun = struct {
         const bin_file = exe.getEmittedBin();
         bin_file.addStepDependencies(&self.step);
 
-        for (sources) |s| {
+        for (include) |s| {
             switch (s) {
-                .compiled_unit => |info| {
-                    self.step.dependOn(&info.compile_step.step);
-                },
+                .compiled_unit => |info| self.step.dependOn(
+                    &info.compile_step.step,
+                ),
+                .path => |path| addWatchInput(
+                    owner,
+                    &self.step,
+                    path,
+                    .lintable_file,
+                ) catch @panic("OOM"),
             }
         }
 
@@ -861,13 +858,11 @@ const ZlinterRun = struct {
 
         var includes: shims.ArrayList(std.Build.LazyPath) = try .initCapacity(
             b.allocator,
-            @max(1, run.include_paths.len),
+            @max(1, run.include.len),
         );
         defer includes.deinit(b.allocator);
 
-        includes.appendSliceAssumeCapacity(run.include_paths);
-
-        for (run.sources) |source| {
+        for (run.include) |source| {
             switch (source) {
                 .compiled_unit => |info| {
                     var exe = info.compile_step;
@@ -906,15 +901,27 @@ const ZlinterRun = struct {
                         }
                     }
                 },
+                .path => |path| try includes.append(
+                    b.allocator,
+                    path,
+                ),
             }
         }
         if (includes.items.len == 0) {
             includes.appendAssumeCapacity(b.path("./"));
         }
 
+        var excludes: shims.ArrayList(std.Build.LazyPath) = try .initCapacity(b.allocator, run.exclude.len);
+        defer excludes.deinit(b.allocator);
+        for (run.exclude) |exclude| {
+            switch (exclude) {
+                .path => |path| excludes.appendAssumeCapacity(path),
+            }
+        }
+
         const build_info_zon_bytes: []const u8 = toZonString(BuildInfo{
             .include_paths = try subPaths(&run.step, includes.items),
-            .exclude_paths = try subPaths(&run.step, run.exclude_paths),
+            .exclude_paths = try subPaths(&run.step, excludes.items),
         }, b.allocator);
 
         const env_map = arena.create(std.process.EnvMap) catch @panic("OOM");
