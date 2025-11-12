@@ -554,12 +554,6 @@ fn buildStep(
         exclude,
     );
 
-    if (options.compiled_steps) |compiled| {
-        for (compiled.items) |c| {
-            zlinter_run.addCompiled(c);
-        }
-    }
-
     return &zlinter_run.step;
 }
 
