@@ -89,7 +89,7 @@ const LintIncludeSource = union(enum) {
     },
     path: std.Build.LazyPath,
 
-    fn compiled(compile: *std.Build.Step.Compile) LintIncludeSource {
+    pub fn compiled(compile: *std.Build.Step.Compile) LintIncludeSource {
         return .{
             .compiled_unit = .{
                 .compile_step = compile,
@@ -132,17 +132,14 @@ const StepBuilder = struct {
         ) catch @panic("OOM");
     }
 
-    /// Adds a compiled source to be linted (e.g., library or executable). Only
+    /// Adds a source to be linted (e.g., library, executable or path). Only
     /// inputs resolved to this source within the projects path will be linted.
     ///
-    /// If a source is not set then it falls back to linting the include paths.
-    /// If no include paths are given then it falls back to linting all source
-    /// files under the current working directory.
-    pub fn addCompiled(self: *StepBuilder, compile: []const *std.Build.Step.Compile) void {
+    /// If no paths are given or resolved then it falls back to linting all
+    /// zig source files under the current working directory.
+    pub fn addSource(self: *StepBuilder, source: LintIncludeSource) void {
         const arena = self.b.allocator;
-
-        for (compile) |c|
-            self.include.append(arena, .compiled(c)) catch @panic("OOM");
+        self.include.append(arena, source) catch @panic("OOM");
     }
 
     /// Set the paths to include or exclude when running the linter.
