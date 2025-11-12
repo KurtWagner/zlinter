@@ -75,16 +75,35 @@ pub fn builder(b: *std.Build, options: BuilderOptions) StepBuilder {
         .rules = .empty,
         .include_paths = .empty,
         .exclude_paths = .empty,
+        .sources = .empty,
         .b = b,
         .optimize = options.optimize,
         .target = options.target orelse b.graph.host,
     };
 }
 
+/// Represents a source that can be linted.
+pub const LintSource = union(enum) {
+    /// e.g., library or executable.
+    compiled_unit: struct {
+        compile_step: *std.Build.Step.Compile,
+    },
+
+    pub fn compiled(compile: *std.Build.Step.Compile) LintSource {
+        return .{
+            .compiled_unit = .{
+                .compile_step = compile,
+            },
+        };
+    }
+};
+
 const StepBuilder = struct {
     rules: shims.ArrayList(BuiltRule),
+    // TODO: Collapse paths and sources into one array for union `LintSource`.
     include_paths: shims.ArrayList(std.Build.LazyPath),
     exclude_paths: shims.ArrayList(std.Build.LazyPath),
+    sources: shims.ArrayList(LintSource),
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
@@ -110,11 +129,27 @@ const StepBuilder = struct {
         ) catch @panic("OOM");
     }
 
+    /// Adds a source to be linted (e.g., library or executable). Only inputs
+    /// resolved to this source within the projects path will be linted.
+    ///
+    /// If a source is not set then it falls back to linting the include paths.
+    /// If no include paths are given then it falls back to linting all source
+    /// files under the current working directory.
+    pub fn addSource(self: *StepBuilder, source: LintSource) void {
+        const arena = self.b.allocator;
+        self.sources.append(arena, source) catch @panic("OOM");
+    }
+
     /// Set the paths to include or exclude when running the linter.
     ///
-    /// Include defaults to the current working directory. `zig-out` and
-    /// `.zig-cache` are always excluded - you don't need to explicitly include
-    /// them if setting exclude paths.
+    /// Unless a source is set, includes defaults to the current working
+    /// directory.
+    ///
+    /// If a source is set then paths included here included in combination with
+    /// the inputs resolved from the set source.
+    ///
+    /// `zig-out` and `.zig-cache` are always excluded - you don't need to
+    /// explicitly include them if setting exclude paths.
     pub fn addPaths(
         self: *StepBuilder,
         paths: struct {
@@ -132,17 +167,6 @@ const StepBuilder = struct {
 
     pub fn build(self: *StepBuilder) *std.Build.Step {
         const b = self.b;
-        const arena = b.allocator;
-
-        const include_paths = include_paths: {
-            if (self.include_paths.items.len > 0) {
-                break :include_paths self.include_paths.items;
-            } else {
-                var list = arena.alloc(std.Build.LazyPath, 1) catch @panic("OOM");
-                list[0] = b.path("./");
-                break :include_paths list;
-            }
-        };
 
         return buildStep(
             b,
@@ -156,8 +180,9 @@ const StepBuilder = struct {
                         .{},
                     ),
                 },
-                .include_paths = include_paths,
+                .include_paths = self.include_paths.items,
                 .exclude_paths = self.exclude_paths.items,
+                .sources = self.sources.items,
             },
         );
     }
@@ -339,9 +364,17 @@ pub fn build(b: *std.Build) void {
 
     const lint_cmd = b.step("lint", "Lint the linters own source code.");
     lint_cmd.dependOn(step: {
-        const include_paths = shims.ArrayList(std.Build.LazyPath).empty;
+        var sources = shims.ArrayList(LintSource).empty;
+        sources.append(b.allocator, .compiled(b.addLibrary(.{
+            .name = "zlinter",
+            .root_module = zlinter_lib_module,
+        }))) catch @panic("OOM");
+
+        var include_paths = shims.ArrayList(std.Build.LazyPath).empty;
         var exclude_paths = shims.ArrayList(std.Build.LazyPath).empty;
 
+        // Also lint all files within project, not just those resolved to our compiled source.
+        include_paths.append(b.allocator, b.path("./")) catch @panic("OOM");
         exclude_paths.append(b.allocator, b.path("integration_tests/test_cases")) catch @panic("OOM");
         exclude_paths.append(b.allocator, b.path("integration_tests/src/test_case_references.zig")) catch @panic("OOM");
 
@@ -398,6 +431,7 @@ pub fn build(b: *std.Build) void {
                 ),
             },
             .{
+                .sources = sources.items,
                 .target = target,
                 .optimize = optimize,
                 .include_paths = include_paths.items,
@@ -469,6 +503,7 @@ fn buildStep(
         },
         include_paths: []const std.Build.LazyPath,
         exclude_paths: []const std.Build.LazyPath,
+        sources: []const LintSource,
     },
 ) *std.Build.Step {
     const zlinter_lib_module: *std.Build.Module, const exe_file: std.Build.LazyPath, const build_rules_exe_file: std.Build.LazyPath = switch (options.zlinter) {
@@ -521,6 +556,7 @@ fn buildStep(
         zlinter_exe,
         options.include_paths,
         options.exclude_paths,
+        options.sources,
     );
 
     return &zlinter_run.step;
@@ -727,6 +763,9 @@ const ZlinterRun = struct {
     /// Exclude paths confiured within the build file.
     exclude_paths: []const std.Build.LazyPath,
 
+    /// The sources to lint (e.g., an executable or library).
+    sources: []const LintSource,
+
     const Arg = union(enum) {
         artifact: *std.Build.Step.Compile,
         bytes: []const u8,
@@ -737,6 +776,7 @@ const ZlinterRun = struct {
         exe: *std.Build.Step.Compile,
         include_paths: []const std.Build.LazyPath,
         exclude_paths: []const std.Build.LazyPath,
+        sources: []const LintSource,
     ) *ZlinterRun {
         const arena = owner.allocator;
 
@@ -751,6 +791,7 @@ const ZlinterRun = struct {
             .argv = .empty,
             .exclude_paths = exclude_paths,
             .include_paths = include_paths,
+            .sources = sources,
         };
 
         for (include_paths) |path| {
@@ -772,6 +813,14 @@ const ZlinterRun = struct {
         const bin_file = exe.getEmittedBin();
         bin_file.addStepDependencies(&self.step);
 
+        for (sources) |s| {
+            switch (s) {
+                .compiled_unit => |info| {
+                    self.step.dependOn(&info.compile_step.step);
+                },
+            }
+        }
+
         return self;
     }
 
@@ -784,14 +833,16 @@ const ZlinterRun = struct {
     fn subPaths(
         step: *std.Build.Step,
         paths: []const std.Build.LazyPath,
-    ) error{OutOfMemory}![]const []const u8 {
+    ) error{OutOfMemory}!?[]const []const u8 {
+        if (paths.len == 0) return null;
+
         const b = step.owner;
 
         var list: shims.ArrayList([]const u8) = try .initCapacity(
             b.allocator,
             paths.len,
         );
-        errdefer list.deinit(b.allocator);
+        defer list.deinit(b.allocator);
 
         for (paths) |path| {
             list.appendAssumeCapacity(
@@ -807,9 +858,65 @@ const ZlinterRun = struct {
         const b = run.step.owner;
         const arena = b.allocator;
 
+        var cwd_buff: [std.fs.max_path_bytes]u8 = undefined;
+        const cwd: BuildCwd = .init(&cwd_buff);
+
+        var includes: std.ArrayList(std.Build.LazyPath) = try .initCapacity(
+            b.allocator,
+            @max(1, run.include_paths.len),
+        );
+        defer includes.deinit(b.allocator);
+
+        includes.appendSliceAssumeCapacity(run.include_paths);
+
+        for (run.sources) |source| {
+            switch (source) {
+                .compiled_unit => |info| {
+                    var exe = info.compile_step;
+
+                    // TODO: Use graph for import map.
+                    const graph = exe.root_module.getGraph();
+                    _ = graph;
+
+                    var inputs = exe.step.inputs;
+                    std.debug.assert(inputs.populated());
+
+                    var it = inputs.table.iterator();
+                    while (it.next()) |entry| {
+                        const p = entry.key_ptr.*;
+                        sub_paths: for (entry.value_ptr.items) |sub_path| {
+                            var buf: [std.fs.max_path_bytes]u8 = undefined;
+                            const joined_path = if (p.sub_path.len == 0) sub_path else p: {
+                                const fmt = "{s}" ++ std.fs.path.sep_str ++ "{s}";
+                                break :p std.fmt.bufPrint(
+                                    &buf,
+                                    fmt,
+                                    .{ p.sub_path, sub_path },
+                                ) catch {
+                                    std.debug.print(
+                                        "Warning: Name too long - " ++ fmt,
+                                        .{ p.sub_path, sub_path },
+                                    );
+                                    continue :sub_paths;
+                                };
+                            };
+                            std.debug.assert(joined_path.len > 0);
+
+                            if (cwd.relativePath(b, joined_path)) |path| {
+                                try includes.append(b.allocator, path);
+                            }
+                        }
+                    }
+                },
+            }
+        }
+        if (includes.items.len == 0) {
+            includes.appendAssumeCapacity(b.path("./"));
+        }
+
         const build_info_zon_bytes: []const u8 = toZonString(BuildInfo{
-            .include_paths = if (run.include_paths.len > 0) try subPaths(&run.step, run.include_paths) else null,
-            .exclude_paths = if (run.exclude_paths.len > 0) try subPaths(&run.step, run.exclude_paths) else null,
+            .include_paths = try subPaths(&run.step, includes.items),
+            .exclude_paths = try subPaths(&run.step, run.exclude_paths),
         }, b.allocator);
 
         const env_map = arena.create(std.process.EnvMap) catch @panic("OOM");
@@ -989,6 +1096,68 @@ fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
     if (replacements == 0) @panic("Failed to replace template timestamps");
     return buffer;
 }
+
+/// Normalised representation of the current working directory
+const BuildCwd = struct {
+    path: []const u8,
+    dir: std.fs.Dir,
+
+    pub fn init(buff: *[std.fs.max_path_bytes]u8) BuildCwd {
+        return .{
+            .dir = std.fs.cwd(),
+            .path = std.process.getCwd(buff) catch unreachable,
+        };
+    }
+
+    /// Returns a path relative to the current working directory or null if the
+    /// path is not relative to the current working directory.
+    ///
+    /// If the path is a relative path, we check whether it exists with the
+    /// current working directory.
+    ///
+    /// If the path is absolute, we check whether it resolves to a readable
+    /// file within the current working directory.
+    pub fn relativePath(
+        self: *const BuildCwd,
+        b: *std.Build,
+        to: []const u8,
+    ) ?std.Build.LazyPath {
+        if (std.fs.path.isAbsolute(to)) {
+            const relative = std.fs.path.relative(
+                b.allocator,
+                self.path,
+                to,
+            ) catch |e|
+                switch (e) {
+                    error.OutOfMemory => @panic("OOM"),
+                    error.Unexpected,
+                    error.CurrentWorkingDirectoryUnlinked,
+                    => return null,
+                };
+            errdefer b.allocator.free(relative);
+
+            if (relative.len != 0 and isReadable(&self.dir, relative)) {
+                return b.path(relative);
+            } else {
+                b.allocator.free(relative);
+                return null;
+            }
+        } else {
+            if (isReadable(&self.dir, to)) {
+                return b.path(b.dupe(to));
+            }
+        }
+        return null;
+    }
+
+    fn isReadable(from: *const std.fs.Dir, sub_path: []const u8) bool {
+        _ = from.access(
+            sub_path,
+            .{ .mode = .read_only },
+        ) catch return false;
+        return true;
+    }
+};
 
 const BuildInfo = @import("src/lib/BuildInfo.zig");
 const std = @import("std");
