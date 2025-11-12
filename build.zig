@@ -830,7 +830,9 @@ const ZlinterRun = struct {
     fn subPaths(
         step: *std.Build.Step,
         paths: []const std.Build.LazyPath,
-    ) error{OutOfMemory}![]const []const u8 {
+    ) error{OutOfMemory}!?[]const []const u8 {
+        if (paths.len == 0) return null;
+
         const b = step.owner;
 
         var list: shims.ArrayList([]const u8) = try .initCapacity(
@@ -854,7 +856,7 @@ const ZlinterRun = struct {
         const arena = b.allocator;
 
         var cwd_buff: [std.fs.max_path_bytes]u8 = undefined;
-        const cwd: Cwd = .init(&cwd_buff);
+        const cwd: BuildCwd = .init(&cwd_buff);
 
         var includes: std.ArrayList(std.Build.LazyPath) = try .initCapacity(
             b.allocator,
@@ -910,8 +912,8 @@ const ZlinterRun = struct {
         }
 
         const build_info_zon_bytes: []const u8 = toZonString(BuildInfo{
-            .include_paths = if (includes.items.len > 0) try subPaths(&run.step, includes.items) else null,
-            .exclude_paths = if (run.exclude_paths.len > 0) try subPaths(&run.step, run.exclude_paths) else null,
+            .include_paths = try subPaths(&run.step, includes.items),
+            .exclude_paths = try subPaths(&run.step, run.exclude_paths),
         }, b.allocator);
 
         const env_map = arena.create(std.process.EnvMap) catch @panic("OOM");
@@ -1114,19 +1116,28 @@ fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
     return try out.toOwnedSlice();
 }
 
-const Cwd = struct {
+/// Normalised representation of the current working directory
+const BuildCwd = struct {
     path: []const u8,
     dir: std.fs.Dir,
 
-    pub fn init(buff: *[std.fs.max_path_bytes]u8) Cwd {
+    pub fn init(buff: *[std.fs.max_path_bytes]u8) BuildCwd {
         return .{
             .dir = std.fs.cwd(),
             .path = std.process.getCwd(buff) catch unreachable,
         };
     }
 
+    /// Returns a path relative to the current working directory or null if the
+    /// path is not relative to the current working directory.
+    ///
+    /// If the path is a relative path, we check whether it exists with the
+    /// current working directory.
+    ///
+    /// If the path is absolute, we check whether it resolves to a readable
+    /// file within the current working directory.
     pub fn relativePath(
-        self: Cwd,
+        self: *const BuildCwd,
         b: *std.Build,
         to: []const u8,
     ) ?std.Build.LazyPath {
