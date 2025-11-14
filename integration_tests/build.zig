@@ -71,6 +71,37 @@ pub fn build(b: *std.Build) !void {
         builder.addRule(.{ .custom = .{ .name = "no_cats", .path = "src/no_cats.zig" } }, .{});
         break :step builder.build();
     });
+
+    // See: src/check_compiled_source/README.md
+    {
+        const lint_integration_cmd = b.step("check-compiled-source", "");
+        lint_integration_cmd.dependOn(step: {
+            var builder = zlinter.builder(b, .{ .target = target, .optimize = optimize });
+            builder.addRule(
+                .{ .custom = .{
+                    .name = "no_cats",
+                    .path = "src/no_cats.zig",
+                } },
+                .{
+                    .severity = .@"error",
+                },
+            );
+            builder.addRule(
+                .{ .builtin = .no_panic },
+                .{ .severity = .warning },
+            );
+            builder.addSource(.compiled(b.addLibrary(.{
+                .name = "main",
+                .root_module = b.addModule("main", .{
+                    .root_source_file = b.path("src/check_compiled_source/main.zig"),
+                    .target = target,
+                    .optimize = optimize,
+                }),
+            })));
+            builder.addPaths(.{ .exclude = &.{b.path("src/check_compiled_source/excluded.zig")} });
+            break :step builder.build();
+        });
+    }
 }
 
 fn addFileArgIfExists(b: *std.Build, step: *std.Build.Step.Run, raw_path: []const u8) void {

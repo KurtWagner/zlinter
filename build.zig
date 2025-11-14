@@ -270,6 +270,7 @@ pub fn build(b: *std.Build) void {
 
     const run_integration_tests = b.addSystemCommand(&.{ b.graph.zig_exe, "build", "test" });
     run_integration_tests.setCwd(b.path("./integration_tests"));
+    run_integration_tests.has_side_effects = true;
 
     // Add directory and file inputs to ensure that we can watch and re-run tests
     // as these can't be resolved magicaly through the system call.
@@ -281,6 +282,25 @@ pub fn build(b: *std.Build) void {
 
     const integration_test_step = b.step("integration-test", "Run integration tests");
     integration_test_step.dependOn(&run_integration_tests.step);
+
+    const run_integration_check = b.addSystemCommand(&.{ b.graph.zig_exe, "build", "check-compiled-source" });
+    run_integration_check.has_side_effects = true;
+    run_integration_check.setCwd(b.path("./integration_tests"));
+    run_integration_check.setEnvironmentVariable("NO_COLOR", "");
+    run_integration_check.expectExitCode(0);
+    run_integration_check.expectStdOutEqual(std.fmt.comptimePrint(
+        \\warning `@panic` forcibly stops the program at runtime and should be avoided [{s}:4:5] no_panic
+        \\
+        \\ 4 |     @panic("whoops");
+        \\   |     ^^^^^^^^^^^^^^^^
+        \\
+        \\x 1 warnings
+        \\
+    , .{"src" ++ std.fs.path.sep_str ++ "check_compiled_source" ++ std.fs.path.sep_str ++ "used.zig"}));
+    addWatchInput(b, &run_integration_check.step, b.path("./integration_tests/src/check_compiled_source"), .none) catch @panic("OOM");
+
+    const integration_check_step = b.step("integration-check", "Run integration checks");
+    integration_check_step.dependOn(&run_integration_check.step);
 
     const unit_test_step = b.step("unit-test", "Run unit tests");
     if (coverage orelse false) {
@@ -320,6 +340,7 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run all tests");
     test_step.dependOn(unit_test_step);
     test_step.dependOn(integration_test_step);
+    test_step.dependOn(integration_check_step);
 
     // ------------------------------------------------------------------------
     // zig build website
