@@ -1098,7 +1098,7 @@ fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
     defer file.close();
 
     var file_buffer: [1024]u8 = undefined;
-    var file_reader = file.reader(&file_buffer);
+    var file_reader = file.reader(b.graph.io, &file_buffer);
 
     var out: std.Io.Writer.Allocating = .init(b.allocator);
     defer out.deinit();
@@ -1113,7 +1113,8 @@ fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
         // Ignore.
     }
 
-    const build_timestamp = b.fmt("{d}", .{std.time.milliTimestamp()});
+    const timestamp = try std.Io.Clock.real.now(b.graph.io);
+    const build_timestamp = b.fmt("{d}", .{@divTrunc(timestamp.nanoseconds, std.time.ns_per_ms)});
     const zig_version = zig_version_string;
 
     while (true) {

@@ -7,6 +7,7 @@ pub const FormatInput = struct {
     /// Arena allocator that is cleared after calling format.
     arena: std.mem.Allocator,
 
+    io: std.Io,
     tty: zlinter.ansi.Tty = .no_color,
 
     /// Only print this severity and above. e.g., set to error to only format errors
