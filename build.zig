@@ -1201,7 +1201,7 @@ const BuildCwd = struct {
     fn isReadable(from: *const std.fs.Dir, sub_path: []const u8) bool {
         _ = from.access(
             sub_path,
-            .{ .mode = .read_only },
+            .{ .read = true },
         ) catch return false;
         return true;
     }
