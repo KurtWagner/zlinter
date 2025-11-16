@@ -59,14 +59,14 @@ pub const NodeLineageIterator = struct {
 
 pub fn nodeChildrenAlloc(
     gpa: std.mem.Allocator,
-    tree: Ast,
+    tree: *const Ast,
     node: Ast.Node.Index,
 ) error{OutOfMemory}![]Ast.Node.Index {
     const Context = struct {
         gpa: std.mem.Allocator,
         children: *shims.ArrayList(Ast.Node.Index),
 
-        fn callback(self: @This(), _: Ast, child_node: Ast.Node.Index) error{OutOfMemory}!void {
+        fn callback(self: @This(), _: *const Ast, child_node: Ast.Node.Index) error{OutOfMemory}!void {
             if (NodeIndexShim.init(child_node).isRoot()) return;
             try self.children.append(self.gpa, child_node);
         }
@@ -92,23 +92,16 @@ pub fn nodeChildrenAlloc(
 /// I don't see the point in upstreaming the fix to the ZLS 0.14 branch so
 /// leaving this simple work around in place while we support 0.14 and then it
 /// can be deleted.
-pub fn iterateChildren(
-    tree: Ast,
+pub inline fn iterateChildren(
+    tree: *const Ast,
     node: Ast.Node.Index,
     context: anytype,
     comptime Error: type,
-    comptime callback: fn (@TypeOf(context), Ast, Ast.Node.Index) Error!void,
+    comptime callback: fn (@TypeOf(context), *const Ast, Ast.Node.Index) Error!void,
 ) Error!void {
     switch (version.zig) {
-        .@"0.14" => {
-            if (shims.nodeTag(tree, node) == .fn_decl) {
-                try callback(context, tree, shims.nodeData(tree, node).lhs);
-                try callback(context, tree, shims.nodeData(tree, node).rhs);
-            } else {
-                try zls.ast.iterateChildren(tree, node, context, Error, callback);
-            }
-        },
-        .@"0.15", .@"0.16" => try zls.ast.iterateChildren(tree, node, context, Error, callback),
+        .@"0.14", .@"0.15" => @panic("Not implemented"),
+        .@"0.16" => try zls.ast.iterateChildren(tree, node, context, Error, callback),
     }
 }
 

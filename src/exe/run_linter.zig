@@ -254,7 +254,7 @@ fn runLinterRules(
         .zig_exe_path = args.zig_exe,
         .zig_lib_path = args.zig_lib_directory,
         .global_cache_path = args.global_cache_root,
-    }, gpa, arena.allocator());
+    }, io, gpa, arena.allocator());
     defer context.deinit();
 
     var enabled_rules = enabledRules(args.rules);

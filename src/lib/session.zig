@@ -154,6 +154,7 @@ pub const LintContext = struct {
     pub fn init(
         self: *LintContext,
         config: zls.Config,
+        io: std.Io,
         gpa: std.mem.Allocator,
         arena: std.mem.Allocator,
     ) !void {
@@ -174,6 +175,7 @@ pub const LintContext = struct {
             }) catch @panic("Failed to init thread pool");
         }
         self.document_store = zls.DocumentStore{
+            .io = io,
             .allocator = gpa,
             .diagnostics_collection = &self.diagnostics_collection,
             .config = switch (version.zig) {
@@ -295,7 +297,7 @@ pub const LintContext = struct {
             while (queue.pop()) |item| {
                 const children = try ast.nodeChildrenAlloc(
                     gpa,
-                    doc.handle.tree,
+                    &doc.handle.tree,
                     item.node.toNodeIndex(),
                 );
 
