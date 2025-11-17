@@ -8,8 +8,15 @@ pub fn main() !u8 {
     const io = threaded.io();
 
     const gpa, const is_debug = switch (builtin.mode) {
-        .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
-        .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, false },
+        // TODO: There appears to be a performance regression in master where
+        // debug allocator is taking a lot of questionable stack traces
+        // significantly impacting performance.
+        // .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
+        .Debug,
+        .ReleaseSafe,
+        .ReleaseFast,
+        .ReleaseSmall,
+        => .{ std.heap.smp_allocator, false },
     };
     defer if (is_debug) {
         if (debug_allocator.deinit() == .leak) @panic("Memory leak");
