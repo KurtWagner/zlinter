@@ -206,7 +206,7 @@ test "deferBlock - has expected children" {
         defer _ = arena.reset(.retain_capacity);
 
         var context: session.LintContext = undefined;
-        try context.init(.{}, std.testing.allocator, arena.allocator());
+        try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
         defer context.deinit();
 
         var tmp = std.testing.tmpDir(.{});
@@ -752,7 +752,7 @@ test "fnCall - direct call without params" {
     defer arena.deinit();
 
     var context: session.LintContext = undefined;
-    try context.init(.{}, std.testing.allocator, arena.allocator());
+    try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
     defer context.deinit();
 
     var tmp = std.testing.tmpDir(.{});
@@ -794,7 +794,7 @@ test "fnCall - single field call with params" {
     defer arena.deinit();
 
     var context: session.LintContext = undefined;
-    try context.init(.{}, std.testing.allocator, arena.allocator());
+    try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
     defer context.deinit();
 
     var tmp = std.testing.tmpDir(.{});
@@ -866,7 +866,7 @@ test "findFnCall" {
         errdefer std.debug.print("Failed source: '{s}'\n", .{source});
 
         var context: session.LintContext = undefined;
-        try context.init(.{}, std.testing.allocator, arena.allocator());
+        try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
         defer context.deinit();
 
         var tmp = std.testing.tmpDir(.{});

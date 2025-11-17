@@ -595,7 +595,7 @@ test "LintDocument.isEnclosedInTestBlock" {
     defer arena.deinit();
 
     var context: LintContext = undefined;
-    try context.init(.{}, std.testing.allocator, arena.allocator());
+    try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
     defer context.deinit();
 
     var tmp = std.testing.tmpDir(.{});
@@ -1001,7 +1001,7 @@ test "LintContext.resolveTypeKind" {
         defer arena.deinit();
 
         var context: LintContext = undefined;
-        try context.init(.{}, std.testing.allocator, arena.allocator());
+        try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
         defer context.deinit();
 
         var tmp = std.testing.tmpDir(.{});

@@ -210,7 +210,12 @@ fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8, option
     defer arena.deinit();
 
     var context: LintContext = undefined;
-    try context.init(.{}, std.testing.allocator, arena.allocator());
+    try context.init(
+        .{},
+        std.testing.io,
+        std.testing.allocator,
+        arena.allocator(),
+    );
     defer context.deinit();
 
     var tmp = std.testing.tmpDir(.{});
