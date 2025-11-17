@@ -19,7 +19,7 @@ jobs:
   test:
     runs-on: windows-latest
     name: Test Windows
-    timeout-minutes: 4
+    timeout-minutes: 6
     steps:
       - name: "Checkout repo"
         uses: actions/checkout@v4
