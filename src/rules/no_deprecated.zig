@@ -178,7 +178,7 @@ fn handleIdentifierAccess(
     // Check whether the identifier is itself the declaration, in which case
     // we should skip as its not the usage but the declaration of it and we
     // dont want to list the declaration as deprecated only its usages
-    if (std.mem.eql(u8, decl_with_handle.handle.uri, handle.uri)) {
+    if (std.mem.eql(u8, decl_with_handle.handle.uri.raw, handle.uri.raw)) {
         const is_identifier = switch (decl_with_handle.decl) {
             .ast_node => |decl_node| switch (shims.nodeTag(decl_with_handle.handle.tree, decl_node)) {
                 .container_field_init,

@@ -286,7 +286,7 @@ pub fn build(b: *std.Build) void {
     const run_integration_check = b.addSystemCommand(&.{ b.graph.zig_exe, "build", "check-compiled-source" });
     run_integration_check.has_side_effects = true;
     run_integration_check.setCwd(b.path("./integration_tests"));
-    run_integration_check.setEnvironmentVariable("NO_COLOR", "");
+    run_integration_check.color = .disable;
     run_integration_check.expectExitCode(0);
     run_integration_check.expectStdOutEqual(std.fmt.comptimePrint(
         \\warning `@panic` forcibly stops the program at runtime and should be avoided [{s}:4:5] no_panic
@@ -1098,7 +1098,7 @@ fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
     defer file.close();
 
     var file_buffer: [1024]u8 = undefined;
-    var file_reader = file.reader(&file_buffer);
+    var file_reader = file.reader(b.graph.io, &file_buffer);
 
     var out: std.Io.Writer.Allocating = .init(b.allocator);
     defer out.deinit();
@@ -1113,7 +1113,8 @@ fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
         // Ignore.
     }
 
-    const build_timestamp = b.fmt("{d}", .{std.time.milliTimestamp()});
+    const timestamp = try std.Io.Clock.real.now(b.graph.io);
+    const build_timestamp = b.fmt("{d}", .{@divTrunc(timestamp.nanoseconds, std.time.ns_per_ms)});
     const zig_version = zig_version_string;
 
     while (true) {
@@ -1200,7 +1201,7 @@ const BuildCwd = struct {
     fn isReadable(from: *const std.fs.Dir, sub_path: []const u8) bool {
         _ = from.access(
             sub_path,
-            .{ .mode = .read_only },
+            .{ .read = true },
         ) catch return false;
         return true;
     }

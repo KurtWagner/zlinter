@@ -47,16 +47,16 @@ pub fn jsonTree(
         indent: u32 = 0,
         node_children: *std.json.Array,
 
-        fn callback(self: @This(), context_tree: Ast, child_node: Ast.Node.Index) error{OutOfMemory}!void {
+        fn callback(self: @This(), context_tree: *const Ast, child_node: Ast.Node.Index) error{OutOfMemory}!void {
             if (NodeIndexShim.init(child_node).isRoot()) return;
 
             var node_object = std.json.ObjectMap.init(self.arena);
             try node_object.put("tag", .{
-                .string = @tagName(shims.nodeTag(context_tree, child_node)),
+                .string = @tagName(shims.nodeTag(context_tree.*, child_node)),
             });
 
             try node_object.put("main_token", .{
-                .integer = shims.nodeMainToken(context_tree, child_node),
+                .integer = shims.nodeMainToken(context_tree.*, child_node),
             });
             try node_object.put("first_token", .{
                 .integer = context_tree.firstToken(child_node),
@@ -99,7 +99,7 @@ pub fn jsonTree(
 
     if (tree.errors.len == 0) {
         try ast.iterateChildren(
-            tree,
+            &tree,
             NodeIndexShim.root.toNodeIndex(),
             Context{
                 .arena = arena,

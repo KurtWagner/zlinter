@@ -154,6 +154,7 @@ pub const LintContext = struct {
     pub fn init(
         self: *LintContext,
         config: zls.Config,
+        io: std.Io,
         gpa: std.mem.Allocator,
         arena: std.mem.Allocator,
     ) !void {
@@ -174,6 +175,7 @@ pub const LintContext = struct {
             }) catch @panic("Failed to init thread pool");
         }
         self.document_store = zls.DocumentStore{
+            .io = io,
             .allocator = gpa,
             .diagnostics_collection = &self.diagnostics_collection,
             .config = switch (version.zig) {
@@ -250,7 +252,7 @@ pub const LintContext = struct {
     ) !void {
         var mem: [std.fs.max_path_bytes]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&mem);
-        const uri = try zls.URI.fromPath(
+        const uri = try zls.Uri.fromPath(
             fba.allocator(),
             try std.fs.cwd().realpathAlloc(
                 fba.allocator(),
@@ -295,7 +297,7 @@ pub const LintContext = struct {
             while (queue.pop()) |item| {
                 const children = try ast.nodeChildrenAlloc(
                     gpa,
-                    doc.handle.tree,
+                    &doc.handle.tree,
                     item.node.toNodeIndex(),
                 );
 
@@ -593,7 +595,7 @@ test "LintDocument.isEnclosedInTestBlock" {
     defer arena.deinit();
 
     var context: LintContext = undefined;
-    try context.init(.{}, std.testing.allocator, arena.allocator());
+    try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
     defer context.deinit();
 
     var tmp = std.testing.tmpDir(.{});
@@ -999,7 +1001,7 @@ test "LintContext.resolveTypeKind" {
         defer arena.deinit();
 
         var context: LintContext = undefined;
-        try context.init(.{}, std.testing.allocator, arena.allocator());
+        try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
         defer context.deinit();
 
         var tmp = std.testing.tmpDir(.{});
