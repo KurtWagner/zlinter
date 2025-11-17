@@ -320,7 +320,7 @@ If your project is large it may be worth setting optimize to `.ReleaseFast` - ke
 
 The plan is to support `master` (mostly because its an important exercise in keeping up to date with whats changing in zig) and the latest previous version.
 
-Currently, `0.14.x` and `master`.
+Currently, [`0.14.x`](https://github.com/KurtWagner/zlinter/tree/0.14.x), [`0.15.x`](https://github.com/KurtWagner/zlinter/tree/0.15.x) and [`master`](https://github.com/KurtWagner/zlinter/tree/master).
 
 Fixes and improvements to rules may be cherry-picked to older versions if there's no API compatibility issues.
 
