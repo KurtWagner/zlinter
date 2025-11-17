@@ -38,6 +38,9 @@ jobs:
           wget https://github.com/SimonKagstrom/kcov/releases/download/v42/kcov-amd64.tar.gz
           sudo tar xf kcov-amd64.tar.gz -C /
 
+      - name: "Prefetch dependencies (workaround)"
+        run: sed -n 's/.*url *= *"\(.*\)".*/\1/p' build.zig.zon | xargs -t -n1 zig fetch
+
       - name: "Run unit tests with coverage"
         run: |
           kcov --version
