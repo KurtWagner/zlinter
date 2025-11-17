@@ -44,7 +44,7 @@ jobs:
       - name: "Run unit tests with coverage"
         run: |
           kcov --version
-          zig build unit-test -Dcoverage=true
+          zig build unit-test -Dcoverage=true --summary all
 
       - name: "Upload coverage"
         uses: coverallsapp/github-action@v2

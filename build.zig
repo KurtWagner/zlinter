@@ -305,7 +305,7 @@ pub fn build(b: *std.Build) void {
     const unit_test_step = b.step("unit-test", "Run unit tests");
     if (coverage orelse false) {
         const cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
-        cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only", "--debug=31" });
+        cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only" });
         cover_run.addPrefixedDirectoryArg("--include-pattern=", b.path("src"));
         merge_coverage.addDirectoryArg(cover_run.addOutputDirectoryArg("unit_test_coverage"));
         cover_run.addArtifactArg(unit_tests_exe);
