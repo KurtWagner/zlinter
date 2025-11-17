@@ -64,7 +64,7 @@ pub fn build(b: *std.Build) !void {
     // zig build lint -
     const lint_cmd = b.step("lint", "Lint source code.");
     lint_cmd.dependOn(step: {
-        var builder = zlinter.builder(b, .{ .target = target, .optimize = optimize });
+        var builder = zlinter.builder(b, .{ .target = target });
         inline for (@typeInfo(zlinter.BuiltinLintRule).@"enum".fields) |field| {
             builder.addRule(.{ .builtin = @enumFromInt(field.value) }, .{});
         }
@@ -76,7 +76,7 @@ pub fn build(b: *std.Build) !void {
     {
         const lint_integration_cmd = b.step("check-compiled-source", "");
         lint_integration_cmd.dependOn(step: {
-            var builder = zlinter.builder(b, .{ .target = target, .optimize = optimize });
+            var builder = zlinter.builder(b, .{ .target = target });
             builder.addRule(
                 .{ .custom = .{
                     .name = "no_cats",

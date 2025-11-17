@@ -59,19 +59,13 @@ pub const BuilderOptions = struct {
     /// You should never need to set this. Defaults to native host.
     target: ?std.Build.ResolvedTarget = null,
 
-    /// You may configure depending on the size of your project and how it's run
+    /// Optimisation to build zlinter at.
     ///
-    /// Release optimisations cost more upfront but once cached will offer faster
-    /// iterations. Typically preferred for development cycles, especially if
-    /// running with `--watch`.
+    /// `.Debug` is cheaper up-front but much slower to run. Only use
+    /// `.Debug` for linter development purposes.
     ///
-    /// Debug optimisation is cheaper up-front but slower to run, which may make
-    /// it more suitable for average sized projects in cold environments (e.g.,
-    /// cacheless CI environments).
-    ///
-    /// If your project is tiny, then it's fine to not think too much about this
-    /// and to simply leave on debug.
-    optimize: std.builtin.OptimizeMode = .Debug,
+    /// For enormous projects consider using `.ReleaseFast`.
+    optimize: std.builtin.OptimizeMode = .ReleaseSafe,
 };
 
 /// Create a step builder for zlinter
@@ -459,7 +453,7 @@ pub fn build(b: *std.Build) void {
             exclude.items,
             .{
                 .target = target,
-                .optimize = optimize,
+                .optimize = .ReleaseSafe,
             },
         );
     });

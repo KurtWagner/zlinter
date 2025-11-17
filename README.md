@@ -308,13 +308,15 @@ zig build lint -- --include src/ android/ --exclude src/generated.zig --rule no_
 
 ### Configure Optimization
 
-`zlinter.builder` accepts `.optimize` (defaults to `.Debug`). For example,
+`zlinter.builder` accepts `.optimize` (defaults to `.ReleaseSafe`). For example,
 
 ```zig
 var builder = zlinter.builder(b, .{.optimize = .ReleaseFast });
 ```
 
-If your project is large it may be worth setting optimize to `.ReleaseFast` - keep in mind the first run may be slower as it builds the the modules for the first time with the new optimisation.
+If your project is large it may be worth setting optimize to `.ReleaseFast`. Just keep in mind the first run may be slower as it builds the modules for the first time with the new optimisation.
+
+Since 0.16.x `.Debug` is significantly slower to run as it uses the debug allocator. Unless working on zlinter or a custom rule it should be avoided
 
 ## Supported zig versions
 

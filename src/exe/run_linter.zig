@@ -8,11 +8,12 @@ pub fn main() !u8 {
     const io = threaded.io();
 
     const gpa, const is_debug = switch (builtin.mode) {
-        // TODO: There appears to be a performance regression in master where
-        // debug allocator is taking a lot of questionable stack traces
-        // significantly impacting performance.
-        // .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
+        // Debug allocator has become significantly slower (since 0.16) so
+        // unless explicitly a debug build (defaults to release fast) don't
+        // use it.
         .Debug,
+        => .{ debug_allocator.allocator(), true },
+
         .ReleaseSafe,
         .ReleaseFast,
         .ReleaseSmall,
