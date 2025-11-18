@@ -408,6 +408,12 @@ All tests:
 zig build test
 ```
 
+To focus on a single rule when running integration tests:
+
+```shell
+zig build integration-test -Dtest_focus_on_rule=require_braces
+```
+
 ### Run lint on self
 
 ```shell

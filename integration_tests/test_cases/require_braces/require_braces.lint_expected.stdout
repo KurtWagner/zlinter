@@ -1,0 +1,59 @@
+error Expects no braces when on a single line [test_cases/require_braces/require_braces.input.zig:75:14] require_braces
+
+ 75 |         3 => { val = 5; },
+    |              ^^^^^^^^^^^^
+
+warning Expects no braces when there's only one statement [test_cases/require_braces/require_braces.input.zig:61:11] require_braces
+
+ 61 |     defer { val = 1; }
+    |           ^^^^^^^^^^^^
+
+warning Expects no braces when there's only one statement [test_cases/require_braces/require_braces.input.zig:52:11] require_braces
+
+ 52 |     defer {
+    |           ^
+ 53 |         val = 0;
+    | ^^^^^^^^^^^^^^^^
+ 54 |     }
+    | ^^^^^
+
+warning Expects braces whether on a single or across multiple lines [test_cases/require_braces/require_braces.input.zig:45:9] require_braces
+
+ 45 |         val += i;
+    |         ^^^^^^^^
+
+warning Expects braces whether on a single or across multiple lines [test_cases/require_braces/require_braces.input.zig:37:20] require_braces
+
+ 37 |     for (0..1) |i| val += i;
+    |                    ^^^^^^^^
+
+error Expects no braces when on a single line [test_cases/require_braces/require_braces.input.zig:24:22] require_braces
+
+ 24 |     while (val < 10) { val += 1; }
+    |                      ^^^^^^^^^^^^^
+
+warning Expects no braces when there's only one statement [test_cases/require_braces/require_braces.input.zig:17:12] require_braces
+
+ 17 |     } else {
+    |            ^
+ 18 |         val += 1;
+    | ^^^^^^^^^^^^^^^^^
+ 19 |     }
+    | ^^^^^
+
+warning Expects no braces when there's only one statement [test_cases/require_braces/require_braces.input.zig:9:19] require_braces
+
+ 9 |     if (val < 10) {
+   |                   ^
+ 10 |         val += 1;
+    | ^^^^^^^^^^^^^^^^^
+ 11 |     }
+    | ^^^^^
+
+warning Expects no braces when there's only one statement [test_cases/require_braces/require_braces.input.zig:7:19] require_braces
+
+ 7 |     if (val < 10) { val += 1; }
+   |                   ^^^^^^^^^^^^^
+
+x 2 errors
+x 7 warnings
