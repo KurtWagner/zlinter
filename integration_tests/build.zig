@@ -4,6 +4,7 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const test_focus_on_rule = b.option([]const u8, "test_focus_on_rule", "Only run tests for this rule");
     const test_step = b.step("test", "Run tests");
 
     const test_cases_path = b.path("test_cases/").getPath3(b, null).sub_path;
@@ -39,6 +40,12 @@ pub fn build(b: *std.Build) !void {
             std.log.err("Test case file skipped as its invalid: {s}", .{item.path});
             continue;
         }];
+        if (test_focus_on_rule) |r| {
+            if (!std.mem.eql(u8, rule_name, r)) {
+                std.log.warn("Skipping {s}", .{rule_name});
+                continue;
+            }
+        }
         run_integration_test.addArg(rule_name);
 
         const test_name = item.basename[0..(item.basename.len - input_suffix.len)];
