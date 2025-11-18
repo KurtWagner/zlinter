@@ -1,0 +1,30 @@
+.{
+    .if_statement = .{
+        .severity = .warning,
+        .requirement = .multi_statement_only,
+    },
+    .while_statement = .{
+        .severity = .@"error",
+        .requirement = .multi_line_only,
+    },
+    .for_statement = .{
+        .severity = .warning,
+        .requirement = .all,
+    },
+    .catch_statement = .{
+        .severity = .warning,
+        .requirement = .all,
+    },
+    .switch_case_statement = .{
+        .severity = .@"error",
+        .requirement = .multi_line_only,
+    },
+    .defer_statement = .{
+        .severity = .warning,
+        .requirement = .multi_statement_only,
+    },
+    .errdefer_statement = .{
+        .severity = .warning,
+        .requirement = .all,
+    },
+}

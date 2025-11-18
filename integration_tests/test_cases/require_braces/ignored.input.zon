@@ -1,0 +1,6 @@
+.{
+    .if_statement = .{
+        .severity = .@"error",
+        .requirement = .all,
+    },
+}
