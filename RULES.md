@@ -583,11 +583,15 @@ The goal of the rule is to keep error contracts clear and stable. If it can fail
 
 ## `no_literal_args`
 
-Disallow passing primitive literal numbers and booleans directly as function arguments.
+Disallow passing primitive literal numbers and booleans directly as
+function arguments.
 
-Passing literal `1`, `0`, `true`, or `false` directly to a function is ambiguous.
+Passing literal `1`, `0`, `true`, or `false` directly to a function is
+ambiguous.
 
-These magic literals don’t explain what they mean. Consider using named constants or if you're the owner of the API and there's multiple arguments, consider introducing a struct argument
+These magic literals don’t explain what they mean. Consider using named
+constants or if you're the owner of the API and there's multiple arguments,
+consider introducing a struct argument
 
 **Config options:**
 
@@ -857,19 +861,17 @@ Enforces that container declarations are referenced.
 
 ## `require_braces`
 
-> [!WARNING]
-> The `require_braces` rule is still under testing and development. It may
-> not work as expected and may change without notice.
-
 Requires specific brace `{}` usage for the bodies of `if`, `else`, `while`,
 `for`, `defer` and `catch` statements.
 
-By requiring braces, you avoid ambiguity, make code easier to maintain,
-and prevent unintended logic changes when adding new lines.
+By requiring braces, you're consistent and avoid ambiguity, which can code
+easier to maintain, and prevent unintended logic changes when adding new
+lines.
 
 If an `if` statement is used as part of a return or assignment it is excluded
-from this rule (braces not required). For example, the following two examples
-will be ignored by this rule.
+from this rule (braces not required).
+
+For example, the following two examples will be ignored by this rule.
 
 ```zig
 const label = if (x > 10) "over 10" else "under 10";
@@ -975,9 +977,7 @@ in these cases can lead to memory leaks.
 **Caveats:**
 
 * This rule is not exhaustive. It makes a best-effort attempt to detect known
-  object declarations that require cleanup, but a complete check is
-  impractical at this level. It currently only looks at std library containers
-  like `ArrayList` and `HashMap`.
+  object declarations that require cleanup.
 
 * This rule cannot always reliably detect usage of fixed buffer allocators or
   arenas; however, using `errdefer array.deinit(arena);` in these cases is
