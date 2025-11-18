@@ -4,6 +4,9 @@ pub fn main() !void {
     var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
     defer if (debug_allocator.deinit() == .leak) @panic("Memory leak");
 
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    const io = threaded.io();
+
     const gpa = debug_allocator.allocator();
 
     const args = try std.process.argsAlloc(gpa);
@@ -46,7 +49,7 @@ pub fn main() !void {
         var file = try std.fs.cwd().openFile(file_name, .{});
         defer file.close();
 
-        var reader = file.readerStreaming(&file_buffer);
+        var reader = file.readerStreaming(io, &file_buffer);
 
         _ = try reader.interface.streamRemaining(&content.writer);
 
