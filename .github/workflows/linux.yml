@@ -26,7 +26,7 @@ jobs:
       - name: "Setup zig environment"
         uses: mlugg/setup-zig@v2
         with:
-          version: ${{ matrix.zig_version }}
+          version: 0.14.1
       - name: "Run unit tests"
         run: zig build unit-test
       - name: "Run linter"
