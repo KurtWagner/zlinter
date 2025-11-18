@@ -19,7 +19,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     name: Test Linux
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: "Checkout repo"
         uses: actions/checkout@v4

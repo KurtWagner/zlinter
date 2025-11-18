@@ -1,16 +1,14 @@
-//! > [!WARNING]
-//! > The `require_braces` rule is still under testing and development. It may
-//! > not work as expected and may change without notice.
-//!
 //! Requires specific brace `{}` usage for the bodies of `if`, `else`, `while`,
 //! `for`, `defer` and `catch` statements.
 //!
-//! By requiring braces, you avoid ambiguity, make code easier to maintain,
-//! and prevent unintended logic changes when adding new lines.
+//! By requiring braces, you're consistent and avoid ambiguity, which can code
+//! easier to maintain, and prevent unintended logic changes when adding new
+//! lines.
 //!
 //! If an `if` statement is used as part of a return or assignment it is excluded
-//! from this rule (braces not required). For example, the following two examples
-//! will be ignored by this rule.
+//! from this rule (braces not required).
+//!
+//! For example, the following two examples will be ignored by this rule.
 //!
 //! ```zig
 //! const label = if (x > 10) "over 10" else "under 10";

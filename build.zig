@@ -190,7 +190,8 @@ const StepBuilder = struct {
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const coverage = b.option(bool, "coverage", "Generate a coverage report with kcov");
+    const test_coverage = b.option(bool, "coverage", "Generate a coverage report with kcov");
+    const test_focus_on_rule = b.option([]const u8, "test_focus_on_rule", "Only run integration tests for this rule");
 
     const zlinter_lib_module = b.addModule("zlinter", .{
         .root_source_file = b.path("src/lib/zlinter.zig"),
@@ -216,7 +217,7 @@ pub fn build(b: *std.Build) void {
 
     const unit_tests_exe = b.addTest(.{
         .root_module = zlinter_lib_module,
-        .use_llvm = coverage,
+        .use_llvm = test_coverage,
     });
 
     // --------------------------------------------------------------------
@@ -263,6 +264,9 @@ pub fn build(b: *std.Build) void {
     install_coverage.step.dependOn(&merge_coverage.step);
 
     const run_integration_tests = b.addSystemCommand(&.{ b.graph.zig_exe, "build", "test" });
+    if (test_focus_on_rule) |r| {
+        run_integration_tests.addArg(b.fmt("-Dtest_focus_on_rule={s}", .{r}));
+    }
     run_integration_tests.setCwd(b.path("./integration_tests"));
     run_integration_tests.has_side_effects = true;
 
@@ -297,7 +301,7 @@ pub fn build(b: *std.Build) void {
     integration_check_step.dependOn(&run_integration_check.step);
 
     const unit_test_step = b.step("unit-test", "Run unit tests");
-    if (coverage orelse false) {
+    if (test_coverage orelse false) {
         const cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
         cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only" });
         cover_run.addPrefixedDirectoryArg("--include-pattern=", b.path("src"));
@@ -314,10 +318,10 @@ pub fn build(b: *std.Build) void {
         const test_rule_exe = b.addTest(.{
             .name = b.fmt("{s}_unit_test_coverage", .{rule_import.name}),
             .root_module = rule_import.module,
-            .use_llvm = coverage,
+            .use_llvm = test_coverage,
         });
 
-        if (coverage orelse false) {
+        if (test_coverage orelse false) {
             const cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
             cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only" });
             cover_run.addPrefixedDirectoryArg("--include-pattern=", b.path("src"));
