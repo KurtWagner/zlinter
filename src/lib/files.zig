@@ -112,7 +112,7 @@ pub fn isLintableFilePath(file_path: []const u8) !bool {
     if (basename.len <= extension.len) return false; // Can't just be ".zig"
     if (!std.mem.endsWith(u8, basename, extension)) return false;
 
-    var components = try std.fs.path.componentIterator(file_path);
+    var components = std.fs.path.componentIterator(file_path);
     while (components.next()) |component| {
         if (std.mem.eql(u8, component.name, ".zig-cache")) return false;
         if (std.mem.eql(u8, component.name, "zig-out")) return false;
