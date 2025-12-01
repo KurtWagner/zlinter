@@ -429,33 +429,22 @@ pub const LintContext = struct {
 
         const tree = doc.handle.tree;
 
-        // First we try looking for a type node in the declaration
+        // First we try looking for a <type> node in the declaration. e.g.,
+        // `const var_name: <type> = ....`
         if (maybe_type_node) |type_node| {
-            // std.debug.print("TypeNode - Before: {s}\n", .{tree.getNodeSource(type_node.toNodeIndex())});
-            // std.debug.print("TypeNode - Tag Before: {}\n", .{shims.nodeTag(tree, type_node.toNodeIndex())});
-
             const node = shims.unwrapNode(tree, type_node.toNodeIndex(), .{});
-
-            // std.debug.print("TypeNode - After: {s}\n", .{tree.getNodeSource(node)});
-            // std.debug.print("TypeNode - Tag After: {}\n", .{shims.nodeTag(tree, node)});
 
             if (tree.fullFnProto(&fn_proto_buffer, node)) |fn_proto| {
                 if (NodeIndexShim.initOptional(fn_proto.ast.return_type)) |return_node_shim| {
                     const return_node = shims.unwrapNode(tree, return_node_shim.toNodeIndex(), .{});
 
-                    // std.debug.print("TypeNode - Return unwrapped: {s}\n", .{tree.getNodeSource(return_node)});
-                    // std.debug.print("TypeNode - Return unwrapped tag: {}\n", .{shims.nodeTag(tree, return_node)});
-
-                    // If it's a function proto, then return whether or not the function returns a type
-                    return if (shims.isIdentiferKind(tree, shims.unwrapNode(tree, return_node, .{}), .type))
-                        .fn_returns_type
-                    else
-                        .@"fn";
+                    // If it's a function proto, then return whether or not the function returns `type`
+                    const is_type_identifier = shims.isIdentiferKind(tree, shims.unwrapNode(tree, return_node, .{}), .type);
+                    return if (is_type_identifier) .fn_returns_type else .@"fn";
                 } else {
                     return .@"fn";
                 }
             } else if (tree.fullContainerDecl(&container_decl_buffer, node)) |container_decl| {
-
                 // If's it's a container declaration (e.g., struct {}) then resolve what type of container
                 switch (tree.tokens.items(.tag)[container_decl.ast.main_token]) {
                     // Instance of namespace should be impossible but to be safe
@@ -471,30 +460,27 @@ pub const LintContext = struct {
             } else if (try self.resolveTypeOfNode(doc, node)) |type_node_type| {
                 const decl = type_node_type.resolveDeclLiteralResultType();
 
-                if (decl.isUnionType()) {
-                    return .union_instance;
-                } else if (decl.isEnumType()) {
-                    return .enum_instance;
-                } else if (decl.isStructType()) {
-                    return .struct_instance;
-                } else if (decl.isTypeFunc()) {
-                    return .fn_returns_type;
-                } else if (decl.isFunc()) {
-                    return .@"fn";
-                }
+                return if (decl.isUnionType())
+                    .union_instance
+                else if (decl.isEnumType())
+                    .enum_instance
+                else if (decl.isStructType())
+                    .struct_instance
+                else if (decl.isTypeFunc())
+                    .fn_returns_type
+                else if (decl.isFunc())
+                    .@"fn"
+                else if (isTypeUnknown(type_node_type))
+                    null
+                else
+                    .other;
             }
-            return .other;
         }
 
-        // Then we look at the initialisation value if a type couldn't be used
+        // Then we look at the initialisation <value> if a type couldn't be used
+        // from then declaration. e.g., `const var_name = <value>`
         if (maybe_value_node) |value_node| {
-            // std.debug.print("InitNode - Before: {s}\n", .{tree.getNodeSource(value_node.toNodeIndex())});
-            // std.debug.print("InitNode - Tag Before: {}\n", .{shims.nodeTag(tree, value_node.toNodeIndex())});
-
             const node = shims.unwrapNode(tree, value_node.toNodeIndex(), .{});
-
-            // std.debug.print("InitNode - After: {s}\n", .{tree.getNodeSource(node)});
-            // std.debug.print("InitNode - Tag After: {}\n", .{shims.nodeTag(tree, node)});
 
             // LIMITATION: All builtin calls to type of and type will return
             // `type` without any resolution.
@@ -503,11 +489,9 @@ pub const LintContext = struct {
                 .builtin_call_two_comma,
                 .builtin_call,
                 .builtin_call_comma,
-                => {
-                    inline for (&.{ "@Type", "@TypeOf" }) |builtin_name| {
-                        if (std.mem.eql(u8, builtin_name, tree.tokenSlice(shims.nodeMainToken(tree, node)))) {
-                            return .type;
-                        }
+                => inline for (&.{ "@Type", "@TypeOf" }) |builtin_name| {
+                    if (std.mem.eql(u8, builtin_name, tree.tokenSlice(shims.nodeMainToken(tree, node)))) {
+                        return .type;
                     }
                 },
                 .error_set_decl,
@@ -517,20 +501,15 @@ pub const LintContext = struct {
             }
 
             if (tree.fullContainerDecl(&container_decl_buffer, node)) |container_decl| {
-                switch (tree.tokens.items(.tag)[container_decl.ast.main_token]) {
-                    .keyword_struct => return if (shims.isContainerNamespace(tree, container_decl)) .namespace_type else .struct_type,
-                    .keyword_union => return .union_type,
-                    .keyword_opaque => return .opaque_type,
-                    .keyword_enum => return .enum_type,
+                return switch (tree.tokens.items(.tag)[container_decl.ast.main_token]) {
+                    .keyword_struct => if (shims.isContainerNamespace(tree, container_decl)) .namespace_type else .struct_type,
+                    .keyword_union => .union_type,
+                    .keyword_opaque => .opaque_type,
+                    .keyword_enum => .enum_type,
                     inline else => |token| @panic("Unexpected container main token: " ++ @tagName(token)),
-                }
+                };
             } else if (try self.resolveTypeOfNode(doc, node)) |init_node_type| {
-                // std.debug.print("InitNode - ResolvedNode type: {}\n", .{init_node_type});
-
                 const decl = init_node_type.resolveDeclLiteralResultType();
-
-                // std.debug.print("InitNode - Resolved type: {}\n", .{decl});
-                // try self.dumpType(decl, 0);
 
                 const is_error_container =
                     if (std.meta.hasMethod(@TypeOf(decl), "isErrorSetType"))
@@ -553,44 +532,54 @@ pub const LintContext = struct {
                         else => false,
                     };
 
-                if (is_error_container) {
-                    return .error_type;
-                } else if (decl.isNamespace()) {
-                    return if (init_node_type.is_type_val) .namespace_type else null;
-                } else if (decl.isUnionType()) {
-                    return if (init_node_type.is_type_val) .union_type else .union_instance;
-                } else if (decl.isEnumType()) {
-                    return if (init_node_type.is_type_val) .enum_type else .enum_instance;
-                } else if (decl.isOpaqueType()) {
-                    return if (init_node_type.is_type_val) .opaque_type else null;
-                } else if (decl.isStructType()) {
-                    return if (init_node_type.is_type_val) .struct_type else .struct_instance;
-                } else if (decl.isTypeFunc()) {
-                    return if (init_node_type.is_type_val) .fn_type_returns_type else .fn_returns_type;
-                } else if (decl.isFunc()) {
-                    return if (init_node_type.is_type_val) .fn_type else .@"fn";
-                } else if (decl.isMetaType()) {
-                    return .type;
-                } else {
-                    if (init_node_type.is_type_val) {
-                        if (init_node_type.isErrorSetType(&self.analyser)) {
-                            return .error_type;
-                        }
-                        switch (init_node_type.data) {
-                            // TODO: Maybe this can be merged with what isErrorSet
-                            // is doing to be less branches.
-                            .ip_index => return .type,
-                            else => {},
-                        }
-                    } else if (try self.isCallReturningType(doc.handle, node)) {
-                        return .type;
+                const is_type_val = init_node_type.is_type_val;
+                return if (is_error_container)
+                    .error_type
+                else if (decl.isNamespace())
+                    if (is_type_val) .namespace_type else null
+                else if (decl.isUnionType())
+                    if (is_type_val) .union_type else .union_instance
+                else if (decl.isEnumType())
+                    if (is_type_val) .enum_type else .enum_instance
+                else if (decl.isOpaqueType())
+                    if (is_type_val) .opaque_type else null
+                else if (decl.isStructType())
+                    if (is_type_val) .struct_type else .struct_instance
+                else if (decl.isTypeFunc())
+                    if (is_type_val) .fn_type_returns_type else .fn_returns_type
+                else if (decl.isFunc())
+                    if (is_type_val) .fn_type else .@"fn"
+                else if (decl.isMetaType())
+                    .type
+                else if (is_type_val)
+                    if (init_node_type.isErrorSetType(&self.analyser))
+                        .error_type
+                    else switch (init_node_type.data) {
+                        // TODO: Maybe this can be merged with what isErrorSet
+                        // is doing to be less branches.
+                        .ip_index => .type,
+                        else => null,
                     }
+                else if (try self.isCallReturningType(doc.handle, node))
+                    return .type
+                else if (isTypeUnknown(init_node_type))
+                    return null
+                else
                     return .other;
-                }
             }
         }
 
         return null;
+    }
+
+    /// Returns true if a resolved type is unknown. Typically this means that
+    /// a linter should ignore any checks that rely on a type (e.g., naming styles)
+    fn isTypeUnknown(node_type: zls.Analyser.Type) bool {
+        return switch (node_type.data) {
+            .ip_index => |info| info.type == .unknown_type or
+                info.type == .unknown_unknown,
+            else => false,
+        };
     }
 
     /// Returns true if it's a call to a function that returns `type`.
@@ -734,6 +723,11 @@ pub const LintContext = struct {
                 break :symbol null;
             },
         };
+    }
+
+    /// Resolves the resulting type of an either expression (e.g., switch statement in an assignment)
+    fn resolveEitherType(_: *LintContext, _: []const zls.Analyser.Type.Data.EitherEntry) zls.Analyser.Type {
+        @panic("Not implemented yet");
     }
 };
 
