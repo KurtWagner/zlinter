@@ -74,7 +74,16 @@ pub const Config = struct {
     },
 
     /// Exclude these declaration names from min and max declaration name checks.
-    decl_name_exclude_len: []const []const u8 = &.{ "x", "y", "z", "i", "b" },
+    decl_name_exclude_len: []const []const u8 = &.{
+        "x",
+        "y",
+        "z",
+        "i",
+        "b",
+        "it",
+        "ip",
+        "c",
+    },
 };
 
 /// Builds and returns the declaration_naming rule.
