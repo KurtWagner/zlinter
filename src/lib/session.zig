@@ -607,13 +607,11 @@ pub const LintContext = struct {
         var arena = std.heap.ArenaAllocator.init(self.gpa);
         defer arena.deinit();
 
-        // Walk down symbols until we reach a function proto.
         const child = (try self.resolveFnDecl(
             handle,
             node,
             arena.allocator(),
-        )) orelse
-            return false;
+        )) orelse return false;
 
         var fn_buffer: [1]Ast.Node.Index = undefined;
         const return_type = child.handle.tree.fullFnProto(
