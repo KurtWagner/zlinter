@@ -619,7 +619,7 @@ pub const LintContext = struct {
         defer arena.deinit();
 
         // Walk down symbols until we reach a function proto.
-        const child = (try self.resolveFnProto(
+        const child = (try self.resolveFnDecl(
             handle,
             node,
             arena.allocator(),
@@ -635,7 +635,10 @@ pub const LintContext = struct {
             std.mem.eql(u8, child.handle.tree.getNodeSource(return_type), "type");
     }
 
-    fn resolveFnProto(
+    /// Resolves the declaration of a function from a function call.
+    ///
+    /// If the given node is not a function call this method will return null.
+    fn resolveFnDecl(
         self: *LintContext,
         handle: *zls.DocumentStore.Handle,
         call_node: Ast.Node.Index,
@@ -646,18 +649,19 @@ pub const LintContext = struct {
         const call = handle.tree.fullCall(&call_buffer, call_node) orelse
             return null;
 
-        // Walk down symbols until we reach a function proto.
-        var child: zls.Analyser.DeclWithHandle = (try self.resolveSymbol(
+        // Walk down symbols until we reach a function.
+        var child: zls.Analyser.DeclWithHandle = (try self.resolveDecl(
             handle,
             call.ast.fn_expr,
             arena,
         )) orelse return null;
 
-        var fn_buffer: [1]Ast.Node.Index = undefined;
         walking: while (true) {
+            if (child.decl != .ast_node) break :walking;
+
             if (child.handle.tree.fullVarDecl(child.decl.ast_node)) |decl| {
                 if (decl.ast.init_node.unwrap()) |init_node| {
-                    child = try self.resolveSymbol(
+                    child = try self.resolveDecl(
                         child.handle,
                         init_node,
                         arena,
@@ -667,18 +671,27 @@ pub const LintContext = struct {
                 break :walking;
             }
 
-            // TODO: Use switch on tag instead?
-            if (child.handle.tree.fullFnProto(&fn_buffer, child.decl.ast_node) != null) {
-                return child;
-            } else {
-                // TODO: Log this case to understand
+            const is_fn_proto = switch (child.handle.tree.nodeTag(child.decl.ast_node)) {
+                .fn_proto,
+                .fn_proto_multi,
+                .fn_proto_one,
+                .fn_proto_simple,
+                .fn_decl,
+                => true,
+                else => false,
+            };
+            if (is_fn_proto)
+                return child
+            else
                 break :walking;
-            }
         }
         return null;
     }
 
-    fn resolveSymbol(
+    /// Resolves the declaration for a given node (aka symbol).
+    ///
+    /// Only supports identifiers and field access ending in an identifier.
+    fn resolveDecl(
         self: *LintContext,
         handle: *zls.DocumentStore.Handle,
         node: Ast.Node.Index,
@@ -701,8 +714,9 @@ pub const LintContext = struct {
                     .end = tree.tokenStart(last_token) + tree.tokenSlice(last_token).len,
                 };
 
-                // TODO: ensure its identifier
                 const identifier_token = last_token;
+                if (tree.tokenTag(identifier_token) != .identifier)
+                    break :field_access null;
 
                 if (try self.analyser.getSymbolFieldAccesses(
                     arena,
