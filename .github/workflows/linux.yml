@@ -24,10 +24,9 @@ jobs:
       - name: "Checkout repo"
         uses: actions/checkout@v4
       - name: "Setup zig environment"
-        uses: mlugg/setup-zig@v2
+        uses: mlugg/setup-zig@v2.0.5
         with:
           version: 0.15.1
-          use-cache: false
       - name: "Run unit tests"
         run: zig build unit-test
       - name: "Run linter"
