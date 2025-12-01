@@ -1,0 +1,31 @@
+error Type declaration should be TitleCase [test_cases/declaration_naming/regression_132.input.zig:11:7] declaration_naming
+
+ 11 | const badFloatType = IntToFloatType(u32);
+    |       ^^^^^^^^^^^^
+
+error Type declaration should be TitleCase [test_cases/declaration_naming/regression_132.input.zig:12:7] declaration_naming
+
+ 12 | const bad_float_type = IntToFloatType(u32);
+    |       ^^^^^^^^^^^^^^
+
+error Type declaration should be TitleCase [test_cases/declaration_naming/regression_132.input.zig:15:7] declaration_naming
+
+ 15 | const badInt = std.math.IntFittingRange(0, 10);
+    |       ^^^^^^
+
+error Type declaration should be TitleCase [test_cases/declaration_naming/regression_132.input.zig:16:7] declaration_naming
+
+ 16 | const bad_int = std.math.IntFittingRange(0, 10);
+    |       ^^^^^^^
+
+error Type declaration should be TitleCase [test_cases/declaration_naming/regression_132.input.zig:19:7] declaration_naming
+
+ 19 | const badBitSet = std.StaticBitSet(10);
+    |       ^^^^^^^^^
+
+error Type declaration should be TitleCase [test_cases/declaration_naming/regression_132.input.zig:20:7] declaration_naming
+
+ 20 | const bad_bit_set = std.StaticBitSet(10);
+    |       ^^^^^^^^^^^
+
+x 6 errors

@@ -74,7 +74,16 @@ pub const Config = struct {
     },
 
     /// Exclude these declaration names from min and max declaration name checks.
-    decl_name_exclude_len: []const []const u8 = &.{ "x", "y", "z", "i", "b" },
+    decl_name_exclude_len: []const []const u8 = &.{
+        "x",
+        "y",
+        "z",
+        "i",
+        "b",
+        "it",
+        "ip",
+        "c",
+    },
 };
 
 /// Builds and returns the declaration_naming rule.
@@ -171,7 +180,12 @@ fn run(
                 .union_type => .{ config.decl_that_is_type, "Union" },
                 .opaque_type => .{ config.decl_that_is_type, "Opaque" },
                 .error_type => .{ config.decl_that_is_type, "Error" },
-                else => switch (tree.tokens.items(.tag)[var_decl.ast.mut_token]) {
+                .other,
+                .struct_instance,
+                .union_instance,
+                .enum_instance,
+                .opaque_instance,
+                => switch (tree.tokens.items(.tag)[var_decl.ast.mut_token]) {
                     .keyword_const => .{ config.const_decl, "Constant" },
                     .keyword_var => .{ config.var_decl, "Variable" },
                     else => unreachable,
