@@ -323,7 +323,7 @@ pub const LintContext = struct {
     }
 
     /// Resolves the type of node or null if it can't be resolved.
-    pub inline fn resolveTypeOfNode(self: *LintContext, doc: *const LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
+    pub fn resolveTypeOfNode(self: *LintContext, doc: *const LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
         return switch (version.zig) {
             .@"0.15", .@"0.16" => self.analyser.resolveTypeOfNode(.of(node, doc.handle)),
             .@"0.14" => self.analyser.resolveTypeOfNode(.{ .handle = doc.handle, .node = node }),
@@ -332,7 +332,7 @@ pub const LintContext = struct {
 
     /// Resolves the type of a node that points to a type (e.g., return type) or
     /// null if it cannot be resolved.
-    pub inline fn resolveTypeOfTypeNode(self: *LintContext, doc: *const LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
+    pub fn resolveTypeOfTypeNode(self: *LintContext, doc: *const LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
         const resolved_type = try self.resolveTypeOfNode(doc, node) orelse return null;
         const instance_type = if (resolved_type.isMetaType()) resolved_type else switch (version.zig) {
             .@"0.14" => resolved_type.instanceTypeVal(&self.analyser) orelse resolved_type,
@@ -435,6 +435,7 @@ pub const LintContext = struct {
             // std.debug.print("TypeNode - Tag Before: {}\n", .{shims.nodeTag(tree, type_node.toNodeIndex())});
 
             const node = shims.unwrapNode(tree, type_node.toNodeIndex(), .{});
+
             // std.debug.print("TypeNode - After: {s}\n", .{tree.getNodeSource(node)});
             // std.debug.print("TypeNode - Tag After: {}\n", .{shims.nodeTag(tree, node)});
 
@@ -469,6 +470,7 @@ pub const LintContext = struct {
                 return .type;
             } else if (try self.resolveTypeOfNode(doc, node)) |type_node_type| {
                 const decl = type_node_type.resolveDeclLiteralResultType();
+
                 if (decl.isUnionType()) {
                     return .union_instance;
                 } else if (decl.isEnumType()) {
@@ -490,6 +492,7 @@ pub const LintContext = struct {
             // std.debug.print("InitNode - Tag Before: {}\n", .{shims.nodeTag(tree, value_node.toNodeIndex())});
 
             const node = shims.unwrapNode(tree, value_node.toNodeIndex(), .{});
+
             // std.debug.print("InitNode - After: {s}\n", .{tree.getNodeSource(node)});
             // std.debug.print("InitNode - Tag After: {}\n", .{shims.nodeTag(tree, node)});
 
@@ -579,12 +582,144 @@ pub const LintContext = struct {
                             .ip_index => return .type,
                             else => {},
                         }
+                    } else if (try self.isCallReturningType(doc.handle, node)) {
+                        return .type;
                     }
                     return .other;
                 }
             }
         }
+
         return null;
+    }
+
+    /// Returns true if it's a call to a function that returns `type`.
+    ///
+    /// For example:
+    ///
+    /// ```
+    /// const MyType = BuildType();
+    /// //             ~~~~~~~~~~~  <---- this node would return true
+    ///
+    /// fn BuildType() type {
+    ///   return struct {
+    ///     // ...
+    ///   };
+    /// }
+    /// ```
+    ///
+    /// Returns false if not a call or if the call is to a function that does
+    /// not return `type`.
+    fn isCallReturningType(
+        self: *LintContext,
+        handle: *zls.DocumentStore.Handle,
+        node: Ast.Node.Index,
+    ) !bool {
+        var arena = std.heap.ArenaAllocator.init(self.gpa);
+        defer arena.deinit();
+
+        // Walk down symbols until we reach a function proto.
+        const child = (try self.resolveFnProto(
+            handle,
+            node,
+            arena.allocator(),
+        )) orelse
+            return false;
+
+        var fn_buffer: [1]Ast.Node.Index = undefined;
+        const return_type = child.handle.tree.fullFnProto(
+            &fn_buffer,
+            child.decl.ast_node,
+        ).?.ast.return_type.unwrap() orelse return false;
+        return child.handle.tree.nodeTag(return_type) == .identifier and
+            std.mem.eql(u8, child.handle.tree.getNodeSource(return_type), "type");
+    }
+
+    fn resolveFnProto(
+        self: *LintContext,
+        handle: *zls.DocumentStore.Handle,
+        call_node: Ast.Node.Index,
+        arena: std.mem.Allocator,
+    ) !?zls.Analyser.DeclWithHandle {
+        // Return null if not even a function call node.
+        var call_buffer: [1]Ast.Node.Index = undefined;
+        const call = handle.tree.fullCall(&call_buffer, call_node) orelse
+            return null;
+
+        // Walk down symbols until we reach a function proto.
+        var child: zls.Analyser.DeclWithHandle = (try self.resolveSymbol(
+            handle,
+            call.ast.fn_expr,
+            arena,
+        )) orelse return null;
+
+        var fn_buffer: [1]Ast.Node.Index = undefined;
+        walking: while (true) {
+            if (child.handle.tree.fullVarDecl(child.decl.ast_node)) |decl| {
+                if (decl.ast.init_node.unwrap()) |init_node| {
+                    child = try self.resolveSymbol(
+                        child.handle,
+                        init_node,
+                        arena,
+                    ) orelse break :walking;
+                    continue :walking;
+                }
+                break :walking;
+            }
+
+            // TODO: Use switch on tag instead?
+            if (child.handle.tree.fullFnProto(&fn_buffer, child.decl.ast_node) != null) {
+                return child;
+            } else {
+                // TODO: Log this case to understand
+                break :walking;
+            }
+        }
+        return null;
+    }
+
+    fn resolveSymbol(
+        self: *LintContext,
+        handle: *zls.DocumentStore.Handle,
+        node: Ast.Node.Index,
+        arena: std.mem.Allocator,
+    ) !?zls.Analyser.DeclWithHandle {
+        const tree = handle.tree;
+
+        return switch (tree.nodeTag(node)) {
+            .identifier => try self.analyser.lookupSymbolGlobal(
+                handle,
+                tree.getNodeSource(node),
+                tree.tokenStart(tree.firstToken(node)),
+            ),
+            .field_access => field_access: {
+                const first_token = tree.firstToken(node);
+                const last_token = tree.lastToken(node);
+
+                const held_loc: std.zig.Token.Loc = .{
+                    .start = tree.tokenStart(first_token),
+                    .end = tree.tokenStart(last_token) + tree.tokenSlice(last_token).len,
+                };
+
+                // TODO: ensure its identifier
+                const identifier_token = last_token;
+
+                if (try self.analyser.getSymbolFieldAccesses(
+                    arena,
+                    handle,
+                    tree.tokenStart(identifier_token),
+                    held_loc,
+                    tree.tokenSlice(identifier_token),
+                )) |decls| {
+                    if (decls.len > 0) break :field_access decls[0];
+                }
+                break :field_access null;
+            },
+            else => symbol: {
+                std.log.warn("Unhandled: {}", .{tree.nodeTag(node)});
+                break :symbol null;
+            },
+        };
     }
 };
 
@@ -769,6 +904,20 @@ test "LintContext.resolveTypeKind" {
             ,
             .kind = .type,
         },
+        .{
+            .contents =
+            \\const FloatType = IntToFloatType(u32);
+            \\fn IntToFloatType(IntType: type) type {
+            \\return @Type(.{
+            \\    .int = .{
+            \\        .signedness = .signed,
+            \\        .bits = @typeInfo(IntType).float.bits,
+            \\    },
+            \\});
+            \\}
+            ,
+            .kind = .type,
+        },
         // Struct type:
         // ------------
         .{
@@ -781,7 +930,7 @@ test "LintContext.resolveTypeKind" {
             .kind = .struct_type,
         },
         .{
-            .contents = "const A = struct { field: u32; };",
+            .contents = "const A = struct { field: u32 };",
             .kind = .struct_type,
         },
         // Namespace type:
@@ -1012,6 +1161,17 @@ test "LintContext.resolveTypeKind" {
             test_case.contents,
             arena.allocator(),
         );
+        std.testing.expectEqual(doc.handle.tree.errors.len, 0) catch |err| {
+            std.debug.print("Failed to parse AST:\n{s}\n", .{test_case.contents});
+            for (doc.handle.tree.errors) |ast_err| {
+                var buffer: [1024]u8 = undefined;
+
+                var writer = std.fs.File.stderr().writer(&buffer).interface;
+                try doc.handle.tree.renderError(ast_err, &writer);
+                try writer.flush();
+            }
+            return err;
+        };
 
         const node = doc.handle.tree.rootDecls()[0];
         const actual_kind = if (doc.handle.tree.fullVarDecl(node)) |var_decl|
