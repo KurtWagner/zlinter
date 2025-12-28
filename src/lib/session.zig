@@ -144,7 +144,6 @@ fn isTestOnlyCondition(tree: Ast, if_statement: Ast.full.If) bool {
 
 /// The context of all document and rule executions.
 pub const LintContext = struct {
-    thread_pool: if (builtin.single_threaded) void else std.Thread.Pool,
     diagnostics_collection: zls.DiagnosticsCollection,
     intern_pool: zls.analyser.InternPool,
     document_store: zls.DocumentStore,
@@ -160,20 +159,16 @@ pub const LintContext = struct {
     ) !void {
         self.* = .{
             .gpa = gpa,
-            .diagnostics_collection = .{ .allocator = gpa },
+            .diagnostics_collection = .{
+                .allocator = gpa,
+                .io = io,
+            },
             .intern_pool = try .init(gpa),
-            .thread_pool = undefined, // zlinter-disable-current-line no_undefined - set below
             .document_store = undefined, // zlinter-disable-current-line no_undefined - set below
             .analyser = undefined, // zlinter-disable-current-line no_undefined - set below
         };
         errdefer self.intern_pool.deinit(gpa);
 
-        if (!builtin.single_threaded) {
-            self.thread_pool.init(.{
-                .allocator = gpa,
-                .n_jobs = @min(4, std.Thread.getCpuCount() catch 1),
-            }) catch @panic("Failed to init thread pool");
-        }
         self.document_store = zls.DocumentStore{
             .io = io,
             .allocator = gpa,
@@ -209,10 +204,13 @@ pub const LintContext = struct {
                         }
                         break :dir null;
                     },
+                    .wasi_preopens = switch (builtin.os.tag) {
+                        .wasi => try std.fs.wasi.preopensAlloc(arena),
+                        else => {},
+                    },
                 },
                 .@"0.14" => .fromMainConfig(config),
             },
-            .thread_pool = &self.thread_pool,
         };
 
         self.analyser = switch (version.zig) {
@@ -237,8 +235,6 @@ pub const LintContext = struct {
         self.intern_pool.deinit(self.gpa);
         self.document_store.deinit();
         self.analyser.deinit();
-
-        if (!builtin.single_threaded) self.thread_pool.deinit();
     }
 
     /// Loads and parses zig file into the document store.
