@@ -82,4 +82,16 @@ pub fn debugPrintMultilineString(source: []const u8, writer: anytype, indent: us
         writer.print("\n{s}\\\\{s}", .{ indent_str, line });
 }
 
+pub const default_excluded_short_names: []const []const u8 = &.{
+    "x",
+    "y",
+    "z",
+    "i",
+    "b",
+    "it",
+    "ip",
+    "c",
+    "io",
+};
+
 const std = @import("std");

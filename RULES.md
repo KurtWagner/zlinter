@@ -77,7 +77,7 @@ Enforces that variable declaration names use consistent naming. For example,
 
   * Exclude these declaration names from min and max declaration name checks.
 
-  * **Default:** `&.{ "x", "y", "z", "i", "b", "it", "ip", "c", }`
+  * **Default:** `zlinter.strings.default_excluded_short_names`
 
 ## `field_naming`
 
@@ -156,7 +156,7 @@ example, `struct`, `enum`, `union`, `opaque` and `error`.
 
   * Exclude these `struct` field names from min and max `struct` field name checks.
 
-  * **Default:** `&.{ "x", "y", "z", "i", "b" }`
+  * **Default:** `zlinter.strings.default_excluded_short_names`
 
 * `struct_field_that_is_type`
 
@@ -204,7 +204,7 @@ example, `struct`, `enum`, `union`, `opaque` and `error`.
 
   * Exclude these `union` field names from min and max `union` field name checks.
 
-  * **Default:** `&.{ "x", "y", "z", "i", "b" }`
+  * **Default:** `zlinter.strings.default_excluded_short_names`
 
 ## `field_ordering`
 
