@@ -5,16 +5,16 @@ pub const Diagnostics = switch (version.zig) {
 
 pub fn parseFileAlloc(
     T: type,
-    dir: std.fs.Dir,
+    dir: std.Io.Dir,
     cwd_file_path: []const u8,
     diagnostics: ?*Diagnostics,
     io: std.Io,
     gpa: std.mem.Allocator,
 ) !T {
-    const file = try dir.openFile(cwd_file_path, .{
+    const file = try dir.openFile(io, cwd_file_path, .{
         .mode = .read_only,
     });
-    defer file.close();
+    defer file.close(io);
 
     const null_terminated = null_terminated: switch (version.zig) {
         .@"0.14" => {

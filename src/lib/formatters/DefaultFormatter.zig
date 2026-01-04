@@ -19,9 +19,11 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: *st
         defer _ = file_arena.reset(.retain_capacity);
 
         var file = input.dir.openFile(
+            input.io,
             file_result.file_path,
             .{ .mode = .read_only },
         ) catch |e| return logAndReturnWriteFailure("Open file", e);
+        defer file.close(input.io);
 
         var file_reader = file.reader(input.io, &file_buffer);
 

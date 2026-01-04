@@ -20,13 +20,13 @@ pub const LintFile = struct {
 ///
 /// If an explicit list of file paths was provided in the args, this will be
 /// used, otherwise it'll walk relative to working path.
-pub fn allocLintFiles(cwd: []const u8, dir: std.fs.Dir, maybe_files: ?[]const []const u8, gpa: std.mem.Allocator) ![]zlinter.files.LintFile {
+pub fn allocLintFiles(io: std.Io, cwd: []const u8, dir: std.Io.Dir, maybe_files: ?[]const []const u8, gpa: std.mem.Allocator) ![]zlinter.files.LintFile {
     var file_paths = std.StringHashMap(void).init(gpa);
     defer file_paths.deinit();
 
     if (maybe_files) |files| {
         for (files) |file_or_dir| {
-            const sub_dir = dir.openDir(file_or_dir, .{ .iterate = true }) catch {
+            const sub_dir = dir.openDir(io, file_or_dir, .{ .iterate = true }) catch {
                 // Assume file if we can't open as directory:
                 // No validation is done at this point on whether the file
                 // even exists and can be opened as it'll be done when
@@ -42,6 +42,7 @@ pub fn allocLintFiles(cwd: []const u8, dir: std.fs.Dir, maybe_files: ?[]const []
                 continue;
             };
             try walkDirectory(
+                io,
                 gpa,
                 sub_dir,
                 &file_paths,
@@ -50,6 +51,7 @@ pub fn allocLintFiles(cwd: []const u8, dir: std.fs.Dir, maybe_files: ?[]const []
         }
     } else {
         try walkDirectory(
+            io,
             gpa,
             dir,
             &file_paths,
@@ -73,15 +75,16 @@ pub fn allocLintFiles(cwd: []const u8, dir: std.fs.Dir, maybe_files: ?[]const []
 /// Walks a directory and its sub directories adding any zig relative file
 /// paths that should be linted to the given `file_paths` set.
 fn walkDirectory(
+    io: std.Io,
     allocator: std.mem.Allocator,
-    dir: std.fs.Dir,
+    dir: std.Io.Dir,
     file_paths: *std.StringHashMap(void),
     parent_path: []const u8,
 ) !void {
     var walker = try dir.walk(allocator);
     defer walker.deinit();
 
-    while (try walker.next()) |item| {
+    while (try walker.next(io)) |item| {
         if (item.kind != .file) continue;
         if (!try isLintableFilePath(item.path)) continue;
 
@@ -176,7 +179,7 @@ test "allocLintFiles - with default args" {
         testing.paths.posix("zig-out/a.zig"),
     }));
 
-    const lint_files = try allocLintFiles(cwd, tmp_dir.dir, null, std.testing.allocator);
+    const lint_files = try allocLintFiles(std.testing.io, cwd, tmp_dir.dir, null, std.testing.allocator);
     defer {
         for (lint_files) |*file| file.deinit(std.testing.allocator);
         std.testing.allocator.free(lint_files);
@@ -211,7 +214,7 @@ test "allocLintFiles - with arg files" {
         testing.paths.posix("zig-out/a.zig"),
     }));
 
-    const lint_files = try allocLintFiles(cwd, tmp_dir.dir, &.{
+    const lint_files = try allocLintFiles(std.testing.io, cwd, tmp_dir.dir, &.{
         testing.paths.posix("a.zig"),
         testing.paths.posix("src/"),
         testing.paths.posix("a.zig"), // Duplicate should be ignored

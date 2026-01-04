@@ -192,6 +192,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const test_coverage = b.option(bool, "coverage", "Generate a coverage report with kcov");
     const test_focus_on_rule = b.option([]const u8, "test_focus_on_rule", "Only run integration tests for this rule");
+    const io = b.graph.io;
 
     const zlinter_lib_module = b.addModule("zlinter", .{
         .root_source_file = b.path("src/lib/zlinter.zig"),
@@ -488,11 +489,11 @@ pub fn build(b: *std.Build) void {
         const rules_path = rules_lazy_path.getPath3(b, step);
         _ = step.addDirectoryWatchInput(rules_lazy_path) catch @panic("OOM");
 
-        var rules_dir = rules_path.root_dir.handle.openDir(rules_path.subPathOrDot(), .{ .iterate = true }) catch @panic("unable to open rules/ directory");
-        defer rules_dir.close();
+        var rules_dir = rules_path.root_dir.handle.openDir(io, rules_path.subPathOrDot(), .{ .iterate = true }) catch @panic("unable to open rules/ directory");
+        defer rules_dir.close(io);
         {
             var it = rules_dir.walk(b.allocator) catch @panic("OOM");
-            while (it.next() catch @panic("OOM")) |entry| {
+            while (it.next(io) catch @panic("OOM")) |entry| {
                 if (!std.mem.endsWith(u8, entry.basename, ".zig")) continue;
                 doc_build_run.addFileArg(b.path(b.pathJoin(&.{ "src/rules", entry.path })));
             }
@@ -595,7 +596,9 @@ fn addWatchInput(
 ) !void {
     const src_dir_path = file_or_dir.getPath3(b, step);
 
+    const io = b.graph.io;
     var src_dir = src_dir_path.root_dir.handle.openDir(
+        io,
         src_dir_path.subPathOrDot(),
         .{ .iterate = true },
     ) catch |e| switch (e) {
@@ -608,14 +611,14 @@ fn addWatchInput(
             .@"0.15", .@"0.16" => @panic(b.fmt("Unable to open directory '{f}': {t}", .{ src_dir_path, e })),
         },
     };
-    defer src_dir.close();
+    defer src_dir.close(io);
 
     const needs_dir_derived = try step.addDirectoryWatchInput(file_or_dir);
 
     var it = try src_dir.walk(b.allocator);
     defer it.deinit();
 
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         switch (entry.kind) {
             .directory => if (needs_dir_derived) {
                 const entry_path = try src_dir_path.join(b.allocator, entry.path);
@@ -867,6 +870,7 @@ const ZlinterRun = struct {
     fn make(step: *std.Build.Step, _: std.Build.Step.MakeOptions) !void {
         const run: *ZlinterRun = @alignCast(@fieldParentPtr("step", step));
         const b = run.step.owner;
+        const io = b.graph.io;
         const arena = b.allocator;
 
         var cwd_buff: [std.fs.max_path_bytes]u8 = undefined;
@@ -1021,13 +1025,12 @@ const ZlinterRun = struct {
 
         var timer = try std.time.Timer.start();
 
-        std.debug.lockStdErr();
-        defer std.debug.unlockStdErr();
-
-        child.spawn() catch |err| {
+        _ = std.debug.lockStderr(&.{});
+        defer std.debug.unlockStderr();
+        child.spawn(io) catch |err| {
             return run.step.fail("Unable to spawn zlinter: {s}", .{@errorName(err)});
         };
-        errdefer _ = child.kill() catch {};
+        errdefer _ = child.kill(io) catch {};
 
         {
             if (b.verbose)
@@ -1042,7 +1045,7 @@ const ZlinterRun = struct {
                 },
                 .@"0.15", .@"0.16" => {
                     var buffer: [1024]u8 = undefined;
-                    var writer = stdin_file.writer(&buffer);
+                    var writer = stdin_file.writer(io, &buffer);
                     writer.interface.writeInt(usize, build_info_zon_bytes.len, .little) catch @panic("stdin write failed");
                     writer.interface.writeAll(build_info_zon_bytes) catch @panic("stdin write failed");
                     writer.interface.flush() catch @panic("Flush failed");
@@ -1050,7 +1053,7 @@ const ZlinterRun = struct {
             }
         }
 
-        const term = try child.wait();
+        const term = try child.wait(io);
 
         step.result_duration_ns = timer.read();
         step.result_peak_rss = child.resource_usage_statistics.getMaxRss() orelse 0;
@@ -1092,8 +1095,9 @@ const ZlinterRun = struct {
 fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
     const rules_path = path.getPath3(b, null);
 
-    var file = try rules_path.root_dir.handle.openFile(rules_path.subPathOrDot(), .{});
-    defer file.close();
+    const io = b.graph.io;
+    var file = try rules_path.root_dir.handle.openFile(io, rules_path.subPathOrDot(), .{});
+    defer file.close(io);
 
     var file_buffer: [1024]u8 = undefined;
     var file_reader = file.reader(b.graph.io, &file_buffer);
@@ -1146,11 +1150,11 @@ fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
 /// Normalised representation of the current working directory
 const BuildCwd = struct {
     path: []const u8,
-    dir: std.fs.Dir,
+    dir: std.Io.Dir,
 
     pub fn init(buff: *[std.fs.max_path_bytes]u8) BuildCwd {
         return .{
-            .dir = std.fs.cwd(),
+            .dir = std.Io.Dir.cwd(),
             .path = std.process.getCwd(buff) catch unreachable,
         };
     }
@@ -1182,22 +1186,23 @@ const BuildCwd = struct {
                 };
             errdefer b.allocator.free(relative);
 
-            if (relative.len != 0 and isReadable(&self.dir, relative)) {
+            if (relative.len != 0 and isReadable(b, &self.dir, relative)) {
                 return b.path(relative);
             } else {
                 b.allocator.free(relative);
                 return null;
             }
         } else {
-            if (isReadable(&self.dir, to)) {
+            if (isReadable(b, &self.dir, to)) {
                 return b.path(b.dupe(to));
             }
         }
         return null;
     }
 
-    fn isReadable(from: *const std.fs.Dir, sub_path: []const u8) bool {
+    fn isReadable(b: *std.Build, from: *const std.Io.Dir, sub_path: []const u8) bool {
         _ = from.access(
+            b.graph.io,
             sub_path,
             .{ .read = true },
         ) catch return false;

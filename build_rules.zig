@@ -4,6 +4,9 @@ pub fn main() !void {
     var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
     defer if (debug_allocator.deinit() == .leak) @panic("Memory leak");
 
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    const io = threaded.io();
+
     const gpa = debug_allocator.allocator();
 
     const args = try std.process.argsAlloc(gpa);
@@ -12,15 +15,15 @@ pub fn main() !void {
     if (args.len < 2) fatal("Wrong number of arguments", .{});
 
     const output_file_path = args[1];
-    var output_file = std.fs.cwd().createFile(output_file_path, .{}) catch |err| {
+    var output_file = std.Io.Dir.cwd().createFile(io, output_file_path, .{}) catch |err| {
         fatal("Unable to open '{s}': {s}", .{ output_file_path, @errorName(err) });
     };
-    defer output_file.close();
+    defer output_file.close(io);
 
     const rule_names = args[2..];
 
     var write_buffer: [2048]u8 = undefined;
-    var output_file_writer = output_file.writer(&write_buffer);
+    var output_file_writer = output_file.writer(io, &write_buffer);
 
     try output_file_writer.interface.writeAll(
         \\const zlinter = @import("zlinter");
@@ -91,7 +94,7 @@ pub fn main() !void {
 
     try output_file_writer.interface.flush();
 
-    return std.process.cleanExit();
+    return std.process.cleanExit(io);
 }
 
 fn fatal(comptime format: []const u8, args: anytype) noreturn {

@@ -13,13 +13,13 @@ pub fn main() !void {
     defer std.process.argsFree(gpa, args);
 
     const output_file_path = args[1];
-    var output_file = std.fs.cwd().createFile(output_file_path, .{}) catch |err| {
+    var output_file = std.Io.Dir.cwd().createFile(io, output_file_path, .{}) catch |err| {
         fatal("Unable to open '{s}': {s}", .{ output_file_path, @errorName(err) });
     };
-    defer output_file.close();
+    defer output_file.close(io);
 
     var buffer: [1024]u8 = undefined;
-    var writer = output_file.writer(&buffer);
+    var writer = output_file.writer(io, &buffer);
 
     try writer.interface.writeAll(
         \\# zlinter rules
@@ -46,8 +46,8 @@ pub fn main() !void {
         try writer.interface.writeAll(rule_name);
         try writer.interface.writeAll("`\n\n");
 
-        var file = try std.fs.cwd().openFile(file_name, .{});
-        defer file.close();
+        var file = try std.Io.Dir.cwd().openFile(io, file_name, .{});
+        defer file.close(io);
 
         var reader = file.readerStreaming(io, &file_buffer);
 
@@ -61,7 +61,7 @@ pub fn main() !void {
 
     try writer.interface.flush();
 
-    return std.process.cleanExit();
+    return std.process.cleanExit(io);
 }
 
 fn stringLessThan(_: void, lhs: []const u8, rhs: []const u8) bool {
