@@ -3,18 +3,19 @@ const input_suffix = ".input.zig";
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const io = b.graph.io;
 
     const test_focus_on_rule = b.option([]const u8, "test_focus_on_rule", "Only run tests for this rule");
     const test_step = b.step("test", "Run tests");
 
     const test_cases_path = b.path("test_cases/").getPath3(b, null).sub_path;
-    var test_cases_dir = try std.fs.cwd().openDir(test_cases_path, .{ .iterate = true });
-    defer test_cases_dir.close();
+    var test_cases_dir = try std.Io.Dir.cwd().openDir(io, test_cases_path, .{ .iterate = true });
+    defer test_cases_dir.close(io);
 
     var walker = try test_cases_dir.walk(b.allocator);
     defer walker.deinit();
 
-    while (try walker.next()) |item| {
+    while (try walker.next(io)) |item| {
         if (item.kind != .file) continue;
         if (!std.mem.endsWith(u8, item.path, input_suffix)) continue;
 
@@ -114,7 +115,7 @@ pub fn build(b: *std.Build) !void {
 fn addFileArgIfExists(b: *std.Build, step: *std.Build.Step.Run, raw_path: []const u8) void {
     var path = b.path(raw_path);
     const relative_path = path.getPath3(b, &step.step).sub_path;
-    const exists = if (std.fs.cwd().access(relative_path, .{})) true else |e| e != error.FileNotFound;
+    const exists = if (std.Io.Dir.cwd().access(b.graph.io, relative_path, .{})) true else |e| e != error.FileNotFound;
     if (exists) {
         step.addFileArg(path);
     }

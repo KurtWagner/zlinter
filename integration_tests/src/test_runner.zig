@@ -6,6 +6,9 @@ const ansi_reset = "\x1B[0m";
 const ansi_gray = "\x1B[90m";
 
 pub fn main() !void {
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    const io = threaded.io();
+
     var mem: [32 * 1024]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&mem);
     const allocator = fba.allocator();
@@ -22,7 +25,7 @@ pub fn main() !void {
     const test_name = args[3];
 
     var buffer: [1024]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&buffer);
+    var stdout_writer = std.Io.File.stdout().writer(io, &buffer);
 
     const output_fmt = ansi_gray ++
         "[Integration test]" ++
@@ -76,7 +79,7 @@ pub fn main() !void {
     }
 
     try stdout_writer.interface.flush();
-    std.posix.exit(if (fail) 1 else 0);
+    std.process.exit(if (fail) 1 else 0);
 }
 
 fn prettyName(buffer: []u8, input: []const u8) []const u8 {

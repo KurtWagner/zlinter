@@ -27,15 +27,15 @@ pub fn main() !u8 {
     var stderr_buffer: [1024]u8 = undefined;
     var stdin_buffer: [1024]u8 = undefined;
 
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-    var stderr_writer = std.fs.File.stderr().writer(&stderr_buffer);
-    var stdin_reader = std.fs.File.stdin().reader(io, &stdin_buffer);
+    var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
+    var stderr_writer = std.Io.File.stderr().writer(io, &stderr_buffer);
+    var stdin_reader = std.Io.File.stdin().reader(io, &stdin_buffer);
 
     var printer: *zlinter.rendering.Printer = zlinter.rendering.process_printer;
     printer.init(
         &stdout_writer.interface,
         &stderr_writer.interface,
-        .init(std.fs.File.stdout()),
+        try .init(io, std.Io.File.stdout()),
         false,
     );
 
@@ -144,13 +144,14 @@ fn run(
     // Resolve files then apply excludes and filters
     // ------------------------------------------------------------------------
 
-    var dir = try std.fs.cwd().openDir("./", .{ .iterate = true });
-    defer dir.close();
+    var dir = try std.Io.Dir.cwd().openDir(io, "./", .{ .iterate = true });
+    defer dir.close(io);
 
     const cwd = try std.process.getCwdAlloc(gpa);
     defer gpa.free(cwd);
 
     const lint_files = try zlinter.files.allocLintFiles(
+        io,
         cwd,
         dir,
         // `--include` argument supersedes build defined includes and excludes
@@ -162,14 +163,14 @@ fn run(
         gpa.free(lint_files);
     }
 
-    if (try buildExcludesIndex(cwd, gpa, dir, args)) |*index| {
+    if (try buildExcludesIndex(io, cwd, gpa, dir, args)) |*index| {
         defer @constCast(index).deinit();
 
         for (lint_files) |*file|
             file.excluded = index.contains(file.pathname);
     }
 
-    if (try buildFilterIndex(cwd, gpa, dir, args)) |*index| {
+    if (try buildFilterIndex(io, cwd, gpa, dir, args)) |*index| {
         defer @constCast(index).deinit();
 
         for (lint_files) |*file|
@@ -287,7 +288,7 @@ fn runLinterRules(
 
                                 config.* = zlinter.zon.parseFileAlloc(
                                     rules_configs_types[i],
-                                    std.fs.cwd(),
+                                    std.Io.Dir.cwd(),
                                     zon_path,
                                     &diagnostics,
                                     io,
@@ -422,7 +423,7 @@ fn runLinterRules(
 fn runFormatter(
     io: std.Io,
     gpa: std.mem.Allocator,
-    dir: std.fs.Dir,
+    dir: std.Io.Dir,
     file_lint_problems: std.AutoArrayHashMap(u32, []zlinter.results.LintResult),
     output_writer: *std.Io.Writer,
     output_tty: zlinter.ansi.Tty,
@@ -483,7 +484,7 @@ fn cmpFix(context: void, a: zlinter.results.LintProblemFix, b: zlinter.results.L
 fn runFixes(
     io: std.Io,
     gpa: std.mem.Allocator,
-    dir: std.fs.Dir,
+    dir: std.Io.Dir,
     lint_files: []zlinter.files.LintFile,
     file_lint_problems: std.AutoArrayHashMap(u32, []zlinter.results.LintResult),
     printer: *zlinter.rendering.Printer,
@@ -520,10 +521,10 @@ fn runFixes(
         );
 
         const file_path = lint_files[entry.key_ptr.*].pathname;
-        const file = try dir.openFile(file_path, .{
+        const file = try dir.openFile(io, file_path, .{
             .mode = .read_only,
         });
-        defer file.close();
+        defer file.close(io);
 
         const file_content = switch (zlinter.version.zig) {
             .@"0.14" => try file.reader().readAllAlloc(gpa, zlinter.session.max_zig_file_size_bytes),
@@ -583,10 +584,10 @@ fn runFixes(
         });
 
         if (output_slices.items.len > 0) {
-            const new_file = try dir.createFile(file_path, .{
+            const new_file = try dir.createFile(io, file_path, .{
                 .truncate = true,
             });
-            defer new_file.close();
+            defer new_file.close(io);
 
             switch (zlinter.version.zig) {
                 .@"0.14" => {
@@ -597,7 +598,7 @@ fn runFixes(
                 },
                 .@"0.15", .@"0.16" => {
                     var buffer: [1024]u8 = undefined;
-                    var writer = new_file.writer(&buffer);
+                    var writer = new_file.writer(io, &buffer);
                     for (output_slices.items) |output_slice| {
                         try writer.interface.writeAll(output_slice);
                     }
@@ -651,13 +652,13 @@ fn allocAstErrorMsg(
 // TODO: Move buildExcludesIndex and buildFilterIndex to lib and write unit tests
 
 /// Returns an index of files to exclude if exclude configuration is found in args
-fn buildExcludesIndex(cwd: []const u8, gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Args) !?std.BufSet {
+fn buildExcludesIndex(io: std.Io, cwd: []const u8, gpa: std.mem.Allocator, dir: std.Io.Dir, args: zlinter.Args) !?std.BufSet {
     if (args.exclude_paths == null and args.build_info.exclude_paths == null) return null;
 
     const exclude_lint_paths: ?[]zlinter.files.LintFile = exclude: {
         if (args.exclude_paths) |p| {
             std.debug.assert(p.len > 0);
-            break :exclude try zlinter.files.allocLintFiles(cwd, dir, p, gpa);
+            break :exclude try zlinter.files.allocLintFiles(io, cwd, dir, p, gpa);
         } else break :exclude null;
     };
     defer {
@@ -673,7 +674,7 @@ fn buildExcludesIndex(cwd: []const u8, gpa: std.mem.Allocator, dir: std.fs.Dir, 
 
         if (args.build_info.exclude_paths) |p| {
             std.debug.assert(p.len > 0);
-            break :exclude try zlinter.files.allocLintFiles(cwd, dir, p, gpa);
+            break :exclude try zlinter.files.allocLintFiles(io, cwd, dir, p, gpa);
         } else break :exclude null;
     };
     defer {
@@ -698,11 +699,11 @@ fn buildExcludesIndex(cwd: []const u8, gpa: std.mem.Allocator, dir: std.fs.Dir, 
 }
 
 /// Returns an index of files to only include if filter configuration is found in args
-fn buildFilterIndex(cwd: []const u8, gpa: std.mem.Allocator, dir: std.fs.Dir, args: zlinter.Args) !?std.BufSet {
+fn buildFilterIndex(io: std.Io, cwd: []const u8, gpa: std.mem.Allocator, dir: std.Io.Dir, args: zlinter.Args) !?std.BufSet {
     const filter_paths: []zlinter.files.LintFile = exclude: {
         if (args.filter_paths) |p| {
             std.debug.assert(p.len > 0);
-            break :exclude try zlinter.files.allocLintFiles(cwd, dir, p, gpa);
+            break :exclude try zlinter.files.allocLintFiles(io, cwd, dir, p, gpa);
         } else return null;
     };
     defer {

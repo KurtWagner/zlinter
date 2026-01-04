@@ -4,10 +4,13 @@ pub const Tty = enum {
     no_color,
     ansi_color,
 
-    pub fn init(file: std.fs.File) Tty {
+    pub fn init(io: std.Io, file: std.Io.File) std.Io.Cancelable!Tty {
         if (builtin.is_test) return .no_color;
-
-        return if (std.Io.tty.Config.detect(file) == .escape_codes) .ansi_color else .no_color;
+        // zlinter-disable declaration_naming - naming matches env vars
+        const NO_COLOR = std.zig.EnvVar.NO_COLOR.isSet();
+        const CLICOLOR_FORCE = std.zig.EnvVar.CLICOLOR_FORCE.isSet();
+        // zlinter-enable declaration_naming
+        return if (try std.Io.Terminal.Mode.detect(io, file, NO_COLOR, CLICOLOR_FORCE) == .escape_codes) .ansi_color else .no_color;
     }
 
     /// Returns the ANSI escape sequence if enabled otherwise an empty string

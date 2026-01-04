@@ -149,6 +149,7 @@ pub const LintContext = struct {
     document_store: zls.DocumentStore,
     gpa: std.mem.Allocator,
     analyser: zls.Analyser,
+    io: std.Io,
 
     pub fn init(
         self: *LintContext,
@@ -166,6 +167,7 @@ pub const LintContext = struct {
             .intern_pool = try .init(gpa),
             .document_store = undefined, // zlinter-disable-current-line no_undefined - set below
             .analyser = undefined, // zlinter-disable-current-line no_undefined - set below
+            .io = io,
         };
         errdefer self.intern_pool.deinit(gpa);
 
@@ -178,7 +180,7 @@ pub const LintContext = struct {
                     .zig_exe_path = config.zig_exe_path,
                     .zig_lib_dir = dir: {
                         if (config.zig_lib_path) |zig_lib_path| {
-                            if (std.fs.openDirAbsolute(zig_lib_path, .{})) |zig_lib_dir| {
+                            if (std.Io.Dir.openDirAbsolute(io, zig_lib_path, .{})) |zig_lib_dir| {
                                 break :dir .{
                                     .handle = zig_lib_dir,
                                     .path = zig_lib_path,
@@ -193,7 +195,7 @@ pub const LintContext = struct {
                     .builtin_path = config.builtin_path,
                     .global_cache_dir = dir: {
                         if (config.global_cache_path) |global_cache_path| {
-                            if (std.fs.openDirAbsolute(global_cache_path, .{})) |global_cache_dir| {
+                            if (std.Io.Dir.openDirAbsolute(io, global_cache_path, .{})) |global_cache_dir| {
                                 break :dir .{
                                     .handle = global_cache_dir,
                                     .path = global_cache_path,
@@ -246,14 +248,19 @@ pub const LintContext = struct {
         gpa: std.mem.Allocator,
         doc: *LintDocument,
     ) !void {
+        var buffer: [std.fs.max_path_bytes]u8 = undefined;
+        const size = try std.Io.Dir.cwd().realPathFile(
+            self.io,
+            path,
+            &buffer,
+        );
+
         var mem: [std.fs.max_path_bytes]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&mem);
+
         const uri = try zls.Uri.fromPath(
             fba.allocator(),
-            try std.fs.cwd().realpathAlloc(
-                fba.allocator(),
-                path,
-            ),
+            buffer[0..size],
         );
 
         const handle = self.document_store.getOrLoadHandle(uri) orelse return error.HandleError;
@@ -1170,7 +1177,7 @@ test "LintContext.resolveTypeKind" {
             for (doc.handle.tree.errors) |ast_err| {
                 var buffer: [1024]u8 = undefined;
 
-                var writer = std.fs.File.stderr().writer(&buffer).interface;
+                var writer = std.Io.File.stderr().writer(std.testing.io, &buffer).interface;
                 try doc.handle.tree.renderError(ast_err, &writer);
                 try writer.flush();
             }

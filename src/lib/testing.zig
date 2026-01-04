@@ -3,24 +3,27 @@
 /// See `runRule` for example (test only)
 pub fn loadFakeDocument(
     context: *LintContext,
-    dir: std.fs.Dir,
+    dir: std.Io.Dir,
     file_name: []const u8,
     contents: [:0]const u8,
     arena: std.mem.Allocator,
 ) !*LintDocument {
     assertTestOnly();
 
-    if (std.fs.path.dirname(file_name)) |dir_name|
-        try dir.makePath(dir_name);
+    const io = std.testing.io;
 
-    const file = try dir.createFile(file_name, .{});
-    defer file.close();
+    if (std.fs.path.dirname(file_name)) |dir_name|
+        try dir.createDirPath(io, dir_name);
+
+    const file = try dir.createFile(io, file_name, .{});
+    defer file.close(io);
 
     var buffer: [1024]u8 = undefined;
-    const real_path = try dir.realpath(file_name, &buffer);
+    const size = try dir.realPathFile(io, file_name, &buffer);
+    const real_path = buffer[0..size];
 
     var file_buffer: [1024]u8 = undefined;
-    var file_writer = file.writer(&file_buffer);
+    var file_writer = file.writer(io, &file_buffer);
     try file_writer.interface.writeAll(contents);
     try file_writer.interface.flush();
 
@@ -29,14 +32,16 @@ pub fn loadFakeDocument(
     return doc;
 }
 
-pub fn writeFile(dir: std.fs.Dir, file_name: []const u8, contents: []const u8) !void {
+pub fn writeFile(dir: std.Io.Dir, file_name: []const u8, contents: []const u8) !void {
     assertTestOnly();
 
-    const file = try dir.createFile(file_name, .{});
-    defer file.close();
+    const io = std.testing.io;
+
+    const file = try dir.createFile(io, file_name, .{});
+    defer file.close(io);
 
     var file_buffer: [2048]u8 = undefined;
-    var file_writer = file.writer(&file_buffer);
+    var file_writer = file.writer(io, &file_buffer);
 
     try file_writer.interface.writeAll(contents);
     try file_writer.interface.flush();
@@ -205,6 +210,7 @@ pub fn expectNodeOfTagFirst(doc: *const LintDocument, comptime tags: []const Ast
 /// which uses this method instead of this method directly.
 fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8, options: RunOptions) !?LintResult {
     assertTestOnly();
+    const io = std.testing.io;
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -235,7 +241,7 @@ fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8, option
         for (tree.errors) |ast_err| {
             var buffer: [1024]u8 = undefined;
 
-            var writer = std.fs.File.stderr().writer(&buffer).interface;
+            var writer = std.Io.File.stderr().writer(io, &buffer).interface;
             try tree.renderError(ast_err, &writer);
         }
         return err;
@@ -278,13 +284,14 @@ fn expectDeepEquals(T: type, expected: []const T, actual: []const T) !void {
 }
 
 /// Create empty files (test only)
-pub fn createFiles(dir: std.fs.Dir, file_paths: [][]const u8) !void {
+pub fn createFiles(dir: std.Io.Dir, file_paths: [][]const u8) !void {
     assertTestOnly();
 
+    const io = std.testing.io;
     for (file_paths) |file_path| {
         if (std.fs.path.dirname(file_path)) |parent|
-            try dir.makePath(parent);
-        (try dir.createFile(file_path, .{})).close();
+            try dir.createDirPath(io, parent);
+        (try dir.createFile(io, file_path, .{})).close(io);
     }
 }
 
