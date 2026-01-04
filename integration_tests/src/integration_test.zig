@@ -7,6 +7,8 @@ const fix_stdout_output_suffix = ".fix_expected.stdout";
 
 test "integration test rules" {
     const allocator = std.testing.allocator;
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    const io = threaded.io();
 
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
@@ -76,6 +78,8 @@ test "integration test rules" {
         // try expectEqualStringsNormalized("", fix_output.stderr);
 
         expectFileContentsEquals(
+            io,
+            allocator,
             std.Io.Dir.cwd(),
             lint_stdout_expected_file.?,
             lint_output.stdout,
@@ -90,11 +94,11 @@ test "integration test rules" {
     // --------------------------------------------------------------------
     if (fix_stdout_expected_file != null or fix_zig_expected_file != null) {
         const cwd = std.Io.Dir.cwd();
-        var cache_dir = try cwd.createDirPathOpen(std.testing.io, ".zig-cache", .{});
-        defer cache_dir.close(std.testing.io);
+        var cache_dir = try cwd.createDirPathOpen(io, ".zig-cache", .{});
+        defer cache_dir.close(io);
 
-        var temp_dir = try cache_dir.createDirPathOpen(std.testing.io, "tmp", .{});
-        defer temp_dir.close(std.testing.io);
+        var temp_dir = try cache_dir.createDirPathOpen(io, "tmp", .{});
+        defer temp_dir.close(io);
 
         const temp_path = try std.fmt.allocPrint(
             std.testing.allocator,
@@ -107,7 +111,7 @@ test "integration test rules" {
             input_zig_file.?,
             std.Io.Dir.cwd(),
             temp_path,
-            std.testing.io,
+            io,
             .{},
         );
 
@@ -146,6 +150,8 @@ test "integration test rules" {
         try expectEqualStringsNormalized("", fix_output.stderr);
 
         expectFileContentsEquals(
+            io,
+            allocator,
             std.Io.Dir.cwd(),
             fix_stdout_expected_file.?,
             fix_output.stdout,
@@ -155,7 +161,7 @@ test "integration test rules" {
         };
 
         const actual = try std.Io.Dir.cwd().readFileAlloc(
-            std.testing.io,
+            io,
             temp_path,
             allocator,
             .limited(max_file_size_bytes),
@@ -163,6 +169,8 @@ test "integration test rules" {
         defer allocator.free(actual);
 
         expectFileContentsEquals(
+            io,
+            allocator,
             std.Io.Dir.cwd(),
             fix_zig_expected_file.?,
             actual,
@@ -173,11 +181,17 @@ test "integration test rules" {
     }
 }
 
-fn expectFileContentsEquals(dir: std.Io.Dir, file_path: []const u8, actual: []const u8) !void {
+fn expectFileContentsEquals(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    dir: std.Io.Dir,
+    file_path: []const u8,
+    actual: []const u8,
+) !void {
     const contents = dir.readFileAlloc(
-        std.testing.io,
+        io,
         file_path,
-        std.testing.allocator,
+        allocator,
         .limited(max_file_size_bytes),
     ) catch |err| {
         switch (err) {
@@ -188,13 +202,13 @@ fn expectFileContentsEquals(dir: std.Io.Dir, file_path: []const u8, actual: []co
             else => return err,
         }
     };
-    defer std.testing.allocator.free(contents);
+    defer allocator.free(contents);
 
-    const normalized_expected = try normalizeNewLinesAlloc(contents, std.testing.allocator);
-    defer std.testing.allocator.free(normalized_expected);
+    const normalized_expected = try normalizeNewLinesAlloc(contents, allocator);
+    defer allocator.free(normalized_expected);
 
-    const normalized_actual = try normalizeNewLinesAlloc(actual, std.testing.allocator);
-    defer std.testing.allocator.free(normalized_actual);
+    const normalized_actual = try normalizeNewLinesAlloc(actual, allocator);
+    defer allocator.free(normalized_actual);
 
     std.testing.expectEqualStrings(normalized_expected, normalized_actual) catch |err| {
         switch (err) {
