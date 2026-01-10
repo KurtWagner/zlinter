@@ -15,22 +15,25 @@ pub fn build(b: *std.Build) !void {
     var walker = try test_cases_dir.walk(b.allocator);
     defer walker.deinit();
 
+    const test_runner_module = b.createModule(.{
+        .root_source_file = b.path("src/test_runner.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    if (zlinter.version.zig == .@"0.15" and target.result.os.tag == .windows) {
+        test_runner_module.linkSystemLibrary("advapi32", .{});
+    }
+
+    const test_runner_exe = b.addExecutable(.{
+        .name = "integration_tests",
+        .root_module = test_runner_module,
+    });
+
     while (try walker.next(io)) |item| {
         if (item.kind != .file) continue;
         if (!std.mem.endsWith(u8, item.path, input_suffix)) continue;
 
-        const test_runner_module = b.createModule(.{
-            .root_source_file = b.path("src/test_runner.zig"),
-            .target = target,
-            .optimize = optimize,
-        });
-        if (zlinter.version.zig == .@"0.15" and target.result.os.tag == .windows) {
-            test_runner_module.linkSystemLibrary("advapi32", .{});
-        }
-        const run_integration_test = b.addRunArtifact(b.addExecutable(.{
-            .name = "integration_tests",
-            .root_module = test_runner_module,
-        }));
+        const run_integration_test = b.addRunArtifact(test_runner_exe);
         run_integration_test.addArg(b.graph.zig_exe);
 
         // Format: <rule_name>/<test_name>.input.zig
