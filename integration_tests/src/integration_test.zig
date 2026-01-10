@@ -21,9 +21,9 @@ pub fn runTest(
     // Second arg is zig bin path
     // Third arg is rule name
     // Forth arg is test name
-    const zig_bin = args[1]; // 1
-    const rule_name = args[2]; // 2
-    const test_name = args[3]; // 3
+    const zig_bin = args[1];
+    const rule_name = args[2];
+    const test_name = args[3];
     _ = test_name;
     for (args[4..]) |arg| {
         if (std.mem.endsWith(u8, arg, input_zig_suffix)) {
