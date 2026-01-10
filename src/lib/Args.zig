@@ -105,7 +105,7 @@ pub fn deinit(self: Args, allocator: std.mem.Allocator) void {
 }
 
 pub fn allocParse(
-    args: [][:0]u8,
+    args: []const [:0]const u8,
     available_rules: []const LintRule,
     allocator: std.mem.Allocator,
     stdin_reader: *std.Io.Reader,

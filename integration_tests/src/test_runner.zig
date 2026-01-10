@@ -5,14 +5,15 @@ const ansi_bold = "\x1B[1m";
 const ansi_reset = "\x1B[0m";
 const ansi_gray = "\x1B[90m";
 
-pub fn main() !void {
+pub fn main(init: std.process.Init.Minimal) !void {
     var threaded: std.Io.Threaded = .init_single_threaded;
     const io = threaded.io();
 
     var mem: [32 * 1024]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&mem);
     const allocator = fba.allocator();
-    const args = try std.process.argsAlloc(allocator);
+    const args = try init.args.toSlice(allocator);
+
     defer std.process.argsFree(allocator, args);
 
     // First arg is executable

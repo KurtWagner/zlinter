@@ -10,7 +10,11 @@ test "integration test rules" {
     var threaded: std.Io.Threaded = .init_single_threaded;
     const io = threaded.io();
 
-    const args = try std.process.argsAlloc(allocator);
+    var args: std.process.Args = undefined;
+    var args_it = try std.process.Args.iterateAllocator(args, allocator);
+    defer args_it.deinit();
+    args_it.skip();
+
     defer std.process.argsFree(allocator, args);
 
     var input_zig_file: ?[:0]u8 = null;
@@ -23,9 +27,9 @@ test "integration test rules" {
     // Second arg is zig bin path
     // Third arg is rule name
     // Forth arg is test name
-    const zig_bin = args[1];
-    const rule_name = args[2];
-    const test_name = args[3];
+    const zig_bin = args_it.next();
+    const rule_name = args_it.next();
+    const test_name = args_it.next();
     _ = test_name;
     for (args[4..]) |arg| {
         if (std.mem.endsWith(u8, arg, input_zig_suffix)) {

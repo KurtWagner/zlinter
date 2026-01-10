@@ -3,10 +3,11 @@ const default_formatter = zlinter.formatters.DefaultFormatter{};
 
 pub const std_options: std.Options = .{ .log_level = .err };
 
-pub fn main() !u8 {
+pub fn main(init: std.process.Init.Minimal) !u8 {
     var threaded: std.Io.Threaded = .init_single_threaded;
     const io = threaded.io();
 
+    // TODO: Work out whether this should swap to the "juicy" main allocators
     const gpa, const is_debug = switch (builtin.mode) {
         // Debug allocator has become significantly slower (since 0.16) so
         // unless explicitly a debug build (defaults to release fast) don't
@@ -23,6 +24,9 @@ pub fn main() !u8 {
         if (debug_allocator.deinit() == .leak) @panic("Memory leak");
     };
 
+    var environ_map = try init.environ.createMap(gpa);
+    defer environ_map.deinit();
+
     var stdout_buffer: [1024]u8 = undefined;
     var stderr_buffer: [1024]u8 = undefined;
     var stdin_buffer: [1024]u8 = undefined;
@@ -35,13 +39,15 @@ pub fn main() !u8 {
     printer.init(
         &stdout_writer.interface,
         &stderr_writer.interface,
-        try .init(io, std.Io.File.stdout()),
+        try .init(io, std.Io.File.stdout(), &environ_map),
         false,
     );
 
     const args = args: {
-        const raw_args = try std.process.argsAlloc(gpa);
-        defer std.process.argsFree(gpa, raw_args);
+        var arena: std.heap.ArenaAllocator = .init(gpa);
+        defer arena.deinit();
+
+        const raw_args = try init.args.toSlice(arena.allocator());
 
         break :args zlinter.Args.allocParse(
             raw_args,
@@ -79,7 +85,7 @@ pub fn main() !u8 {
     const result = result: {
         var remaining_fix_passes = @max(1, args.fix_passes);
         while (remaining_fix_passes > 0) {
-            if (run(io, gpa, args, printer)) |r| {
+            if (run(io, &environ_map, gpa, args, printer)) |r| {
                 total_fixes += r.fixes_applied;
                 if (r.fixes_applied == 0 or remaining_fix_passes == 1) {
                     break :result r;
@@ -120,6 +126,7 @@ pub fn main() !u8 {
 
 fn run(
     io: std.Io,
+    environ_map: *const std.process.Environ.Map,
     gpa: std.mem.Allocator,
     args: zlinter.Args,
     printer: *zlinter.rendering.Printer,
@@ -181,6 +188,7 @@ fn run(
 
     try runLinterRules(
         io,
+        environ_map,
         gpa,
         lint_files,
         printer,
@@ -225,6 +233,7 @@ fn run(
 
 fn runLinterRules(
     io: std.Io,
+    environ_map: *const std.process.Environ.Map,
     gpa: std.mem.Allocator,
     lint_files: []zlinter.files.LintFile,
     printer: *zlinter.rendering.Printer,
@@ -259,11 +268,17 @@ fn runLinterRules(
     };
 
     var context: zlinter.session.LintContext = undefined;
-    try context.init(.{
-        .zig_exe_path = args.zig_exe,
-        .zig_lib_path = args.zig_lib_directory,
-        .global_cache_path = args.global_cache_root,
-    }, io, gpa, arena.allocator());
+    try context.init(
+        .{
+            .zig_exe_path = args.zig_exe,
+            .zig_lib_path = args.zig_lib_directory,
+            .global_cache_path = args.global_cache_root,
+        },
+        io,
+        environ_map,
+        gpa,
+        arena.allocator(),
+    );
     defer context.deinit();
 
     var enabled_rules = enabledRules(args.rules);

@@ -31,7 +31,7 @@ pub fn allocLintFiles(io: std.Io, cwd: []const u8, dir: std.Io.Dir, maybe_files:
                 // No validation is done at this point on whether the file
                 // even exists and can be opened as it'll be done when
                 // opening the file for parsing so don't double up...
-                const relative = try std.fs.path.relative(gpa, cwd, file_or_dir);
+                const relative = try std.fs.path.relative(gpa, cwd, null, cwd, file_or_dir);
                 errdefer gpa.free(relative);
 
                 if (file_paths.contains(relative)) {
