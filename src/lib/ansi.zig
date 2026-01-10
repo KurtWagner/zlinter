@@ -4,11 +4,11 @@ pub const Tty = enum {
     no_color,
     ansi_color,
 
-    pub fn init(io: std.Io, file: std.Io.File) std.Io.Cancelable!Tty {
+    pub fn init(io: std.Io, file: std.Io.File, environ_map: *const std.process.Environ.Map) std.Io.Cancelable!Tty {
         if (builtin.is_test) return .no_color;
         // zlinter-disable declaration_naming - naming matches env vars
-        const NO_COLOR = std.zig.EnvVar.NO_COLOR.isSet();
-        const CLICOLOR_FORCE = std.zig.EnvVar.CLICOLOR_FORCE.isSet();
+        const NO_COLOR = std.zig.EnvVar.NO_COLOR.isSet(environ_map);
+        const CLICOLOR_FORCE = std.zig.EnvVar.CLICOLOR_FORCE.isSet(environ_map);
         // zlinter-enable declaration_naming
         return if (try std.Io.Terminal.Mode.detect(io, file, NO_COLOR, CLICOLOR_FORCE) == .escape_codes) .ansi_color else .no_color;
     }

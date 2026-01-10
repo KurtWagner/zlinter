@@ -1,16 +1,12 @@
 //! Generates a rules zig file at build time that can be built into the linter.
 
-pub fn main() !void {
-    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
-    defer if (debug_allocator.deinit() == .leak) @panic("Memory leak");
-
+pub fn main(init: std.process.Init) !void {
     var threaded: std.Io.Threaded = .init_single_threaded;
     const io = threaded.io();
 
-    const gpa = debug_allocator.allocator();
+    const gpa = init.gpa;
 
-    const args = try std.process.argsAlloc(gpa);
-    defer std.process.argsFree(gpa, args);
+    const args = try init.minimal.args.toSlice(init.arena.allocator());
 
     const output_file_path = args[1];
     var output_file = std.Io.Dir.cwd().createFile(io, output_file_path, .{}) catch |err| {

@@ -946,8 +946,7 @@ const ZlinterRun = struct {
             .exclude_paths = try subPaths(&run.step, excludes.items),
         }, b.allocator);
 
-        const env_map = arena.create(std.process.EnvMap) catch @panic("OOM");
-        env_map.* = std.process.getEnvMap(arena) catch @panic("unhandled error");
+        var environ_map = b.graph.environ_map;
 
         var argv_list = shims.ArrayList([]const u8).initCapacity(
             arena,
@@ -971,14 +970,14 @@ const ZlinterRun = struct {
                             const bin_path = compile.getEmittedBin().getPath3(b, &run.step);
                             const search_path = std.fs.path.dirname(b.pathResolve(&.{ bin_path.root_dir.path orelse ".", bin_path.sub_path })).?;
                             const key = "PATH";
-                            if (env_map.get(key)) |prev_path| {
-                                env_map.put(key, b.fmt("{s}{c}{s}", .{
+                            if (environ_map.get(key)) |prev_path| {
+                                environ_map.put(key, b.fmt("{s}{c}{s}", .{
                                     prev_path,
                                     std.fs.path.delimiter,
                                     search_path,
                                 })) catch @panic("OOM");
                             } else {
-                                env_map.put(key, b.dupePath(search_path)) catch @panic("OOM");
+                                environ_map.put(key, b.dupePath(search_path)) catch @panic("OOM");
                             }
                         }
                     }
@@ -1005,32 +1004,35 @@ const ZlinterRun = struct {
             std.debug.print("zlinter command:\n\t{s}\n", .{
                 std.Build.Step.allocPrintCmd(
                     arena,
-                    b.build_root.path,
+                    null,
+                    null,
                     argv_list.items,
                 ) catch @panic("OOM"),
             });
         }
 
-        var child = std.process.Child.init(argv_list.items, arena);
-        child.cwd = b.build_root.path;
-        child.cwd_dir = b.build_root.handle;
-        child.env_map = env_map;
-        // As we're using stdout and stderr inherit we don't want to update
-        // parent of childs progress (i.e commented out as deliberately not set)
-        // child.progress_node = options.progress_node;
-        child.request_resource_usage_statistics = true;
-        child.stdout_behavior = .Inherit;
-        child.stderr_behavior = .Inherit;
-        child.stdin_behavior = .Pipe; // Otherwise, `.Ignore` if not sending stdin
-
         var timer = try std.time.Timer.start();
 
         _ = std.debug.lockStderr(&.{});
         defer std.debug.unlockStderr();
-        child.spawn(io) catch |err| {
+
+        var child = std.process.spawn(io, .{
+            .argv = argv_list.items,
+            .cwd = b.build_root.path,
+            .cwd_dir = b.build_root.handle,
+            .environ_map = &environ_map,
+            // As we're using stdout and stderr inherit we don't want to update
+            // parent of childs progress (i.e commented out as deliberately not set)
+            // .progress_node = options.progress_node,
+            .request_resource_usage_statistics = true,
+            .stdout = .inherit,
+            .stderr = .inherit,
+            .stdin = .pipe, // Otherwise, `.Ignore` if not sending stdin
+        }) catch |err| {
             return run.step.fail("Unable to spawn zlinter: {s}", .{@errorName(err)});
         };
-        errdefer _ = child.kill(io) catch {};
+
+        errdefer child.kill(io);
 
         {
             if (b.verbose)
@@ -1060,7 +1062,7 @@ const ZlinterRun = struct {
         step.test_results = .{};
 
         switch (term) {
-            .Exited => |code| {
+            .exited => |code| {
                 // These codes are defined in run_linter.zig
                 const success = 0;
                 const lint_error = 2;
@@ -1073,17 +1075,19 @@ const ZlinterRun = struct {
                     return step.fail("zlinter command crashed:\n\t{s}", .{
                         std.Build.Step.allocPrintCmd(
                             arena,
-                            b.build_root.path,
+                            null,
+                            null,
                             argv_list.items,
                         ) catch @panic("OOM"),
                     });
                 }
             },
-            .Signal, .Stopped, .Unknown => {
+            .signal, .stopped, .unknown => {
                 return step.fail("zlinter was terminated unexpectedly:\n\t{s}", .{
                     std.Build.Step.allocPrintCmd(
                         arena,
-                        b.build_root.path,
+                        null,
+                        null,
                         argv_list.items,
                     ) catch @panic("OOM"),
                 });
@@ -1175,14 +1179,13 @@ const BuildCwd = struct {
         if (std.fs.path.isAbsolute(to)) {
             const relative = std.fs.path.relative(
                 b.allocator,
+                b.graph.cache.cwd,
+                &b.graph.environ_map,
                 self.path,
                 to,
             ) catch |e|
                 switch (e) {
                     error.OutOfMemory => @panic("OOM"),
-                    error.Unexpected,
-                    error.CurrentWorkingDirectoryUnlinked,
-                    => return null,
                 };
             errdefer b.allocator.free(relative);
 

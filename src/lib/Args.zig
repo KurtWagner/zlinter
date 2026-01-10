@@ -105,7 +105,7 @@ pub fn deinit(self: Args, allocator: std.mem.Allocator) void {
 }
 
 pub fn allocParse(
-    args: [][:0]u8,
+    args: []const [:0]const u8,
     available_rules: []const LintRule,
     allocator: std.mem.Allocator,
     stdin_reader: *std.Io.Reader,
@@ -973,7 +973,7 @@ test "allocParse without args" {
 
 test "allocParse fuzz" {
     var seed: u64 = undefined;
-    try std.posix.getrandom(std.mem.asBytes(&seed));
+    std.testing.io.random(std.mem.asBytes(&seed));
 
     const max_args = 10;
 

@@ -144,6 +144,7 @@ fn isTestOnlyCondition(tree: Ast, if_statement: Ast.full.If) bool {
 
 /// The context of all document and rule executions.
 pub const LintContext = struct {
+    environ_map: *const std.process.Environ.Map,
     diagnostics_collection: zls.DiagnosticsCollection,
     intern_pool: zls.analyser.InternPool,
     document_store: zls.DocumentStore,
@@ -155,6 +156,7 @@ pub const LintContext = struct {
         self: *LintContext,
         config: zls.Config,
         io: std.Io,
+        environ_map: *const std.process.Environ.Map,
         gpa: std.mem.Allocator,
         arena: std.mem.Allocator,
     ) !void {
@@ -168,6 +170,7 @@ pub const LintContext = struct {
             .document_store = undefined, // zlinter-disable-current-line no_undefined - set below
             .analyser = undefined, // zlinter-disable-current-line no_undefined - set below
             .io = io,
+            .environ_map = environ_map,
         };
         errdefer self.intern_pool.deinit(gpa);
 
@@ -175,43 +178,41 @@ pub const LintContext = struct {
             .io = io,
             .allocator = gpa,
             .diagnostics_collection = &self.diagnostics_collection,
-            .config = switch (version.zig) {
-                .@"0.15", .@"0.16" => .{
-                    .zig_exe_path = config.zig_exe_path,
-                    .zig_lib_dir = dir: {
-                        if (config.zig_lib_path) |zig_lib_path| {
-                            if (std.Io.Dir.openDirAbsolute(io, zig_lib_path, .{})) |zig_lib_dir| {
-                                break :dir .{
-                                    .handle = zig_lib_dir,
-                                    .path = zig_lib_path,
-                                };
-                            } else |err| {
-                                std.log.err("failed to open zig library directory '{s}': {s}", .{ zig_lib_path, @errorName(err) });
-                            }
+            .config = .{
+                .environ_map = environ_map,
+                .zig_exe_path = config.zig_exe_path,
+                .zig_lib_dir = dir: {
+                    if (config.zig_lib_path) |zig_lib_path| {
+                        if (std.Io.Dir.openDirAbsolute(io, zig_lib_path, .{})) |zig_lib_dir| {
+                            break :dir .{
+                                .handle = zig_lib_dir,
+                                .path = zig_lib_path,
+                            };
+                        } else |err| {
+                            std.log.err("failed to open zig library directory '{s}': {s}", .{ zig_lib_path, @errorName(err) });
                         }
-                        break :dir null;
-                    },
-                    .build_runner_path = config.build_runner_path,
-                    .builtin_path = config.builtin_path,
-                    .global_cache_dir = dir: {
-                        if (config.global_cache_path) |global_cache_path| {
-                            if (std.Io.Dir.openDirAbsolute(io, global_cache_path, .{})) |global_cache_dir| {
-                                break :dir .{
-                                    .handle = global_cache_dir,
-                                    .path = global_cache_path,
-                                };
-                            } else |err| {
-                                std.log.err("failed to open zig library directory '{s}': {s}", .{ global_cache_path, @errorName(err) });
-                            }
-                        }
-                        break :dir null;
-                    },
-                    .wasi_preopens = switch (builtin.os.tag) {
-                        .wasi => try std.fs.wasi.preopensAlloc(arena),
-                        else => {},
-                    },
+                    }
+                    break :dir null;
                 },
-                .@"0.14" => .fromMainConfig(config),
+                .build_runner_path = config.build_runner_path,
+                .builtin_path = config.builtin_path,
+                .global_cache_dir = dir: {
+                    if (config.global_cache_path) |global_cache_path| {
+                        if (std.Io.Dir.openDirAbsolute(io, global_cache_path, .{})) |global_cache_dir| {
+                            break :dir .{
+                                .handle = global_cache_dir,
+                                .path = global_cache_path,
+                            };
+                        } else |err| {
+                            std.log.err("failed to open zig library directory '{s}': {s}", .{ global_cache_path, @errorName(err) });
+                        }
+                    }
+                    break :dir null;
+                },
+                .wasi_preopens = switch (builtin.os.tag) {
+                    .wasi => try std.fs.wasi.preopensAlloc(arena),
+                    else => {},
+                },
             },
         };
 
@@ -738,8 +739,10 @@ test "LintDocument.isEnclosedInTestBlock" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
+    const environ_map: std.process.Environ.Map = .init(arena.allocator());
+
     var context: LintContext = undefined;
-    try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
+    try context.init(.{}, std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
     defer context.deinit();
 
     var tmp = std.testing.tmpDir(.{});
@@ -1158,8 +1161,10 @@ test "LintContext.resolveTypeKind" {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
 
+        const environ_map: std.process.Environ.Map = .init(arena.allocator());
+
         var context: LintContext = undefined;
-        try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
+        try context.init(.{}, std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
         defer context.deinit();
 
         var tmp = std.testing.tmpDir(.{});

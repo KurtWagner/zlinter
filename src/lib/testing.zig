@@ -208,17 +208,25 @@ pub fn expectNodeOfTagFirst(doc: *const LintDocument, comptime tags: []const Ast
 
 /// Builds and runs a rule with fake file name and content. Use `testRunRule`
 /// which uses this method instead of this method directly.
-fn runRule(rule: LintRule, file_name: []const u8, contents: [:0]const u8, options: RunOptions) !?LintResult {
+fn runRule(
+    rule: LintRule,
+    file_name: []const u8,
+    contents: [:0]const u8,
+    options: RunOptions,
+) !?LintResult {
     assertTestOnly();
     const io = std.testing.io;
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
+    const environ_map: std.process.Environ.Map = .init(arena.allocator());
+
     var context: LintContext = undefined;
     try context.init(
         .{},
         std.testing.io,
+        &environ_map,
         std.testing.allocator,
         arena.allocator(),
     );

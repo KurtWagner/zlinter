@@ -5,19 +5,17 @@ const lint_output_suffix = ".lint_expected.stdout";
 const fix_zig_output_suffix = ".fix_expected.zig";
 const fix_stdout_output_suffix = ".fix_expected.stdout";
 
-test "integration test rules" {
-    const allocator = std.testing.allocator;
-    var threaded: std.Io.Threaded = .init_single_threaded;
-    const io = threaded.io();
-
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
-
-    var input_zig_file: ?[:0]u8 = null;
-    var input_zon_file: ?[:0]u8 = null;
-    var lint_stdout_expected_file: ?[:0]u8 = null;
-    var fix_zig_expected_file: ?[:0]u8 = null;
-    var fix_stdout_expected_file: ?[:0]u8 = null;
+pub fn runTest(
+    io: std.Io,
+    arena: std.mem.Allocator,
+    args: []const [:0]const u8,
+    environ_map: std.process.Environ.Map,
+) !void {
+    var input_zig_file: ?[:0]const u8 = null;
+    var input_zon_file: ?[:0]const u8 = null;
+    var lint_stdout_expected_file: ?[:0]const u8 = null;
+    var fix_zig_expected_file: ?[:0]const u8 = null;
+    var fix_stdout_expected_file: ?[:0]const u8 = null;
 
     // First arg is executable
     // Second arg is zig bin path
@@ -49,9 +47,8 @@ test "integration test rules" {
     // --------------------------------------------------------------------
     {
         var lint_args = std.ArrayList([]const u8).empty;
-        defer lint_args.deinit(std.testing.allocator);
 
-        try lint_args.appendSlice(std.testing.allocator, &.{
+        try lint_args.appendSlice(arena, &.{
             zig_bin,
             "build",
             "lint",
@@ -62,24 +59,27 @@ test "integration test rules" {
             input_zig_file.?,
         });
         if (input_zon_file) |file| {
-            try lint_args.appendSlice(std.testing.allocator, &.{
+            try lint_args.appendSlice(arena, &.{
                 "--rule-config",
                 rule_name,
                 file,
             });
         }
 
-        const lint_output = try runLintCommand(lint_args.items);
-        defer allocator.free(lint_output.stdout);
-        defer allocator.free(lint_output.stderr);
+        const lint_output = try runLintCommand(
+            lint_args.items,
+            &environ_map,
+            io,
+            arena,
+        );
 
         // TODO: Update to expect certain exit codes based on input
-        // try std.testing.expect(lint_output.term.Exited == 0);
-        // try expectEqualStringsNormalized("", fix_output.stderr);
+        // try std.testing.expect(lint_output.term.exited == 0);
+        // try expectEqualStringsNormalized(arena, "", fix_output.stderr);
 
         expectFileContentsEquals(
             io,
-            allocator,
+            arena,
             std.Io.Dir.cwd(),
             lint_stdout_expected_file.?,
             lint_output.stdout,
@@ -101,11 +101,10 @@ test "integration test rules" {
         defer temp_dir.close(io);
 
         const temp_path = try std.fmt.allocPrint(
-            std.testing.allocator,
+            arena,
             ".zig-cache" ++ std.fs.path.sep_str ++ "tmp" ++ std.fs.path.sep_str ++ "{s}.input.zig",
             .{rule_name},
         );
-        defer allocator.free(temp_path);
 
         try std.Io.Dir.cwd().copyFile(
             input_zig_file.?,
@@ -116,9 +115,8 @@ test "integration test rules" {
         );
 
         var lint_args = std.ArrayList([]const u8).empty;
-        defer lint_args.deinit(std.testing.allocator);
 
-        try lint_args.appendSlice(std.testing.allocator, &.{
+        try lint_args.appendSlice(arena, &.{
             zig_bin,
             "build",
             "lint",
@@ -130,28 +128,31 @@ test "integration test rules" {
             temp_path,
         });
         if (input_zon_file) |file| {
-            try lint_args.appendSlice(std.testing.allocator, &.{
+            try lint_args.appendSlice(arena, &.{
                 "--rule-config",
                 rule_name,
                 file,
             });
         }
 
-        const fix_output = try runLintCommand(lint_args.items);
-        defer allocator.free(fix_output.stdout);
-        defer allocator.free(fix_output.stderr);
+        const fix_output = try runLintCommand(
+            lint_args.items,
+            &environ_map,
+            io,
+            arena,
+        );
 
         // Expect all integration fix tests to be successful so exit 0 with
         // no stderr. Maybe one day we will add cases where it fails
-        std.testing.expect(fix_output.term.Exited == 0) catch |e| {
+        std.testing.expect(fix_output.term.exited == 0) catch |e| {
             std.log.err("stderr: {s}", .{fix_output.stderr});
             return e;
         };
-        try expectEqualStringsNormalized("", fix_output.stderr);
+        try expectEqualStringsNormalized(arena, "", fix_output.stderr);
 
         expectFileContentsEquals(
             io,
-            allocator,
+            arena,
             std.Io.Dir.cwd(),
             fix_stdout_expected_file.?,
             fix_output.stdout,
@@ -163,14 +164,13 @@ test "integration test rules" {
         const actual = try std.Io.Dir.cwd().readFileAlloc(
             io,
             temp_path,
-            allocator,
+            arena,
             .limited(max_file_size_bytes),
         );
-        defer allocator.free(actual);
 
         expectFileContentsEquals(
             io,
-            allocator,
+            arena,
             std.Io.Dir.cwd(),
             fix_zig_expected_file.?,
             actual,
@@ -183,7 +183,7 @@ test "integration test rules" {
 
 fn expectFileContentsEquals(
     io: std.Io,
-    allocator: std.mem.Allocator,
+    arena: std.mem.Allocator,
     dir: std.Io.Dir,
     file_path: []const u8,
     actual: []const u8,
@@ -191,48 +191,40 @@ fn expectFileContentsEquals(
     const contents = dir.readFileAlloc(
         io,
         file_path,
-        allocator,
+        arena,
         .limited(max_file_size_bytes),
     ) catch |err| {
         switch (err) {
             error.FileNotFound => {
-                try printWithHeader("Could not find file", file_path);
+                try printWithHeader(arena, "Could not find file", file_path);
                 return err;
             },
             else => return err,
         }
     };
-    defer allocator.free(contents);
 
-    const normalized_expected = try normalizeNewLinesAlloc(contents, allocator);
-    defer allocator.free(normalized_expected);
-
-    const normalized_actual = try normalizeNewLinesAlloc(actual, allocator);
-    defer allocator.free(normalized_actual);
+    const normalized_expected = try normalizeNewLinesAlloc(contents, arena);
+    const normalized_actual = try normalizeNewLinesAlloc(actual, arena);
 
     std.testing.expectEqualStrings(normalized_expected, normalized_actual) catch |err| {
         switch (err) {
             error.TestExpectedEqual => {
-                try printWithHeader("Expected contents from", file_path);
+                try printWithHeader(arena, "Expected contents from", file_path);
                 return err;
             },
         }
     };
 }
 
-fn expectEqualStringsNormalized(expected: []const u8, actual: []const u8) !void {
-    const normalized_expected = try normalizeNewLinesAlloc(expected, std.testing.allocator);
-    defer std.testing.allocator.free(normalized_expected);
-
-    const normalized_actual = try normalizeNewLinesAlloc(actual, std.testing.allocator);
-    defer std.testing.allocator.free(normalized_actual);
+fn expectEqualStringsNormalized(arena: std.mem.Allocator, expected: []const u8, actual: []const u8) !void {
+    const normalized_expected = try normalizeNewLinesAlloc(expected, arena);
+    const normalized_actual = try normalizeNewLinesAlloc(actual, arena);
 
     try std.testing.expectEqualStrings(normalized_expected, normalized_actual);
 }
 
-fn normalizeNewLinesAlloc(input: []const u8, allocator: std.mem.Allocator) ![]const u8 {
+fn normalizeNewLinesAlloc(input: []const u8, arena: std.mem.Allocator) ![]const u8 {
     var result = std.ArrayList(u8).empty;
-    defer result.deinit(allocator);
 
     // Removes "\r". e.g., "\r\n"
     for (input) |c| {
@@ -241,14 +233,18 @@ fn normalizeNewLinesAlloc(input: []const u8, allocator: std.mem.Allocator) ![]co
             // This assumes that '\' is never in output, which is currently true
             // If this ever changes we will need something more sophisticated
             // to identify strings that look like paths
-            else => try result.append(allocator, if (std.fs.path.isSep(c)) std.fs.path.sep_posix else c),
+            else => try result.append(arena, if (std.fs.path.isSep(c)) std.fs.path.sep_posix else c),
         }
     }
 
-    return result.toOwnedSlice(allocator);
+    return result.toOwnedSlice(arena);
 }
 
-fn printWithHeader(header: []const u8, content: []const u8) !void {
+fn printWithHeader(
+    arena: std.mem.Allocator,
+    header: []const u8,
+    content: []const u8,
+) !void {
     var buffer: [1024]u8 = undefined;
     const top_bar = try std.fmt.bufPrint(
         &buffer,
@@ -256,24 +252,27 @@ fn printWithHeader(header: []const u8, content: []const u8) !void {
         .{header},
     );
 
-    const bottom_bar = try std.testing.allocator.alloc(u8, top_bar.len);
-    defer std.testing.allocator.free(bottom_bar);
+    const bottom_bar = try arena.alloc(u8, top_bar.len);
     @memset(bottom_bar, '=');
 
     std.debug.print("{s}\n{s}\n{s}\n", .{ top_bar, content, bottom_bar[0..] });
 }
 
-fn runLintCommand(args: []const []const u8) !std.process.Child.RunResult {
-    var map = try std.process.getEnvMap(std.testing.allocator);
-    defer map.deinit();
-
-    try map.put("NO_COLOR", "1");
-
-    return try std.process.Child.run(std.testing.allocator, std.testing.io, .{
-        .argv = args,
-        .max_output_bytes = max_file_size_bytes,
-        .env_map = &map,
-    });
+fn runLintCommand(
+    args: []const []const u8,
+    map: *const std.process.Environ.Map,
+    io: std.Io,
+    arena: std.mem.Allocator,
+) !std.process.RunResult {
+    return try std.process.run(
+        arena,
+        io,
+        .{
+            .argv = args,
+            .max_output_bytes = max_file_size_bytes,
+            .environ_map = map,
+        },
+    );
 }
 
 const std = @import("std");
