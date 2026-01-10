@@ -5,16 +5,18 @@ const ansi_bold = "\x1B[1m";
 const ansi_reset = "\x1B[0m";
 const ansi_gray = "\x1B[90m";
 
-pub fn main(init: std.process.Init.Minimal) !void {
+const integration_test = @import("integration_test.zig");
+
+pub fn main(init: std.process.Init) !void {
     var threaded: std.Io.Threaded = .init_single_threaded;
     const io = threaded.io();
 
-    var mem: [32 * 1024]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&mem);
-    const allocator = fba.allocator();
-    const args = try init.args.toSlice(allocator);
+    const arena = init.arena.allocator();
 
-    defer std.process.argsFree(allocator, args);
+    const args = try init.minimal.args.toSlice(arena);
+
+    var environ_map = try init.minimal.environ.createMap(arena);
+    try environ_map.put("NO_COLOR", "1");
 
     // First arg is executable
     // Second arg is zig bin path
@@ -41,42 +43,36 @@ pub fn main(init: std.process.Init.Minimal) !void {
     var pretty_name_buffer: [128]u8 = undefined;
     var test_desc_buffer: [128]u8 = undefined;
     var fail: bool = false;
-    for (builtin.test_functions) |t| {
-        const test_description = if (std.mem.eql(u8, test_name, rule_name))
-            ""
-        else
-            std.fmt.bufPrint(&test_desc_buffer, "{s} - ", .{prettyName(&pretty_name_buffer, test_name)}) catch "";
 
-        if (t.func()) {
-            try stdout_writer.interface.print(output_fmt ++ "\n", .{
-                rule_name,
-                test_description,
-                ansi_green_bold,
-                "passed",
-                ansi_reset,
-            });
-        } else |err| switch (err) {
-            error.SkipZigTest => {
-                try stdout_writer.interface.print(output_fmt ++ "\n", .{
-                    rule_name,
-                    test_description,
-                    ansi_yellow_bold,
-                    "skipped",
-                    ansi_reset,
-                });
-            },
-            else => {
-                fail = true;
-                try stdout_writer.interface.print(output_fmt ++ ": {}\n", .{
-                    rule_name,
-                    test_description,
-                    ansi_red_bold,
-                    "failed",
-                    ansi_reset,
-                    err,
-                });
-            },
-        }
+    const test_description = if (std.mem.eql(u8, test_name, rule_name))
+        ""
+    else
+        std.fmt.bufPrint(&test_desc_buffer, "{s} - ", .{prettyName(&pretty_name_buffer, test_name)}) catch "";
+
+    if (integration_test.runTest(
+        init.io,
+        arena,
+        args,
+        environ_map,
+    )) {
+        try stdout_writer.interface.print(output_fmt ++ "\n", .{
+            rule_name,
+            test_description,
+            ansi_green_bold,
+            "passed",
+            ansi_reset,
+        });
+    } else |err| {
+        if (err == error.OutOfMemory) @panic("OOM");
+        fail = true;
+        try stdout_writer.interface.print(output_fmt ++ ": {}\n", .{
+            rule_name,
+            test_description,
+            ansi_red_bold,
+            "failed",
+            ansi_reset,
+            err,
+        });
     }
 
     try stdout_writer.interface.flush();

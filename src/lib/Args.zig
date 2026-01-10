@@ -973,7 +973,7 @@ test "allocParse without args" {
 
 test "allocParse fuzz" {
     var seed: u64 = undefined;
-    try std.posix.getrandom(std.mem.asBytes(&seed));
+    std.testing.io.random(std.mem.asBytes(&seed));
 
     const max_args = 10;
 
