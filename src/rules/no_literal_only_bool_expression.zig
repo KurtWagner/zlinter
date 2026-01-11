@@ -50,7 +50,7 @@ fn run(
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
-    var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
+    var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;

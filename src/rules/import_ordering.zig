@@ -62,7 +62,7 @@ fn run(
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
-    var lint_problems: shims.ArrayList(zlinter.results.LintProblem) = .empty;
+    var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
     defer lint_problems.deinit(gpa);
 
     var scoped_imports = try resolveScopedImports(doc, gpa);
@@ -159,7 +159,7 @@ fn swapNodesFix(
     const second_line_start = tree.tokenLocation(0, tree.firstToken(second)).line_start;
     const second_line_end = tree.tokenLocation(0, tree.lastToken(second)).line_end;
 
-    var text = try shims.ArrayList(u8).initCapacity(gpa, second_line_start - first_line_start);
+    var text = try std.ArrayList(u8).initCapacity(gpa, second_line_start - first_line_start);
     errdefer text.deinit(gpa);
 
     if (source[second_line_end] == 0) {

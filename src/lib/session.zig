@@ -293,7 +293,7 @@ pub const LintContext = struct {
                 node: NodeIndexShim,
             };
 
-            var queue = shims.ArrayList(QueueItem).empty;
+            var queue = std.ArrayList(QueueItem).empty;
             defer queue.deinit(gpa);
 
             try queue.append(gpa, .{ .node = NodeIndexShim.root });

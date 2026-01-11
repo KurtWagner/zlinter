@@ -70,7 +70,7 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    var problem_nodes = shims.ArrayList(Ast.Node.Index).empty;
+    var problem_nodes = std.ArrayList(Ast.Node.Index).empty;
     defer problem_nodes.deinit(gpa);
 
     const root: NodeIndexShim = .root;
@@ -108,7 +108,7 @@ fn run(
         _ = arena.reset(.retain_capacity);
     }
 
-    var lint_problems: shims.ArrayList(zlinter.results.LintProblem) = .empty;
+    var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
     defer lint_problems.deinit(gpa);
 
     for (problem_nodes.items) |node| {
@@ -135,7 +135,7 @@ fn processBlock(
     context: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
     block_node: Ast.Node.Index,
-    problems: *shims.ArrayList(Ast.Node.Index),
+    problems: *std.ArrayList(Ast.Node.Index),
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
 ) !void {

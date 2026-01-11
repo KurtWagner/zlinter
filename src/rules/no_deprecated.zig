@@ -32,7 +32,7 @@ fn run(
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
-    var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
+    var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
     const handle = doc.handle;
@@ -161,7 +161,7 @@ fn handleIdentifierAccess(
     doc: *const zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     identifier_token: Ast.TokenIndex,
-    lint_problems: *shims.ArrayList(zlinter.results.LintProblem),
+    lint_problems: *std.ArrayList(zlinter.results.LintProblem),
     config: Config,
 ) !void {
     const handle = doc.handle;
@@ -214,7 +214,7 @@ fn handleEnumLiteral(
     doc: *const zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     identifier_token: Ast.TokenIndex,
-    lint_problems: *shims.ArrayList(zlinter.results.LintProblem),
+    lint_problems: *std.ArrayList(zlinter.results.LintProblem),
     config: Config,
 ) !void {
     const doc_comment = try getSymbolEnumLiteralDocComment(
@@ -244,7 +244,7 @@ fn getSymbolEnumLiteralDocComment(
 ) error{OutOfMemory}!?[]const u8 {
     std.debug.assert(shims.nodeTag(doc.handle.tree, node) == .enum_literal);
 
-    var ancestors = shims.ArrayList(Ast.Node.Index).empty;
+    var ancestors = std.ArrayList(Ast.Node.Index).empty;
     defer ancestors.deinit(arena);
 
     var current = node;
@@ -286,7 +286,7 @@ fn handleFieldAccess(
     doc: *const zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     identifier_token: Ast.TokenIndex,
-    lint_problems: *shims.ArrayList(zlinter.results.LintProblem),
+    lint_problems: *std.ArrayList(zlinter.results.LintProblem),
     config: Config,
 ) !void {
     const handle = doc.handle;

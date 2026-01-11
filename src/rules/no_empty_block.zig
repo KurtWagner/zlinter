@@ -69,7 +69,7 @@ fn run(
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
-    var lint_problems: shims.ArrayList(zlinter.results.LintProblem) = .empty;
+    var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
     defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
@@ -111,7 +111,7 @@ fn run(
         if (severity == .off) continue :nodes;
 
         var expr_nodes_buffer: [2]Ast.Node.Index = undefined;
-        var expr_nodes: shims.ArrayList(Ast.Node.Index) = .initBuffer(&expr_nodes_buffer);
+        var expr_nodes: std.ArrayList(Ast.Node.Index) = .initBuffer(&expr_nodes_buffer);
 
         switch (statement) {
             .@"if" => |info| {

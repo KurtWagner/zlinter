@@ -105,9 +105,9 @@ const LintExcludeSource = union(enum) {
 };
 
 const StepBuilder = struct {
-    rules: shims.ArrayList(BuiltRule),
-    include: shims.ArrayList(LintIncludeSource),
-    exclude: shims.ArrayList(LintExcludeSource),
+    rules: std.ArrayList(BuiltRule),
+    include: std.ArrayList(LintIncludeSource),
+    exclude: std.ArrayList(LintExcludeSource),
     options: BuildOptions,
     b: *std.Build,
 
@@ -388,13 +388,13 @@ pub fn build(b: *std.Build) void {
 
     const lint_cmd = b.step("lint", "Lint the linters own source code.");
     lint_cmd.dependOn(step: {
-        var include = shims.ArrayList(LintIncludeSource).empty;
+        var include = std.ArrayList(LintIncludeSource).empty;
         include.append(b.allocator, .compiled(b.addLibrary(.{
             .name = "zlinter",
             .root_module = zlinter_lib_module,
         }))) catch @panic("OOM");
 
-        var exclude = shims.ArrayList(LintExcludeSource).empty;
+        var exclude = std.ArrayList(LintExcludeSource).empty;
 
         // Also lint all files within project, not just those resolved to our compiled source.
         include.append(b.allocator, .{ .path = b.path("./") }) catch @panic("OOM");
@@ -735,7 +735,7 @@ fn createRulesModule(
     rules: []const BuiltRule,
     build_rules_output: std.Build.LazyPath,
 ) *std.Build.Module {
-    var rule_imports = shims.ArrayList(std.Build.Module.Import).empty;
+    var rule_imports = std.ArrayList(std.Build.Module.Import).empty;
     for (rules) |r| rule_imports.append(b.allocator, r.import) catch @panic("OOM");
     defer rule_imports.deinit(b.allocator);
 
@@ -772,7 +772,7 @@ const ZlinterRun = struct {
     step: std.Build.Step,
 
     /// CLI arguments to be passed to zlinter when executed
-    argv: shims.ArrayList(Arg),
+    argv: std.ArrayList(Arg),
 
     /// Exclude paths confiured within the build file.
     exclude: []const LintExcludeSource,
@@ -852,7 +852,7 @@ const ZlinterRun = struct {
 
         const b = step.owner;
 
-        var list: shims.ArrayList([]const u8) = try .initCapacity(
+        var list: std.ArrayList([]const u8) = try .initCapacity(
             b.allocator,
             paths.len,
         );
@@ -876,7 +876,7 @@ const ZlinterRun = struct {
         var cwd_buff: [std.fs.max_path_bytes]u8 = undefined;
         const cwd: BuildCwd = .init(&cwd_buff);
 
-        var includes: shims.ArrayList(std.Build.LazyPath) = try .initCapacity(
+        var includes: std.ArrayList(std.Build.LazyPath) = try .initCapacity(
             b.allocator,
             @max(1, run.include.len),
         );
@@ -933,7 +933,7 @@ const ZlinterRun = struct {
             includes.appendAssumeCapacity(b.path("./"));
         }
 
-        var excludes: shims.ArrayList(std.Build.LazyPath) = try .initCapacity(b.allocator, run.exclude.len);
+        var excludes: std.ArrayList(std.Build.LazyPath) = try .initCapacity(b.allocator, run.exclude.len);
         defer excludes.deinit(b.allocator);
         for (run.exclude) |exclude| {
             switch (exclude) {
@@ -948,7 +948,7 @@ const ZlinterRun = struct {
 
         var environ_map = b.graph.environ_map;
 
-        var argv_list = shims.ArrayList([]const u8).initCapacity(
+        var argv_list = std.ArrayList([]const u8).initCapacity(
             arena,
             run.argv.items.len + 1,
         ) catch @panic("OOM");

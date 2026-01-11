@@ -9,7 +9,7 @@ pub const LintFileRenderer = struct {
     pub fn init(allocator: std.mem.Allocator, reader: *std.Io.Reader) !Self {
         const source = try reader.allocRemaining(allocator, .limited(max_zig_file_size_bytes));
 
-        var line_ends = try shims.ArrayList(usize).initCapacity(allocator, source.len / 40);
+        var line_ends = try std.ArrayList(usize).initCapacity(allocator, source.len / 40);
         errdefer line_ends.deinit(allocator);
 
         for (0..source.len) |i| {

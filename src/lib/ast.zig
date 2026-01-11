@@ -36,7 +36,7 @@ pub const NodeAncestorIterator = struct {
 pub const NodeLineageIterator = struct {
     const Self = @This();
 
-    queue: shims.ArrayList(NodeIndexShim) = .empty,
+    queue: std.ArrayList(NodeIndexShim) = .empty,
     lineage: *const NodeLineage,
     gpa: std.mem.Allocator,
 
@@ -64,7 +64,7 @@ pub fn nodeChildrenAlloc(
 ) error{OutOfMemory}![]Ast.Node.Index {
     const Context = struct {
         gpa: std.mem.Allocator,
-        children: *shims.ArrayList(Ast.Node.Index),
+        children: *std.ArrayList(Ast.Node.Index),
 
         fn callback(self: @This(), _: *const Ast, child_node: Ast.Node.Index) error{OutOfMemory}!void {
             if (NodeIndexShim.init(child_node).isRoot()) return;
@@ -72,7 +72,7 @@ pub fn nodeChildrenAlloc(
         }
     };
 
-    var children: shims.ArrayList(Ast.Node.Index) = .empty;
+    var children: std.ArrayList(Ast.Node.Index) = .empty;
     defer children.deinit(gpa);
 
     try iterateChildren(

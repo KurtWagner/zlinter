@@ -379,7 +379,7 @@ pub fn testRunRule(
     ));
     defer if (result) |*r| r.deinit(std.testing.allocator);
 
-    var actual = shims.ArrayList(LintProblemExpectation).empty;
+    var actual = std.ArrayList(LintProblemExpectation).empty;
     defer actual.deinit(std.testing.allocator);
 
     for (if (result) |r| r.problems else &.{}) |problem| {

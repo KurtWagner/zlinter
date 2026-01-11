@@ -55,7 +55,7 @@ fn run(
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
-    var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
+    var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
@@ -98,10 +98,10 @@ fn run(
             continue :nodes;
         }
 
-        var actual_order = shims.ArrayList(Ast.Node.Index).empty;
+        var actual_order = std.ArrayList(Ast.Node.Index).empty;
         defer actual_order.deinit(gpa);
 
-        var expected_order = shims.ArrayList(Ast.Node.Index).empty;
+        var expected_order = std.ArrayList(Ast.Node.Index).empty;
         defer expected_order.deinit(gpa);
 
         var sorted_queue = std.PriorityQueue(
@@ -159,7 +159,7 @@ fn run(
                     },
                 );
 
-            var expected_source = shims.ArrayList(u8).empty;
+            var expected_source = std.ArrayList(u8).empty;
             defer expected_source.deinit(gpa);
 
             const last_node = expected_order.items[expected_order.items.len - 1];

@@ -115,22 +115,22 @@ pub fn allocParse(
     var lint_args = Args{};
     errdefer lint_args.deinit(allocator);
 
-    var unknown_args = shims.ArrayList([]const u8).empty;
+    var unknown_args = std.ArrayList([]const u8).empty;
     defer unknown_args.deinit(allocator);
 
-    var include_paths = shims.ArrayList([]const u8).empty;
+    var include_paths = std.ArrayList([]const u8).empty;
     defer include_paths.deinit(allocator);
     errdefer for (include_paths.items) |p| allocator.free(p);
 
-    var exclude_paths = shims.ArrayList([]const u8).empty;
+    var exclude_paths = std.ArrayList([]const u8).empty;
     defer exclude_paths.deinit(allocator);
     errdefer for (exclude_paths.items) |p| allocator.free(p);
 
-    var filter_paths = shims.ArrayList([]const u8).empty;
+    var filter_paths = std.ArrayList([]const u8).empty;
     defer filter_paths.deinit(allocator);
     errdefer for (filter_paths.items) |p| allocator.free(p);
 
-    var rules = shims.ArrayList([]const u8).empty;
+    var rules = std.ArrayList([]const u8).empty;
     defer rules.deinit(allocator);
     errdefer for (rules.items) |r| allocator.free(r);
 

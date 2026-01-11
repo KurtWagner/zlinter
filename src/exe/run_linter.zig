@@ -370,7 +370,7 @@ fn runLinterRules(
         printer.println(.verbose, "    - {d} nodes", .{doc.handle.tree.nodes.len});
         printer.println(.verbose, "    - {d} tokens", .{doc.handle.tree.tokens.len});
 
-        var results = shims.ArrayList(zlinter.results.LintResult).empty;
+        var results = std.ArrayList(zlinter.results.LintResult).empty;
         defer results.deinit(gpa);
 
         const tree = doc.handle.tree;
@@ -472,7 +472,7 @@ fn runFormatter(
         }
     }
 
-    var flattened = try shims.ArrayList(zlinter.results.LintResult).initCapacity(
+    var flattened = try std.ArrayList(zlinter.results.LintResult).initCapacity(
         arena_allocator,
         results_count,
     );
@@ -509,7 +509,7 @@ fn runFixes(
 
     var it = file_lint_problems.iterator();
     while (it.next()) |entry| {
-        var lint_fixes = shims.ArrayList(zlinter.results.LintProblemFix).empty;
+        var lint_fixes = std.ArrayList(zlinter.results.LintProblemFix).empty;
         defer lint_fixes.deinit(gpa);
 
         const results = entry.value_ptr.*;
@@ -563,7 +563,7 @@ fn runFixes(
         };
         defer gpa.free(file_content);
 
-        var output_slices = shims.ArrayList([]const u8).empty;
+        var output_slices = std.ArrayList([]const u8).empty;
         defer output_slices.deinit(gpa);
 
         var file_fixes: usize = 0;
@@ -650,7 +650,7 @@ fn allocAstErrorMsg(
 ) ![]const u8 {
     switch (zlinter.version.zig) {
         .@"0.14" => {
-            var error_message = shims.ArrayList(u8).empty;
+            var error_message = std.ArrayList(u8).empty;
             defer error_message.deinit(allocator);
 
             try tree.renderError(err, error_message.writer(allocator));
