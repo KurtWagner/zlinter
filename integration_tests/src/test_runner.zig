@@ -15,8 +15,6 @@ const fix_stdout_output_suffix = ".fix_expected.stdout";
 pub fn main(init: std.process.Init) !void {
     const arena = init.arena.allocator();
 
-    const args = try init.minimal.args.toSlice(arena);
-
     var environ_map = try init.minimal.environ.createMap(arena);
     try environ_map.put("NO_COLOR", "1");
 
@@ -24,79 +22,74 @@ pub fn main(init: std.process.Init) !void {
     // Second arg is zig bin path
     // Third arg is rule name
     // Forth arg is test name
-    const zig_bin = args[1];
-    _ = zig_bin;
+    const args = try init.minimal.args.toSlice(arena);
     const rule_name = args[2];
     const test_name = args[3];
 
-    var buffer: [4096]u8 = undefined;
-    var stdout_writer = std.Io.File.stdout().writer(init.io, &buffer);
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_writer = std.Io.File.stdout().writer(init.io, &stdout_buffer);
+    var stdout = &stdout_writer.interface;
 
-    const output_fmt = ansi_gray ++
-        "[Integration test]" ++
-        ansi_reset ++
-        " " ++
-        ansi_bold ++
-        "{s}" ++
-        ansi_reset ++
-        " - {s}{s}{s}{s}" ++
-        ansi_reset;
+    try stdout.writeAll(ansi_gray ++ "[Integration test]" ++ ansi_reset ++ " ");
 
-    var pretty_name_buffer: [128]u8 = undefined;
-    var test_desc_buffer: [128]u8 = undefined;
     var fail: bool = false;
-
-    const test_description = if (std.mem.eql(u8, test_name, rule_name))
-        ""
-    else
-        std.fmt.bufPrint(&test_desc_buffer, "{s} - ", .{prettyName(&pretty_name_buffer, test_name)}) catch "";
-
     if (runTest(
         init.io,
+        stdout,
         arena,
         args,
         environ_map,
     )) {
-        try stdout_writer.interface.print(output_fmt ++ "\n", .{
-            rule_name,
-            test_description,
-            ansi_green_bold,
-            "passed",
-            ansi_reset,
-        });
+        try stdout.print(
+            ansi_bold ++ "{s}" ++ ansi_reset ++ " - {s}" ++ ansi_green_bold ++ "passed" ++ ansi_reset ++ "\n",
+            .{
+                rule_name,
+                try testDescription(test_name, rule_name, arena),
+            },
+        );
     } else |err| {
         if (err == error.OutOfMemory) @panic("OOM");
         fail = true;
-        try stdout_writer.interface.print(output_fmt ++ ": {}\n", .{
-            rule_name,
-            test_description,
-            ansi_red_bold,
-            "failed",
-            ansi_reset,
-            err,
-        });
+        try stdout.print(
+            ansi_bold ++ "{s}" ++ ansi_reset ++ " - {s}" ++ ansi_red_bold ++ "failed" ++ ansi_reset ++ "\n",
+            .{
+                rule_name,
+                try testDescription(test_name, rule_name, arena),
+            },
+        );
     }
 
-    try stdout_writer.interface.flush();
+    try stdout.flush();
     std.process.exit(if (fail) 1 else 0);
 }
 
-fn prettyName(buffer: []u8, input: []const u8) []const u8 {
-    if (input.len == 0) return "";
+fn testDescription(test_name: []const u8, rule_name: []const u8, arena: std.mem.Allocator) ![]const u8 {
+    if (std.mem.eql(u8, test_name, rule_name))
+        return "";
 
-    buffer[0] = std.ascii.toUpper(input[0]);
+    var buffer: [512]u8 = undefined;
+    return std.fmt.allocPrint(arena, "{s} - ", .{
+        prettifyTestName(test_name, &buffer),
+    });
+}
+
+fn prettifyTestName(test_name: []const u8, buffer: []u8) []const u8 {
+    if (test_name.len == 0) return "";
+
+    buffer[0] = std.ascii.toUpper(test_name[0]);
     var i: usize = 1;
-    while (i < input.len) : (i += 1) {
-        buffer[i] = switch (input[i]) {
+    while (i < test_name.len) : (i += 1) {
+        buffer[i] = switch (test_name[i]) {
             '-', '_', '.' => ' ',
             else => |c| c,
         };
     }
-    return buffer[0..input.len];
+    return buffer[0..test_name.len];
 }
 
 fn runTest(
     io: std.Io,
+    stdout: *std.Io.Writer,
     arena: std.mem.Allocator,
     args: []const [:0]const u8,
     environ_map: std.process.Environ.Map,
@@ -107,38 +100,30 @@ fn runTest(
     var fix_zig_expected_file: ?[:0]const u8 = null;
     var fix_stdout_expected_file: ?[:0]const u8 = null;
 
-    // First arg is executable
-    // Second arg is zig bin path
-    // Third arg is rule name
-    // Forth arg is test name
     const zig_bin = args[1];
     const rule_name = args[2];
-    const test_name = args[3];
-    _ = test_name;
+    // ignore arg index 3, which is test name
     for (args[4..]) |arg| {
-        if (std.mem.endsWith(u8, arg, input_zig_suffix)) {
-            input_zig_file = arg;
-        } else if (std.mem.endsWith(u8, arg, lint_output_suffix)) {
-            lint_stdout_expected_file = arg;
-        } else if (std.mem.endsWith(u8, arg, fix_zig_output_suffix)) {
-            fix_zig_expected_file = arg;
-        } else if (std.mem.endsWith(u8, arg, fix_stdout_output_suffix)) {
-            fix_stdout_expected_file = arg;
-        } else if (std.mem.endsWith(u8, arg, input_zon_suffix)) {
-            input_zon_file = arg;
-        } else {
-            std.log.err("Unable to handle input file: {s}", .{arg});
-            @panic("Failed");
-        }
+        if (std.mem.endsWith(u8, arg, input_zig_suffix))
+            input_zig_file = arg
+        else if (std.mem.endsWith(u8, arg, lint_output_suffix))
+            lint_stdout_expected_file = arg
+        else if (std.mem.endsWith(u8, arg, fix_zig_output_suffix))
+            fix_zig_expected_file = arg
+        else if (std.mem.endsWith(u8, arg, fix_stdout_output_suffix))
+            fix_stdout_expected_file = arg
+        else if (std.mem.endsWith(u8, arg, input_zon_suffix))
+            input_zon_file = arg
+        else
+            std.debug.panic("Unable to handle input file: {s}", .{arg});
     }
 
     // --------------------------------------------------------------------
     // Lint command "zig build lint -- <file>.zig"
     // --------------------------------------------------------------------
     {
-        var lint_args = std.ArrayList([]const u8).empty;
-
-        try lint_args.appendSlice(arena, &.{
+        var lint_args: std.ArrayList([]const u8) = try .initCapacity(arena, 32);
+        lint_args.appendSliceAssumeCapacity(&.{
             zig_bin,
             "build",
             "lint",
@@ -148,13 +133,12 @@ fn runTest(
             "--include",
             input_zig_file.?,
         });
-        if (input_zon_file) |file| {
-            try lint_args.appendSlice(arena, &.{
+        if (input_zon_file) |file|
+            lint_args.appendSliceAssumeCapacity(&.{
                 "--rule-config",
                 rule_name,
                 file,
             });
-        }
 
         const lint_output = try runLintCommand(
             lint_args.items,
@@ -169,12 +153,13 @@ fn runTest(
 
         expectFileContentsEquals(
             io,
+            stdout,
             arena,
             std.Io.Dir.cwd(),
             lint_stdout_expected_file.?,
             lint_output.stdout,
         ) catch |e| {
-            std.log.err("stderr: {s}", .{lint_output.stderr});
+            try printWithHeader(stdout, "STDERR:", lint_output.stderr);
             return e;
         };
     }
@@ -204,9 +189,8 @@ fn runTest(
             .{},
         );
 
-        var lint_args = std.ArrayList([]const u8).empty;
-
-        try lint_args.appendSlice(arena, &.{
+        var lint_args: std.ArrayList([]const u8) = try .initCapacity(arena, 32);
+        lint_args.appendSliceAssumeCapacity(&.{
             zig_bin,
             "build",
             "lint",
@@ -217,13 +201,12 @@ fn runTest(
             "--include",
             temp_path,
         });
-        if (input_zon_file) |file| {
-            try lint_args.appendSlice(arena, &.{
+        if (input_zon_file) |file|
+            lint_args.appendSliceAssumeCapacity(&.{
                 "--rule-config",
                 rule_name,
                 file,
             });
-        }
 
         const fix_output = try runLintCommand(
             lint_args.items,
@@ -235,19 +218,20 @@ fn runTest(
         // Expect all integration fix tests to be successful so exit 0 with
         // no stderr. Maybe one day we will add cases where it fails
         std.testing.expect(fix_output.term.exited == 0) catch |e| {
-            std.log.err("stderr: {s}", .{fix_output.stderr});
+            try printWithHeader(stdout, "STDERR:", fix_output.stderr);
             return e;
         };
         try expectEqualStringsNormalized(arena, "", fix_output.stderr);
 
         expectFileContentsEquals(
             io,
+            stdout,
             arena,
             std.Io.Dir.cwd(),
             fix_stdout_expected_file.?,
             fix_output.stdout,
         ) catch |e| {
-            std.log.err("stderr: {s}", .{fix_output.stderr});
+            try printWithHeader(stdout, "STDERR:", fix_output.stderr);
             return e;
         };
 
@@ -260,12 +244,13 @@ fn runTest(
 
         expectFileContentsEquals(
             io,
+            stdout,
             arena,
             std.Io.Dir.cwd(),
             fix_zig_expected_file.?,
             actual,
         ) catch |e| {
-            std.log.err("stderr: {s}", .{fix_output.stderr});
+            try printWithHeader(stdout, "STDERR:", fix_output.stderr);
             return e;
         };
     }
@@ -273,6 +258,7 @@ fn runTest(
 
 fn expectFileContentsEquals(
     io: std.Io,
+    stdout: *std.Io.Writer,
     arena: std.mem.Allocator,
     dir: std.Io.Dir,
     file_path: []const u8,
@@ -286,7 +272,7 @@ fn expectFileContentsEquals(
     ) catch |err| {
         switch (err) {
             error.FileNotFound => {
-                try printWithHeader(arena, "Could not find file", file_path);
+                try printWithHeader(stdout, "Could not find file:", file_path);
                 return err;
             },
             else => return err,
@@ -299,7 +285,7 @@ fn expectFileContentsEquals(
     std.testing.expectEqualStrings(normalized_expected, normalized_actual) catch |err| {
         switch (err) {
             error.TestExpectedEqual => {
-                try printWithHeader(arena, "Expected contents from", file_path);
+                try printWithHeader(stdout, "Expected contents from:", file_path);
                 return err;
             },
         }
@@ -314,7 +300,7 @@ fn expectEqualStringsNormalized(arena: std.mem.Allocator, expected: []const u8, 
 }
 
 fn normalizeNewLinesAlloc(input: []const u8, arena: std.mem.Allocator) ![]const u8 {
-    var result = std.ArrayList(u8).empty;
+    var result: std.ArrayList(u8) = try .initCapacity(arena, input.len);
 
     // Removes "\r". e.g., "\r\n"
     for (input) |c| {
@@ -323,7 +309,7 @@ fn normalizeNewLinesAlloc(input: []const u8, arena: std.mem.Allocator) ![]const 
             // This assumes that '\' is never in output, which is currently true
             // If this ever changes we will need something more sophisticated
             // to identify strings that look like paths
-            else => try result.append(arena, if (std.fs.path.isSep(c)) std.fs.path.sep_posix else c),
+            else => result.appendAssumeCapacity(if (std.fs.path.isSep(c)) std.fs.path.sep_posix else c),
         }
     }
 
@@ -331,21 +317,27 @@ fn normalizeNewLinesAlloc(input: []const u8, arena: std.mem.Allocator) ![]const 
 }
 
 fn printWithHeader(
-    arena: std.mem.Allocator,
+    stdout: *std.Io.Writer,
     header: []const u8,
     content: []const u8,
 ) !void {
-    var buffer: [1024]u8 = undefined;
-    const top_bar = try std.fmt.bufPrint(
-        &buffer,
-        "======== {s} ========",
-        .{header},
-    );
+    const title_padding = "=========";
+    const title_len = (title_padding.len * 2) + 2 + header.len;
 
-    const bottom_bar = try arena.alloc(u8, top_bar.len);
-    @memset(bottom_bar, '=');
+    try stdout.writeByte('\n');
+    try stdout.writeAll(title_padding);
+    try stdout.writeByte(' ');
+    try stdout.writeAll(header);
+    try stdout.writeByte(' ');
+    try stdout.writeAll(title_padding);
 
-    std.debug.print("{s}\n{s}\n{s}\n", .{ top_bar, content, bottom_bar[0..] });
+    try stdout.writeByte('\n');
+    try stdout.writeAll(content);
+
+    try stdout.writeByte('\n');
+    for (0..title_len) |_|
+        try stdout.writeByte('=');
+    try stdout.writeByte('\n');
 }
 
 fn runLintCommand(
