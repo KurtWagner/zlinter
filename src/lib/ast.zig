@@ -62,47 +62,16 @@ pub fn nodeChildrenAlloc(
     tree: *const Ast,
     node: Ast.Node.Index,
 ) error{OutOfMemory}![]Ast.Node.Index {
-    const Context = struct {
-        gpa: std.mem.Allocator,
-        children: *std.ArrayList(Ast.Node.Index),
-
-        fn callback(self: @This(), _: *const Ast, child_node: Ast.Node.Index) error{OutOfMemory}!void {
-            if (NodeIndexShim.init(child_node).isRoot()) return;
-            try self.children.append(self.gpa, child_node);
-        }
-    };
-
     var children: std.ArrayList(Ast.Node.Index) = .empty;
     defer children.deinit(gpa);
 
-    try iterateChildren(
-        tree,
-        node,
-        Context{
-            .gpa = gpa,
-            .children = &children,
-        },
-        error{OutOfMemory},
-        Context.callback,
-    );
-    return children.toOwnedSlice(gpa);
-}
-
-/// Temporary work around to bug in zls 0.14 that's now fixed in zls master.
-/// I don't see the point in upstreaming the fix to the ZLS 0.14 branch so
-/// leaving this simple work around in place while we support 0.14 and then it
-/// can be deleted.
-pub inline fn iterateChildren(
-    tree: *const Ast,
-    node: Ast.Node.Index,
-    context: anytype,
-    comptime Error: type,
-    comptime callback: fn (@TypeOf(context), *const Ast, Ast.Node.Index) Error!void,
-) Error!void {
-    switch (version.zig) {
-        .@"0.14", .@"0.15" => @panic("Not implemented"),
-        .@"0.16" => try zls.ast.iterateChildren(tree, node, context, Error, callback),
+    var it = zls.ast.Iterator.init(tree, node);
+    while (it.next(tree)) |child_node| {
+        std.debug.assert(child_node != .root);
+        try children.append(gpa, child_node);
     }
+
+    return children.toOwnedSlice(gpa);
 }
 
 /// `errdefer` and `defer` calls

@@ -68,7 +68,7 @@ pub fn jsonTree(
             // e.g., the "data" union structures
 
             var node_children = std.json.Array.init(self.arena);
-            try ast.iterateChildren(
+            try iterateChildren(
                 context_tree,
                 child_node,
                 @This(){
@@ -98,7 +98,7 @@ pub fn jsonTree(
     var root_node_children = std.json.Array.init(arena);
 
     if (tree.errors.len == 0) {
-        try ast.iterateChildren(
+        try iterateChildren(
             &tree,
             NodeIndexShim.root.toNodeIndex(),
             Context{
@@ -114,6 +114,19 @@ pub fn jsonTree(
     try root_json_object.put("body", .{ .array = root_node_children });
 
     return std.json.Value{ .object = root_json_object };
+}
+
+fn iterateChildren(
+    tree: *const Ast,
+    node: Ast.Node.Index,
+    context: anytype,
+    comptime Error: type,
+    comptime callback: fn (@TypeOf(context), *const Ast, Ast.Node.Index) Error!void,
+) Error!void {
+    var it = zls.ast.Iterator.init(tree, node);
+    while (it.next(tree)) |child_node| {
+        try callback(context, tree, child_node);
+    }
 }
 
 fn errorsToJson(tree: Ast, arena: std.mem.Allocator) !std.json.Array {
@@ -187,3 +200,4 @@ const std = @import("std");
 const version = @import("version.zig");
 const NodeIndexShim = shims.NodeIndexShim;
 const Ast = std.zig.Ast;
+const zls = @import("zls");
