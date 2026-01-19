@@ -216,21 +216,13 @@ pub const LintContext = struct {
             },
         };
 
-        self.analyser = switch (version.zig) {
-            .@"0.14" => zls.Analyser.init(
-                gpa,
-                &self.document_store,
-                &self.intern_pool,
-                null,
-            ),
-            .@"0.15", .@"0.16" => zls.Analyser.init(
-                gpa,
-                arena,
-                &self.document_store,
-                &self.intern_pool,
-                null,
-            ),
-        };
+        self.analyser = zls.Analyser.init(
+            gpa,
+            arena,
+            &self.document_store,
+            &self.intern_pool,
+            null,
+        );
     }
 
     pub fn deinit(self: *LintContext) void {
@@ -330,20 +322,14 @@ pub const LintContext = struct {
 
     /// Resolves the type of node or null if it can't be resolved.
     pub fn resolveTypeOfNode(self: *LintContext, doc: *const LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
-        return switch (version.zig) {
-            .@"0.15", .@"0.16" => self.analyser.resolveTypeOfNode(.of(node, doc.handle)),
-            .@"0.14" => self.analyser.resolveTypeOfNode(.{ .handle = doc.handle, .node = node }),
-        };
+        return self.analyser.resolveTypeOfNode(.of(node, doc.handle));
     }
 
     /// Resolves the type of a node that points to a type (e.g., return type) or
     /// null if it cannot be resolved.
     pub fn resolveTypeOfTypeNode(self: *LintContext, doc: *const LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
         const resolved_type = try self.resolveTypeOfNode(doc, node) orelse return null;
-        const instance_type = if (resolved_type.isMetaType()) resolved_type else switch (version.zig) {
-            .@"0.14" => resolved_type.instanceTypeVal(&self.analyser) orelse resolved_type,
-            .@"0.15", .@"0.16" => try resolved_type.instanceTypeVal(&self.analyser) orelse resolved_type,
-        };
+        const instance_type = if (resolved_type.isMetaType()) resolved_type else try resolved_type.instanceTypeVal(&self.analyser) orelse resolved_type;
 
         return instance_type.resolveDeclLiteralResultType();
     }
@@ -522,10 +508,7 @@ pub const LintContext = struct {
                         decl.isErrorSetType(&self.analyser)
                     else switch (decl.data) {
                         .container => |container| result: {
-                            const container_node, const container_tree = switch (version.zig) {
-                                .@"0.14" => .{ container.toNode(), container.handle.tree },
-                                .@"0.15", .@"0.16" => .{ container.scope_handle.toNode(), container.scope_handle.handle.tree },
-                            };
+                            const container_node, const container_tree = .{ container.scope_handle.toNode(), container.scope_handle.handle.tree };
 
                             if (!NodeIndexShim.init(container_node).isRoot()) {
                                 switch (shims.nodeTag(container_tree, container_node)) {
@@ -1215,7 +1198,6 @@ const comments = @import("comments.zig");
 const shims = @import("shims.zig");
 const std = @import("std");
 const testing = @import("testing.zig");
-const version = @import("version.zig");
 const zls = @import("zls");
 const LintProblem = @import("results.zig").LintProblem;
 const NodeIndexShim = shims.NodeIndexShim;

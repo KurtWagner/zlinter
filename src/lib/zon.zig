@@ -1,7 +1,4 @@
-pub const Diagnostics = switch (version.zig) {
-    .@"0.14" => std.zon.parse.Status,
-    .@"0.15", .@"0.16" => std.zon.parse.Diagnostics,
-};
+pub const Diagnostics = std.zon.parse.Diagnostics;
 
 pub fn parseFileAlloc(
     T: type,
@@ -16,40 +13,27 @@ pub fn parseFileAlloc(
     });
     defer file.close(io);
 
-    const null_terminated = null_terminated: switch (version.zig) {
-        .@"0.14" => {
-            var array_list: std.ArrayList(u8) = .init(gpa);
-            defer array_list.deinit();
+    const null_terminated = null_terminated: {
+        var file_reader_buffer: [1024]u8 = undefined;
+        var file_reader = file.reader(io, &file_reader_buffer);
 
-            var file_reader = file.reader();
-            try file_reader.readAllArrayList(
-                &array_list,
-                session.max_zig_file_size_bytes,
-            );
-            break :null_terminated try array_list.toOwnedSliceSentinel(0);
-        },
-        .@"0.15", .@"0.16" => {
-            var file_reader_buffer: [1024]u8 = undefined;
-            var file_reader = file.reader(io, &file_reader_buffer);
+        var buffer: std.ArrayList(u8) = .empty;
+        defer buffer.deinit(gpa);
 
-            var buffer: std.ArrayList(u8) = .empty;
-            defer buffer.deinit(gpa);
+        if (file_reader.getSize()) |size| {
+            const casted_size = std.math.cast(u32, size) orelse return error.StreamTooLong;
+            try buffer.ensureTotalCapacityPrecise(gpa, casted_size + 1); // +1 for null term
+        } else |_| {
+            // Do nothing.
+        }
 
-            if (file_reader.getSize()) |size| {
-                const casted_size = std.math.cast(u32, size) orelse return error.StreamTooLong;
-                try buffer.ensureTotalCapacityPrecise(gpa, casted_size + 1); // +1 for null term
-            } else |_| {
-                // Do nothing.
-            }
+        try file_reader.interface.appendRemaining(
+            gpa,
+            &buffer,
+            .limited(session.max_zig_file_size_bytes),
+        );
 
-            try file_reader.interface.appendRemaining(
-                gpa,
-                &buffer,
-                .limited(session.max_zig_file_size_bytes),
-            );
-
-            break :null_terminated try buffer.toOwnedSliceSentinel(gpa, 0);
-        },
+        break :null_terminated try buffer.toOwnedSliceSentinel(gpa, 0);
     };
     defer gpa.free(null_terminated);
 
@@ -146,4 +130,3 @@ test "parseFileAlloc" {
 const session = @import("session.zig");
 const std = @import("std");
 const testing = @import("testing.zig");
-const version = @import("version.zig");

@@ -195,10 +195,7 @@ fn isEmptyBlock(tree: Ast, node: Ast.Node.Index) bool {
 
 fn fnDeclBlock(tree: Ast, node: Ast.Node.Index) ?Ast.Node.Index {
     return switch (shims.nodeTag(tree, node)) {
-        .fn_decl => switch (zlinter.version.zig) {
-            .@"0.14" => shims.nodeData(tree, node).rhs,
-            .@"0.15", .@"0.16" => shims.nodeData(tree, node).node_and_node.@"1",
-        },
+        .fn_decl => shims.nodeData(tree, node).node_and_node.@"1",
         else => null,
     };
 }

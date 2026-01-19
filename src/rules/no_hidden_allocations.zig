@@ -80,10 +80,7 @@ fn run(
 
         // unwrap field access lhs and identifier (e.g., lhs.identifier)
         const node_data = shims.nodeData(tree, node.toNodeIndex());
-        const lhs, const identifier = switch (zlinter.version.zig) {
-            .@"0.14" => .{ node_data.lhs, node_data.rhs },
-            .@"0.15", .@"0.16" => .{ node_data.node_and_token.@"0", node_data.node_and_token.@"1" },
-        };
+        const lhs, const identifier = .{ node_data.node_and_token.@"0", node_data.node_and_token.@"1" };
 
         // is identifier a method on Allocator e.g., something.alloc(..) or something.create(..)
         const is_allocator_method = is_allocator_method: {
@@ -98,10 +95,12 @@ fn run(
         if (!is_allocator_method) continue :nodes;
 
         const decl_name, const uri = decl_name_and_uri: {
-            if (try context.analyser.resolveVarDeclAlias(switch (zlinter.version.zig) {
-                .@"0.14" => .{ .node = lhs, .handle = doc.handle },
-                .@"0.15", .@"0.16" => .{ .node_handle = .{ .node = lhs, .handle = doc.handle }, .container_type = null },
-            })) |decl_handle| {
+            if (try context.analyser.resolveVarDeclAlias(
+                .{ .node_handle = .{
+                    .node = lhs,
+                    .handle = doc.handle,
+                }, .container_type = null },
+            )) |decl_handle| {
                 const uri = decl_handle.handle.uri;
 
                 const name: []const u8 = name: switch (decl_handle.decl) {

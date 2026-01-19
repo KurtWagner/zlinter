@@ -60,10 +60,7 @@ fn run(
             switch (shims.nodeTag(tree, node.toNodeIndex())) {
                 .@"catch" => {
                     const data = shims.nodeData(tree, node.toNodeIndex());
-                    const rhs = switch (zlinter.version.zig) {
-                        .@"0.14" => data.rhs,
-                        .@"0.15", .@"0.16" => data.node_and_node.@"1",
-                    };
+                    const rhs = data.node_and_node.@"1";
 
                     switch (shims.nodeTag(tree, rhs)) {
                         .unreachable_literal => if (config.detect_catch_unreachable != .off)
@@ -147,15 +144,9 @@ fn isEmptyOrUnreachableBlock(tree: Ast, node: Ast.Node.Index) enum { none, empty
     std.debug.assert(tag == .block_two or tag == .block_two_semicolon);
 
     const data = shims.nodeData(tree, node);
-    const lhs, const rhs = switch (zlinter.version.zig) {
-        .@"0.14" => .{
-            NodeIndexShim.initOptional(data.lhs),
-            NodeIndexShim.initOptional(data.rhs),
-        },
-        .@"0.15", .@"0.16" => .{
-            NodeIndexShim.initOptional(data.opt_node_and_opt_node.@"0"),
-            NodeIndexShim.initOptional(data.opt_node_and_opt_node.@"1"),
-        },
+    const lhs, const rhs = .{
+        NodeIndexShim.initOptional(data.opt_node_and_opt_node.@"0"),
+        NodeIndexShim.initOptional(data.opt_node_and_opt_node.@"1"),
     };
 
     if (lhs == null and rhs == null) return .empty;

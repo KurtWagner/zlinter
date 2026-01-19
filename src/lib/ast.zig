@@ -89,14 +89,8 @@ pub fn deferBlock(doc: *const session.LintDocument, node: Ast.Node.Index, alloca
     const data = shims.nodeData(tree, node);
     const exp_node =
         switch (shims.nodeTag(tree, node)) {
-            .@"errdefer" => switch (version.zig) {
-                .@"0.14" => data.rhs,
-                .@"0.15", .@"0.16" => data.opt_token_and_node[1],
-            },
-            .@"defer" => switch (version.zig) {
-                .@"0.14" => data.rhs,
-                .@"0.15", .@"0.16" => data.node,
-            },
+            .@"errdefer" => data.opt_token_and_node[1],
+            .@"defer" => data.node,
             else => return null,
         };
 
@@ -298,10 +292,7 @@ pub fn fnDecl(tree: Ast, node: Ast.Node.Index, fn_proto_buffer: *[1]Ast.Node.Ind
     switch (shims.nodeTag(tree, node)) {
         .fn_decl => {
             const data = shims.nodeData(tree, node);
-            const lhs, const rhs = switch (version.zig) {
-                .@"0.14" => .{ data.lhs, data.rhs },
-                .@"0.15", .@"0.16" => .{ data.node_and_node[0], data.node_and_node[1] },
-            };
+            const lhs, const rhs = .{ data.node_and_node[0], data.node_and_node[1] };
             return .{ .proto = tree.fullFnProto(fn_proto_buffer, lhs).?, .block = rhs };
         },
         else => return null,
@@ -378,24 +369,9 @@ pub fn fullStatement(tree: Ast, node: Ast.Node.Index) ?Statement {
     else if (tree.fullSwitchCase(node)) |switchStatement|
         .{ .switch_case = switchStatement }
     else switch (shims.nodeTag(tree, node)) {
-        .@"catch" => .{
-            .@"catch" = switch (version.zig) {
-                .@"0.14" => shims.nodeData(tree, node).rhs,
-                .@"0.15", .@"0.16" => shims.nodeData(tree, node).node_and_node[1],
-            },
-        },
-        .@"defer" => .{
-            .@"defer" = switch (version.zig) {
-                .@"0.14" => shims.nodeData(tree, node).rhs,
-                .@"0.15", .@"0.16" => shims.nodeData(tree, node).node,
-            },
-        },
-        .@"errdefer" => .{
-            .@"errdefer" = switch (version.zig) {
-                .@"0.14" => shims.nodeData(tree, node).rhs,
-                .@"0.15", .@"0.16" => shims.nodeData(tree, node).opt_token_and_node[1],
-            },
-        },
+        .@"catch" => .{ .@"catch" = shims.nodeData(tree, node).node_and_node[1] },
+        .@"defer" => .{ .@"defer" = shims.nodeData(tree, node).node },
+        .@"errdefer" => .{ .@"errdefer" = shims.nodeData(tree, node).opt_token_and_node[1] },
         else => null,
     };
 }
@@ -650,10 +626,7 @@ pub fn fnCall(
         switch (fn_expr_node_tag) {
             // e.g., `parent.*`
             .field_access => {
-                const field_node, const fn_name = switch (version.zig) {
-                    .@"0.14" => .{ fn_expr_node_data.lhs, fn_expr_node_data.rhs },
-                    .@"0.15", .@"0.16" => .{ fn_expr_node_data.node_and_token[0], fn_expr_node_data.node_and_token[1] },
-                };
+                const field_node, const fn_name = .{ fn_expr_node_data.node_and_token[0], fn_expr_node_data.node_and_token[1] };
                 std.debug.assert(shims.tokenTag(tree, fn_name) == .identifier);
 
                 const field_node_tag = shims.nodeTag(tree, field_node);
@@ -885,7 +858,6 @@ const session = @import("session.zig");
 const shims = @import("shims.zig");
 const std = @import("std");
 const testing = @import("testing.zig");
-const version = @import("version.zig");
 const zls = @import("zls");
 const NodeIndexShim = shims.NodeIndexShim;
 const Ast = std.zig.Ast;

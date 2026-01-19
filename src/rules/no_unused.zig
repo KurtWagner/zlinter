@@ -50,10 +50,9 @@ fn run(
                 .identifier => try map.put(gpa, tree.tokenSlice(shims.nodeMainToken(tree, node.toNodeIndex())), {}),
                 .field_access => if (try isFieldAccessOfRootContainer(context, doc, node.toNodeIndex())) {
                     const node_data = shims.nodeData(tree, node.toNodeIndex());
-                    try map.put(gpa, tree.tokenSlice(switch (zlinter.version.zig) {
-                        .@"0.14" => node_data.rhs,
-                        .@"0.15", .@"0.16" => node_data.node_and_token.@"1",
-                    }), {});
+                    try map.put(gpa, tree.tokenSlice(
+                        node_data.node_and_token.@"1",
+                    ), {});
                 },
                 else => {},
             }
@@ -140,10 +139,10 @@ fn namedFnDeclProto(
     node: Ast.Node.Index,
 ) ?Ast.full.FnProto {
     if (switch (shims.nodeTag(tree, node)) {
-        .fn_decl => tree.fullFnProto(buffer, switch (zlinter.version.zig) {
-            .@"0.14" => shims.nodeData(tree, node).lhs,
-            .@"0.15", .@"0.16" => shims.nodeData(tree, node).node_and_node.@"0",
-        }),
+        .fn_decl => tree.fullFnProto(
+            buffer,
+            shims.nodeData(tree, node).node_and_node.@"0",
+        ),
         else => null,
     }) |fn_proto| {
         if (fn_proto.name_token != null) return fn_proto;
@@ -161,10 +160,7 @@ fn isFieldAccessOfRootContainer(
     const tree = doc.handle.tree;
 
     const node_data = shims.nodeData(tree, node);
-    const lhs = switch (zlinter.version.zig) {
-        .@"0.14" => node_data.lhs,
-        .@"0.15", .@"0.16" => node_data.node_and_token.@"0",
-    };
+    const lhs = node_data.node_and_token.@"0";
 
     if (try context.resolveTypeOfNode(doc, lhs)) |t| {
         switch (t.resolveDeclLiteralResultType().data) {
@@ -176,10 +172,7 @@ fn isFieldAccessOfRootContainer(
 }
 
 fn isContainerRoot(container: anytype) bool {
-    return switch (zlinter.version.zig) {
-        .@"0.14" => container.toNode() == 0,
-        .@"0.15", .@"0.16" => container.scope_handle.toNode() == .root,
-    };
+    return container.scope_handle.toNode() == .root;
 }
 
 test "no_unused" {

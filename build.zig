@@ -207,9 +207,6 @@ pub fn build(b: *std.Build) void {
             }).module("zls"),
         }},
     });
-    if (version.zig == .@"0.15" and target.result.os.tag == .windows) {
-        zlinter_lib_module.linkSystemLibrary("advapi32", .{});
-    }
 
     const zlinter_import = std.Build.Module.Import{
         .name = "zlinter",
@@ -538,9 +535,6 @@ fn buildStep(
         .optimize = options.optimize,
         .imports = &.{zlinter_import},
     });
-    if (version.zig == .@"0.15" and options.target.result.os.tag == .windows) {
-        exe_module.linkSystemLibrary("advapi32", .{});
-    }
 
     // --------------------------------------------------------------------
     // Generate dynamic rules and rules config
@@ -606,10 +600,7 @@ fn addWatchInput(
             try step.addWatchInput(file_or_dir);
             return;
         },
-        else => switch (version.zig) {
-            .@"0.14" => @panic(b.fmt("Unable to open directory '{}': {s}", .{ src_dir_path, @errorName(e) })),
-            .@"0.15", .@"0.16" => @panic(b.fmt("Unable to open directory '{f}': {t}", .{ src_dir_path, e })),
-        },
+        else => @panic(b.fmt("Unable to open directory '{f}': {t}", .{ src_dir_path, e })),
     };
     defer src_dir.close(io);
 
@@ -1039,20 +1030,12 @@ const ZlinterRun = struct {
                 std.debug.print("Writing stdin: '{s}'\n", .{build_info_zon_bytes});
 
             var stdin_file = child.stdin.?;
-            switch (version.zig) {
-                .@"0.14" => {
-                    var writer = stdin_file.writer();
-                    writer.writeInt(usize, build_info_zon_bytes.len, .little) catch @panic("stdin write failed");
-                    writer.writeAll(build_info_zon_bytes) catch @panic("stdin write failed");
-                },
-                .@"0.15", .@"0.16" => {
-                    var buffer: [1024]u8 = undefined;
-                    var writer = stdin_file.writer(io, &buffer);
-                    writer.interface.writeInt(usize, build_info_zon_bytes.len, .little) catch @panic("stdin write failed");
-                    writer.interface.writeAll(build_info_zon_bytes) catch @panic("stdin write failed");
-                    writer.interface.flush() catch @panic("Flush failed");
-                },
-            }
+
+            var buffer: [1024]u8 = undefined;
+            var writer = stdin_file.writer(io, &buffer);
+            writer.interface.writeInt(usize, build_info_zon_bytes.len, .little) catch @panic("stdin write failed");
+            writer.interface.writeAll(build_info_zon_bytes) catch @panic("stdin write failed");
+            writer.interface.flush() catch @panic("Flush failed");
         }
 
         const term = try child.wait(io);

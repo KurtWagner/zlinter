@@ -103,10 +103,10 @@ fn writeFileRuleConfig(content: []const u8, gpa: std.mem.Allocator, writer: anyt
             const name = tree.tokenSlice(var_decl.ast.mut_token + 1);
             if (!std.mem.eql(u8, name, "Config")) continue;
 
-            const struct_init = tree.fullContainerDecl(&struct_buffer, switch (zig_version) {
-                .@"0.14" => var_decl.ast.init_node,
-                .@"0.15", .@"0.16" => var_decl.ast.init_node.unwrap().?,
-            }).?;
+            const struct_init = tree.fullContainerDecl(
+                &struct_buffer,
+                var_decl.ast.init_node.unwrap().?,
+            ).?;
 
             for (struct_init.ast.members) |field| {
                 const container_field = tree.fullContainerField(field) orelse continue;
@@ -129,10 +129,10 @@ fn writeFileRuleConfig(content: []const u8, gpa: std.mem.Allocator, writer: anyt
                     }
                 }
 
-                const maybe_default: ?[]const u8 = switch (zig_version) {
-                    .@"0.14" => if (container_field.ast.value_expr != 0) tree.getNodeSource(container_field.ast.value_expr) else null,
-                    .@"0.15", .@"0.16" => if (container_field.ast.value_expr.unwrap()) |default_node| tree.getNodeSource(default_node) else null,
-                };
+                const maybe_default: ?[]const u8 = if (container_field.ast.value_expr.unwrap()) |default_node|
+                    tree.getNodeSource(default_node)
+                else
+                    null;
 
                 if (maybe_default) |default| {
                     try writer.writeAll("\n\n  * **Default:** `");
@@ -165,5 +165,4 @@ fn writeWithoutDuplicateWhiteSpace(content: []const u8, writer: anytype) !void {
 }
 
 const std = @import("std");
-const zig_version = @import("src/lib/version.zig").zig;
 const Ast = std.zig.Ast;
