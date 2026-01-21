@@ -242,10 +242,7 @@ fn declRequiringCleanup(
     const var_decl_type = try context.resolveTypeOfNode(doc, maybe_var_decl_node) orelse return null;
     switch (var_decl_type.data) {
         .container => |container| {
-            const scope_handle = switch (zlinter.version.zig) {
-                .@"0.14" => container,
-                .@"0.15", .@"0.16" => container.scope_handle,
-            };
+            const scope_handle = container.scope_handle;
             const node = scope_handle.toNode();
             const tag = shims.nodeTag(scope_handle.handle.tree, node);
             switch (tag) {

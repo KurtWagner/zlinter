@@ -159,11 +159,7 @@ fn run(
         const tag = shims.nodeTag(tree, node.toNodeIndex());
         if (tag == .error_set_decl) {
             const node_data = shims.nodeData(tree, node.toNodeIndex());
-
-            const rbrace = switch (zlinter.version.zig) {
-                .@"0.14" => node_data.rhs,
-                .@"0.15", .@"0.16" => node_data.token_and_token.@"1",
-            };
+            const rbrace = node_data.token_and_token.@"1";
 
             var token = rbrace - 1;
             tokens: while (token >= tree.firstToken(node.toNodeIndex())) : (token -= 1) {

@@ -20,9 +20,6 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
     });
-    if (zlinter.version.zig == .@"0.15" and target.result.os.tag == .windows) {
-        test_runner_module.linkSystemLibrary("advapi32", .{});
-    }
 
     const test_runner_exe = b.addExecutable(.{
         .name = "integration_tests",

@@ -311,10 +311,7 @@ fn runLinterRules(
                                 ) catch |e| {
                                     switch (e) {
                                         error.ParseZon => {
-                                            std.log.err("Failed to parse rule config: " ++ switch (zlinter.version.zig) {
-                                                .@"0.14" => "{}",
-                                                .@"0.15", .@"0.16" => "{f}",
-                                            }, .{diagnostics});
+                                            std.log.err("Failed to parse rule config: {f}", .{diagnostics});
                                         },
                                         else => {},
                                     }
@@ -541,25 +538,22 @@ fn runFixes(
         });
         defer file.close(io);
 
-        const file_content = switch (zlinter.version.zig) {
-            .@"0.14" => try file.reader().readAllAlloc(gpa, zlinter.session.max_zig_file_size_bytes),
-            .@"0.15", .@"0.16" => file_content: {
-                var file_reader_buffer: [1024]u8 = undefined;
-                var file_reader = file.readerStreaming(io, &file_reader_buffer);
+        const file_content = file_content: {
+            var file_reader_buffer: [1024]u8 = undefined;
+            var file_reader = file.readerStreaming(io, &file_reader_buffer);
 
-                var buffer: std.Io.Writer.Allocating = .init(gpa);
-                defer buffer.deinit();
+            var buffer: std.Io.Writer.Allocating = .init(gpa);
+            defer buffer.deinit();
 
-                if (file_reader.getSize()) |size| {
-                    const casted_size = std.math.cast(u32, size) orelse return error.StreamTooLong;
-                    try buffer.ensureTotalCapacity(casted_size);
-                } else |_| {
-                    // Do nothing.
-                }
+            if (file_reader.getSize()) |size| {
+                const casted_size = std.math.cast(u32, size) orelse return error.StreamTooLong;
+                try buffer.ensureTotalCapacity(casted_size);
+            } else |_| {
+                // Do nothing.
+            }
 
-                _ = try file_reader.interface.streamRemaining(&buffer.writer);
-                break :file_content try buffer.toOwnedSlice();
-            },
+            _ = try file_reader.interface.streamRemaining(&buffer.writer);
+            break :file_content try buffer.toOwnedSlice();
         };
         defer gpa.free(file_content);
 
@@ -604,22 +598,12 @@ fn runFixes(
             });
             defer new_file.close(io);
 
-            switch (zlinter.version.zig) {
-                .@"0.14" => {
-                    var writer = new_file.writer();
-                    for (output_slices.items) |output_slice| {
-                        try writer.writeAll(output_slice);
-                    }
-                },
-                .@"0.15", .@"0.16" => {
-                    var buffer: [1024]u8 = undefined;
-                    var writer = new_file.writer(io, &buffer);
-                    for (output_slices.items) |output_slice| {
-                        try writer.interface.writeAll(output_slice);
-                    }
-                    try writer.interface.flush();
-                },
+            var buffer: [1024]u8 = undefined;
+            var writer = new_file.writer(io, &buffer);
+            for (output_slices.items) |output_slice| {
+                try writer.interface.writeAll(output_slice);
             }
+            try writer.interface.flush();
         }
     }
 
@@ -648,20 +632,9 @@ fn allocAstErrorMsg(
     err: Ast.Error,
     allocator: std.mem.Allocator,
 ) ![]const u8 {
-    switch (zlinter.version.zig) {
-        .@"0.14" => {
-            var error_message = std.ArrayList(u8).empty;
-            defer error_message.deinit(allocator);
-
-            try tree.renderError(err, error_message.writer(allocator));
-            return error_message.toOwnedSlice(allocator);
-        },
-        .@"0.15", .@"0.16" => {
-            var aw = std.Io.Writer.Allocating.init(allocator);
-            try tree.renderError(err, &aw.writer);
-            return aw.toOwnedSlice();
-        },
-    }
+    var aw = std.Io.Writer.Allocating.init(allocator);
+    try tree.renderError(err, &aw.writer);
+    return aw.toOwnedSlice();
 }
 
 // TODO: Move buildExcludesIndex and buildFilterIndex to lib and write unit tests

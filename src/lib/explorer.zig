@@ -29,10 +29,7 @@ pub fn jsonTree(
     );
 
     if (tree.errors.len == 0) {
-        if (switch (version.zig) {
-            .@"0.14" => tree.render(arena),
-            .@"0.15", .@"0.16" => tree.renderAlloc(arena),
-        }) |rendering| {
+        if (tree.renderAlloc(arena)) |rendering| {
             try root_json_object.put(
                 "render",
                 .{ .string = rendering },
@@ -140,24 +137,9 @@ fn errorsToJson(tree: Ast, arena: std.mem.Allocator) !std.json.Array {
         try json_error.put("token_is_prev", .{ .bool = e.token_is_prev });
         try json_error.put("token", .{ .integer = e.token });
 
-        switch (version.zig) {
-            .@"0.14" => {
-                var render_backing = std.ArrayList(u8).empty;
-                // zlinter-disable-next-line no_deprecated - Upgraded in 0.15
-                try tree.renderError(e, render_backing.writer(arena));
-                try json_error.put("message", .{ .string = try render_backing.toOwnedSlice(arena) });
-            },
-            .@"0.15" => {
-                var aw = std.Io.Writer.Allocating.init(arena);
-                try tree.renderError(e, &aw.writer);
-                try json_error.put("message", .{ .string = try aw.toOwnedSlice() });
-            },
-            .@"0.16" => {
-                var aw = std.Io.Writer.Allocating.init(arena);
-                try tree.renderError(e, &aw.writer);
-                try json_error.put("message", .{ .string = try aw.toOwnedSlice() });
-            },
-        }
+        var aw = std.Io.Writer.Allocating.init(arena);
+        try tree.renderError(e, &aw.writer);
+        try json_error.put("message", .{ .string = try aw.toOwnedSlice() });
 
         try json_errors.append(.{ .object = json_error });
     }
@@ -197,7 +179,6 @@ fn tokensToJson(tree: Ast, arena: std.mem.Allocator) !std.json.Array {
 const ast = @import("ast.zig");
 const shims = @import("shims.zig");
 const std = @import("std");
-const version = @import("version.zig");
 const NodeIndexShim = shims.NodeIndexShim;
 const Ast = std.zig.Ast;
 const zls = @import("zls");
