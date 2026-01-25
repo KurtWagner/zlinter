@@ -62,7 +62,7 @@ fn run(
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
-) error{OutOfMemory}!?zlinter.results.LintResult {
+) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;

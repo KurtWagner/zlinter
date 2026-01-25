@@ -256,7 +256,7 @@ pub const LintContext = struct {
             buffer[0..size],
         );
 
-        const handle = self.document_store.getOrLoadHandle(uri) orelse return error.HandleError;
+        const handle = (try self.document_store.getOrLoadHandle(uri)) orelse return error.HandleError;
 
         var src_comments = try comments.allocParse(handle.tree.source, gpa);
         errdefer src_comments.deinit(gpa);

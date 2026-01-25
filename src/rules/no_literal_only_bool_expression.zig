@@ -46,7 +46,7 @@ fn run(
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
-) error{OutOfMemory}!?zlinter.results.LintResult {
+) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 

@@ -28,7 +28,7 @@ fn run(
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
-) error{OutOfMemory}!?zlinter.results.LintResult {
+) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
@@ -187,7 +187,7 @@ fn getSymbolEnumLiteralDocComment(
     node: Ast.Node.Index,
     name: []const u8,
     arena: std.mem.Allocator,
-) error{OutOfMemory}!?[]const u8 {
+) !?[]const u8 {
     std.debug.assert(shims.nodeTag(doc.handle.tree, node) == .enum_literal);
 
     var ancestors = std.ArrayList(Ast.Node.Index).empty;

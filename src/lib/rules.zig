@@ -7,7 +7,7 @@ pub const LintRule = struct {
         doc: *const session.LintDocument,
         gpa: std.mem.Allocator,
         options: RunOptions,
-    ) error{OutOfMemory}!?results.LintResult,
+    ) RunError!?results.LintResult,
 };
 
 pub const RunOptions = struct {
@@ -18,6 +18,8 @@ pub const RunOptions = struct {
         return if (self.config) |config| @as(*T, @ptrCast(@alignCast(config))).* else T{};
     }
 };
+
+pub const RunError = std.mem.Allocator.Error || std.Io.Cancelable;
 
 /// Rules the modify the execution of rules.
 pub const RuleOptions = struct {}; // zlinter-disable-current-line

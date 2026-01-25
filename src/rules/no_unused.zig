@@ -27,7 +27,7 @@ fn run(
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
-) error{OutOfMemory}!?zlinter.results.LintResult {
+) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
     if (config.container_declaration == .off) return null;
@@ -154,7 +154,7 @@ fn isFieldAccessOfRootContainer(
     context: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
     node: Ast.Node.Index,
-) error{OutOfMemory}!bool {
+) !bool {
     std.debug.assert(shims.nodeTag(doc.handle.tree, node) == .field_access);
 
     const tree = doc.handle.tree;
