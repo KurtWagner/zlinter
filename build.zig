@@ -865,7 +865,7 @@ const ZlinterRun = struct {
         const arena = b.allocator;
 
         var cwd_buff: [std.fs.max_path_bytes]u8 = undefined;
-        const cwd: BuildCwd = .init(&cwd_buff);
+        const cwd: BuildCwd = .init(io, &cwd_buff);
 
         var includes: std.ArrayList(std.Build.LazyPath) = try .initCapacity(
             b.allocator,
@@ -1139,10 +1139,11 @@ const BuildCwd = struct {
     path: []const u8,
     dir: std.Io.Dir,
 
-    pub fn init(buff: *[std.fs.max_path_bytes]u8) BuildCwd {
+    pub fn init(io: std.Io, buff: *[std.fs.max_path_bytes]u8) BuildCwd {
+        const size = std.process.currentPath(io, buff) catch unreachable;
         return .{
             .dir = std.Io.Dir.cwd(),
-            .path = std.process.getCwd(buff) catch unreachable,
+            .path = buff[0..size],
         };
     }
 

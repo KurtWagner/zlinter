@@ -164,7 +164,7 @@ test "allocLintFiles - with default args" {
     var tmp_dir = std.testing.tmpDir(.{ .iterate = true });
     defer tmp_dir.cleanup();
 
-    const cwd = try std.process.getCwdAlloc(std.testing.allocator);
+    const cwd = try std.process.currentPathAlloc(std.testing.io, std.testing.allocator);
     defer std.testing.allocator.free(cwd);
 
     try testing.createFiles(tmp_dir.dir, @constCast(&[_][]const u8{
@@ -196,7 +196,7 @@ test "allocLintFiles - with arg files" {
     var tmp_dir = std.testing.tmpDir(.{ .iterate = true });
     defer tmp_dir.cleanup();
 
-    const cwd = try std.process.getCwdAlloc(std.testing.allocator);
+    const cwd = try std.process.currentPathAlloc(std.testing.io, std.testing.allocator);
     defer std.testing.allocator.free(cwd);
 
     try testing.createFiles(tmp_dir.dir, @constCast(&[_][]const u8{

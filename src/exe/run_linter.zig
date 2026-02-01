@@ -154,7 +154,7 @@ fn run(
     var dir = try std.Io.Dir.cwd().openDir(io, "./", .{ .iterate = true });
     defer dir.close(io);
 
-    const cwd = try std.process.getCwdAlloc(gpa);
+    const cwd = try std.process.currentPathAlloc(io, gpa);
     defer gpa.free(cwd);
 
     const lint_files = try zlinter.files.allocLintFiles(
