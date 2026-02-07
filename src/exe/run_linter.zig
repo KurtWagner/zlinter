@@ -131,8 +131,8 @@ fn run(
     args: zlinter.Args,
     printer: *zlinter.rendering.Printer,
 ) !RunResult {
-    var timer = Timer.createStarted();
-    var total_timer = Timer.createStarted();
+    var timer = Timer.createStarted(io);
+    var total_timer = Timer.createStarted(io);
 
     // Key is index to `lint_files` and value are errors for the file.
     var file_lint_problems = std.AutoArrayHashMap(
@@ -184,7 +184,7 @@ fn run(
             file.excluded = !index.contains(file.pathname);
     }
 
-    if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "Resolving {d} files took: {d}ms", .{ lint_files.len, ms });
+    printer.println(.verbose, "Resolving {d} files took: {d}ms", .{ lint_files.len, timer.lapMilliseconds() });
 
     try runLinterRules(
         io,
@@ -199,7 +199,7 @@ fn run(
 
     printer.printBanner(.verbose);
     printer.println(.verbose, "Linted {d} files", .{lint_files.len});
-    if (total_timer.lapMilliseconds()) |ms| printer.println(.verbose, "Took {d}ms", .{ms});
+    printer.println(.verbose, "Took {d}ms", .{total_timer.lapMilliseconds()});
     printer.printBanner(.verbose);
 
     // ------------------------------------------------------------------------
@@ -335,16 +335,15 @@ fn runLinterRules(
         }
         printer.println(.verbose, "[{d}/{d}] Linting: {s}", .{ i + 1, lint_files.len, lint_file.pathname });
 
-        var rule_timer = Timer.createStarted();
+        var rule_timer = Timer.createStarted(io);
         defer {
-            if (rule_timer.lapNanoseconds()) |ns| {
-                printer.println(.verbose, "  - Total elapsed {d}ms", .{ns / std.time.ns_per_ms});
-                if (maybe_slowest_files) |*slowest_files| {
-                    slowest_files.add(.{
-                        .name = lint_file.pathname,
-                        .elapsed_ns = ns,
-                    });
-                }
+            const ns = rule_timer.lapNanoseconds();
+            printer.println(.verbose, "  - Total elapsed {d}ms", .{ns / std.time.ns_per_ms});
+            if (maybe_slowest_files) |*slowest_files| {
+                slowest_files.add(.{
+                    .name = lint_file.pathname,
+                    .elapsed_ns = ns,
+                });
             }
         }
 
@@ -359,10 +358,7 @@ fn runLinterRules(
         };
         defer doc.deinit(context.gpa);
 
-        if (timer.lapMilliseconds()) |ms|
-            printer.println(.verbose, "  - Load document: {d}ms", .{ms})
-        else
-            printer.println(.verbose, "  - Load document", .{});
+        printer.println(.verbose, "  - Load document: {d}ms", .{timer.lapMilliseconds()});
         printer.println(.verbose, "    - {d} bytes", .{doc.handle.tree.source.len});
         printer.println(.verbose, "    - {d} nodes", .{doc.handle.tree.nodes.len});
         printer.println(.verbose, "    - {d} tokens", .{doc.handle.tree.tokens.len});
@@ -395,7 +391,7 @@ fn runLinterRules(
                 },
             );
         }
-        if (timer.lapMilliseconds()) |ms| printer.println(.verbose, "  - Process syntax errors: {d}ms", .{ms});
+        printer.println(.verbose, "  - Process syntax errors: {d}ms", .{timer.lapMilliseconds()});
 
         printer.println(.verbose, "  - Rules", .{});
 
@@ -415,12 +411,11 @@ fn runLinterRules(
                 try results.append(gpa, result);
             }
 
-            if (timer.lapNanoseconds()) |ns| {
-                if (maybe_rule_elapsed_times) |*rule_elapsed_time| {
-                    rule_elapsed_time[rule_index] += ns;
-                }
-                printer.println(.verbose, "    - {s}: {d}ms", .{ rule.rule_id, ns / std.time.ns_per_ms });
-            } else printer.println(.verbose, "    - {s}", .{rule.rule_id});
+            const ns = timer.lapNanoseconds();
+            if (maybe_rule_elapsed_times) |*rule_elapsed_time| {
+                rule_elapsed_time[rule_index] += ns;
+            }
+            printer.println(.verbose, "    - {s}: {d}ms", .{ rule.rule_id, ns / std.time.ns_per_ms });
         }
 
         if (results.items.len > 0) {
@@ -753,20 +748,26 @@ const RunResult = struct {
     const usage_error: RunResult = .{ .exit_code = .usage_error };
 };
 
-/// Simple more forgiving timer for optionally timing laps in verbose mode.
 const Timer = struct {
-    backing: ?std.time.Timer = null,
+    last_timestamp: std.Io.Timestamp,
+    io: std.Io,
 
-    pub fn createStarted() Timer {
-        return .{ .backing = std.time.Timer.start() catch null };
+    pub fn createStarted(io: std.Io) Timer {
+        return .{
+            .last_timestamp = std.Io.Clock.now(.awake, io),
+            .io = io,
+        };
     }
 
-    pub fn lapNanoseconds(self: *Timer) ?usize {
-        return (self.backing orelse return null).lap();
+    pub fn lapNanoseconds(self: *Timer) usize {
+        const current = std.Io.Clock.now(.awake, self.io);
+        const elapsed = self.last_timestamp.durationTo(current).toNanoseconds();
+        self.last_timestamp = current;
+        return @intCast(elapsed);
     }
 
-    pub fn lapMilliseconds(self: *Timer) ?usize {
-        return (self.lapNanoseconds() orelse return null) / std.time.ns_per_ms;
+    pub fn lapMilliseconds(self: *Timer) usize {
+        return self.lapNanoseconds() / std.time.ns_per_ms;
     }
 };
 

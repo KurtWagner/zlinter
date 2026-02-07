@@ -995,22 +995,21 @@ const ZlinterRun = struct {
             std.debug.print("zlinter command:\n\t{s}\n", .{
                 std.Build.Step.allocPrintCmd(
                     arena,
-                    null,
+                    .inherit,
                     null,
                     argv_list.items,
                 ) catch @panic("OOM"),
             });
         }
 
-        var timer = try std.time.Timer.start();
+        const start_time = std.Io.Clock.awake.now(io);
 
         _ = std.debug.lockStderr(&.{});
         defer std.debug.unlockStderr();
 
         var child = std.process.spawn(io, .{
             .argv = argv_list.items,
-            .cwd = b.build_root.path,
-            .cwd_dir = b.build_root.handle,
+            .cwd = .{ .dir = b.build_root.handle },
             .environ_map = &environ_map,
             // As we're using stdout and stderr inherit we don't want to update
             // parent of childs progress (i.e commented out as deliberately not set)
@@ -1040,7 +1039,7 @@ const ZlinterRun = struct {
 
         const term = try child.wait(io);
 
-        step.result_duration_ns = timer.read();
+        step.result_duration_ns = @intCast(start_time.untilNow(io, .awake).toNanoseconds());
         step.result_peak_rss = child.resource_usage_statistics.getMaxRss() orelse 0;
         step.test_results = .{};
 
@@ -1058,7 +1057,7 @@ const ZlinterRun = struct {
                     return step.fail("zlinter command crashed:\n\t{s}", .{
                         std.Build.Step.allocPrintCmd(
                             arena,
-                            null,
+                            .inherit,
                             null,
                             argv_list.items,
                         ) catch @panic("OOM"),
@@ -1069,7 +1068,7 @@ const ZlinterRun = struct {
                 return step.fail("zlinter was terminated unexpectedly:\n\t{s}", .{
                     std.Build.Step.allocPrintCmd(
                         arena,
-                        null,
+                        .inherit,
                         null,
                         argv_list.items,
                     ) catch @panic("OOM"),
@@ -1102,7 +1101,7 @@ fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
         // Ignore.
     }
 
-    const timestamp = try std.Io.Clock.real.now(b.graph.io);
+    const timestamp = std.Io.Clock.real.now(b.graph.io);
     const build_timestamp = b.fmt("{d}", .{@divTrunc(timestamp.nanoseconds, std.time.ns_per_ms)});
     const zig_version = zig_version_string;
 
