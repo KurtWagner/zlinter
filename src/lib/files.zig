@@ -119,6 +119,7 @@ pub fn isLintableFilePath(file_path: []const u8) !bool {
     while (components.next()) |component| {
         if (std.mem.eql(u8, component.name, ".zig-cache")) return false;
         if (std.mem.eql(u8, component.name, "zig-out")) return false;
+        if (std.mem.eql(u8, component.name, "zig-pkg")) return false;
     }
 
     return true;
@@ -155,6 +156,9 @@ test "isLintableFilePath" {
         ".zig-cache/file.zig",
         "./parent/.zig-cache/file.zig",
         "/other/parent/.zig-cache/file.zig",
+        "zig-pkg/file.zig",
+        "./zig-pkg/file.zig",
+        "/other/parent/zig-pkg/file.zig",
     }) |file_path| {
         try std.testing.expect(!try isLintableFilePath(testing.paths.posix(file_path)));
     }

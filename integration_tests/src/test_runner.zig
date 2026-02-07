@@ -351,7 +351,8 @@ fn runLintCommand(
         io,
         .{
             .argv = args,
-            .max_output_bytes = max_file_size_bytes,
+            .stdout_limit = .limited(max_file_size_bytes),
+            .stderr_limit = .limited(max_file_size_bytes),
             .environ_map = map,
         },
     );
