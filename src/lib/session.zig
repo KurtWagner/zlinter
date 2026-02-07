@@ -166,7 +166,7 @@ pub const LintContext = struct {
                 .allocator = gpa,
                 .io = io,
             },
-            .intern_pool = try .init(gpa),
+            .intern_pool = try .init(io, gpa),
             .document_store = undefined, // zlinter-disable-current-line no_undefined - set below
             .analyser = undefined, // zlinter-disable-current-line no_undefined - set below
             .io = io,
