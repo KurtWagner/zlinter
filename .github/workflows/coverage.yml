@@ -42,7 +42,7 @@ jobs:
         run: sed -n 's/.*url *= *"\(.*\)".*/\1/p' build.zig.zon | xargs -t -n1 zig fetch
       
       - name: "Prefetch ZLS dependencies (workaround)"
-        run: curl -L https://raw.githubusercontent.com/zigtools/zls/7b9d079c65e2400612bd126ee64ffda5dbb7e1f6/build.zig.zon | sed -n 's/.*url *= *"\(.*\)".*/\1/p' | xargs -t -n1 zig fetch
+        run: curl -L https://raw.githubusercontent.com/zigtools/zls/0ced338490bf50ef3e51736d7357767fa9988c9d/build.zig.zon | sed -n 's/.*url *= *"\(.*\)".*/\1/p' | xargs -t -n1 zig fetch
 
       - name: "Run unit tests with coverage"
         run: |
