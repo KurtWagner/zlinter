@@ -96,10 +96,11 @@ fn run(
 
         const decl_name, const uri = decl_name_and_uri: {
             if (try context.analyser.resolveVarDeclAlias(
-                .{ .node_handle = .{
-                    .node = lhs,
+                .{
+                    .decl = .{ .ast_node = lhs },
                     .handle = doc.handle,
-                }, .container_type = null },
+                    .container_type = null,
+                },
             )) |decl_handle| {
                 const uri = decl_handle.handle.uri;
 
