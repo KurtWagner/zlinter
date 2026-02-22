@@ -779,6 +779,7 @@ const SlowestItemQueue = struct {
         void,
         Item.compare,
     ),
+    gpa: std.mem.Allocator,
 
     const Item = struct {
         name: []const u8,
@@ -790,18 +791,21 @@ const SlowestItemQueue = struct {
     };
 
     fn init(gpa: std.mem.Allocator) SlowestItemQueue {
-        return .{ .queue = .init(gpa, {}) };
+        return .{
+            .queue = .empty,
+            .gpa = gpa,
+        };
     }
 
     fn deinit(self: *SlowestItemQueue) void {
-        self.queue.deinit();
+        self.queue.deinit(self.gpa);
         self.* = undefined;
     }
 
     fn add(self: *SlowestItemQueue, item: Item) void {
-        if (self.queue.add(item)) {
+        if (self.queue.push(self.gpa, item)) {
             if (self.queue.count() > self.max) {
-                _ = self.queue.removeMin();
+                _ = self.queue.popMin();
             }
         } else |_| {
             // Ignore.
@@ -819,7 +823,7 @@ const SlowestItemQueue = struct {
         printer.printBanner(.verbose);
 
         var i: usize = 0;
-        while (self.queue.removeMaxOrNull()) |item| {
+        while (self.queue.popMax()) |item| {
             printer.println(.verbose, "  {d:02} -  {s}[{d}ms]{s} {s}", .{
                 i,
                 printer.tty.ansiOrEmpty(&.{.bold}),

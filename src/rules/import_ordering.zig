@@ -66,7 +66,7 @@ fn run(
     defer lint_problems.deinit(gpa);
 
     var scoped_imports = try resolveScopedImports(doc, gpa);
-    defer deinitScopedImports(&scoped_imports);
+    defer deinitScopedImports(gpa, &scoped_imports);
 
     const tree = doc.handle.tree;
     var import_it = scoped_imports.iterator();
@@ -74,7 +74,7 @@ fn run(
         var imports = e.value_ptr;
         var previous: ?ImportDecl = null;
 
-        while (imports.removeMinOrNull()) |import| {
+        while (imports.popMin()) |import| {
             if (previous) |p| {
                 const is_same_chunk = (p.last_line + 1) == import.first_line;
 
@@ -141,8 +141,8 @@ const ImportDecl = struct {
     }
 };
 
-fn deinitScopedImports(scoped_imports: *std.AutoArrayHashMap(Ast.Node.Index, ImportsQueueLinesAscending)) void {
-    for (scoped_imports.values()) |v| v.deinit();
+fn deinitScopedImports(gpa: std.mem.Allocator, scoped_imports: *std.AutoArrayHashMap(Ast.Node.Index, ImportsQueueLinesAscending)) void {
+    for (scoped_imports.values()) |v| v.deinit(gpa);
     scoped_imports.deinit();
 }
 
@@ -215,12 +215,12 @@ fn resolveScopedImports(
 
         var gop = try scoped_imports.getOrPut(parent);
         if (gop.found_existing) {
-            try gop.value_ptr.add(import);
+            try gop.value_ptr.push(gpa, import);
         } else {
-            var imports = ImportsQueueLinesAscending.init(gpa, {});
-            errdefer imports.deinit();
+            var imports: ImportsQueueLinesAscending = .empty;
+            errdefer imports.deinit(gpa);
 
-            try imports.add(import);
+            try imports.push(gpa, import);
             gop.value_ptr.* = imports;
         }
     }
