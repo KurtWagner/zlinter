@@ -104,12 +104,12 @@ fn run(
         var expected_order = std.ArrayList(Ast.Node.Index).empty;
         defer expected_order.deinit(gpa);
 
-        var sorted_queue = std.PriorityQueue(
+        var sorted_queue: std.PriorityQueue(
             Field,
             struct { zlinter.rules.LintTextOrder },
             Field.cmp,
-        ).init(gpa, .{order_with_severity.order});
-        defer sorted_queue.deinit();
+        ) = .initContext(.{order_with_severity.order});
+        defer sorted_queue.deinit(gpa);
 
         var seen_field: bool = false;
         children: for (connections.children orelse &.{}) |container_child| {
@@ -128,7 +128,7 @@ fn run(
             };
 
             try actual_order.append(gpa, container_child);
-            try sorted_queue.add(.{
+            try sorted_queue.push(gpa, .{
                 .name = tree.tokenSlice(name_token),
                 .node = container_child,
             });
@@ -138,7 +138,7 @@ fn run(
         var i: usize = 0;
         var maybe_first_problem_index: ?usize = null; // Inclusive
         var maybe_last_problem_index: ?usize = null; // Inclusive
-        while (sorted_queue.removeOrNull()) |field| : (i += 1) {
+        while (sorted_queue.pop()) |field| : (i += 1) {
             try expected_order.append(gpa, field.node);
             if (field.node != actual_order.items[i]) {
                 maybe_first_problem_index = maybe_first_problem_index orelse i;
