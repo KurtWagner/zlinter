@@ -156,9 +156,9 @@ fn run(
 
     var node: NodeIndexShim = .root;
     while (node.index < tree.nodes.len) : (node.index += 1) {
-        const tag = shims.nodeTag(tree, node.toNodeIndex());
+        const tag = tree.nodeTag(node.toNodeIndex());
         if (tag == .error_set_decl) {
-            const node_data = shims.nodeData(tree, node.toNodeIndex());
+            const node_data = tree.nodeData(node.toNodeIndex());
             const rbrace = node_data.token_and_token.@"1";
 
             var token = rbrace - 1;

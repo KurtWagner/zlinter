@@ -57,12 +57,12 @@ fn run(
             severity: zlinter.rules.LintProblemSeverity,
             message: []const u8,
         } = problem: {
-            switch (shims.nodeTag(tree, node.toNodeIndex())) {
+            switch (tree.nodeTag(node.toNodeIndex())) {
                 .@"catch" => {
-                    const data = shims.nodeData(tree, node.toNodeIndex());
+                    const data = tree.nodeData(node.toNodeIndex());
                     const rhs = data.node_and_node.@"1";
 
-                    switch (shims.nodeTag(tree, rhs)) {
+                    switch (tree.nodeTag(rhs)) {
                         .unreachable_literal => if (config.detect_catch_unreachable != .off)
                             break :problem .{
                                 .severity = config.detect_catch_unreachable,
@@ -86,7 +86,7 @@ fn run(
                 },
                 else => if (tree.fullIf(node.toNodeIndex())) |if_info| {
                     if (NodeIndexShim.initOptional(if_info.ast.else_expr)) |else_node| {
-                        switch (shims.nodeTag(tree, else_node.toNodeIndex())) {
+                        switch (tree.nodeTag(else_node.toNodeIndex())) {
                             .unreachable_literal => if (config.detect_else_unreachable != .off)
                                 break :problem .{
                                     .severity = config.detect_else_unreachable,
@@ -140,17 +140,17 @@ fn run(
 }
 
 fn isEmptyOrUnreachableBlock(tree: Ast, node: Ast.Node.Index) enum { none, empty, @"unreachable" } {
-    const tag = shims.nodeTag(tree, node);
+    const tag = tree.nodeTag(node);
     std.debug.assert(tag == .block_two or tag == .block_two_semicolon);
 
-    const data = shims.nodeData(tree, node);
+    const data = tree.nodeData(node);
     const lhs, const rhs = .{
         NodeIndexShim.initOptional(data.opt_node_and_opt_node.@"0"),
         NodeIndexShim.initOptional(data.opt_node_and_opt_node.@"1"),
     };
 
     if (lhs == null and rhs == null) return .empty;
-    if (lhs != null and shims.nodeTag(tree, lhs.?.toNodeIndex()) == .unreachable_literal) return .@"unreachable";
+    if (lhs != null and tree.nodeTag(lhs.?.toNodeIndex()) == .unreachable_literal) return .@"unreachable";
     return .none;
 }
 

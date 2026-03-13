@@ -59,7 +59,7 @@ fn run(
         const node, const connections = tuple;
         _ = connections;
 
-        const tag = shims.nodeTag(tree, node.toNodeIndex());
+        const tag = tree.nodeTag(node.toNodeIndex());
         if (tag != .fn_decl) continue :nodes;
 
         const fn_decl = tree.fullFnProto(&fn_decl_buffer, node.toNodeIndex()) orelse continue :nodes;
@@ -67,7 +67,7 @@ fn run(
 
         const return_type = NodeIndexShim.initOptional(fn_decl.ast.return_type) orelse continue :nodes;
 
-        const return_type_tag = shims.nodeTag(tree, return_type.toNodeIndex());
+        const return_type_tag = tree.nodeTag(return_type.toNodeIndex());
         switch (return_type_tag) {
             .error_union => if (config.allow_anyerror or
                 !std.mem.eql(u8, tree.tokenSlice(tree.firstToken(return_type.toNodeIndex())), "anyerror"))

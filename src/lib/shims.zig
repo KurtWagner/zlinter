@@ -63,9 +63,9 @@ pub fn isIdentiferKind(
     node: Ast.Node.Index,
     kind: enum { type },
 ) bool {
-    return switch (nodeTag(tree, node)) {
+    return switch (tree.nodeTag(node)) {
         .identifier => switch (kind) {
-            .type => std.mem.eql(u8, "type", tree.tokenSlice(nodeMainToken(tree, node))),
+            .type => std.mem.eql(u8, "type", tree.tokenSlice(tree.nodeMainToken(node))),
         },
         else => false,
     };
@@ -90,58 +90,30 @@ pub fn unwrapNode(
     var current = node;
 
     while (true) {
-        switch (nodeTag(tree, current)) {
+        switch (tree.nodeTag(current)) {
             .unwrap_optional => if (options.unwrap_optional_unwrap) switch (version.zig) {
-                .@"0.14" => current = nodeData(tree, current).lhs,
-                .@"0.15", .@"0.16" => current = nodeData(tree, current).node_and_token.@"0",
+                .@"0.14" => current = tree.nodeData(current).lhs,
+                .@"0.15", .@"0.16" => current = tree.nodeData(current).node_and_token.@"0",
             } else break,
             .optional_type => if (options.unwrap_optional) switch (version.zig) {
-                .@"0.14" => current = nodeData(tree, current).lhs,
-                .@"0.15", .@"0.16" => current = nodeData(tree, current).node,
+                .@"0.14" => current = tree.nodeData(current).lhs,
+                .@"0.15", .@"0.16" => current = tree.nodeData(current).node,
             } else break,
             .ptr_type_aligned,
             .ptr_type_sentinel,
             => if (options.unwrap_pointer) switch (version.zig) {
-                .@"0.14" => current = nodeData(tree, current).rhs,
-                .@"0.15", .@"0.16" => current = nodeData(tree, current).opt_node_and_node.@"1",
+                .@"0.14" => current = tree.nodeData(current).rhs,
+                .@"0.15", .@"0.16" => current = tree.nodeData(current).opt_node_and_node.@"1",
             } else break,
             .ptr_type,
             => if (options.unwrap_pointer) switch (version.zig) {
-                .@"0.14" => current = nodeData(tree, current).rhs,
-                .@"0.15", .@"0.16" => current = nodeData(tree, current).extra_and_node.@"1",
+                .@"0.14" => current = tree.nodeData(current).rhs,
+                .@"0.15", .@"0.16" => current = tree.nodeData(current).extra_and_node.@"1",
             } else break,
             else => break,
         }
     }
     return current;
-}
-
-pub fn tokenTag(tree: Ast, token: Ast.TokenIndex) std.zig.Token.Tag {
-    return if (std.meta.hasMethod(@TypeOf(tree), "tokenTag"))
-        tree.tokenTag(token)
-    else
-        tree.tokens.items(.tag)[token]; // 0.14.x
-}
-
-pub fn nodeTag(tree: Ast, node: Ast.Node.Index) Ast.Node.Tag {
-    return if (std.meta.hasMethod(@TypeOf(tree), "nodeTag"))
-        tree.nodeTag(node)
-    else
-        tree.nodes.items(.tag)[node]; // 0.14.x
-}
-
-pub fn nodeMainToken(tree: Ast, node: Ast.Node.Index) Ast.TokenIndex {
-    return if (std.meta.hasMethod(@TypeOf(tree), "nodeMainToken"))
-        tree.nodeMainToken(node)
-    else
-        tree.nodes.items(.main_token)[node]; // 0.14.x
-}
-
-pub fn nodeData(tree: Ast, node: Ast.Node.Index) Ast.Node.Data {
-    return if (std.meta.hasMethod(@TypeOf(tree), "nodeData"))
-        tree.nodeData(node)
-    else
-        tree.nodes.items(.data)[node]; // 0.14.x
 }
 
 // TODO: Write unit tests for this
@@ -176,7 +148,7 @@ pub fn isRootImplicitStruct(tree: Ast) bool {
 /// Returns true if the container is a namespace (i.e., no fields just declarations)
 pub fn isContainerNamespace(tree: Ast, container_decl: Ast.full.ContainerDecl) bool {
     for (container_decl.ast.members) |member| {
-        if (nodeTag(tree, member).isContainerField()) return false;
+        if (tree.nodeTag(member).isContainerField()) return false;
     }
     return true;
 }

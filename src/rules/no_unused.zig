@@ -46,10 +46,10 @@ fn run(
 
         var node: NodeIndexShim = .root;
         while (node.index < tree.nodes.len) : (node.index += 1) {
-            switch (shims.nodeTag(tree, node.toNodeIndex())) {
-                .identifier => try map.put(gpa, tree.tokenSlice(shims.nodeMainToken(tree, node.toNodeIndex())), {}),
+            switch (tree.nodeTag(node.toNodeIndex())) {
+                .identifier => try map.put(gpa, tree.tokenSlice(tree.nodeMainToken(node.toNodeIndex())), {}),
                 .field_access => if (try isFieldAccessOfRootContainer(context, doc, node.toNodeIndex())) {
-                    const node_data = shims.nodeData(tree, node.toNodeIndex());
+                    const node_data = tree.nodeData(node.toNodeIndex());
                     try map.put(gpa, tree.tokenSlice(
                         node_data.node_and_token.@"1",
                     ), {});
@@ -138,10 +138,10 @@ fn namedFnDeclProto(
     buffer: *[1]Ast.Node.Index,
     node: Ast.Node.Index,
 ) ?Ast.full.FnProto {
-    if (switch (shims.nodeTag(tree, node)) {
+    if (switch (tree.nodeTag(node)) {
         .fn_decl => tree.fullFnProto(
             buffer,
-            shims.nodeData(tree, node).node_and_node.@"0",
+            tree.nodeData(node).node_and_node.@"0",
         ),
         else => null,
     }) |fn_proto| {
@@ -155,11 +155,11 @@ fn isFieldAccessOfRootContainer(
     doc: *const zlinter.session.LintDocument,
     node: Ast.Node.Index,
 ) !bool {
-    std.debug.assert(shims.nodeTag(doc.handle.tree, node) == .field_access);
+    std.debug.assert(doc.handle.tree.nodeTag(node) == .field_access);
 
     const tree = doc.handle.tree;
 
-    const node_data = shims.nodeData(tree, node);
+    const node_data = tree.nodeData(node);
     const lhs = node_data.node_and_token.@"0";
 
     if (try context.resolveTypeOfNode(doc, lhs)) |t| {

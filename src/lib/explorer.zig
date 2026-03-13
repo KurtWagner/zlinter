@@ -49,11 +49,11 @@ pub fn jsonTree(
 
             var node_object = std.json.ObjectMap.init(self.arena);
             try node_object.put("tag", .{
-                .string = @tagName(shims.nodeTag(context_tree.*, child_node)),
+                .string = @tagName(context_tree.*.nodeTag(child_node)),
             });
 
             try node_object.put("main_token", .{
-                .integer = shims.nodeMainToken(context_tree.*, child_node),
+                .integer = context_tree.*.nodeMainToken(child_node),
             });
             try node_object.put("first_token", .{
                 .integer = context_tree.firstToken(child_node),
@@ -176,7 +176,6 @@ fn tokensToJson(tree: Ast, arena: std.mem.Allocator) !std.json.Array {
     return json_tokens;
 }
 
-const ast = @import("ast.zig");
 const shims = @import("shims.zig");
 const std = @import("std");
 const NodeIndexShim = shims.NodeIndexShim;

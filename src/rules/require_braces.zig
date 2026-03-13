@@ -118,7 +118,7 @@ fn run(
         const statement = zlinter.ast.fullStatement(tree, node.toNodeIndex()) orelse continue :nodes;
 
         // Skip if part of an assignment or return statement as braces are omitted
-        switch (shims.nodeTag(tree, connections.parent.?)) {
+        switch (tree.nodeTag(connections.parent.?)) {
             .@"return",
             .simple_var_decl,
             .local_var_decl,
@@ -145,19 +145,19 @@ fn run(
         switch (statement) {
             .@"if" => |info| {
                 expr_nodes.appendAssumeCapacity(info.ast.then_expr);
-                if (shims.NodeIndexShim.initOptional(info.ast.else_expr)) |n| {
+                if (NodeIndexShim.initOptional(info.ast.else_expr)) |n| {
                     expr_nodes.appendAssumeCapacity(n.toNodeIndex());
                 }
             },
             .@"while" => |info| {
                 expr_nodes.appendAssumeCapacity(info.ast.then_expr);
-                if (shims.NodeIndexShim.initOptional(info.ast.else_expr)) |n| {
+                if (NodeIndexShim.initOptional(info.ast.else_expr)) |n| {
                     expr_nodes.appendAssumeCapacity(n.toNodeIndex());
                 }
             },
             .@"for" => |info| {
                 expr_nodes.appendAssumeCapacity(info.ast.then_expr);
-                if (shims.NodeIndexShim.initOptional(info.ast.else_expr)) |n| {
+                if (NodeIndexShim.initOptional(info.ast.else_expr)) |n| {
                     expr_nodes.appendAssumeCapacity(n.toNodeIndex());
                 }
             },
@@ -174,7 +174,7 @@ fn run(
             // If it's not a block we assume it's a single statement (i.e., one
             // child). Keep in mind a block may have zero statement (i.e., empty).
             // Which this rule does not care about.
-            const has_braces = switch (shims.nodeTag(tree, expr_node)) {
+            const has_braces = switch (tree.nodeTag(expr_node)) {
                 .block,
                 .block_semicolon,
                 .block_two,
@@ -195,7 +195,7 @@ fn run(
                     },
                     .multi_statement_only => {
                         if (has_braces) {
-                            const children = doc.lineage.items(.children)[shims.NodeIndexShim.init(expr_node).index] orelse &.{};
+                            const children = doc.lineage.items(.children)[NodeIndexShim.init(expr_node).index] orelse &.{};
                             if (children.len == 1) {
                                 break :error_msg try gpa.dupe(u8, "Expects no braces when there's only one statement");
                             }
@@ -204,7 +204,7 @@ fn run(
                     .multi_line_only => {
                         const on_single_line = tree.tokensOnSameLine(first_token, last_token);
                         if (on_single_line) {
-                            const children = doc.lineage.items(.children)[shims.NodeIndexShim.init(expr_node).index] orelse &.{};
+                            const children = doc.lineage.items(.children)[NodeIndexShim.init(expr_node).index] orelse &.{};
                             if (has_braces and children.len > 0) { // We allow empy blocks / no children
                                 break :error_msg try gpa.dupe(u8, "Expects no braces when on a single line");
                             }

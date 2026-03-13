@@ -1423,4 +1423,3 @@ pub const LazyRuleSkipper = struct {
 
 const std = @import("std");
 const LintProblem = @import("results.zig").LintProblem;
-const shims = @import("shims.zig");

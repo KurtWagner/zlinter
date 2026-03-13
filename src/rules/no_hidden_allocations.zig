@@ -71,7 +71,7 @@ fn run(
         const node, const connections = tuple;
         _ = connections;
 
-        if (shims.nodeTag(tree, node.toNodeIndex()) != .field_access) continue :nodes;
+        if (tree.nodeTag(node.toNodeIndex()) != .field_access) continue :nodes;
 
         // if configured, skip if a parent is a test block
         if (config.exclude_tests and doc.isEnclosedInTestBlock(node)) {
@@ -79,7 +79,7 @@ fn run(
         }
 
         // unwrap field access lhs and identifier (e.g., lhs.identifier)
-        const node_data = shims.nodeData(tree, node.toNodeIndex());
+        const node_data = tree.nodeData(node.toNodeIndex());
         const lhs, const identifier = .{ node_data.node_and_token.@"0", node_data.node_and_token.@"1" };
 
         // is identifier a method on Allocator e.g., something.alloc(..) or something.create(..)
@@ -111,7 +111,7 @@ fn run(
                                 _ = init_node;
                                 // TODO: If .call_one then check return value
                                 // std.debug.print("{} - {s}\n", .{
-                                //     shims.nodeTag(decl_handle.handle.tree, init_node.toNodeIndex()),
+                                //     decl_handle.handle.tree.nodeTag(init_node.toNodeIndex()),
                                 //     decl_handle.handle.tree.getNodeSource(init_node.toNodeIndex()),
                                 // });
                             }

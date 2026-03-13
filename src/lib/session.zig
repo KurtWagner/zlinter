@@ -75,7 +75,7 @@ pub const LintDocument = struct {
     pub fn isEnclosedInTestBlock(self: *const LintDocument, node: NodeIndexShim) bool {
         var next = node;
         while (self.lineage.items(.parent)[next.index]) |parent| {
-            switch (shims.nodeTag(self.handle.tree, parent)) {
+            switch (self.handle.tree.nodeTag(parent)) {
                 .test_decl => return true,
                 .@"if", .if_simple => if (isTestOnlyCondition(
                     self.handle.tree,
@@ -135,7 +135,7 @@ pub const LintDocument = struct {
 /// Returns true if the if statement appears to enforce that its block is test only
 fn isTestOnlyCondition(tree: Ast, if_statement: Ast.full.If) bool {
     const cond_node = if_statement.ast.cond_expr;
-    return switch (shims.nodeTag(tree, cond_node)) {
+    return switch (tree.nodeTag(cond_node)) {
         .identifier => std.mem.eql(u8, "is_test", tree.getNodeSource(cond_node)),
         .field_access => ast.isFieldVarAccess(tree, cond_node, &.{"is_test"}),
         else => false,
@@ -476,13 +476,13 @@ pub const LintContext = struct {
 
             // LIMITATION: All builtin calls to type of and type will return
             // `type` without any resolution.
-            switch (shims.nodeTag(tree, node)) {
+            switch (tree.nodeTag(node)) {
                 .builtin_call_two,
                 .builtin_call_two_comma,
                 .builtin_call,
                 .builtin_call_comma,
                 => inline for (&.{ "@Type", "@TypeOf" }) |builtin_name| {
-                    if (std.mem.eql(u8, builtin_name, tree.tokenSlice(shims.nodeMainToken(tree, node)))) {
+                    if (std.mem.eql(u8, builtin_name, tree.tokenSlice(tree.nodeMainToken(node)))) {
                         return .type;
                     }
                 },
@@ -511,7 +511,7 @@ pub const LintContext = struct {
                             const container_node, const container_tree = .{ container.scope_handle.toNode(), container.scope_handle.handle.tree };
 
                             if (!NodeIndexShim.init(container_node).isRoot()) {
-                                switch (shims.nodeTag(container_tree, container_node)) {
+                                switch (container_tree.nodeTag(container_node)) {
                                     .error_set_decl => break :result true,
                                     else => {},
                                 }

@@ -86,9 +86,9 @@ pub const DeferBlock = struct {
 pub fn deferBlock(doc: *const session.LintDocument, node: Ast.Node.Index, allocator: std.mem.Allocator) !?DeferBlock {
     const tree = doc.handle.tree;
 
-    const data = shims.nodeData(tree, node);
+    const data = tree.nodeData(node);
     const exp_node =
-        switch (shims.nodeTag(tree, node)) {
+        switch (tree.nodeTag(node)) {
             .@"errdefer" => data.opt_token_and_node[1],
             .@"defer" => data.node,
             else => return null,
@@ -102,7 +102,7 @@ pub fn deferBlock(doc: *const session.LintDocument, node: Ast.Node.Index, alloca
 }
 
 pub fn isBlock(tree: Ast, node: Ast.Node.Index) bool {
-    return switch (shims.nodeTag(tree, node)) {
+    return switch (tree.nodeTag(node)) {
         .block_two, .block_two_semicolon, .block, .block_semicolon => true,
         else => false,
     };
@@ -199,7 +199,7 @@ test "deferBlock - has expected children" {
 /// Returns true if return type is `!type` or `error{ErrorName}!type` or `ErrorName!type`
 pub fn fnProtoReturnsError(tree: Ast, fn_proto: Ast.full.FnProto) bool {
     const return_node = NodeIndexShim.initOptional(fn_proto.ast.return_type) orelse return false;
-    const tag = shims.nodeTag(tree, return_node.toNodeIndex());
+    const tag = tree.nodeTag(return_node.toNodeIndex());
     return switch (tag) {
         .error_union => true,
         else => tree.tokens.items(.tag)[tree.firstToken(return_node.toNodeIndex()) - 1] == .bang,
@@ -289,9 +289,9 @@ pub const FnDecl = struct {
 /// Returns the function declaration (proto and block) if node is a function declaration,
 /// otherwise returns null.
 pub fn fnDecl(tree: Ast, node: Ast.Node.Index, fn_proto_buffer: *[1]Ast.Node.Index) ?FnDecl {
-    switch (shims.nodeTag(tree, node)) {
+    switch (tree.nodeTag(node)) {
         .fn_decl => {
-            const data = shims.nodeData(tree, node);
+            const data = tree.nodeData(node);
             const lhs, const rhs = .{ data.node_and_node[0], data.node_and_node[1] };
             return .{ .proto = tree.fullFnProto(fn_proto_buffer, lhs).?, .block = rhs };
         },
@@ -305,10 +305,10 @@ pub fn fnDecl(tree: Ast, node: Ast.Node.Index, fn_proto_buffer: *[1]Ast.Node.Ind
 /// For example `parent.ok` and `parent.child.ok` would return a token index
 /// pointing to `ok`.
 pub fn fieldVarAccess(tree: Ast, node: Ast.Node.Index) ?Ast.TokenIndex {
-    if (shims.nodeTag(tree, node) != .field_access) return null;
+    if (tree.nodeTag(node) != .field_access) return null;
 
     const last_token = tree.lastToken(node);
-    const last_token_tag = shims.tokenTag(tree, last_token);
+    const last_token_tag = tree.tokenTag(last_token);
 
     return switch (last_token_tag) {
         .identifier => last_token,
@@ -368,10 +368,10 @@ pub fn fullStatement(tree: Ast, node: Ast.Node.Index) ?Statement {
         .{ .@"for" = forStatement }
     else if (tree.fullSwitchCase(node)) |switchStatement|
         .{ .switch_case = switchStatement }
-    else switch (shims.nodeTag(tree, node)) {
-        .@"catch" => .{ .@"catch" = shims.nodeData(tree, node).node_and_node[1] },
-        .@"defer" => .{ .@"defer" = shims.nodeData(tree, node).node },
-        .@"errdefer" => .{ .@"errdefer" = shims.nodeData(tree, node).opt_token_and_node[1] },
+    else switch (tree.nodeTag(node)) {
+        .@"catch" => .{ .@"catch" = tree.nodeData(node).node_and_node[1] },
+        .@"defer" => .{ .@"defer" = tree.nodeData(node).node },
+        .@"errdefer" => .{ .@"errdefer" = tree.nodeData(node).opt_token_and_node[1] },
         else => null,
     };
 }
@@ -469,9 +469,9 @@ test "isFieldVarAccess" {
 
 /// Returns true if enum literal matching a given var name
 pub fn isEnumLiteral(tree: Ast, node: Ast.Node.Index, enum_names: []const []const u8) bool {
-    if (shims.nodeTag(tree, node) != .enum_literal) return false;
+    if (tree.nodeTag(node) != .enum_literal) return false;
 
-    const actual_enum_name = tree.tokenSlice(shims.nodeMainToken(tree, node));
+    const actual_enum_name = tree.tokenSlice(tree.nodeMainToken(node));
     for (enum_names) |enum_name| {
         if (std.mem.eql(u8, actual_enum_name, enum_name)) return true;
     }
@@ -563,7 +563,7 @@ pub fn findFnCall(
         return call;
     }
 
-    for (doc.lineage.items(.children)[shims.NodeIndexShim.init(node).index] orelse &.{}) |child| {
+    for (doc.lineage.items(.children)[NodeIndexShim.init(node).index] orelse &.{}) |child| {
         if (findFnCall(
             doc,
             child,
@@ -619,17 +619,17 @@ pub fn fnCall(
     const call = tree.fullCall(buffer, node) orelse return null;
 
     const fn_expr_node = call.ast.fn_expr;
-    const fn_expr_node_data = shims.nodeData(tree, fn_expr_node);
-    const fn_expr_node_tag = shims.nodeTag(tree, fn_expr_node);
+    const fn_expr_node_data = tree.nodeData(fn_expr_node);
+    const fn_expr_node_tag = tree.nodeTag(fn_expr_node);
 
     const maybe_fn_call: ?FnCall = maybe_fn_call: {
         switch (fn_expr_node_tag) {
             // e.g., `parent.*`
             .field_access => {
                 const field_node, const fn_name = .{ fn_expr_node_data.node_and_token[0], fn_expr_node_data.node_and_token[1] };
-                std.debug.assert(shims.tokenTag(tree, fn_name) == .identifier);
+                std.debug.assert(tree.tokenTag(fn_name) == .identifier);
 
-                const field_node_tag = shims.nodeTag(tree, field_node);
+                const field_node_tag = tree.nodeTag(field_node);
                 if (field_node_tag != .identifier) {
                     // e.g, array_access, unwrap_optional, field_access
                     break :maybe_fn_call .{
@@ -646,15 +646,15 @@ pub fn fnCall(
                     .call_identifier_token = fn_name,
                     .kind = .{
                         .single_field = .{
-                            .field_main_token = shims.nodeMainToken(tree, field_node),
+                            .field_main_token = tree.nodeMainToken(field_node),
                         },
                     },
                 };
             },
             // e.g., `.init()`
             .enum_literal => {
-                const fn_name = shims.nodeMainToken(tree, fn_expr_node);
-                std.debug.assert(shims.tokenTag(tree, fn_name) == .identifier);
+                const fn_name = tree.nodeMainToken(fn_expr_node);
+                std.debug.assert(tree.tokenTag(fn_name) == .identifier);
 
                 break :maybe_fn_call .{
                     .params = call.ast.params,
@@ -667,7 +667,7 @@ pub fn fnCall(
             .identifier => {
                 break :maybe_fn_call .{
                     .params = call.ast.params,
-                    .call_identifier_token = shims.nodeMainToken(tree, fn_expr_node),
+                    .call_identifier_token = tree.nodeMainToken(fn_expr_node),
                     .kind = .{
                         .direct = {},
                     },
@@ -836,7 +836,7 @@ test "findFnCall" {
             "fnName",
             doc.handle.tree.tokenSlice(findFnCall(
                 doc,
-                shims.NodeIndexShim.root.toNodeIndex(),
+                NodeIndexShim.root.toNodeIndex(),
                 &buffer,
                 &.{"fnName"},
             ).?.call_identifier_token),
@@ -846,7 +846,7 @@ test "findFnCall" {
             null,
             findFnCall(
                 doc,
-                shims.NodeIndexShim.root.toNodeIndex(),
+                NodeIndexShim.root.toNodeIndex(),
                 &buffer,
                 &.{ "fn", "Name", "fnname" },
             ),

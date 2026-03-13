@@ -173,4 +173,3 @@ test {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const shims = zlinter.shims;

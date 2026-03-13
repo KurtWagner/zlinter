@@ -116,19 +116,19 @@ fn run(
         switch (statement) {
             .@"if" => |info| {
                 expr_nodes.appendAssumeCapacity(info.ast.then_expr);
-                if (shims.NodeIndexShim.initOptional(info.ast.else_expr)) |n| {
+                if (NodeIndexShim.initOptional(info.ast.else_expr)) |n| {
                     expr_nodes.appendAssumeCapacity(n.toNodeIndex());
                 }
             },
             .@"while" => |info| {
                 expr_nodes.appendAssumeCapacity(info.ast.then_expr);
-                if (shims.NodeIndexShim.initOptional(info.ast.else_expr)) |n| {
+                if (NodeIndexShim.initOptional(info.ast.else_expr)) |n| {
                     expr_nodes.appendAssumeCapacity(n.toNodeIndex());
                 }
             },
             .@"for" => |info| {
                 expr_nodes.appendAssumeCapacity(info.ast.then_expr);
-                if (shims.NodeIndexShim.initOptional(info.ast.else_expr)) |n| {
+                if (NodeIndexShim.initOptional(info.ast.else_expr)) |n| {
                     expr_nodes.appendAssumeCapacity(n.toNodeIndex());
                 }
             },
@@ -169,7 +169,7 @@ fn run(
 }
 
 fn isEmptyBlock(tree: Ast, node: Ast.Node.Index) bool {
-    const is_block = switch (shims.nodeTag(tree, node)) {
+    const is_block = switch (tree.nodeTag(node)) {
         .block,
         .block_semicolon,
         .block_two,
@@ -194,8 +194,8 @@ fn isEmptyBlock(tree: Ast, node: Ast.Node.Index) bool {
 }
 
 fn fnDeclBlock(tree: Ast, node: Ast.Node.Index) ?Ast.Node.Index {
-    return switch (shims.nodeTag(tree, node)) {
-        .fn_decl => shims.nodeData(tree, node).node_and_node.@"1",
+    return switch (tree.nodeTag(node)) {
+        .fn_decl => tree.nodeData(node).node_and_node.@"1",
         else => null,
     };
 }

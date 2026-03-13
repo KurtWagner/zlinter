@@ -82,11 +82,11 @@ fn run(
         const call = tree.fullCall(&call_buffer, node.toNodeIndex()) orelse continue :nodes;
 
         for (call.ast.params) |param_node| {
-            const kind: LiteralKind = switch (shims.nodeTag(tree, param_node)) {
+            const kind: LiteralKind = switch (tree.nodeTag(param_node)) {
                 .number_literal => .number,
                 .string_literal, .multiline_string_literal => .string,
                 .char_literal => .char,
-                .identifier => switch (tree.tokens.items(.tag)[shims.nodeMainToken(tree, param_node)]) {
+                .identifier => switch (tree.tokens.items(.tag)[tree.nodeMainToken(param_node)]) {
                     .string_literal, .multiline_string_literal_line => .string,
                     .char_literal => .char,
                     .number_literal => .number,

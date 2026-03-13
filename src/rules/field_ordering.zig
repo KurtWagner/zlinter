@@ -74,7 +74,7 @@ fn run(
                 &container_decl_buffer,
                 node.toNodeIndex(),
             )) |container_decl| {
-                break :kind switch (tree.tokens.items(.tag)[shims.nodeMainToken(tree, node.toNodeIndex())]) {
+                break :kind switch (tree.tokens.items(.tag)[tree.nodeMainToken(node.toNodeIndex())]) {
                     .keyword_union => .{ config.union_field_order, "Union" },
                     .keyword_struct => {
                         if (container_decl.layout_token) |layout_token| {
@@ -116,13 +116,13 @@ fn run(
             // Declarations cannot appear between fields so once we see a field
             // simply read until we see something else to identify the chunk of
             // fields in source:
-            const name_token = token: switch (shims.nodeTag(tree, container_child)) {
+            const name_token = token: switch (tree.nodeTag(container_child)) {
                 .container_field_init,
                 .container_field_align,
                 .container_field,
                 => {
                     seen_field = true;
-                    break :token shims.nodeMainToken(tree, container_child);
+                    break :token tree.nodeMainToken(container_child);
                 },
                 else => if (seen_field) break :children else continue :children,
             };

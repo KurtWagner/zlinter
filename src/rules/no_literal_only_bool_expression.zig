@@ -63,7 +63,7 @@ fn run(
         const node, const connections = tuple;
         _ = connections;
 
-        switch (shims.nodeTag(tree, node.toNodeIndex())) {
+        switch (tree.nodeTag(node.toNodeIndex())) {
             .equal_equal,
             .bang_equal,
             .less_than,
@@ -71,7 +71,7 @@ fn run(
             .less_or_equal,
             .greater_or_equal,
             => {
-                const data = shims.nodeData(tree, node.toNodeIndex());
+                const data = tree.nodeData(node.toNodeIndex());
                 const lhs, const rhs = .{ data.node_and_node[0], data.node_and_node[1] };
                 if (isLiteral(tree, lhs) != null and isLiteral(tree, rhs) != null) {
                     try lint_problems.append(gpa, .{
@@ -134,11 +134,11 @@ const Literal = enum {
 
 /// Does not consider string literals, only booleans, numbers and chars
 fn isLiteral(tree: Ast, node: Ast.Node.Index) ?Literal {
-    return switch (shims.nodeTag(tree, node)) {
+    return switch (tree.nodeTag(node)) {
         .number_literal => .number,
         .char_literal => .char,
         .identifier => id: {
-            const token = shims.nodeMainToken(tree, node);
+            const token = tree.nodeMainToken(node);
             break :id switch (tree.tokens.items(.tag)[token]) {
                 .number_literal => .number,
                 .char_literal => .char,

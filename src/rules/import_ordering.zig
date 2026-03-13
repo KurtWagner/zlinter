@@ -229,19 +229,19 @@ fn resolveScopedImports(
 
 /// Returns the import path if `@import` built in call.
 fn isImportCall(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
-    switch (shims.nodeTag(tree, node)) {
+    switch (tree.nodeTag(node)) {
         .builtin_call_two,
         .builtin_call_two_comma,
         => {
-            const main_token = shims.nodeMainToken(tree, node);
+            const main_token = tree.nodeMainToken(node);
             if (!std.mem.eql(u8, "@import", tree.tokenSlice(main_token))) return null;
 
-            const data = shims.nodeData(tree, node);
+            const data = tree.nodeData(node);
             const lhs_node = NodeIndexShim.initOptional(data.opt_node_and_opt_node[0]) orelse return null;
 
-            std.debug.assert(shims.nodeTag(tree, lhs_node.toNodeIndex()) == .string_literal);
+            std.debug.assert(tree.nodeTag(lhs_node.toNodeIndex()) == .string_literal);
 
-            const lhs_content = tree.tokenSlice(shims.nodeMainToken(tree, lhs_node.toNodeIndex()));
+            const lhs_content = tree.tokenSlice(tree.nodeMainToken(lhs_node.toNodeIndex()));
             std.debug.assert(lhs_content.len > 2);
             return lhs_content[1 .. lhs_content.len - 1];
         },
@@ -262,7 +262,7 @@ fn classifyImportPath(path: []const u8) ImportDecl.Classification {
 // fn getScopedNode(doc: *const zlinter.session.LintDocument, node: Ast.Node.Index) Ast.Node.Index {
 //     var parent = doc.lineage.items(.parent)[node];
 //     while (parent) |parent_node| {
-//         switch (shims.nodeTag(doc.handle.tree, parent_node)) {
+//         switch (doc.handle.tree.nodeTag(parent_node)) {
 //             .block_two,
 //             .block_two_semicolon,
 //             .block,

@@ -84,14 +84,14 @@ fn run(
         const node, const connections = tuple;
         _ = connections;
 
-        const tag = shims.nodeTag(tree, node.toNodeIndex());
+        const tag = tree.nodeTag(node.toNodeIndex());
         switch (tag) {
             .builtin_call_two,
             .builtin_call_two_comma,
             .builtin_call,
             .builtin_call_comma,
             => {
-                const main_token = shims.nodeMainToken(tree, node.toNodeIndex());
+                const main_token = tree.nodeMainToken(node.toNodeIndex());
                 if (!std.mem.eql(u8, tree.tokenSlice(main_token), "@panic")) continue :nodes;
             },
             else => continue :nodes,
@@ -139,10 +139,10 @@ fn builtinHasParamContent(
     if (params.len != 1) return false;
 
     const param = params[0];
-    const tag = shims.nodeTag(tree, param);
+    const tag = tree.nodeTag(param);
     if (tag != .string_literal) return false;
 
-    const param_slice = tree.tokenSlice(shims.nodeMainToken(tree, param));
+    const param_slice = tree.tokenSlice(tree.nodeMainToken(param));
     for (contents) |c| {
         // offset 1 on either side to factor in quotes
         if (std.mem.eql(u8, param_slice[1 .. param_slice.len - 1], c)) return true;

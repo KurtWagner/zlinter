@@ -1201,6 +1201,5 @@ const BuildCwd = struct {
 const BuildInfo = @import("src/lib/BuildInfo.zig");
 const std = @import("std");
 const isLintableFilePath = @import("src/lib/files.zig").isLintableFilePath;
-const shims = @import("src/lib/shims.zig");
 const zig_version_string = @import("builtin").zig_version_string;
 pub const version = @import("./src/lib/version.zig");

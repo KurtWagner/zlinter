@@ -843,7 +843,6 @@ test {
 const builtin = @import("builtin");
 const std = @import("std");
 const zlinter = @import("zlinter");
-const shims = zlinter.shims;
 const rules = @import("rules").rules; // Generated in build_rules.zig
 const rules_configs = @import("rules").rules_configs; // Generated in build_rules.zig
 const rules_configs_types = @import("rules").rules_configs_types; // Generated in build_rules.zig

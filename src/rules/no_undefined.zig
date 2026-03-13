@@ -63,7 +63,7 @@ fn run(
     nodes: while (try it.next()) |tuple| {
         const node, const connections = tuple;
 
-        if (shims.nodeTag(tree, node.toNodeIndex()) != .identifier) continue :nodes;
+        if (tree.nodeTag(node.toNodeIndex()) != .identifier) continue :nodes;
         if (!std.mem.eql(u8, tree.getNodeSource(node.toNodeIndex()), "undefined")) continue :nodes;
 
         var decl_var_name: ?[]const u8 = null;
@@ -106,7 +106,7 @@ fn run(
             // configured method) is called on the var declaration set to
             // undefined. e.g., `this_was_undefined.init()`
             if (decl_var_name) |var_name| {
-                if (switch (shims.nodeTag(tree, parent)) {
+                if (switch (tree.nodeTag(parent)) {
                     .block_two,
                     .block_two_semicolon,
                     .block,
@@ -119,8 +119,8 @@ fn run(
 
                     while (try block_it.next()) |block_tuple| {
                         const block_node, _ = block_tuple;
-                        if (shims.nodeTag(tree, block_node.toNodeIndex()) == .field_access) {
-                            const node_data = shims.nodeData(tree, block_node.toNodeIndex());
+                        if (tree.nodeTag(block_node.toNodeIndex()) == .field_access) {
+                            const node_data = tree.nodeData(block_node.toNodeIndex());
                             const lhs_node, const identifier_token = .{ node_data.node_and_token.@"0", node_data.node_and_token.@"1" };
                             const lhs_source = tree.getNodeSource(lhs_node);
                             if (std.mem.eql(u8, lhs_source, var_name)) {

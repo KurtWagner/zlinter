@@ -156,7 +156,7 @@ fn looksLikeCode(content: []const u8, gpa: std.mem.Allocator) !bool {
 
         var node = NodeIndexShim.init(0);
         while (node.index < tree.nodes.len) : (node.index += 1) {
-            switch (shims.nodeTag(tree, node.toNodeIndex())) {
+            switch (tree.nodeTag(node.toNodeIndex())) {
                 .test_decl,
                 .global_var_decl,
                 .local_var_decl,

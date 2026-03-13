@@ -178,7 +178,7 @@ pub fn expectSingleNodeOfTag(tree: Ast, comptime tags: []const Ast.Node.Tag) !As
     var i = NodeIndexShim.root;
     while (i.index < tree.nodes.len) : (i.index += 1) {
         inline for (tags) |tag| {
-            if (nodeTag(tree, i.toNodeIndex()) == tag) {
+            if (tree.nodeTag(i.toNodeIndex()) == tag) {
                 if (found != null) return error.TestExpectedSingleNodeTag;
                 found = i.toNodeIndex();
             }
@@ -198,7 +198,7 @@ pub fn expectNodeOfTagFirst(doc: *const LintDocument, comptime tags: []const Ast
     while (try it.next()) |node_and_children| {
         const node = node_and_children[0].toNodeIndex();
         inline for (tags) |tag| {
-            if (nodeTag(doc.handle.tree, node) == tag) {
+            if (doc.handle.tree.nodeTag(node) == tag) {
                 return node;
             }
         }
@@ -391,6 +391,7 @@ pub fn testRunRule(
 
 const builtin = @import("builtin");
 const session = @import("session.zig");
+const shims = @import("shims.zig");
 const std = @import("std");
 const LintContext = session.LintContext;
 const LintDocument = session.LintDocument;
@@ -400,8 +401,6 @@ const LintProblem = @import("results.zig").LintProblem;
 const LintResult = @import("results.zig").LintResult;
 const LintProblemFix = @import("results.zig").LintProblemFix;
 const RunOptions = @import("rules.zig").RunOptions;
-const shims = @import("shims.zig");
 const NodeIndexShim = shims.NodeIndexShim;
-const nodeTag = shims.nodeTag;
 const strings = @import("strings.zig");
 const Ast = std.zig.Ast;

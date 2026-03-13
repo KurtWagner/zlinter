@@ -37,12 +37,12 @@ fn run(
 
     var node: NodeIndexShim = .root;
     while (node.index < tree.nodes.len) : (node.index += 1) {
-        if (shims.nodeTag(tree, node.toNodeIndex()) != .@"orelse") continue;
+        if (tree.nodeTag(node.toNodeIndex()) != .@"orelse") continue;
 
-        const data = shims.nodeData(tree, node.toNodeIndex());
+        const data = tree.nodeData(node.toNodeIndex());
         const rhs = data.node_and_node.@"1";
 
-        if (shims.nodeTag(tree, rhs) != .unreachable_literal) continue;
+        if (tree.nodeTag(rhs) != .unreachable_literal) continue;
 
         try lint_problems.append(gpa, .{
             .rule_id = rule.rule_id,

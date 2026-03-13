@@ -123,7 +123,7 @@ fn run(
 
         if (config.exclude_aliases) {
             if (NodeIndexShim.initOptional(var_decl.ast.init_node)) |init_node| {
-                if (shims.nodeTag(tree, init_node.toNodeIndex()) == .field_access) {
+                if (tree.nodeTag(init_node.toNodeIndex()) == .field_access) {
                     const last_token = tree.lastToken(init_node.toNodeIndex());
                     const field_name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(last_token));
                     if (std.mem.eql(u8, field_name, name)) continue :nodes;

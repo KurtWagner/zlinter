@@ -46,7 +46,7 @@ fn run(
     while (node.index < handle.tree.nodes.len) : (node.index += 1) {
         defer _ = arena_allocator.reset(.retain_capacity);
 
-        const tag = shims.nodeTag(tree, node.toNodeIndex());
+        const tag = tree.nodeTag(node.toNodeIndex());
         switch (tag) {
             .enum_literal => try handleEnumLiteral(
                 rule,
@@ -55,7 +55,7 @@ fn run(
                 context,
                 doc,
                 node.toNodeIndex(),
-                shims.nodeMainToken(tree, node.toNodeIndex()),
+                tree.nodeMainToken(node.toNodeIndex()),
                 &lint_problems,
                 config,
             ),
@@ -66,7 +66,7 @@ fn run(
                 context,
                 doc,
                 node.toNodeIndex(),
-                shims.nodeData(tree, node.toNodeIndex()).node_and_token.@"1",
+                tree.nodeData(node.toNodeIndex()).node_and_token.@"1",
                 &lint_problems,
                 config,
             ),
@@ -77,7 +77,7 @@ fn run(
                 context,
                 doc,
                 node.toNodeIndex(),
-                shims.nodeMainToken(tree, node.toNodeIndex()),
+                tree.nodeMainToken(node.toNodeIndex()),
                 &lint_problems,
                 config,
             ),
@@ -126,11 +126,11 @@ fn handleIdentifierAccess(
     // dont want to list the declaration as deprecated only its usages
     if (std.mem.eql(u8, decl_with_handle.handle.uri.raw, handle.uri.raw)) {
         const is_identifier = switch (decl_with_handle.decl) {
-            .ast_node => |decl_node| switch (shims.nodeTag(decl_with_handle.handle.tree, decl_node)) {
+            .ast_node => |decl_node| switch (decl_with_handle.handle.tree.nodeTag(decl_node)) {
                 .container_field_init,
                 .container_field_align,
                 .container_field,
-                => shims.nodeMainToken(decl_with_handle.handle.tree, decl_node) == identifier_token,
+                => decl_with_handle.handle.tree.nodeMainToken(decl_node) == identifier_token,
                 else => false,
             },
             .error_token => |err_token| err_token == identifier_token,
@@ -188,7 +188,7 @@ fn getSymbolEnumLiteralDocComment(
     name: []const u8,
     arena: std.mem.Allocator,
 ) !?[]const u8 {
-    std.debug.assert(shims.nodeTag(doc.handle.tree, node) == .enum_literal);
+    std.debug.assert(doc.handle.tree.nodeTag(node) == .enum_literal);
 
     var ancestors = std.ArrayList(Ast.Node.Index).empty;
     defer ancestors.deinit(arena);

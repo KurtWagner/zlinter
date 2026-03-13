@@ -212,7 +212,7 @@ fn declRequiringCleanup(
     // `init` field or through an `init` or `initCapacity` call. I'm torn by
     // this as maybe this rule should just be pedantic with a block list
     // configuration as only those most pedantic would care about this rule?
-    if (!switch (shims.nodeTag(tree, init_node)) {
+    if (!switch (tree.nodeTag(init_node)) {
         // e.g., `ArrayList(u8).empty`
         .field_access => zlinter.ast.isFieldVarAccess(
             tree,
@@ -244,7 +244,7 @@ fn declRequiringCleanup(
         .container => |container| {
             const scope_handle = container.scope_handle;
             const node = scope_handle.toNode();
-            const tag = shims.nodeTag(scope_handle.handle.tree, node);
+            const tag = scope_handle.handle.tree.nodeTag(node);
             switch (tag) {
                 .container_decl,
                 .container_decl_arg,
@@ -304,10 +304,10 @@ fn hasNonFreeingAllocatorParam(doc: *const zlinter.session.LintDocument, params:
     };
     var call_buffer: [1]Ast.Node.Index = undefined;
     for (params) |param_node| {
-        const tag = shims.nodeTag(tree, param_node);
+        const tag = tree.nodeTag(param_node);
         switch (tag) {
             .identifier => {
-                const slice = tree.tokenSlice(shims.nodeMainToken(tree, param_node));
+                const slice = tree.tokenSlice(tree.nodeMainToken(param_node));
                 for (skip_var_and_field_names) |str| {
                     if (std.mem.eql(u8, slice, str)) return true;
                 }
