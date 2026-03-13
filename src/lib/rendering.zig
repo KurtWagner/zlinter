@@ -12,6 +12,13 @@ pub const LintFileRenderer = struct {
         var line_ends = try std.ArrayList(usize).initCapacity(allocator, source.len / 40);
         errdefer line_ends.deinit(allocator);
 
+        if (source.len == 0) {
+            return .{
+                .source = source,
+                .line_ends = try line_ends.toOwnedSlice(allocator),
+            };
+        }
+
         for (0..source.len) |i| {
             if (source[i] == '\n')
                 try line_ends.append(allocator, i);
@@ -162,6 +169,18 @@ pub const LintFileRenderer = struct {
         allocator.free(self.source);
     }
 };
+
+test "LintFileRenderer - empty file" {
+    var input = std.Io.Reader.fixed("");
+    var renderer = try LintFileRenderer.init(
+        std.testing.allocator,
+        &input,
+    );
+    defer renderer.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(usize, 0), renderer.line_ends.len);
+    try std.testing.expectEqual(@as(usize, 0), renderer.source.len);
+}
 
 test "LintFileRenderer" {
     inline for (&.{ "\n", "\r\n" }) |newline| {
