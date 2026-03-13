@@ -43,8 +43,8 @@ pub const LintTextOrder = enum {
     }
 
     test name {
-        try std.testing.expectEqualStrings("alphatical", LintTextOrder.alphabetical_ascending);
-        try std.testing.expectEqualStrings("reverse alphatical", LintTextOrder.alphabetical_descending);
+        try std.testing.expectEqualStrings("alphabetical", LintTextOrder.alphabetical_ascending.name());
+        try std.testing.expectEqualStrings("reverse alphabetical", LintTextOrder.alphabetical_descending.name());
     }
 
     pub inline fn cmp(self: LintTextOrder, lhs: []const u8, rhs: []const u8) std.math.Order {
