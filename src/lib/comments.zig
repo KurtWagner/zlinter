@@ -1362,12 +1362,11 @@ pub const LazyRuleSkipper = struct {
         const index = try self.ensureBuilt();
 
         const line = self.doc.lineNumber(problem.start.byte_offset);
-        if (!index.all.isSet(line)) return true;
+        if (index.rules.get(problem.rule_id)) |bits| {
+            return !bits.isSet(line);
+        }
 
-        if (index.rules.get(problem.rule_id)) |bits|
-            if (!bits.isSet(line)) return true;
-
-        return false;
+        return !index.all.isSet(line);
     }
 
     fn ensureBuilt(self: *LazyRuleSkipper) error{OutOfMemory}!Index {
@@ -1379,6 +1378,16 @@ pub const LazyRuleSkipper = struct {
             .all = try .initFull(self.gpa, line_count + 1),
         };
         errdefer index.deinit();
+
+        const GlobalOp = struct {
+            range: std.bit_set.Range,
+            value: bool,
+        };
+        var global_ops: std.ArrayList(GlobalOp) = try .initCapacity(
+            self.gpa,
+            self.doc.comments.len,
+        );
+        defer global_ops.deinit(self.gpa);
 
         for (self.doc.comments) |comment| {
             const set: struct { range: std.bit_set.Range, rule_ids: ?Comment.RuleIds, value: bool } = switch (comment.kind) {
@@ -1409,17 +1418,168 @@ pub const LazyRuleSkipper = struct {
                     const result = try index.rules.getOrPut(rule_id);
                     if (!result.found_existing) {
                         result.value_ptr.* = try .initFull(self.gpa, line_count + 1);
+                        for (global_ops.items) |op| {
+                            result.value_ptr.setRangeValue(op.range, op.value);
+                        }
                     }
                     result.value_ptr.setRangeValue(set.range, set.value);
                 }
             } else {
                 index.all.setRangeValue(set.range, set.value);
+                global_ops.appendAssumeCapacity(.{
+                    .range = set.range,
+                    .value = set.value,
+                });
+
+                var rule_it = index.rules.iterator();
+                while (rule_it.next()) |entry| {
+                    entry.value_ptr.setRangeValue(set.range, set.value);
+                }
             }
         }
         self.index = index;
         return index;
     }
 };
+
+test "LazyRuleSkipper respects rule-specific enable after global disable" {
+    const source: [:0]const u8 =
+        \\// zlinter-disable
+        \\// zlinter-enable rule_a
+        \\const a = 1;
+        \\const b = 2;
+    ;
+
+    var doc = try allocParse(source, std.testing.allocator);
+    defer doc.deinit(std.testing.allocator);
+
+    var skipper = LazyRuleSkipper.init(doc, source, std.testing.allocator);
+    defer skipper.deinit();
+
+    const a_offset = std.mem.indexOf(u8, source, "const a").?;
+    const b_offset = std.mem.indexOf(u8, source, "const b").?;
+
+    const problem_a = LintProblem{
+        .rule_id = "rule_a",
+        .severity = .warning,
+        .start = .{ .byte_offset = a_offset },
+        .end = .{ .byte_offset = a_offset },
+        .message = "",
+    };
+
+    const problem_b = LintProblem{
+        .rule_id = "rule_b",
+        .severity = .warning,
+        .start = .{ .byte_offset = b_offset },
+        .end = .{ .byte_offset = b_offset },
+        .message = "",
+    };
+
+    try std.testing.expect(!(try skipper.shouldSkip(problem_a)));
+    try std.testing.expect(try skipper.shouldSkip(problem_b));
+}
+
+test "LazyRuleSkipper global disable affects all rules" {
+    const source: [:0]const u8 =
+        \\// zlinter-disable
+        \\const a = 1;
+    ;
+
+    var doc = try allocParse(source, std.testing.allocator);
+    defer doc.deinit(std.testing.allocator);
+
+    var skipper = LazyRuleSkipper.init(doc, source, std.testing.allocator);
+    defer skipper.deinit();
+
+    const a_offset = std.mem.indexOf(u8, source, "const a").?;
+    const problem = LintProblem{
+        .rule_id = "any_rule",
+        .severity = .warning,
+        .start = .{ .byte_offset = a_offset },
+        .end = .{ .byte_offset = a_offset },
+        .message = "",
+    };
+
+    try std.testing.expect(try skipper.shouldSkip(problem));
+}
+
+test "LazyRuleSkipper disable next line targets only that line" {
+    const source: [:0]const u8 =
+        \\const a = 1;
+        \\// zlinter-disable-next-line rule_a
+        \\const b = 2;
+        \\const c = 3;
+    ;
+
+    var doc = try allocParse(source, std.testing.allocator);
+    defer doc.deinit(std.testing.allocator);
+
+    var skipper = LazyRuleSkipper.init(doc, source, std.testing.allocator);
+    defer skipper.deinit();
+
+    const a_offset = std.mem.indexOf(u8, source, "const a").?;
+    const b_offset = std.mem.indexOf(u8, source, "const b").?;
+    const c_offset = std.mem.indexOf(u8, source, "const c").?;
+
+    const problem_a = LintProblem{
+        .rule_id = "rule_a",
+        .severity = .warning,
+        .start = .{ .byte_offset = a_offset },
+        .end = .{ .byte_offset = a_offset },
+        .message = "",
+    };
+    const problem_b = LintProblem{
+        .rule_id = "rule_a",
+        .severity = .warning,
+        .start = .{ .byte_offset = b_offset },
+        .end = .{ .byte_offset = b_offset },
+        .message = "",
+    };
+    const problem_c = LintProblem{
+        .rule_id = "rule_a",
+        .severity = .warning,
+        .start = .{ .byte_offset = c_offset },
+        .end = .{ .byte_offset = c_offset },
+        .message = "",
+    };
+
+    try std.testing.expect(!(try skipper.shouldSkip(problem_a)));
+    try std.testing.expect(try skipper.shouldSkip(problem_b));
+    try std.testing.expect(!(try skipper.shouldSkip(problem_c)));
+}
+
+test "LazyRuleSkipper rule-specific disable does not affect other rules" {
+    const source: [:0]const u8 =
+        \\// zlinter-disable rule_a
+        \\const a = 1;
+    ;
+
+    var doc = try allocParse(source, std.testing.allocator);
+    defer doc.deinit(std.testing.allocator);
+
+    var skipper = LazyRuleSkipper.init(doc, source, std.testing.allocator);
+    defer skipper.deinit();
+
+    const a_offset = std.mem.indexOf(u8, source, "const a").?;
+
+    const problem_a = LintProblem{
+        .rule_id = "rule_a",
+        .severity = .warning,
+        .start = .{ .byte_offset = a_offset },
+        .end = .{ .byte_offset = a_offset },
+        .message = "",
+    };
+    const problem_b = LintProblem{
+        .rule_id = "rule_b",
+        .severity = .warning,
+        .start = .{ .byte_offset = a_offset },
+        .end = .{ .byte_offset = a_offset },
+        .message = "",
+    };
+
+    try std.testing.expect(try skipper.shouldSkip(problem_a));
+    try std.testing.expect(!(try skipper.shouldSkip(problem_b)));
+}
 
 const std = @import("std");
 const LintProblem = @import("results.zig").LintProblem;
