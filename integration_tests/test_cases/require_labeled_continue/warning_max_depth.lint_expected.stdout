@@ -1,0 +1,11 @@
+warning Unlabeled `continue` inside nested loop is ambiguous. Use a loop label to make the control flow explicit. [test_cases/require_labeled_continue/warning_max_depth.input.zig:22:17] require_labeled_continue
+
+ 22 |                 continue;
+    |                 ^^^^^^^^
+
+warning Unlabeled `continue` inside nested loop is ambiguous. Use a loop label to make the control flow explicit. [test_cases/require_labeled_continue/warning_max_depth.input.zig:5:17] require_labeled_continue
+
+ 5 |                 continue;
+   |                 ^^^^^^^^
+
+x 2 warnings

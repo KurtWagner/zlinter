@@ -717,6 +717,7 @@ pub fn divide(x: i32, y: i32) !i32 {
 }
 ```
 
+
 **Config options:**
 
 * `severity`
@@ -1008,6 +1009,7 @@ pub fn message(age: u8, allocator: std.mem.Allocator) error{ OutOfMemory, Invali
 }
 ```
 
+
 **Config options:**
 
 * `severity`
@@ -1015,6 +1017,26 @@ pub fn message(age: u8, allocator: std.mem.Allocator) error{ OutOfMemory, Invali
   * The severity (off, warning, error).
 
   * **Default:** `.warning`
+
+## `require_labeled_continue`
+
+Enforces explicit loop labels for `continue` statements in nested loops.
+
+Unlabeled `continue` is allowed only when loop depth is exactly 1.
+
+**Config options:**
+
+* `severity`
+
+  * The severity (off, warning, error).
+
+  * **Default:** `.@"error"`
+
+* `max_unlabeled_depth`
+
+  * Maximum allowed loop depth for unlabeled `continue`. Depth 1 means a single enclosing loop. Default 1 allows unlabeled `continue` only at depth 1.
+
+  * **Default:** `1`
 
 ## `switch_case_ordering`
 
@@ -1027,3 +1049,4 @@ Enforces an order of values in `switch` statements.
   * The severity for when `else` is not last in a `switch` (off, warning, error).
 
   * **Default:** `.warning`
+

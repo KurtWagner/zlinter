@@ -1,0 +1,4 @@
+.{
+    .severity = .warning,
+    .max_unlabeled_depth = 2,
+}

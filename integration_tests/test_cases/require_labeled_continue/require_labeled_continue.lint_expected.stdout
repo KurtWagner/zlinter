@@ -1,0 +1,11 @@
+error Unlabeled `continue` inside nested loop is ambiguous. Use a loop label to make the control flow explicit. [test_cases/require_labeled_continue/require_labeled_continue.input.zig:16:13] require_labeled_continue
+
+ 16 |             continue;
+    |             ^^^^^^^^
+
+error Unlabeled `continue` inside nested loop is ambiguous. Use a loop label to make the control flow explicit. [test_cases/require_labeled_continue/require_labeled_continue.input.zig:4:13] require_labeled_continue
+
+ 4 |             continue;
+   |             ^^^^^^^^
+
+x 2 errors
