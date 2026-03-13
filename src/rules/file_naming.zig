@@ -38,7 +38,7 @@ fn run(
 
     const message, const severity = msg: {
         const basename = std.fs.path.basename(doc.path);
-        if (shims.isRootImplicitStruct(doc.handle.tree)) {
+        if (ast.isRootImplicitStruct(doc.handle.tree)) {
             if (config.file_struct.severity != .off and !config.file_struct.style.check(basename)) {
                 break :msg .{
                     try std.fmt.allocPrint(gpa, "File is struct so name should be {s}", .{config.file_struct.style.name()}),
@@ -270,4 +270,4 @@ test "expects TitleCase with under_score" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const shims = zlinter.shims;
+const ast = zlinter.ast;

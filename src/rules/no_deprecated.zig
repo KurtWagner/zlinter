@@ -199,7 +199,7 @@ fn getSymbolEnumLiteralDocComment(
     var it = doc.nodeAncestorIterator(current);
     while (it.next()) |ancestor| {
         if (NodeIndexShim.init(ancestor).isRoot()) break;
-        if (shims.isNodeOverlapping(doc.handle.tree, current, ancestor)) {
+        if (ast.isNodeOverlapping(doc.handle.tree, current, ancestor)) {
             try ancestors.append(arena, ancestor);
             current = ancestor;
         } else {
@@ -343,6 +343,6 @@ test "no_deprecated - regression test for #36" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const shims = zlinter.shims;
+const ast = zlinter.ast;
 const NodeIndexShim = zlinter.shims.NodeIndexShim;
 const Ast = std.zig.Ast;

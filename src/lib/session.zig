@@ -424,14 +424,14 @@ pub const LintContext = struct {
         // First we try looking for a <type> node in the declaration. e.g.,
         // `const var_name: <type> = ....`
         if (maybe_type_node) |type_node| {
-            const node = shims.unwrapNode(tree, type_node.toNodeIndex(), .{});
+            const node = ast.unwrapNode(tree, type_node.toNodeIndex(), .{});
 
             if (tree.fullFnProto(&fn_proto_buffer, node)) |fn_proto| {
                 if (NodeIndexShim.initOptional(fn_proto.ast.return_type)) |return_node_shim| {
-                    const return_node = shims.unwrapNode(tree, return_node_shim.toNodeIndex(), .{});
+                    const return_node = ast.unwrapNode(tree, return_node_shim.toNodeIndex(), .{});
 
                     // If it's a function proto, then return whether or not the function returns `type`
-                    const is_type_identifier = shims.isIdentiferKind(tree, shims.unwrapNode(tree, return_node, .{}), .type);
+                    const is_type_identifier = ast.isIdentiferKind(tree, ast.unwrapNode(tree, return_node, .{}), .type);
                     return if (is_type_identifier) .fn_returns_type else .@"fn";
                 } else {
                     return .@"fn";
@@ -441,13 +441,13 @@ pub const LintContext = struct {
                 switch (tree.tokens.items(.tag)[container_decl.ast.main_token]) {
                     // Instance of namespace should be impossible but to be safe
                     // we will just return null to say we couldn't resolve the kind
-                    .keyword_struct => return if (shims.isContainerNamespace(tree, container_decl)) null else .struct_instance,
+                    .keyword_struct => return if (ast.isContainerNamespace(tree, container_decl)) null else .struct_instance,
                     .keyword_union => return .union_instance,
                     .keyword_opaque => return .opaque_instance,
                     .keyword_enum => return .enum_instance,
                     inline else => |token| @panic("Unexpected container main token: " ++ @tagName(token)),
                 }
-            } else if (shims.isIdentiferKind(tree, node, .type)) {
+            } else if (ast.isIdentiferKind(tree, node, .type)) {
                 return .type;
             } else if (try self.resolveTypeOfNode(doc, node)) |type_node_type| {
                 const decl = type_node_type.resolveDeclLiteralResultType();
@@ -472,7 +472,7 @@ pub const LintContext = struct {
         // Then we look at the initialisation <value> if a type couldn't be used
         // from then declaration. e.g., `const var_name = <value>`
         if (maybe_value_node) |value_node| {
-            const node = shims.unwrapNode(tree, value_node.toNodeIndex(), .{});
+            const node = ast.unwrapNode(tree, value_node.toNodeIndex(), .{});
 
             // LIMITATION: All builtin calls to type of and type will return
             // `type` without any resolution.
@@ -494,7 +494,7 @@ pub const LintContext = struct {
 
             if (tree.fullContainerDecl(&container_decl_buffer, node)) |container_decl| {
                 return switch (tree.tokens.items(.tag)[container_decl.ast.main_token]) {
-                    .keyword_struct => if (shims.isContainerNamespace(tree, container_decl)) .namespace_type else .struct_type,
+                    .keyword_struct => if (ast.isContainerNamespace(tree, container_decl)) .namespace_type else .struct_type,
                     .keyword_union => .union_type,
                     .keyword_opaque => .opaque_type,
                     .keyword_enum => .enum_type,
