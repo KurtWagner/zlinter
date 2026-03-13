@@ -159,8 +159,7 @@ test {
 }
 
 test "no_swallow_error" {
-    const rule = buildRule(.{});
-    const source: [:0]const u8 =
+    const no_swallow_error_source: [:0]const u8 =
         \\pub fn main() !void {
         \\  method() catch {};
         \\  method() catch unreachable;
@@ -173,37 +172,19 @@ test "no_swallow_error" {
         \\}
     ;
 
+    const rule = buildRule(.{});
     inline for (&.{ .warning, .@"error" }) |severity| {
         try zlinter.testing.testRunRule(
             rule,
-            source,
+            no_swallow_error_source,
             .{},
             Config{
-                // TODO: Split these into separate tests to ensure severity isn't leaked
                 .detect_catch_unreachable = severity,
-                .detect_empty_catch = severity,
-                .detect_empty_else = severity,
-                .detect_else_unreachable = severity,
+                .detect_empty_catch = .off,
+                .detect_empty_else = .off,
+                .detect_else_unreachable = .off,
             },
             &.{
-                .{
-                    .rule_id = "no_swallow_error",
-                    .severity = severity,
-                    .slice = "if (method()) {} else |_| {}",
-                    .message = "Avoid swallowing error with empty else",
-                },
-                .{
-                    .rule_id = "no_swallow_error",
-                    .severity = severity,
-                    .slice = "if (method()) {} else |_| { unreachable; }",
-                    .message = "Avoid swallowing error with else unreachable",
-                },
-                .{
-                    .rule_id = "no_swallow_error",
-                    .severity = severity,
-                    .slice = "if (method()) {} else |_| unreachable",
-                    .message = "Avoid swallowing error with else unreachable",
-                },
                 .{
                     .rule_id = "no_swallow_error",
                     .severity = severity,
@@ -216,6 +197,20 @@ test "no_swallow_error" {
                     .slice = "method() catch unreachable",
                     .message = "Avoid swallowing error with catch unreachable",
                 },
+            },
+        );
+
+        try zlinter.testing.testRunRule(
+            rule,
+            no_swallow_error_source,
+            .{},
+            Config{
+                .detect_catch_unreachable = .off,
+                .detect_empty_catch = severity,
+                .detect_empty_else = .off,
+                .detect_else_unreachable = .off,
+            },
+            &.{
                 .{
                     .rule_id = "no_swallow_error",
                     .severity = severity,
@@ -224,12 +219,58 @@ test "no_swallow_error" {
                 },
             },
         );
+
+        try zlinter.testing.testRunRule(
+            rule,
+            no_swallow_error_source,
+            .{},
+            Config{
+                .detect_catch_unreachable = .off,
+                .detect_empty_catch = .off,
+                .detect_empty_else = severity,
+                .detect_else_unreachable = .off,
+            },
+            &.{
+                .{
+                    .rule_id = "no_swallow_error",
+                    .severity = severity,
+                    .slice = "if (method()) {} else |_| {}",
+                    .message = "Avoid swallowing error with empty else",
+                },
+            },
+        );
+
+        try zlinter.testing.testRunRule(
+            rule,
+            no_swallow_error_source,
+            .{},
+            Config{
+                .detect_catch_unreachable = .off,
+                .detect_empty_catch = .off,
+                .detect_empty_else = .off,
+                .detect_else_unreachable = severity,
+            },
+            &.{
+                .{
+                    .rule_id = "no_swallow_error",
+                    .severity = severity,
+                    .slice = "if (method()) {} else |_| { unreachable; }",
+                    .message = "Avoid swallowing error with else unreachable",
+                },
+                .{
+                    .rule_id = "no_swallow_error",
+                    .severity = severity,
+                    .slice = "if (method()) {} else |_| unreachable",
+                    .message = "Avoid swallowing error with else unreachable",
+                },
+            },
+        );
     }
 
     // Off:
     try zlinter.testing.testRunRule(
         rule,
-        source,
+        no_swallow_error_source,
         .{},
         Config{
             .detect_catch_unreachable = .off,
