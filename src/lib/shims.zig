@@ -91,24 +91,20 @@ pub fn unwrapNode(
 
     while (true) {
         switch (tree.nodeTag(current)) {
-            .unwrap_optional => if (options.unwrap_optional_unwrap) switch (version.zig) {
-                .@"0.14" => current = tree.nodeData(current).lhs,
-                .@"0.15", .@"0.16" => current = tree.nodeData(current).node_and_token.@"0",
+            .unwrap_optional => if (options.unwrap_optional_unwrap) {
+                current = tree.nodeData(current).node_and_token.@"0";
             } else break,
-            .optional_type => if (options.unwrap_optional) switch (version.zig) {
-                .@"0.14" => current = tree.nodeData(current).lhs,
-                .@"0.15", .@"0.16" => current = tree.nodeData(current).node,
+            .optional_type => if (options.unwrap_optional) {
+                current = tree.nodeData(current).node;
             } else break,
             .ptr_type_aligned,
             .ptr_type_sentinel,
-            => if (options.unwrap_pointer) switch (version.zig) {
-                .@"0.14" => current = tree.nodeData(current).rhs,
-                .@"0.15", .@"0.16" => current = tree.nodeData(current).opt_node_and_node.@"1",
+            => if (options.unwrap_pointer) {
+                current = tree.nodeData(current).opt_node_and_node.@"1";
             } else break,
             .ptr_type,
-            => if (options.unwrap_pointer) switch (version.zig) {
-                .@"0.14" => current = tree.nodeData(current).rhs,
-                .@"0.15", .@"0.16" => current = tree.nodeData(current).extra_and_node.@"1",
+            => if (options.unwrap_pointer) {
+                current = tree.nodeData(current).extra_and_node.@"1";
             } else break,
             else => break,
         }
