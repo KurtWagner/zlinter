@@ -1200,3 +1200,7 @@ const testing = @import("testing.zig");
 const zls = @import("zls");
 const LintProblem = @import("results.zig").LintProblem;
 const Ast = std.zig.Ast;
+
+test {
+    std.testing.refAllDecls(@This());
+}

@@ -62,3 +62,7 @@ pub fn consumeStdinAlloc(
 
 const rendering = @import("rendering.zig");
 const std = @import("std");
+
+test {
+    std.testing.refAllDecls(@This());
+}

@@ -227,3 +227,7 @@ const session = @import("session.zig");
 const std = @import("std");
 const strings = @import("strings.zig");
 const testing = @import("testing.zig");
+
+test {
+    std.testing.refAllDecls(@This());
+}

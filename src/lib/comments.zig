@@ -1583,3 +1583,7 @@ test "LazyRuleSkipper rule-specific disable does not affect other rules" {
 
 const std = @import("std");
 const LintProblem = @import("results.zig").LintProblem;
+
+test {
+    std.testing.refAllDecls(@This());
+}

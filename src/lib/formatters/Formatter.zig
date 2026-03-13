@@ -27,3 +27,7 @@ pub inline fn format(self: *const Formatter, input: FormatInput, writer: *std.Io
 
 const std = @import("std");
 const zlinter = @import("../zlinter.zig");
+
+test {
+    std.testing.refAllDecls(@This());
+}

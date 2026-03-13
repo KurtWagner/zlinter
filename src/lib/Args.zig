@@ -1170,3 +1170,7 @@ const std = @import("std");
 const LintRule = @import("./rules.zig").LintRule;
 const BuildInfo = @import("BuildInfo.zig");
 const rendering = @import("./rendering.zig");
+
+test {
+    std.testing.refAllDecls(@This());
+}

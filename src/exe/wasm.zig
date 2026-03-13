@@ -17,3 +17,7 @@ export fn parse(buffer: [*]u8, len: u32) u32 {
 const builtin = @import("builtin");
 const std = @import("std");
 const zlinter = @import("zlinter");
+
+test {
+    std.testing.refAllDecls(@This());
+}

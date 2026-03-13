@@ -239,3 +239,7 @@ test "allocLintFiles - with arg files" {
 const std = @import("std");
 const testing = @import("testing.zig");
 const zlinter = @import("./zlinter.zig");
+
+test {
+    std.testing.refAllDecls(@This());
+}

@@ -404,3 +404,7 @@ const LintProblemFix = @import("results.zig").LintProblemFix;
 const RunOptions = @import("rules.zig").RunOptions;
 const strings = @import("strings.zig");
 const Ast = std.zig.Ast;
+
+test {
+    std.testing.refAllDecls(@This());
+}

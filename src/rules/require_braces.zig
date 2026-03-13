@@ -384,3 +384,7 @@ test "if statements" {
 const std = @import("std");
 const Ast = std.zig.Ast;
 const zlinter = @import("zlinter");
+
+test {
+    std.testing.refAllDecls(@This());
+}

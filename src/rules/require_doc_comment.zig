@@ -266,3 +266,7 @@ test "require_doc_comment - file" {
 const std = @import("std");
 const zlinter = @import("zlinter");
 const Ast = std.zig.Ast;
+
+test {
+    std.testing.refAllDecls(@This());
+}

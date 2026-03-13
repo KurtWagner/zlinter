@@ -341,3 +341,7 @@ const rules = @import("rules.zig");
 const std = @import("std");
 const strings = @import("strings.zig");
 const Ast = std.zig.Ast;
+
+test {
+    std.testing.refAllDecls(@This());
+}

@@ -128,3 +128,7 @@ fn logAndReturnWriteFailure(comptime suffix: []const u8, err: anyerror) error{Wr
 const Formatter = @import("./Formatter.zig");
 const std = @import("std");
 const zlinter = @import("../zlinter.zig");
+
+test {
+    std.testing.refAllDecls(@This());
+}

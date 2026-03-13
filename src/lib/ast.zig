@@ -948,3 +948,7 @@ const std = @import("std");
 const testing = @import("testing.zig");
 const zls = @import("zls");
 const Ast = std.zig.Ast;
+
+test {
+    std.testing.refAllDecls(@This());
+}

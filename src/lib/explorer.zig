@@ -179,3 +179,7 @@ fn tokensToJson(tree: Ast, arena: std.mem.Allocator) !std.json.Array {
 const std = @import("std");
 const Ast = std.zig.Ast;
 const zls = @import("zls");
+
+test {
+    std.testing.refAllDecls(@This());
+}

@@ -95,3 +95,7 @@ pub const default_excluded_short_names: []const []const u8 = &.{
 };
 
 const std = @import("std");
+
+test {
+    std.testing.refAllDecls(@This());
+}
