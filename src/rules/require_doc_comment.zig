@@ -41,15 +41,15 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    const root: NodeIndexShim = .root;
+    const root: Ast.Node.Index = .root;
 
     if (config.file_severity != .off) {
-        if (!try hasDocComments(tree, root.toNodeIndex())) {
+        if (!try hasDocComments(tree, root)) {
             try lint_problems.append(gpa, .{
                 .rule_id = rule.rule_id,
                 .severity = config.file_severity,
-                .start = .startOfNode(tree, root.toNodeIndex()),
-                .end = .startOfNode(tree, root.toNodeIndex()),
+                .start = .startOfNode(tree, root),
+                .end = .startOfNode(tree, root),
                 .message = try gpa.dupe(u8, "File is missing a doc comment"),
             });
         }
@@ -65,39 +65,39 @@ fn run(
         const node, const connections = tuple;
         _ = connections;
 
-        const tag = tree.nodeTag(node.toNodeIndex());
+        const tag = tree.nodeTag(node);
 
         switch (tag) {
-            .fn_decl => if (tree.fullFnProto(&fn_decl_buffer, node.toNodeIndex())) |fn_decl| {
+            .fn_decl => if (tree.fullFnProto(&fn_decl_buffer, node)) |fn_decl| {
                 const severity, const label = switch (zlinter.ast.fnProtoVisibility(tree, fn_decl)) {
                     .private => .{ config.private_severity, "Private" },
                     .public => .{ config.public_severity, "Public" },
                 };
                 if (severity == .off) continue :nodes;
 
-                if (try hasDocComments(tree, node.toNodeIndex())) continue :nodes;
+                if (try hasDocComments(tree, node)) continue :nodes;
 
                 try lint_problems.append(gpa, .{
                     .rule_id = rule.rule_id,
                     .severity = severity,
-                    .start = .startOfToken(tree, tree.firstToken(node.toNodeIndex())),
+                    .start = .startOfToken(tree, tree.firstToken(node)),
                     .end = .endOfNode(tree, fn_decl.ast.proto_node),
                     .message = try std.fmt.allocPrint(gpa, "{s} function is missing a doc comment", .{label}),
                 });
             },
-            else => if (tree.fullVarDecl(node.toNodeIndex())) |var_decl| {
+            else => if (tree.fullVarDecl(node)) |var_decl| {
                 const severity, const label = switch (zlinter.ast.varDeclVisibility(tree, var_decl)) {
                     .private => .{ config.private_severity, "Private" },
                     .public => .{ config.public_severity, "Public" },
                 };
                 if (severity == .off) continue :nodes;
 
-                if (try hasDocComments(tree, node.toNodeIndex())) continue :nodes;
+                if (try hasDocComments(tree, node)) continue :nodes;
 
                 try lint_problems.append(gpa, .{
                     .rule_id = rule.rule_id,
                     .severity = severity,
-                    .start = .startOfToken(tree, tree.firstToken(node.toNodeIndex())),
+                    .start = .startOfToken(tree, tree.firstToken(node)),
                     .end = .endOfToken(tree, var_decl.ast.mut_token + 1),
                     .message = try std.fmt.allocPrint(gpa, "{s} declaration is missing a doc comment", .{label}),
                 });
@@ -265,6 +265,4 @@ test "require_doc_comment - file" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const shims = zlinter.shims;
-const NodeIndexShim = zlinter.shims.NodeIndexShim;
 const Ast = std.zig.Ast;

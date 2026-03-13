@@ -73,7 +73,7 @@ fn run(
     var problem_nodes = std.ArrayList(Ast.Node.Index).empty;
     defer problem_nodes.deinit(gpa);
 
-    const root: NodeIndexShim = .root;
+    const root: Ast.Node.Index = .root;
     var it = try doc.nodeLineageIterator(
         root,
         gpa,
@@ -84,7 +84,7 @@ fn run(
     defer arena.deinit();
 
     nodes: while (try it.next()) |tuple| {
-        const node = tuple[0].toNodeIndex();
+        const node = tuple[0];
 
         var buffer: [1]Ast.Node.Index = undefined;
         const fn_decl = zlinter.ast.fnDecl(
@@ -146,7 +146,7 @@ fn processBlock(
 
     var call_buffer: [1]Ast.Node.Index = undefined;
 
-    for (doc.lineage.items(.children)[NodeIndexShim.init(block_node).index] orelse &.{}) |child_node| {
+    for (doc.lineage.items(.children)[@intFromEnum(block_node)] orelse &.{}) |child_node| {
         if (try declRequiringCleanup(context, doc, child_node)) |decl_ref| {
             try cleanup_symbols.put(
                 try arena.dupe(u8, doc.handle.tree.tokenSlice(decl_ref.decl_name_token)),
@@ -204,8 +204,7 @@ fn declRequiringCleanup(
 ) !?DeclRef {
     const tree = doc.handle.tree;
     const var_decl = tree.fullVarDecl(maybe_var_decl_node) orelse return null;
-    const init_node = (NodeIndexShim.initOptional(var_decl.ast.init_node) orelse
-        return null).toNodeIndex();
+    const init_node = var_decl.ast.init_node.unwrap() orelse return null;
     var call_buffer: [1]Ast.Node.Index = undefined;
 
     // In an attempt to reduce noise we only care if initialized to `empty` or
@@ -437,6 +436,4 @@ test {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const shims = zlinter.shims;
-const NodeIndexShim = zlinter.shims.NodeIndexShim;
 const Ast = std.zig.Ast;

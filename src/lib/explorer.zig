@@ -45,7 +45,7 @@ pub fn jsonTree(
         node_children: *std.json.Array,
 
         fn callback(self: @This(), context_tree: *const Ast, child_node: Ast.Node.Index) error{OutOfMemory}!void {
-            if (NodeIndexShim.init(child_node).isRoot()) return;
+            if (child_node == .root) return;
 
             var node_object = std.json.ObjectMap.init(self.arena);
             try node_object.put("tag", .{
@@ -97,7 +97,7 @@ pub fn jsonTree(
     if (tree.errors.len == 0) {
         try iterateChildren(
             &tree,
-            NodeIndexShim.root.toNodeIndex(),
+            .root,
             Context{
                 .arena = arena,
                 .indent = 0,
@@ -176,8 +176,6 @@ fn tokensToJson(tree: Ast, arena: std.mem.Allocator) !std.json.Array {
     return json_tokens;
 }
 
-const shims = @import("shims.zig");
 const std = @import("std");
-const NodeIndexShim = shims.NodeIndexShim;
 const Ast = std.zig.Ast;
 const zls = @import("zls");

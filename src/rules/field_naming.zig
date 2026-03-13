@@ -154,15 +154,16 @@ fn run(
     const tree = doc.handle.tree;
     var buffer: [2]Ast.Node.Index = undefined;
 
-    var node: NodeIndexShim = .root;
-    while (node.index < tree.nodes.len) : (node.index += 1) {
-        const tag = tree.nodeTag(node.toNodeIndex());
+    var index: u32 = @intFromEnum(Ast.Node.Index.root);
+    while (index < tree.nodes.len) : (index += 1) {
+        const node: Ast.Node.Index = @enumFromInt(index);
+        const tag = tree.nodeTag(node);
         if (tag == .error_set_decl) {
-            const node_data = tree.nodeData(node.toNodeIndex());
+            const node_data = tree.nodeData(node);
             const rbrace = node_data.token_and_token.@"1";
 
             var token = rbrace - 1;
-            tokens: while (token >= tree.firstToken(node.toNodeIndex())) : (token -= 1) {
+            tokens: while (token >= tree.firstToken(node)) : (token -= 1) {
                 switch (tree.tokens.items(.tag)[token]) {
                     .identifier => {
                         const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(token));
@@ -211,8 +212,8 @@ fn run(
                     else => {},
                 }
             }
-        } else if (tree.fullContainerDecl(&buffer, node.toNodeIndex())) |container_decl| {
-            const container_tag = if (node.index == 0) .keyword_struct else tree.tokens.items(.tag)[container_decl.ast.main_token];
+        } else if (tree.fullContainerDecl(&buffer, node)) |container_decl| {
+            const container_tag = if (node == .root) .keyword_struct else tree.tokens.items(.tag)[container_decl.ast.main_token];
 
             fields: for (container_decl.ast.members) |member| {
                 if (tree.fullContainerField(member)) |container_field| {
@@ -599,6 +600,4 @@ test "name lengths" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const shims = zlinter.shims;
-const NodeIndexShim = zlinter.shims.NodeIndexShim;
 const Ast = std.zig.Ast;

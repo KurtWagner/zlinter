@@ -154,9 +154,10 @@ fn looksLikeCode(content: []const u8, gpa: std.mem.Allocator) !bool {
         if (tree.nodes.len <= root_node) break :looks_like_declaration false;
         if (tree.errors.len > 0) break :looks_like_declaration false;
 
-        var node = NodeIndexShim.init(0);
-        while (node.index < tree.nodes.len) : (node.index += 1) {
-            switch (tree.nodeTag(node.toNodeIndex())) {
+        var index: u32 = 0;
+        while (index < tree.nodes.len) : (index += 1) {
+            const node: Ast.Node.Index = @enumFromInt(index);
+            switch (tree.nodeTag(node)) {
                 .test_decl,
                 .global_var_decl,
                 .local_var_decl,
@@ -170,11 +171,11 @@ fn looksLikeCode(content: []const u8, gpa: std.mem.Allocator) !bool {
                     // TODO: Work out the container field situation as the AST
                     // appears to not be behaving how it is documented.
                     // zlinter-disable-next-line no_comment_out_code
-                    // if (ast.fullContainerField(node.toNodeIndex())) |container_field| {
+                    // if (ast.fullContainerField(node)) |container_field| {
                     //     std.debug.print("{} - '{s}'\n", .{ container_field.tree, tree.tokenSlice(container_field.ast.main_token) });
-                    //     if (NodeIndexShim.initOptional(container_field.ast.type_expr) != null and
-                    //         tree.lastToken(node.toNodeIndex()) + 1 < tree.tokens.len and
-                    //         tree.tokens.items(.tag)[ast.lastToken(node.toNodeIndex()) + 1] == .comma)
+                    //     if (container_field.ast.type_expr.unwrap() != null and
+                    //         tree.lastToken(node) + 1 < tree.tokens.len and
+                    //         tree.tokens.items(.tag)[ast.lastToken(node) + 1] == .comma)
                     //     {
                     //         break :looks_like_declaration true;
                     //     }
@@ -235,6 +236,4 @@ test {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const shims = zlinter.shims;
-const NodeIndexShim = zlinter.shims.NodeIndexShim;
 const Ast = std.zig.Ast;

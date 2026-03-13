@@ -45,7 +45,7 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    const root: NodeIndexShim = .root;
+    const root: Ast.Node.Index = .root;
     var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
@@ -57,9 +57,9 @@ fn run(
             severity: zlinter.rules.LintProblemSeverity,
             message: []const u8,
         } = problem: {
-            switch (tree.nodeTag(node.toNodeIndex())) {
+            switch (tree.nodeTag(node)) {
                 .@"catch" => {
-                    const data = tree.nodeData(node.toNodeIndex());
+                    const data = tree.nodeData(node);
                     const rhs = data.node_and_node.@"1";
 
                     switch (tree.nodeTag(rhs)) {
@@ -84,15 +84,15 @@ fn run(
                         else => {},
                     }
                 },
-                else => if (tree.fullIf(node.toNodeIndex())) |if_info| {
-                    if (NodeIndexShim.initOptional(if_info.ast.else_expr)) |else_node| {
-                        switch (tree.nodeTag(else_node.toNodeIndex())) {
+                else => if (tree.fullIf(node)) |if_info| {
+                    if (if_info.ast.else_expr.unwrap()) |else_node| {
+                        switch (tree.nodeTag(else_node)) {
                             .unreachable_literal => if (config.detect_else_unreachable != .off)
                                 break :problem .{
                                     .severity = config.detect_else_unreachable,
                                     .message = "Avoid swallowing error with else unreachable",
                                 },
-                            .block_two, .block_two_semicolon => switch (isEmptyOrUnreachableBlock(tree, else_node.toNodeIndex())) {
+                            .block_two, .block_two_semicolon => switch (isEmptyOrUnreachableBlock(tree, else_node)) {
                                 .@"unreachable" => if (config.detect_else_unreachable != .off)
                                     break :problem .{
                                         .severity = config.detect_else_unreachable,
@@ -122,8 +122,8 @@ fn run(
             try lint_problems.append(gpa, .{
                 .rule_id = rule.rule_id,
                 .severity = problem.severity,
-                .start = .startOfNode(tree, node.toNodeIndex()),
-                .end = .endOfNode(tree, node.toNodeIndex()),
+                .start = .startOfNode(tree, node),
+                .end = .endOfNode(tree, node),
                 .message = try gpa.dupe(u8, problem.message),
             });
         }
@@ -144,13 +144,12 @@ fn isEmptyOrUnreachableBlock(tree: Ast, node: Ast.Node.Index) enum { none, empty
     std.debug.assert(tag == .block_two or tag == .block_two_semicolon);
 
     const data = tree.nodeData(node);
-    const lhs, const rhs = .{
-        NodeIndexShim.initOptional(data.opt_node_and_opt_node.@"0"),
-        NodeIndexShim.initOptional(data.opt_node_and_opt_node.@"1"),
-    };
+    const lhs = data.opt_node_and_opt_node.@"0".unwrap();
+    const rhs = data.opt_node_and_opt_node.@"1".unwrap();
 
     if (lhs == null and rhs == null) return .empty;
-    if (lhs != null and tree.nodeTag(lhs.?.toNodeIndex()) == .unreachable_literal) return .@"unreachable";
+    if (lhs) |lhs_node|
+        if (tree.nodeTag(lhs_node) == .unreachable_literal) return .@"unreachable";
     return .none;
 }
 
@@ -284,6 +283,4 @@ test "no_swallow_error" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const shims = zlinter.shims;
-const NodeIndexShim = zlinter.shims.NodeIndexShim;
 const Ast = std.zig.Ast;

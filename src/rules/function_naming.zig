@@ -77,10 +77,11 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    var node: NodeIndexShim = .init(1); // Skip root node at 0
-    nodes: while (node.index < tree.nodes.len) : (node.index += 1) {
+    var index: u32 = 1; // Skip root node at 0
+    nodes: while (index < tree.nodes.len) : (index += 1) {
+        const node: Ast.Node.Index = @enumFromInt(index);
         var buffer: [1]Ast.Node.Index = undefined;
-        if (namedFnProto(tree, &buffer, node.toNodeIndex())) |fn_proto| {
+        if (namedFnProto(tree, &buffer, node)) |fn_proto| {
             if (config.exclude_extern and fn_proto.extern_export_inline_token != null) {
                 const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
                 if (token_tag == .keyword_extern) continue :nodes;
@@ -132,7 +133,7 @@ fn run(
         }
 
         // Check arguments:
-        if (fnProto(tree, &buffer, node.toNodeIndex())) |fn_proto| {
+        if (fnProto(tree, &buffer, node)) |fn_proto| {
             if (config.exclude_extern and fn_proto.extern_export_inline_token != null) {
                 const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
                 if (token_tag == .keyword_extern) continue :nodes;
@@ -356,6 +357,4 @@ test "general" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const shims = zlinter.shims;
-const NodeIndexShim = zlinter.shims.NodeIndexShim;
 const Ast = std.zig.Ast;

@@ -55,7 +55,7 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    const root: NodeIndexShim = .root;
+    const root: Ast.Node.Index = .root;
     var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
@@ -63,7 +63,7 @@ fn run(
         const node, const connections = tuple;
         _ = connections;
 
-        switch (tree.nodeTag(node.toNodeIndex())) {
+        switch (tree.nodeTag(node)) {
             .equal_equal,
             .bang_equal,
             .less_than,
@@ -71,19 +71,19 @@ fn run(
             .less_or_equal,
             .greater_or_equal,
             => {
-                const data = tree.nodeData(node.toNodeIndex());
+                const data = tree.nodeData(node);
                 const lhs, const rhs = .{ data.node_and_node[0], data.node_and_node[1] };
                 if (isLiteral(tree, lhs) != null and isLiteral(tree, rhs) != null) {
                     try lint_problems.append(gpa, .{
                         .rule_id = rule.rule_id,
                         .severity = config.severity,
-                        .start = .startOfNode(tree, node.toNodeIndex()),
-                        .end = .endOfNode(tree, node.toNodeIndex()),
+                        .start = .startOfNode(tree, node),
+                        .end = .endOfNode(tree, node),
                         .message = try gpa.dupe(u8, "Useless condition"),
                     });
                 }
             },
-            else => if (tree.fullIf(node.toNodeIndex())) |full_if| {
+            else => if (tree.fullIf(node)) |full_if| {
                 if (isLiteral(tree, full_if.ast.cond_expr)) |_| {
                     try lint_problems.append(gpa, .{
                         .rule_id = rule.rule_id,
@@ -93,7 +93,7 @@ fn run(
                         .message = try gpa.dupe(u8, "Useless condition"),
                     });
                 }
-            } else if (tree.fullWhile(node.toNodeIndex())) |full_while| {
+            } else if (tree.fullWhile(node)) |full_while| {
                 if (isLiteral(tree, full_while.ast.cond_expr)) |literal| {
                     if (literal == .true) continue :nodes;
 
@@ -106,11 +106,11 @@ fn run(
                     });
                 }
             },
-            // else if (tree.fullVarDecl(node.toNodeIndex())) |var_decl| {
+            // else if (tree.fullVarDecl(node)) |var_decl| {
             //     if (tree.tokens.items(.tag)[var_decl.ast.mut_token] != .keyword_const) continue :nodes;
 
-            //     const init_node = NodeIndexShim.initOptional(var_decl.ast.init_node) orelse continue :nodes;
-            //     if (!isLiteral(tree, init_node.toNodeIndex())) continue :nodes;
+            //     const init_node = var_decl.ast.init_node.unwrap() orelse continue :nodes;
+            //     if (!isLiteral(tree, init_node)) continue :nodes;
             // },
         }
     }
@@ -218,6 +218,4 @@ test {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const shims = zlinter.shims;
-const NodeIndexShim = zlinter.shims.NodeIndexShim;
 const Ast = std.zig.Ast;

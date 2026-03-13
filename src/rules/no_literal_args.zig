@@ -71,7 +71,7 @@ fn run(
     const tree = doc.handle.tree;
     var call_buffer: [1]Ast.Node.Index = undefined;
 
-    const root: NodeIndexShim = .root;
+    const root: Ast.Node.Index = .root;
     var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
@@ -79,7 +79,7 @@ fn run(
         const node, const connections = tuple;
         _ = connections;
 
-        const call = tree.fullCall(&call_buffer, node.toNodeIndex()) orelse continue :nodes;
+        const call = tree.fullCall(&call_buffer, node) orelse continue :nodes;
 
         for (call.ast.params) |param_node| {
             const kind: LiteralKind = switch (tree.nodeTag(param_node)) {
@@ -427,6 +427,4 @@ test "exclude tests" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const shims = zlinter.shims;
-const NodeIndexShim = zlinter.shims.NodeIndexShim;
 const Ast = std.zig.Ast;

@@ -74,14 +74,14 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    const root: NodeIndexShim = .root;
+    const root: Ast.Node.Index = .root;
     var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
     nodes: while (try it.next()) |tuple| {
         const node, _ = tuple;
 
-        if (fnDeclBlock(tree, node.toNodeIndex())) |block| {
+        if (fnDeclBlock(tree, node)) |block| {
             if (config.fn_decl_block != .off and isEmptyBlock(tree, block)) {
                 try lint_problems.append(gpa, .{
                     .rule_id = rule.rule_id,
@@ -98,7 +98,7 @@ fn run(
             continue :nodes;
         }
 
-        const statement = zlinter.ast.fullStatement(tree, node.toNodeIndex()) orelse continue :nodes;
+        const statement = zlinter.ast.fullStatement(tree, node) orelse continue :nodes;
         const severity: zlinter.rules.LintProblemSeverity = switch (statement) {
             .@"if" => config.if_block,
             .@"while" => config.while_block,
@@ -116,20 +116,20 @@ fn run(
         switch (statement) {
             .@"if" => |info| {
                 expr_nodes.appendAssumeCapacity(info.ast.then_expr);
-                if (NodeIndexShim.initOptional(info.ast.else_expr)) |n| {
-                    expr_nodes.appendAssumeCapacity(n.toNodeIndex());
+                if (info.ast.else_expr.unwrap()) |n| {
+                    expr_nodes.appendAssumeCapacity(n);
                 }
             },
             .@"while" => |info| {
                 expr_nodes.appendAssumeCapacity(info.ast.then_expr);
-                if (NodeIndexShim.initOptional(info.ast.else_expr)) |n| {
-                    expr_nodes.appendAssumeCapacity(n.toNodeIndex());
+                if (info.ast.else_expr.unwrap()) |n| {
+                    expr_nodes.appendAssumeCapacity(n);
                 }
             },
             .@"for" => |info| {
                 expr_nodes.appendAssumeCapacity(info.ast.then_expr);
-                if (NodeIndexShim.initOptional(info.ast.else_expr)) |n| {
-                    expr_nodes.appendAssumeCapacity(n.toNodeIndex());
+                if (info.ast.else_expr.unwrap()) |n| {
+                    expr_nodes.appendAssumeCapacity(n);
                 }
             },
             .switch_case => |info| expr_nodes.appendAssumeCapacity(info.ast.target_expr),
@@ -631,6 +631,4 @@ test "function declaration blocks" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const shims = zlinter.shims;
-const NodeIndexShim = zlinter.shims.NodeIndexShim;
 const Ast = std.zig.Ast;

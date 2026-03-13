@@ -43,7 +43,7 @@ pub const LintDocument = struct {
         node: Ast.Node.Index,
     ) ast.NodeAncestorIterator {
         return .{
-            .current = NodeIndexShim.init(node),
+            .current = node,
             .lineage = &self.lineage,
         };
     }
@@ -53,7 +53,7 @@ pub const LintDocument = struct {
     /// This includes the given node in the traversal.
     pub fn nodeLineageIterator(
         self: *const LintDocument,
-        node: NodeIndexShim,
+        node: Ast.Node.Index,
         gpa: std.mem.Allocator,
     ) error{OutOfMemory}!ast.NodeLineageIterator {
         var it = ast.NodeLineageIterator{
@@ -72,9 +72,9 @@ pub const LintDocument = struct {
     /// of cases. A more complete solution would require building tests and
     /// seeing whats included thats not in non-test builds, which is probably
     /// out of scope for this linter.
-    pub fn isEnclosedInTestBlock(self: *const LintDocument, node: NodeIndexShim) bool {
+    pub fn isEnclosedInTestBlock(self: *const LintDocument, node: Ast.Node.Index) bool {
         var next = node;
-        while (self.lineage.items(.parent)[next.index]) |parent| {
+        while (self.lineage.items(.parent)[@intFromEnum(next)]) |parent| {
             switch (self.handle.tree.nodeTag(parent)) {
                 .test_decl => return true,
                 .@"if", .if_simple => if (isTestOnlyCondition(
@@ -85,7 +85,7 @@ pub const LintDocument = struct {
                 },
                 else => {},
             }
-            next = NodeIndexShim.init(parent);
+            next = parent;
         }
         return false;
     }
@@ -281,30 +281,30 @@ pub const LintContext = struct {
             }
 
             const QueueItem = struct {
-                parent: ?NodeIndexShim = null,
-                node: NodeIndexShim,
+                parent: ?Ast.Node.Index = null,
+                node: Ast.Node.Index,
             };
 
             var queue = std.ArrayList(QueueItem).empty;
             defer queue.deinit(gpa);
 
-            try queue.append(gpa, .{ .node = NodeIndexShim.root });
+            try queue.append(gpa, .{ .node = .root });
 
             while (queue.pop()) |item| {
                 const children = try ast.nodeChildrenAlloc(
                     gpa,
                     &doc.handle.tree,
-                    item.node.toNodeIndex(),
+                    item.node,
                 );
 
                 // Ideally this is never necessary as we should only be visiting
                 // each node once while walking the tree and if we're not there's
                 // another bug but for now to be safe memory wise we'll ensure
                 // the previous is cleaned up if needed (no-op if not needed)
-                doc.lineage.get(item.node.index).deinit(gpa);
-                doc.lineage.set(item.node.index, .{
+                doc.lineage.get(@intFromEnum(item.node)).deinit(gpa);
+                doc.lineage.set(@intFromEnum(item.node), .{
                     .parent = if (item.parent) |p|
-                        p.toNodeIndex()
+                        p
                     else
                         null,
                     .children = children,
@@ -313,7 +313,7 @@ pub const LintContext = struct {
                 for (children) |child| {
                     try queue.append(gpa, .{
                         .parent = item.node,
-                        .node = NodeIndexShim.init(child),
+                        .node = child,
                     });
                 }
             }
@@ -411,8 +411,8 @@ pub const LintContext = struct {
                 },
             };
             break :inputs .{
-                NodeIndexShim.initOptional(t),
-                NodeIndexShim.initOptional(v),
+                t.unwrap(),
+                v.unwrap(),
             };
         };
 
@@ -424,14 +424,14 @@ pub const LintContext = struct {
         // First we try looking for a <type> node in the declaration. e.g.,
         // `const var_name: <type> = ....`
         if (maybe_type_node) |type_node| {
-            const node = ast.unwrapNode(tree, type_node.toNodeIndex(), .{});
+            const node = ast.unwrapNode(tree, type_node, .{});
 
             if (tree.fullFnProto(&fn_proto_buffer, node)) |fn_proto| {
-                if (NodeIndexShim.initOptional(fn_proto.ast.return_type)) |return_node_shim| {
-                    const return_node = ast.unwrapNode(tree, return_node_shim.toNodeIndex(), .{});
+                if (fn_proto.ast.return_type.unwrap()) |return_node| {
+                    const return_unwrapped = ast.unwrapNode(tree, return_node, .{});
 
                     // If it's a function proto, then return whether or not the function returns `type`
-                    const is_type_identifier = ast.isIdentiferKind(tree, ast.unwrapNode(tree, return_node, .{}), .type);
+                    const is_type_identifier = ast.isIdentiferKind(tree, return_unwrapped, .type);
                     return if (is_type_identifier) .fn_returns_type else .@"fn";
                 } else {
                     return .@"fn";
@@ -472,7 +472,7 @@ pub const LintContext = struct {
         // Then we look at the initialisation <value> if a type couldn't be used
         // from then declaration. e.g., `const var_name = <value>`
         if (maybe_value_node) |value_node| {
-            const node = ast.unwrapNode(tree, value_node.toNodeIndex(), .{});
+            const node = ast.unwrapNode(tree, value_node, .{});
 
             // LIMITATION: All builtin calls to type of and type will return
             // `type` without any resolution.
@@ -510,7 +510,7 @@ pub const LintContext = struct {
                         .container => |container| result: {
                             const container_node, const container_tree = .{ container.scope_handle.toNode(), container.scope_handle.handle.tree };
 
-                            if (!NodeIndexShim.init(container_node).isRoot()) {
+                            if (container_node != .root) {
                                 switch (container_tree.nodeTag(container_node)) {
                                     .error_set_decl => break :result true,
                                     else => {},
@@ -779,73 +779,73 @@ test "LintDocument.isEnclosedInTestBlock" {
     );
 
     try std.testing.expect(
-        !doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+        !doc.isEnclosedInTestBlock(try testing.expectVarDecl(
             doc.handle.tree,
             "is_not_in_test",
-        ))),
+        )),
     );
 
     try std.testing.expect(
-        doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+        doc.isEnclosedInTestBlock(try testing.expectVarDecl(
             doc.handle.tree,
             "is_in_test_without_name",
-        ))),
+        )),
     );
 
     try std.testing.expect(
-        doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+        doc.isEnclosedInTestBlock(try testing.expectVarDecl(
             doc.handle.tree,
             "is_in_test_if_condition_a",
-        ))),
+        )),
     );
 
     try std.testing.expect(
-        doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+        doc.isEnclosedInTestBlock(try testing.expectVarDecl(
             doc.handle.tree,
             "is_in_test_if_condition_b",
-        ))),
+        )),
     );
 
     try std.testing.expect(
-        doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+        doc.isEnclosedInTestBlock(try testing.expectVarDecl(
             doc.handle.tree,
             "is_in_test_if_condition_c",
-        ))),
+        )),
     );
 
     try std.testing.expect(
-        !doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+        !doc.isEnclosedInTestBlock(try testing.expectVarDecl(
             doc.handle.tree,
             "is_not_in_test_if_condition",
-        ))),
+        )),
     );
 
     try std.testing.expect(
-        doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+        doc.isEnclosedInTestBlock(try testing.expectVarDecl(
             doc.handle.tree,
             "is_in_test_nested_if_condition_a",
-        ))),
+        )),
     );
 
     try std.testing.expect(
-        doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+        doc.isEnclosedInTestBlock(try testing.expectVarDecl(
             doc.handle.tree,
             "is_in_test_nested_if_condition_b",
-        ))),
+        )),
     );
 
     try std.testing.expect(
-        doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+        doc.isEnclosedInTestBlock(try testing.expectVarDecl(
             doc.handle.tree,
             "is_in_test_nested_if_condition_c",
-        ))),
+        )),
     );
 
     try std.testing.expect(
-        !doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+        !doc.isEnclosedInTestBlock(try testing.expectVarDecl(
             doc.handle.tree,
             "is_not_in_test_nested_if_condition_a",
-        ))),
+        )),
     );
 }
 
@@ -1195,10 +1195,8 @@ test "LintContext.resolveTypeKind" {
 const ast = @import("ast.zig");
 const builtin = @import("builtin");
 const comments = @import("comments.zig");
-const shims = @import("shims.zig");
 const std = @import("std");
 const testing = @import("testing.zig");
 const zls = @import("zls");
 const LintProblem = @import("results.zig").LintProblem;
-const NodeIndexShim = shims.NodeIndexShim;
 const Ast = std.zig.Ast;

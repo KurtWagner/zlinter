@@ -185,7 +185,7 @@ fn resolveScopedImports(
 ) !std.AutoArrayHashMap(Ast.Node.Index, ImportsQueueLinesAscending) {
     const tree = doc.handle.tree;
 
-    const root: NodeIndexShim = .root;
+    const root: Ast.Node.Index = .root;
     var node_it = try doc.nodeLineageIterator(root, gpa);
     defer node_it.deinit();
 
@@ -193,20 +193,20 @@ fn resolveScopedImports(
     while (try node_it.next()) |tuple| {
         const node, const connections = tuple;
 
-        const var_decl = tree.fullVarDecl(node.toNodeIndex()) orelse continue;
+        const var_decl = tree.fullVarDecl(node) orelse continue;
 
-        const init_node = NodeIndexShim.initOptional(var_decl.ast.init_node) orelse continue;
-        const import_path = isImportCall(tree, init_node.toNodeIndex()) orelse continue;
+        const init_node = var_decl.ast.init_node.unwrap() orelse continue;
+        const import_path = isImportCall(tree, init_node) orelse continue;
         const parent = connections.parent orelse continue;
 
         const decl_name = tree.tokenSlice(var_decl.ast.mut_token + 1);
         const classification = classifyImportPath(import_path);
 
-        const first_loc = tree.tokenLocation(0, tree.firstToken(node.toNodeIndex()));
-        const last_loc = tree.tokenLocation(0, tree.lastToken(node.toNodeIndex()));
+        const first_loc = tree.tokenLocation(0, tree.firstToken(node));
+        const last_loc = tree.tokenLocation(0, tree.lastToken(node));
 
         const import = ImportDecl{
-            .decl_node = node.toNodeIndex(),
+            .decl_node = node,
             .decl_name = decl_name,
             .classification = classification,
             .first_line = first_loc.line,
@@ -237,11 +237,11 @@ fn isImportCall(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
             if (!std.mem.eql(u8, "@import", tree.tokenSlice(main_token))) return null;
 
             const data = tree.nodeData(node);
-            const lhs_node = NodeIndexShim.initOptional(data.opt_node_and_opt_node[0]) orelse return null;
+            const lhs_node = data.opt_node_and_opt_node[0].unwrap() orelse return null;
 
-            std.debug.assert(tree.nodeTag(lhs_node.toNodeIndex()) == .string_literal);
+            std.debug.assert(tree.nodeTag(lhs_node) == .string_literal);
 
-            const lhs_content = tree.tokenSlice(tree.nodeMainToken(lhs_node.toNodeIndex()));
+            const lhs_content = tree.tokenSlice(tree.nodeMainToken(lhs_node));
             std.debug.assert(lhs_content.len > 2);
             return lhs_content[1 .. lhs_content.len - 1];
         },
@@ -277,7 +277,7 @@ fn classifyImportPath(path: []const u8) ImportDecl.Classification {
 //             else => parent = doc.lineage.items(.parent)[parent_node],
 //         }
 //     }
-//     return NodeIndexShim.root.toNodeIndex();
+//     return .root;
 // }
 
 test {
@@ -615,6 +615,4 @@ test "allow_line_separated_chunks" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const shims = zlinter.shims;
-const NodeIndexShim = zlinter.shims.NodeIndexShim;
 const Ast = std.zig.Ast;

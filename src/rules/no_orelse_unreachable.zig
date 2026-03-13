@@ -35,11 +35,12 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    var node: NodeIndexShim = .root;
-    while (node.index < tree.nodes.len) : (node.index += 1) {
-        if (tree.nodeTag(node.toNodeIndex()) != .@"orelse") continue;
+    var index: u32 = @intFromEnum(Ast.Node.Index.root);
+    while (index < tree.nodes.len) : (index += 1) {
+        const node: Ast.Node.Index = @enumFromInt(index);
+        if (tree.nodeTag(node) != .@"orelse") continue;
 
-        const data = tree.nodeData(node.toNodeIndex());
+        const data = tree.nodeData(node);
         const rhs = data.node_and_node.@"1";
 
         if (tree.nodeTag(rhs) != .unreachable_literal) continue;
@@ -47,7 +48,7 @@ fn run(
         try lint_problems.append(gpa, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
-            .start = .startOfNode(tree, node.toNodeIndex()),
+            .start = .startOfNode(tree, node),
             .end = .endOfNode(tree, rhs),
             .message = try gpa.dupe(u8, "Prefer `.?` over `orelse unreachable`"),
         });
@@ -108,5 +109,4 @@ test "no_orelse_unreachable" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const shims = zlinter.shims;
-const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;

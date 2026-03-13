@@ -44,12 +44,13 @@ fn run(
     var container_references = map: {
         var map = std.StringHashMapUnmanaged(void).empty;
 
-        var node: NodeIndexShim = .root;
-        while (node.index < tree.nodes.len) : (node.index += 1) {
-            switch (tree.nodeTag(node.toNodeIndex())) {
-                .identifier => try map.put(gpa, tree.tokenSlice(tree.nodeMainToken(node.toNodeIndex())), {}),
-                .field_access => if (try isFieldAccessOfRootContainer(context, doc, node.toNodeIndex())) {
-                    const node_data = tree.nodeData(node.toNodeIndex());
+        var index: u32 = @intFromEnum(Ast.Node.Index.root);
+        while (index < tree.nodes.len) : (index += 1) {
+            const node: Ast.Node.Index = @enumFromInt(index);
+            switch (tree.nodeTag(node)) {
+                .identifier => try map.put(gpa, tree.tokenSlice(tree.nodeMainToken(node)), {}),
+                .field_access => if (try isFieldAccessOfRootContainer(context, doc, node)) {
+                    const node_data = tree.nodeData(node);
                     try map.put(gpa, tree.tokenSlice(
                         node_data.node_and_token.@"1",
                     ), {});
@@ -259,6 +260,4 @@ test "no_unused" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const shims = zlinter.shims;
-const NodeIndexShim = zlinter.shims.NodeIndexShim;
 const Ast = std.zig.Ast;

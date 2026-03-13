@@ -39,7 +39,7 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    const root: NodeIndexShim = .root;
+    const root: Ast.Node.Index = .root;
     var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
@@ -47,14 +47,14 @@ fn run(
         const node, const connections = tuple;
         _ = connections;
 
-        if (tree.nodeTag(node.toNodeIndex()) != .@"continue") continue;
+        if (tree.nodeTag(node) != .@"continue") continue;
 
-        if (hasContinueLabel(tree, node.toNodeIndex())) continue;
+        if (hasContinueLabel(tree, node)) continue;
 
-        const depth = loopDepth(doc, node.toNodeIndex());
+        const depth = loopDepth(doc, node);
         if (depth <= config.max_unlabeled_depth) continue;
 
-        const continue_token = tree.nodeMainToken(node.toNodeIndex());
+        const continue_token = tree.nodeMainToken(node);
         try lint_problems.append(gpa, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
@@ -81,7 +81,7 @@ fn loopDepth(doc: *const zlinter.session.LintDocument, node: Ast.Node.Index) u32
     var depth: u32 = 0;
     var it = doc.nodeAncestorIterator(node);
     while (it.next()) |ancestor| {
-        if (NodeIndexShim.init(ancestor).isRoot()) break;
+        if (ancestor == .root) break;
         if (isLoopNode(doc.handle.tree, ancestor)) depth += 1;
     }
     return depth;
@@ -190,5 +190,4 @@ test "require_labeled_continue" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const NodeIndexShim = zlinter.shims.NodeIndexShim;
 const Ast = std.zig.Ast;

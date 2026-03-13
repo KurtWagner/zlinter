@@ -102,9 +102,10 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    var node: NodeIndexShim = .init(1); // Skip root node at 0
-    nodes: while (node.index < tree.nodes.len) : (node.index += 1) {
-        const var_decl = tree.fullVarDecl(node.toNodeIndex()) orelse continue :nodes;
+    var index: u32 = 1; // Skip root node at 0
+    nodes: while (index < tree.nodes.len) : (index += 1) {
+        const node: Ast.Node.Index = @enumFromInt(index);
+        const var_decl = tree.fullVarDecl(node) orelse continue :nodes;
 
         // Check whether name should be excluded from checks:
         if (config.exclude_extern and var_decl.extern_export_token != null) {
@@ -122,9 +123,9 @@ fn run(
         const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
 
         if (config.exclude_aliases) {
-            if (NodeIndexShim.initOptional(var_decl.ast.init_node)) |init_node| {
-                if (tree.nodeTag(init_node.toNodeIndex()) == .field_access) {
-                    const last_token = tree.lastToken(init_node.toNodeIndex());
+            if (var_decl.ast.init_node.unwrap()) |init_node| {
+                if (tree.nodeTag(init_node) == .field_access) {
+                    const last_token = tree.lastToken(init_node);
                     const field_name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(last_token));
                     if (std.mem.eql(u8, field_name, name)) continue :nodes;
                 }
@@ -460,5 +461,4 @@ test "name lengths" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const shims = zlinter.shims;
-const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;

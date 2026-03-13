@@ -42,11 +42,12 @@ fn run(
     defer arena_allocator.deinit();
     const arena = arena_allocator.allocator();
 
-    var node: NodeIndexShim = .root;
-    while (node.index < handle.tree.nodes.len) : (node.index += 1) {
+    var index: u32 = @intFromEnum(Ast.Node.Index.root);
+    while (index < handle.tree.nodes.len) : (index += 1) {
         defer _ = arena_allocator.reset(.retain_capacity);
 
-        const tag = tree.nodeTag(node.toNodeIndex());
+        const node: Ast.Node.Index = @enumFromInt(index);
+        const tag = tree.nodeTag(node);
         switch (tag) {
             .enum_literal => try handleEnumLiteral(
                 rule,
@@ -54,8 +55,8 @@ fn run(
                 arena,
                 context,
                 doc,
-                node.toNodeIndex(),
-                tree.nodeMainToken(node.toNodeIndex()),
+                node,
+                tree.nodeMainToken(node),
                 &lint_problems,
                 config,
             ),
@@ -65,8 +66,8 @@ fn run(
                 arena,
                 context,
                 doc,
-                node.toNodeIndex(),
-                tree.nodeData(node.toNodeIndex()).node_and_token.@"1",
+                node,
+                tree.nodeData(node).node_and_token.@"1",
                 &lint_problems,
                 config,
             ),
@@ -76,8 +77,8 @@ fn run(
                 arena,
                 context,
                 doc,
-                node.toNodeIndex(),
-                tree.nodeMainToken(node.toNodeIndex()),
+                node,
+                tree.nodeMainToken(node),
                 &lint_problems,
                 config,
             ),
@@ -198,7 +199,7 @@ fn getSymbolEnumLiteralDocComment(
 
     var it = doc.nodeAncestorIterator(current);
     while (it.next()) |ancestor| {
-        if (NodeIndexShim.init(ancestor).isRoot()) break;
+        if (ancestor == .root) break;
         if (ast.isNodeOverlapping(doc.handle.tree, current, ancestor)) {
             try ancestors.append(arena, ancestor);
             current = ancestor;
@@ -344,5 +345,4 @@ test "no_deprecated - regression test for #36" {
 const std = @import("std");
 const zlinter = @import("zlinter");
 const ast = zlinter.ast;
-const NodeIndexShim = zlinter.shims.NodeIndexShim;
 const Ast = std.zig.Ast;

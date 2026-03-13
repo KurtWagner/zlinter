@@ -15,16 +15,16 @@ pub const NodeConnections = struct {
 pub const NodeAncestorIterator = struct {
     const Self = @This();
 
-    current: NodeIndexShim,
+    current: Ast.Node.Index,
     lineage: *const NodeLineage,
     done: bool = false,
 
     pub fn next(self: *Self) ?Ast.Node.Index {
-        if (self.done or self.current.isRoot()) return null;
+        if (self.done or self.current == .root) return null;
 
-        const parent = self.lineage.items(.parent)[self.current.index];
+        const parent = self.lineage.items(.parent)[@intFromEnum(self.current)];
         if (parent) |p| {
-            self.current = NodeIndexShim.init(p);
+            self.current = p;
             return p;
         } else {
             self.done = true;
@@ -36,7 +36,7 @@ pub const NodeAncestorIterator = struct {
 pub const NodeLineageIterator = struct {
     const Self = @This();
 
-    queue: std.ArrayList(NodeIndexShim) = .empty,
+    queue: std.ArrayList(Ast.Node.Index) = .empty,
     lineage: *const NodeLineage,
     gpa: std.mem.Allocator,
 
@@ -45,13 +45,13 @@ pub const NodeLineageIterator = struct {
         self.* = undefined;
     }
 
-    pub fn next(self: *Self) error{OutOfMemory}!?struct { NodeIndexShim, NodeConnections } {
-        if (self.queue.pop()) |node_shim| {
-            const connections = self.lineage.get(node_shim.index);
+    pub fn next(self: *Self) error{OutOfMemory}!?struct { Ast.Node.Index, NodeConnections } {
+        if (self.queue.pop()) |node| {
+            const connections = self.lineage.get(@intFromEnum(node));
             for (connections.children orelse &.{}) |child| {
-                try self.queue.append(self.gpa, .init(child));
+                try self.queue.append(self.gpa, child);
             }
-            return .{ node_shim, connections };
+            return .{ node, connections };
         }
         return null;
     }
@@ -95,7 +95,7 @@ pub fn deferBlock(doc: *const session.LintDocument, node: Ast.Node.Index, alloca
         };
 
     if (isBlock(tree, exp_node)) {
-        return .{ .children = try allocator.dupe(Ast.Node.Index, doc.lineage.items(.children)[NodeIndexShim.init(exp_node).index] orelse &.{}) };
+        return .{ .children = try allocator.dupe(Ast.Node.Index, doc.lineage.items(.children)[@intFromEnum(exp_node)] orelse &.{}) };
     } else {
         return .{ .children = try allocator.dupe(Ast.Node.Index, &.{exp_node}) };
     }
@@ -173,14 +173,11 @@ pub fn isNodeOverlapping(
     a: Ast.Node.Index,
     b: Ast.Node.Index,
 ) bool {
-    const node_a = NodeIndexShim.init(a);
-    const node_b = NodeIndexShim.init(b);
+    std.debug.assert(a != .root);
+    std.debug.assert(b != .root);
 
-    std.debug.assert(node_a.index != 0);
-    std.debug.assert(node_b.index != 0);
-
-    const span_a = tree.nodeToSpan(node_a.toNodeIndex());
-    const span_b = tree.nodeToSpan(node_b.toNodeIndex());
+    const span_a = tree.nodeToSpan(a);
+    const span_b = tree.nodeToSpan(b);
 
     return (span_a.start >= span_b.start and span_a.start <= span_b.end) or
         (span_b.start >= span_a.start and span_b.start <= span_a.end);
@@ -290,11 +287,11 @@ test "deferBlock - has expected children" {
 
 /// Returns true if return type is `!type` or `error{ErrorName}!type` or `ErrorName!type`
 pub fn fnProtoReturnsError(tree: Ast, fn_proto: Ast.full.FnProto) bool {
-    const return_node = NodeIndexShim.initOptional(fn_proto.ast.return_type) orelse return false;
-    const tag = tree.nodeTag(return_node.toNodeIndex());
+    const return_node = fn_proto.ast.return_type.unwrap() orelse return false;
+    const tag = tree.nodeTag(return_node);
     return switch (tag) {
         .error_union => true,
-        else => tree.tokens.items(.tag)[tree.firstToken(return_node.toNodeIndex()) - 1] == .bang,
+        else => tree.tokens.items(.tag)[tree.firstToken(return_node) - 1] == .bang,
     };
 }
 
@@ -544,7 +541,7 @@ test "isFieldVarAccess" {
 
         const actual = isFieldVarAccess(
             tree,
-            NodeIndexShim.initOptional(tree.fullVarDecl(try testing.expectSingleNodeOfTag(
+            tree.fullVarDecl(try testing.expectSingleNodeOfTag(
                 tree,
                 &.{
                     .local_var_decl,
@@ -552,7 +549,7 @@ test "isFieldVarAccess" {
                     .simple_var_decl,
                     .aligned_var_decl,
                 },
-            )).?.ast.init_node).?.toNodeIndex(),
+            )).?.ast.init_node.unwrap().?,
             names,
         );
         try std.testing.expectEqual(expected, actual);
@@ -621,7 +618,7 @@ test "isEnumLiteral" {
 
         const actual = isEnumLiteral(
             tree,
-            NodeIndexShim.initOptional(tree.fullVarDecl(try testing.expectSingleNodeOfTag(
+            tree.fullVarDecl(try testing.expectSingleNodeOfTag(
                 tree,
                 &.{
                     .local_var_decl,
@@ -629,7 +626,7 @@ test "isEnumLiteral" {
                     .simple_var_decl,
                     .aligned_var_decl,
                 },
-            )).?.ast.init_node).?.toNodeIndex(),
+            )).?.ast.init_node.unwrap().?,
             names,
         );
         try std.testing.expectEqual(expected, actual);
@@ -655,7 +652,7 @@ pub fn findFnCall(
         return call;
     }
 
-    for (doc.lineage.items(.children)[NodeIndexShim.init(node).index] orelse &.{}) |child| {
+    for (doc.lineage.items(.children)[@intFromEnum(node)] orelse &.{}) |child| {
         if (findFnCall(
             doc,
             child,
@@ -928,7 +925,7 @@ test "findFnCall" {
             "fnName",
             doc.handle.tree.tokenSlice(findFnCall(
                 doc,
-                NodeIndexShim.root.toNodeIndex(),
+                .root,
                 &buffer,
                 &.{"fnName"},
             ).?.call_identifier_token),
@@ -938,7 +935,7 @@ test "findFnCall" {
             null,
             findFnCall(
                 doc,
-                NodeIndexShim.root.toNodeIndex(),
+                .root,
                 &buffer,
                 &.{ "fn", "Name", "fnname" },
             ),
@@ -947,9 +944,7 @@ test "findFnCall" {
 }
 
 const session = @import("session.zig");
-const shims = @import("shims.zig");
 const std = @import("std");
 const testing = @import("testing.zig");
 const zls = @import("zls");
-const NodeIndexShim = shims.NodeIndexShim;
 const Ast = std.zig.Ast;

@@ -153,13 +153,14 @@ pub fn expectVarDecl(tree: Ast, name: []const u8) !Ast.Node.Index {
     assertTestOnly();
 
     var found: ?Ast.Node.Index = null;
-    var i = NodeIndexShim.root;
-    while (i.index < tree.nodes.len) : (i.index += 1) {
-        if (tree.fullVarDecl(i.toNodeIndex())) |var_decl| {
+    var i: u32 = @intFromEnum(Ast.Node.Index.root);
+    while (i < tree.nodes.len) : (i += 1) {
+        const node: Ast.Node.Index = @enumFromInt(i);
+        if (tree.fullVarDecl(node)) |var_decl| {
             const name_token = var_decl.ast.mut_token + 1;
             if (std.mem.eql(u8, tree.tokenSlice(name_token), name)) {
                 if (found != null) return error.TestExpectedSingleVarDeclWithName;
-                found = i.toNodeIndex();
+                found = node;
             }
         }
     }
@@ -175,12 +176,13 @@ pub fn expectSingleNodeOfTag(tree: Ast, comptime tags: []const Ast.Node.Tag) !As
     assertTestOnly();
 
     var found: ?Ast.Node.Index = null;
-    var i = NodeIndexShim.root;
-    while (i.index < tree.nodes.len) : (i.index += 1) {
+    var i: u32 = @intFromEnum(Ast.Node.Index.root);
+    while (i < tree.nodes.len) : (i += 1) {
+        const node: Ast.Node.Index = @enumFromInt(i);
         inline for (tags) |tag| {
-            if (tree.nodeTag(i.toNodeIndex()) == tag) {
+            if (tree.nodeTag(node) == tag) {
                 if (found != null) return error.TestExpectedSingleNodeTag;
-                found = i.toNodeIndex();
+                found = node;
             }
         }
     }
@@ -196,7 +198,7 @@ pub fn expectNodeOfTagFirst(doc: *const LintDocument, comptime tags: []const Ast
     defer it.deinit();
 
     while (try it.next()) |node_and_children| {
-        const node = node_and_children[0].toNodeIndex();
+        const node = node_and_children[0];
         inline for (tags) |tag| {
             if (doc.handle.tree.nodeTag(node) == tag) {
                 return node;
@@ -391,7 +393,6 @@ pub fn testRunRule(
 
 const builtin = @import("builtin");
 const session = @import("session.zig");
-const shims = @import("shims.zig");
 const std = @import("std");
 const LintContext = session.LintContext;
 const LintDocument = session.LintDocument;
@@ -401,6 +402,5 @@ const LintProblem = @import("results.zig").LintProblem;
 const LintResult = @import("results.zig").LintResult;
 const LintProblemFix = @import("results.zig").LintProblemFix;
 const RunOptions = @import("rules.zig").RunOptions;
-const NodeIndexShim = shims.NodeIndexShim;
 const strings = @import("strings.zig");
 const Ast = std.zig.Ast;

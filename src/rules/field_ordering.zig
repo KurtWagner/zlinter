@@ -60,7 +60,7 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    const root: NodeIndexShim = .root;
+    const root: Ast.Node.Index = .root;
     var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
@@ -72,9 +72,9 @@ fn run(
         const order_with_severity: zlinter.rules.LintTextOrderWithSeverity, const container_kind_name: []const u8 = kind: {
             if (tree.fullContainerDecl(
                 &container_decl_buffer,
-                node.toNodeIndex(),
+                node,
             )) |container_decl| {
-                break :kind switch (tree.tokens.items(.tag)[tree.nodeMainToken(node.toNodeIndex())]) {
+                break :kind switch (tree.tokens.items(.tag)[tree.nodeMainToken(node)]) {
                     .keyword_union => .{ config.union_field_order, "Union" },
                     .keyword_struct => {
                         if (container_decl.layout_token) |layout_token| {
@@ -260,6 +260,4 @@ test {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const shims = zlinter.shims;
-const NodeIndexShim = zlinter.shims.NodeIndexShim;
 const Ast = std.zig.Ast;

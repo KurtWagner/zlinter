@@ -50,7 +50,7 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    const root: NodeIndexShim = .root;
+    const root: Ast.Node.Index = .root;
     var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
@@ -59,20 +59,20 @@ fn run(
         const node, const connections = tuple;
         _ = connections;
 
-        const tag = tree.nodeTag(node.toNodeIndex());
+        const tag = tree.nodeTag(node);
         if (tag != .fn_decl) continue :nodes;
 
-        const fn_decl = tree.fullFnProto(&fn_decl_buffer, node.toNodeIndex()) orelse continue :nodes;
+        const fn_decl = tree.fullFnProto(&fn_decl_buffer, node) orelse continue :nodes;
         if (config.allow_private and zlinter.ast.fnProtoVisibility(tree, fn_decl) == .private) continue :nodes;
 
-        const return_type = NodeIndexShim.initOptional(fn_decl.ast.return_type) orelse continue :nodes;
+        const return_type = fn_decl.ast.return_type.unwrap() orelse continue :nodes;
 
-        const return_type_tag = tree.nodeTag(return_type.toNodeIndex());
+        const return_type_tag = tree.nodeTag(return_type);
         switch (return_type_tag) {
             .error_union => if (config.allow_anyerror or
-                !std.mem.eql(u8, tree.tokenSlice(tree.firstToken(return_type.toNodeIndex())), "anyerror"))
+                !std.mem.eql(u8, tree.tokenSlice(tree.firstToken(return_type)), "anyerror"))
                 continue :nodes,
-            .identifier => switch (tree.tokens.items(.tag)[tree.firstToken(return_type.toNodeIndex()) - 1]) {
+            .identifier => switch (tree.tokens.items(.tag)[tree.firstToken(return_type) - 1]) {
                 .bang => {},
                 else => continue :nodes,
             },
@@ -82,8 +82,8 @@ fn run(
         try lint_problems.append(gpa, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
-            .start = .startOfToken(tree, tree.firstToken(node.toNodeIndex())),
-            .end = .endOfNode(tree, return_type.toNodeIndex()),
+            .start = .startOfToken(tree, tree.firstToken(node)),
+            .end = .endOfNode(tree, return_type),
             .message = try gpa.dupe(u8, "Function returns an inferred error union. Prefer an explicit error set"),
         });
     }
@@ -208,6 +208,4 @@ test "no_inferred_error_unions - Invalid function declarations - allow_anyerror 
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const shims = zlinter.shims;
-const NodeIndexShim = zlinter.shims.NodeIndexShim;
 const Ast = std.zig.Ast;

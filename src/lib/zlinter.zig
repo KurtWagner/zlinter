@@ -11,7 +11,6 @@ pub const rendering = @import("rendering.zig");
 pub const results = @import("results.zig");
 pub const rules = @import("rules.zig");
 pub const session = @import("session.zig");
-pub const shims = @import("shims.zig");
 pub const strings = @import("strings.zig");
 pub const testing = @import("testing.zig");
 pub const version = @import("version.zig");

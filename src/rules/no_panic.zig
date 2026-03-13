@@ -76,7 +76,7 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    const root: NodeIndexShim = .root;
+    const root: Ast.Node.Index = .root;
     var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
@@ -84,14 +84,14 @@ fn run(
         const node, const connections = tuple;
         _ = connections;
 
-        const tag = tree.nodeTag(node.toNodeIndex());
+        const tag = tree.nodeTag(node);
         switch (tag) {
             .builtin_call_two,
             .builtin_call_two_comma,
             .builtin_call,
             .builtin_call_comma,
             => {
-                const main_token = tree.nodeMainToken(node.toNodeIndex());
+                const main_token = tree.nodeMainToken(node);
                 if (!std.mem.eql(u8, tree.tokenSlice(main_token), "@panic")) continue :nodes;
             },
             else => continue :nodes,
@@ -103,13 +103,13 @@ fn run(
         }
 
         // if configured, skip if panic has case sensitive string content matching
-        if (builtinHasParamContent(tree, node.toNodeIndex(), config.exclude_panic_with_content)) continue :nodes;
+        if (builtinHasParamContent(tree, node, config.exclude_panic_with_content)) continue :nodes;
 
         try lint_problems.append(gpa, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
-            .start = .startOfNode(tree, node.toNodeIndex()),
-            .end = .endOfNode(tree, node.toNodeIndex()),
+            .start = .startOfNode(tree, node),
+            .end = .endOfNode(tree, node),
             .message = try gpa.dupe(u8, "`@panic` forcibly stops the program at runtime and should be avoided"),
         });
     }
@@ -269,6 +269,4 @@ test "no_panic" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const shims = zlinter.shims;
-const NodeIndexShim = zlinter.shims.NodeIndexShim;
 const Ast = std.zig.Ast;

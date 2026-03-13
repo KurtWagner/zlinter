@@ -54,7 +54,7 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    const root: NodeIndexShim = .root;
+    const root: Ast.Node.Index = .root;
     var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
@@ -63,11 +63,11 @@ fn run(
     nodes: while (try it.next()) |tuple| {
         const node, const connections = tuple;
 
-        if (tree.nodeTag(node.toNodeIndex()) != .identifier) continue :nodes;
-        if (!std.mem.eql(u8, tree.getNodeSource(node.toNodeIndex()), "undefined")) continue :nodes;
+        if (tree.nodeTag(node) != .identifier) continue :nodes;
+        if (!std.mem.eql(u8, tree.getNodeSource(node), "undefined")) continue :nodes;
 
         var decl_var_name: ?[]const u8 = null;
-        if (doc.lineage.items(.parent)[node.index]) |parent| {
+        if (doc.lineage.items(.parent)[@intFromEnum(node)]) |parent| {
             if (tree.fullVarDecl(parent)) |var_decl| {
                 if (tree.tokens.items(.tag)[var_decl.ast.mut_token] == .keyword_var) {
                     const name_token = var_decl.ast.mut_token + 1;
@@ -114,13 +114,13 @@ fn run(
                     => true,
                     else => false,
                 }) {
-                    var block_it = try doc.nodeLineageIterator(NodeIndexShim.init(parent), gpa);
+                    var block_it = try doc.nodeLineageIterator(parent, gpa);
                     defer block_it.deinit();
 
                     while (try block_it.next()) |block_tuple| {
                         const block_node, _ = block_tuple;
-                        if (tree.nodeTag(block_node.toNodeIndex()) == .field_access) {
-                            const node_data = tree.nodeData(block_node.toNodeIndex());
+                        if (tree.nodeTag(block_node) == .field_access) {
+                            const node_data = tree.nodeData(block_node);
                             const lhs_node, const identifier_token = .{ node_data.node_and_token.@"0", node_data.node_and_token.@"1" };
                             const lhs_source = tree.getNodeSource(lhs_node);
                             if (std.mem.eql(u8, lhs_source, var_name)) {
@@ -136,14 +136,14 @@ fn run(
                 }
             }
 
-            next_parent = doc.lineage.items(.parent)[NodeIndexShim.init(parent).index];
+            next_parent = doc.lineage.items(.parent)[@intFromEnum(parent)];
         }
 
         try lint_problems.append(gpa, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
-            .start = .startOfNode(tree, node.toNodeIndex()),
-            .end = .endOfNode(tree, node.toNodeIndex()),
+            .start = .startOfNode(tree, node),
+            .end = .endOfNode(tree, node),
             .message = try gpa.dupe(u8, "Take care when using `undefined`"),
         });
     }
@@ -288,6 +288,4 @@ test "init methods" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const shims = zlinter.shims;
-const NodeIndexShim = zlinter.shims.NodeIndexShim;
 const Ast = std.zig.Ast;

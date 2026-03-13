@@ -63,7 +63,7 @@ fn run(
 
     const tree = doc.handle.tree;
 
-    const root: NodeIndexShim = .root;
+    const root: Ast.Node.Index = .root;
     var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
@@ -71,7 +71,7 @@ fn run(
         const node, const connections = tuple;
         _ = connections;
 
-        if (tree.nodeTag(node.toNodeIndex()) != .field_access) continue :nodes;
+        if (tree.nodeTag(node) != .field_access) continue :nodes;
 
         // if configured, skip if a parent is a test block
         if (config.exclude_tests and doc.isEnclosedInTestBlock(node)) {
@@ -79,7 +79,7 @@ fn run(
         }
 
         // unwrap field access lhs and identifier (e.g., lhs.identifier)
-        const node_data = tree.nodeData(node.toNodeIndex());
+        const node_data = tree.nodeData(node);
         const lhs, const identifier = .{ node_data.node_and_token.@"0", node_data.node_and_token.@"1" };
 
         // is identifier a method on Allocator e.g., something.alloc(..) or something.create(..)
@@ -107,12 +107,12 @@ fn run(
                 const name: []const u8 = name: switch (decl_handle.decl) {
                     .ast_node => |ast_node| {
                         if (decl_handle.handle.tree.fullVarDecl(ast_node)) |var_decl| {
-                            if (NodeIndexShim.initOptional(var_decl.ast.init_node)) |init_node| {
+                            if (var_decl.ast.init_node.unwrap()) |init_node| {
                                 _ = init_node;
                                 // TODO: If .call_one then check return value
                                 // std.debug.print("{} - {s}\n", .{
-                                //     decl_handle.handle.tree.nodeTag(init_node.toNodeIndex()),
-                                //     decl_handle.handle.tree.getNodeSource(init_node.toNodeIndex()),
+                                //     decl_handle.handle.tree.nodeTag(init_node),
+                                //     decl_handle.handle.tree.getNodeSource(init_node),
                                 // });
                             }
 
@@ -140,8 +140,8 @@ fn run(
         try lint_problems.append(gpa, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
-            .start = .startOfNode(tree, node.toNodeIndex()),
-            .end = .endOfNode(tree, node.toNodeIndex()),
+            .start = .startOfNode(tree, node),
+            .end = .endOfNode(tree, node),
             .message = try gpa.dupe(u8, "Avoid hidden heap memory management. Instead pass in an Allocator so that the caller knows where memory is being allocated."),
         });
     }
@@ -162,5 +162,4 @@ test {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const shims = zlinter.shims;
-const NodeIndexShim = zlinter.shims.NodeIndexShim;
+const Ast = std.zig.Ast;
