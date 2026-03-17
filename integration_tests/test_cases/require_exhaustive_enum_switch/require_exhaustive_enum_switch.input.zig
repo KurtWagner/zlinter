@@ -26,13 +26,6 @@ pub fn bad_else(state: State) void {
     }
 }
 
-pub fn bad_missing(state: State) void {
-    switch (state) {
-        .idle => {},
-        .running => {},
-    }
-}
-
 pub fn bad_multiple(state: State) void {
     switch (state) {
         .idle => {},
