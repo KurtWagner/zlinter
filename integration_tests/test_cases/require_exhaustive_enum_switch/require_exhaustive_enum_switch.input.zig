@@ -46,3 +46,18 @@ pub fn non_enum(x: u32) void {
         else => {},
     }
 }
+
+pub fn references() void {
+    const Ok = enum { a, b, c, d };
+    const b = Ok.a;
+    const Other = Ok;
+
+    const value = Ok.d;
+
+    switch (value) {
+        b => {},
+        Other.b => {},
+        .c => {},
+        else => {},
+    }
+}

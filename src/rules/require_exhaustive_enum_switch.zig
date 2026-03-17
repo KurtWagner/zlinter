@@ -122,7 +122,9 @@ fn run(
                 if (else_case_node == null) else_case_node = case_node;
             } else {
                 case_values: for (switch_case.ast.values) |value_node| {
-                    const tag_name = caseValueTagName(
+                    const tag_name = try tagNameFromSwitchCaseValue(
+                        context,
+                        doc,
                         tree,
                         value_node,
                     ) orelse continue :case_values;
@@ -162,17 +164,61 @@ fn run(
         null;
 }
 
-fn caseValueTagName(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
+fn tagNameFromSwitchCaseValue(
+    context: *zlinter.session.LintContext,
+    doc: *const zlinter.session.LintDocument,
+    tree: Ast,
+    node: Ast.Node.Index,
+) error{OutOfMemory}!?[]const u8 {
     return switch (tree.nodeTag(node)) {
+        // e.g., `.a`
         .enum_literal => tree.tokenSlice(tree.nodeMainToken(node)),
+        // e.g., `a` where `a = MyEnum.a`
+        .identifier => try tagNameForIdentifier(context, doc, tree, node),
+        // e.g., `MyEnum.a`
         .field_access => blk: {
-            // TODO: This should really resolve the actual type not assume.
             const last_token = tree.lastToken(node);
             if (tree.tokenTag(last_token) != .identifier) break :blk null;
             break :blk tree.tokenSlice(last_token);
         },
-        else => null,
-    };
+        else => {
+            std.log.err(
+                "require_exhaustive_enum_switch: unhandled switch case value node tag: {t}",
+                .{tree.nodeTag(node)},
+            );
+            return null;
+        },
+    } orelse null;
+}
+
+fn tagNameForIdentifier(
+    context: *zlinter.session.LintContext,
+    doc: *const zlinter.session.LintDocument,
+    tree: Ast,
+    node: Ast.Node.Index,
+) error{OutOfMemory}!?[]const u8 {
+    const token = tree.nodeMainToken(node);
+    std.debug.assert(tree.tokenTag(token) == .identifier);
+
+    const tag_name = tree.tokenSlice(token);
+    const decl = try context.analyser.lookupSymbolGlobal(
+        doc.handle,
+        tag_name,
+        tree.tokenStart(token),
+    );
+
+    if (decl) |decl_node| {
+        const token_with_handle = decl_node.definitionToken(
+            &context.analyser,
+            true,
+        ) catch |e| switch (e) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.Canceled => unreachable,
+        };
+        return token_with_handle.handle.tree.tokenSlice(token_with_handle.token);
+    }
+
+    return null;
 }
 
 fn buildProblemMessage(missing: []const []const u8, gpa: std.mem.Allocator) ![]const u8 {
@@ -293,6 +339,33 @@ test "require_exhaustive_enum_switch" {
         .{},
         Config{},
         &.{},
+    );
+
+    try zlinter.testing.testRunRule(
+        rule,
+        \\const Ok = enum { a, b, c, d };
+        \\const b = Ok.a;
+        \\const Other = Ok;
+        \\
+        \\pub fn references(value: Ok) void {
+        \\    switch (value) {
+        \\        b => {},
+        \\        Other.b => {},
+        \\        .c => {},
+        \\        else => {},
+        \\    }
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "require_exhaustive_enum_switch",
+                .severity = .warning,
+                .slice = "switch",
+                .message = "Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .d)",
+            },
+        },
     );
 }
 
