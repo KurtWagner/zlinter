@@ -717,7 +717,6 @@ pub fn divide(x: i32, y: i32) !i32 {
 }
 ```
 
-
 **Config options:**
 
 * `severity`
@@ -1009,6 +1008,52 @@ pub fn message(age: u8, allocator: std.mem.Allocator) error{ OutOfMemory, Invali
 }
 ```
 
+**Config options:**
+
+* `severity`
+
+  * The severity (off, warning, error).
+
+  * **Default:** `.warning`
+
+## `require_exhaustive_enum_switch`
+
+Require explicit exhaustiveness for switches over exhaustive enums.
+
+This rule ensures switches over exhaustive enums remain explicit as the code evolves.
+When a new enum tag is introduced, a switch that uses `else` can continue compiling while
+unintentionally routing the new value through unintended logic. This hides missing behavior and
+makes such changes easy to overlook during testing and review.
+
+Requiring every tag to be listed forces the author to decide how each value should be handled.
+This keeps control flow intentional, improves readability, and prevents silently mis-handling
+newly added enum values.
+
+**Good:**
+
+```zig
+const State = enum { idle, running, stopped };
+fn handle(state: State) void {
+    switch (state) {
+        .idle => {},
+        .running => {},
+        .stopped => {},
+    }
+}
+```
+
+**Bad (else on exhaustive enum):**
+
+```zig
+const State = enum { idle, running, stopped };
+fn handle(state: State) void {
+    switch (state) {
+        .idle => {},
+        .running => {},
+        else => {},
+    }
+}
+```
 
 **Config options:**
 
@@ -1049,4 +1094,3 @@ Enforces an order of values in `switch` statements.
   * The severity for when `else` is not last in a `switch` (off, warning, error).
 
   * **Default:** `.warning`
-

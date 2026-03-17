@@ -1,0 +1,16 @@
+warning Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .d) [test_cases/require_exhaustive_enum_switch/require_exhaustive_enum_switch.input.zig:57:5] require_exhaustive_enum_switch
+
+ 57 |     switch (value) {
+    |     ^^^^^^
+
+warning Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .running, .stopped) [test_cases/require_exhaustive_enum_switch/require_exhaustive_enum_switch.input.zig:30:5] require_exhaustive_enum_switch
+
+ 30 |     switch (state) {
+    |     ^^^^^^
+
+warning Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .stopped) [test_cases/require_exhaustive_enum_switch/require_exhaustive_enum_switch.input.zig:22:5] require_exhaustive_enum_switch
+
+ 22 |     switch (state) {
+    |     ^^^^^^
+
+x 3 warnings
