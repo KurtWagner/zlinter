@@ -105,7 +105,7 @@ pub const LintDocument = struct {
         std.debug.print("{s}isMetaType: {}\n", .{ indent, t.isMetaType() });
         std.debug.print("{s}isNamespace: {}\n", .{ indent, t.isNamespace() });
         std.debug.print("{s}isOpaqueType: {}\n", .{ indent, t.isOpaqueType() });
-        std.debug.print("{s}isStructType: {}\n", .{ indent, t.isStructType() });
+        std.debug.print("{s}isStructType: {}\n", .{ indent, t.isStructType(&self.analyser) });
         std.debug.print("{s}isTaggedUnion: {}\n", .{ indent, t.isTaggedUnion() });
         std.debug.print("{s}isTypeFunc: {}\n", .{ indent, t.isTypeFunc() });
         std.debug.print("{s}isUnionType: {}\n", .{ indent, t.isUnionType() });
@@ -456,7 +456,7 @@ pub const LintContext = struct {
                     .union_instance
                 else if (decl.isEnumType())
                     .enum_instance
-                else if (decl.isStructType())
+                else if (decl.isStructType(&self.analyser))
                     .struct_instance
                 else if (decl.isTypeFunc())
                     .fn_returns_type
@@ -472,7 +472,9 @@ pub const LintContext = struct {
         // Then we look at the initialisation <value> if a type couldn't be used
         // from then declaration. e.g., `const var_name = <value>`
         if (maybe_value_node) |value_node| {
-            const node = ast.unwrapNode(tree, value_node, .{});
+            const node = ast.unwrapNode(tree, value_node, .{
+                .unwrap_optional_unwrap = false,
+            });
 
             // LIMITATION: All builtin calls to type of and type will return
             // `type` without any resolution.
@@ -522,6 +524,27 @@ pub const LintContext = struct {
                     };
 
                 const is_type_val = init_node_type.is_type_val;
+                if (!is_type_val and decl.data == .container) {
+                    const container_node = decl.data.container.scope_handle.toNode();
+                    if (container_node != .root) {
+                        const container_tree = decl.data.container.scope_handle.handle.tree;
+                        const container_token = container_tree.nodeMainToken(container_node);
+                        switch (container_tree.tokenTag(container_token)) {
+                            .keyword_struct => {
+                                var buf: [2]Ast.Node.Index = undefined;
+                                if (container_tree.fullContainerDecl(&buf, container_node)) |container_decl| {
+                                    if (ast.isContainerNamespace(container_tree, container_decl)) return null;
+                                }
+                                return .struct_instance;
+                            },
+                            .keyword_union => return .union_instance,
+                            .keyword_opaque => return .opaque_instance,
+                            .keyword_enum => return .enum_instance,
+                            else => {},
+                        }
+                    }
+                }
+
                 return if (is_error_container)
                     .error_type
                 else if (decl.isNamespace())
@@ -532,7 +555,7 @@ pub const LintContext = struct {
                     if (is_type_val) .enum_type else .enum_instance
                 else if (decl.isOpaqueType())
                     if (is_type_val) .opaque_type else null
-                else if (decl.isStructType())
+                else if (decl.isStructType(&self.analyser))
                     if (is_type_val) .struct_type else .struct_instance
                 else if (decl.isTypeFunc())
                     if (is_type_val) .fn_type_returns_type else .fn_returns_type

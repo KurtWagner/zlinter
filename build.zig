@@ -459,7 +459,7 @@ pub fn build(b: *std.Build) void {
             exclude.items,
             .{
                 .target = target,
-                .optimize = .ReleaseSafe,
+                .optimize = .Debug,
             },
         );
     });
