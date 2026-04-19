@@ -5,7 +5,7 @@
     .minimum_zig_version = "0.15.1",
     .dependencies = .{
         .zls = .{
-            // Update with `zig fetch --save git+https://github.com/zigtools/zls#master`
+            // Update with `zig fetch --save git+https://github.com/zigtools/zls#0.16.0`
             // IF changed THEN update .github/coverage.yml
             .url = "git+https://github.com/zigtools/zls?ref=0.16.0#494486203c3a48927f2383aa3d5ce5fca112186d",
             .hash = "zls-0.16.0-rmm5fs_JJgBG3dk5HwYK1FylE2_LMN0BYpX57tPzT-Xc",
