@@ -135,16 +135,16 @@ fn run(
     var total_timer = Timer.createStarted(io);
 
     // Key is index to `lint_files` and value are errors for the file.
-    var file_lint_problems = std.AutoArrayHashMap(
+    var file_lint_problems = std.array_hash_map.Auto(
         u32,
         []zlinter.results.LintResult,
-    ).init(gpa);
+    ).empty;
     defer {
         for (file_lint_problems.values()) |results| {
             for (results) |*result| result.deinit(gpa);
             gpa.free(results);
         }
-        file_lint_problems.deinit();
+        file_lint_problems.deinit(gpa);
     }
 
     // ------------------------------------------------------------------------
@@ -238,7 +238,7 @@ fn runLinterRules(
     lint_files: []zlinter.files.LintFile,
     printer: *zlinter.rendering.Printer,
     timer: *Timer,
-    file_lint_problems: *std.AutoArrayHashMap(u32, []zlinter.results.LintResult),
+    file_lint_problems: *std.array_hash_map.Auto(u32, []zlinter.results.LintResult),
     args: zlinter.Args,
 ) !void {
     var maybe_slowest_files = if (args.verbose) SlowestItemQueue.init(gpa) else null;
@@ -420,6 +420,7 @@ fn runLinterRules(
 
         if (results.items.len > 0) {
             try file_lint_problems.putNoClobber(
+                gpa,
                 std.math.cast(u32, i) orelse @panic("Too many files"),
                 try results.toOwnedSlice(gpa),
             );
@@ -431,7 +432,7 @@ fn runFormatter(
     io: std.Io,
     gpa: std.mem.Allocator,
     dir: std.Io.Dir,
-    file_lint_problems: std.AutoArrayHashMap(u32, []zlinter.results.LintResult),
+    file_lint_problems: std.array_hash_map.Auto(u32, []zlinter.results.LintResult),
     output_writer: *std.Io.Writer,
     output_tty: zlinter.ansi.Tty,
     formatter: *const zlinter.formatters.Formatter,
@@ -493,7 +494,7 @@ fn runFixes(
     gpa: std.mem.Allocator,
     dir: std.Io.Dir,
     lint_files: []zlinter.files.LintFile,
-    file_lint_problems: std.AutoArrayHashMap(u32, []zlinter.results.LintResult),
+    file_lint_problems: std.array_hash_map.Auto(u32, []zlinter.results.LintResult),
     printer: *zlinter.rendering.Printer,
 ) !RunResult {
     var total_fixes: usize = 0;
