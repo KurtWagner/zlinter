@@ -17,13 +17,15 @@ pub fn jsonTree(
     tree: Ast,
     arena: std.mem.Allocator,
 ) !std.json.Value {
-    var root_json_object = std.json.ObjectMap.init(arena);
+    var root_json_object = std.json.ObjectMap.empty;
     try root_json_object.put(
+        arena,
         "tokens",
         .{ .array = try tokensToJson(tree, arena) },
     );
 
     try root_json_object.put(
+        arena,
         "errors",
         .{ .array = try errorsToJson(tree, arena) },
     );
@@ -31,6 +33,7 @@ pub fn jsonTree(
     if (tree.errors.len == 0) {
         if (tree.renderAlloc(arena)) |rendering| {
             try root_json_object.put(
+                arena,
                 "render",
                 .{ .string = rendering },
             );
@@ -47,18 +50,18 @@ pub fn jsonTree(
         fn callback(self: @This(), context_tree: *const Ast, child_node: Ast.Node.Index) error{OutOfMemory}!void {
             if (child_node == .root) return;
 
-            var node_object = std.json.ObjectMap.init(self.arena);
-            try node_object.put("tag", .{
+            var node_object = std.json.ObjectMap.empty;
+            try node_object.put(self.arena, "tag", .{
                 .string = @tagName(context_tree.*.nodeTag(child_node)),
             });
 
-            try node_object.put("main_token", .{
+            try node_object.put(self.arena, "main_token", .{
                 .integer = context_tree.*.nodeMainToken(child_node),
             });
-            try node_object.put("first_token", .{
+            try node_object.put(self.arena, "first_token", .{
                 .integer = context_tree.firstToken(child_node),
             });
-            try node_object.put("last_token", .{
+            try node_object.put(self.arena, "last_token", .{
                 .integer = context_tree.lastToken(child_node),
             });
             // Add more meta data for nodes here...
@@ -77,7 +80,7 @@ pub fn jsonTree(
                 callback,
             );
 
-            try node_object.put("body", .{ .array = node_children });
+            try node_object.put(self.arena, "body", .{ .array = node_children });
 
             try self.node_children.append(.{
                 .object = node_object,
@@ -85,9 +88,10 @@ pub fn jsonTree(
         }
     };
 
-    var root_node_json_object = std.json.ObjectMap.init(arena);
+    var root_node_json_object = std.json.ObjectMap.empty;
 
     try root_node_json_object.put(
+        arena,
         "tag",
         .{ .string = "root" },
     );
@@ -108,7 +112,7 @@ pub fn jsonTree(
         );
     }
 
-    try root_json_object.put("body", .{ .array = root_node_children });
+    try root_json_object.put(arena, "body", .{ .array = root_node_children });
 
     return std.json.Value{ .object = root_json_object };
 }
@@ -130,16 +134,16 @@ fn errorsToJson(tree: Ast, arena: std.mem.Allocator) !std.json.Array {
     var json_errors = std.json.Array.init(arena);
 
     for (tree.errors) |e| {
-        var json_error = std.json.ObjectMap.init(arena);
+        var json_error = std.json.ObjectMap.empty;
 
-        try json_error.put("tag", .{ .string = @tagName(e.tag) });
-        try json_error.put("is_note", .{ .bool = e.is_note });
-        try json_error.put("token_is_prev", .{ .bool = e.token_is_prev });
-        try json_error.put("token", .{ .integer = e.token });
+        try json_error.put(arena, "tag", .{ .string = @tagName(e.tag) });
+        try json_error.put(arena, "is_note", .{ .bool = e.is_note });
+        try json_error.put(arena, "token_is_prev", .{ .bool = e.token_is_prev });
+        try json_error.put(arena, "token", .{ .integer = e.token });
 
         var aw = std.Io.Writer.Allocating.init(arena);
         try tree.renderError(e, &aw.writer);
-        try json_error.put("message", .{ .string = try aw.toOwnedSlice() });
+        try json_error.put(arena, "message", .{ .string = try aw.toOwnedSlice() });
 
         try json_errors.append(.{ .object = json_error });
     }
@@ -158,14 +162,14 @@ fn tokensToJson(tree: Ast, arena: std.mem.Allocator) !std.json.Array {
         );
         const start_offset = loc.line_start + loc.column;
 
-        var token_object = std.json.ObjectMap.init(arena);
-        try token_object.put("tag", std.json.Value{
+        var token_object = std.json.ObjectMap.empty;
+        try token_object.put(arena, "tag", std.json.Value{
             .string = @tagName(tree.tokens.items(.tag)[token_index]),
         });
-        try token_object.put("start", std.json.Value{
+        try token_object.put(arena, "start", std.json.Value{
             .number_string = try std.fmt.allocPrint(arena, "{d}", .{start_offset}),
         });
-        try token_object.put("len", std.json.Value{
+        try token_object.put(arena, "len", std.json.Value{
             .number_string = try std.fmt.allocPrint(arena, "{d}", .{tree.tokenSlice(token_index).len}),
         });
         // Add more meta data for tokens here..

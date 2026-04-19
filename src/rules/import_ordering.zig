@@ -141,9 +141,9 @@ const ImportDecl = struct {
     }
 };
 
-fn deinitScopedImports(gpa: std.mem.Allocator, scoped_imports: *std.AutoArrayHashMap(Ast.Node.Index, ImportsQueueLinesAscending)) void {
-    for (scoped_imports.values()) |v| v.deinit(gpa);
-    scoped_imports.deinit();
+fn deinitScopedImports(gpa: std.mem.Allocator, scoped_imports: *std.array_hash_map.Auto(Ast.Node.Index, ImportsQueueLinesAscending)) void {
+    for (scoped_imports.values()) |*v| v.deinit(gpa);
+    scoped_imports.deinit(gpa);
 }
 
 fn swapNodesFix(
@@ -182,14 +182,14 @@ fn swapNodesFix(
 fn resolveScopedImports(
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
-) !std.AutoArrayHashMap(Ast.Node.Index, ImportsQueueLinesAscending) {
+) !std.array_hash_map.Auto(Ast.Node.Index, ImportsQueueLinesAscending) {
     const tree = doc.handle.tree;
 
     const root: Ast.Node.Index = .root;
     var node_it = try doc.nodeLineageIterator(root, gpa);
     defer node_it.deinit();
 
-    var scoped_imports: std.AutoArrayHashMap(Ast.Node.Index, ImportsQueueLinesAscending) = .init(gpa);
+    var scoped_imports: std.array_hash_map.Auto(Ast.Node.Index, ImportsQueueLinesAscending) = .empty;
     while (try node_it.next()) |tuple| {
         const node, const connections = tuple;
 
@@ -213,7 +213,7 @@ fn resolveScopedImports(
             .last_line = last_loc.line,
         };
 
-        var gop = try scoped_imports.getOrPut(parent);
+        var gop = try scoped_imports.getOrPut(gpa, parent);
         if (gop.found_existing) {
             try gop.value_ptr.push(gpa, import);
         } else {
