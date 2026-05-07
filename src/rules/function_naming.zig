@@ -52,6 +52,11 @@ pub const Config = struct {
     },
 };
 
+const ParamKind = struct {
+    name: []const u8,
+    kind: zlinter.session.LintContext.TypeKind,
+};
+
 /// Builds and returns the function_naming rule.
 pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
     _ = options;
@@ -143,6 +148,9 @@ fn run(
                 if (token_tag == .keyword_export) continue :nodes;
             }
 
+            var param_kinds = std.ArrayList(ParamKind).empty;
+            defer param_kinds.deinit(gpa);
+
             for (fn_proto.ast.params) |param| {
                 const colon_token = tree.firstToken(param) - 1;
                 if (tree.tokens.items(.tag)[colon_token] != .colon) continue;
@@ -153,26 +161,43 @@ fn run(
 
                 if (identifier.len == 1 and identifier[0] == '_') continue;
 
-                if (try context.resolveTypeOfTypeNode(doc, param)) |param_type| {
-                    const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const desc: []const u8 =
-                        if (param_type.isTypeFunc())
-                            .{ config.function_arg_that_is_type_fn, "Function argument of type function" }
-                        else if (param_type.isFunc())
-                            .{ config.function_arg_that_is_fn, "Function argument of function" }
-                        else if (param_type.isMetaType())
-                            .{ config.function_arg_that_is_type, "Function argument of type" }
-                        else
-                            .{ config.function_arg, "Function argument" };
+                const type_kind = try classifyParamTypeKind(
+                    context,
+                    doc,
+                    tree,
+                    param,
+                    param_kinds.items,
+                );
 
-                    if (!style_with_severity.style.check(identifier)) {
-                        try lint_problems.append(gpa, .{
-                            .rule_id = rule.rule_id,
-                            .severity = style_with_severity.severity,
-                            .start = .startOfToken(tree, identifer_token),
-                            .end = .endOfToken(tree, identifer_token),
-                            .message = try std.fmt.allocPrint(gpa, "{s} should be {s}", .{ desc, style_with_severity.style.name() }),
-                        });
+                if (type_kind) |kind| {
+                    switch (kind) {
+                        .@"fn", .fn_type, .fn_returns_type, .fn_type_returns_type => {
+                            try param_kinds.append(gpa, .{
+                                .name = identifier,
+                                .kind = kind,
+                            });
+                        },
+                        else => {},
                     }
+                }
+
+                const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const desc: []const u8 = style: {
+                    break :style switch (type_kind orelse .other) {
+                        .fn_type, .@"fn" => .{ config.function_arg_that_is_fn, "Function argument of function" },
+                        .fn_type_returns_type, .fn_returns_type => .{ config.function_arg_that_is_type_fn, "Function argument of type function" },
+                        .type => .{ config.function_arg_that_is_type, "Function argument of type" },
+                        else => .{ config.function_arg, "Function argument" },
+                    };
+                };
+
+                if (!style_with_severity.style.check(identifier)) {
+                    try lint_problems.append(gpa, .{
+                        .rule_id = rule.rule_id,
+                        .severity = style_with_severity.severity,
+                        .start = .startOfToken(tree, identifer_token),
+                        .end = .endOfToken(tree, identifer_token),
+                        .message = try std.fmt.allocPrint(gpa, "{s} should be {s}", .{ desc, style_with_severity.style.name() }),
+                    });
                 }
             }
         }
@@ -186,6 +211,79 @@ fn run(
         )
     else
         null;
+}
+
+// TODO: Move this classification into a shared helper (e.g., in session/context)
+// so declaration_naming and field_naming can reuse the same logic.
+fn classifyParamTypeKind(
+    context: *zlinter.session.LintContext,
+    doc: *const zlinter.session.LintDocument,
+    tree: Ast,
+    param: Ast.Node.Index,
+    seen_param_kinds: []const ParamKind,
+) !?zlinter.session.LintContext.TypeKind {
+    const param_type_node = zlinter.ast.unwrapNode(
+        tree,
+        param,
+        .{},
+    );
+
+    var type_kind = try context.resolveTypeKind(
+        doc,
+        .{ .type_node = param },
+    );
+    if ((type_kind orelse .other) != .other) {
+        if (type_kind == .type) {
+            const is_type_literal = tree.nodeTag(param_type_node) == .identifier and
+                std.mem.eql(u8, tree.getNodeSource(param_type_node), "type");
+            if (!is_type_literal) return .other;
+        }
+        return type_kind;
+    }
+
+    if (tree.nodeTag(param_type_node) != .identifier) return type_kind;
+
+    const type_name = tree.getNodeSource(param_type_node);
+
+    for (seen_param_kinds) |param_kind| {
+        if (std.mem.eql(u8, param_kind.name, type_name)) {
+            return switch (param_kind.kind) {
+                .fn_type => .@"fn",
+                .fn_type_returns_type => .fn_returns_type,
+                else => param_kind.kind,
+            };
+        }
+    }
+
+    const type_name_token = tree.firstToken(param_type_node);
+    const source_index = tree.tokens.items(.start)[type_name_token];
+    if (try context.analyser.lookupSymbolGlobal(
+        doc.handle,
+        type_name,
+        source_index,
+    )) |decl_with_handle| {
+        if (decl_with_handle.decl == .ast_node) {
+            if (decl_with_handle.handle.tree.fullVarDecl(
+                decl_with_handle.decl.ast_node,
+            )) |var_decl| {
+                type_kind = try context.resolveTypeKind(
+                    doc,
+                    .{ .var_decl = var_decl },
+                );
+            }
+        }
+    }
+    if ((type_kind orelse .other) != .other) return type_kind;
+
+    if (try context.resolveTypeOfTypeNode(doc, param)) |param_type| {
+        if (param_type.isTypeFunc()) return .fn_type_returns_type;
+        if (param_type.isFunc()) return .fn_type;
+    }
+
+    if (std.mem.endsWith(u8, type_name, "FnType")) return .fn_type_returns_type;
+    if (std.mem.endsWith(u8, type_name, "Type")) return .type;
+
+    return type_kind;
 }
 
 /// Returns fn proto if node is fn proto and has a name token.

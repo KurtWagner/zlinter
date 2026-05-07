@@ -117,7 +117,7 @@ pub const LintDocument = struct {
             }
         }
 
-        const decl_literal = t.resolveDeclLiteralResultType();
+        const decl_literal = ast.resolveDeclLiteralResultTypeSafe(t);
         if (!decl_literal.eql(t)) {
             std.debug.print("{s}Decl literal result type:\n", .{indent});
             try self.dumpType(decl_literal, indent_size + 4);
@@ -325,13 +325,16 @@ pub const LintContext = struct {
         return self.analyser.resolveTypeOfNode(.of(node, doc.handle));
     }
 
+    // TODO: This has gotten out of hand and really needs a revamp.... patching
+    // for now to get things happy with latest changes to master but needs love
+    // as not sustainable....
     /// Resolves the type of a node that points to a type (e.g., return type) or
     /// null if it cannot be resolved.
     pub fn resolveTypeOfTypeNode(self: *LintContext, doc: *const LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
         const resolved_type = try self.resolveTypeOfNode(doc, node) orelse return null;
         const instance_type = if (resolved_type.isMetaType()) resolved_type else try resolved_type.instanceTypeVal(&self.analyser) orelse resolved_type;
 
-        return instance_type.resolveDeclLiteralResultType();
+        return ast.resolveDeclLiteralResultTypeSafe(instance_type);
     }
 
     // TODO: Write tests and clean this up as they're not really all needed
@@ -398,22 +401,21 @@ pub const LintContext = struct {
     pub fn resolveTypeKind(self: *LintContext, doc: *const LintDocument, input: union(enum) {
         var_decl: Ast.full.VarDecl,
         container_field: Ast.full.ContainerField,
+        type_node: Ast.Node.Index,
     }) !?TypeKind {
-        const maybe_type_node, const maybe_value_node = inputs: {
-            const t, const v = switch (input) {
-                .var_decl => |var_decl| .{
-                    var_decl.ast.type_node,
-                    var_decl.ast.init_node,
-                },
-                .container_field => |container_field| .{
-                    container_field.ast.type_expr,
-                    container_field.ast.value_expr,
-                },
-            };
-            break :inputs .{
-                t.unwrap(),
-                v.unwrap(),
-            };
+        const is_direct_type_node = switch (input) {
+            .type_node => true,
+            else => false,
+        };
+        const maybe_type_node: ?Ast.Node.Index = switch (input) {
+            .var_decl => |var_decl| var_decl.ast.type_node.unwrap(),
+            .container_field => |container_field| container_field.ast.type_expr.unwrap(),
+            .type_node => |node| node,
+        };
+        const maybe_value_node: ?Ast.Node.Index = switch (input) {
+            .var_decl => |var_decl| var_decl.ast.init_node.unwrap(),
+            .container_field => |container_field| container_field.ast.value_expr.unwrap(),
+            .type_node => null,
         };
 
         var container_decl_buffer: [2]Ast.Node.Index = undefined;
@@ -447,10 +449,50 @@ pub const LintContext = struct {
                     .keyword_enum => return .enum_instance,
                     inline else => |token| @panic("Unexpected container main token: " ++ @tagName(token)),
                 }
-            } else if (ast.isIdentiferKind(tree, node, .type)) {
+            } else if ((tree.nodeTag(node) == .identifier and std.mem.eql(u8, tree.getNodeSource(node), "type")) or
+                ast.isIdentiferKind(tree, node, .type))
+            {
                 return .type;
+            } else if (is_direct_type_node and tree.nodeTag(node) == .identifier) {
+                const identifier_token = tree.firstToken(node);
+                const source_index = tree.tokens.items(.start)[identifier_token];
+                if (try self.analyser.lookupSymbolGlobal(
+                    doc.handle,
+                    tree.tokenSlice(identifier_token),
+                    source_index,
+                )) |decl_with_handle| {
+                    if (decl_with_handle.decl == .ast_node) {
+                        const decl_node = decl_with_handle.decl.ast_node;
+                        if (decl_with_handle.handle.tree.fullVarDecl(decl_node)) |var_decl| {
+                            if (std.mem.eql(u8, decl_with_handle.handle.uri.raw, doc.handle.uri.raw)) {
+                                return try self.resolveTypeKind(doc, .{ .var_decl = var_decl });
+                            }
+                        }
+
+                        var fn_decl_buffer: [1]Ast.Node.Index = undefined;
+                        if (decl_with_handle.handle.tree.fullFnProto(&fn_decl_buffer, decl_node)) |fn_proto| {
+                            if (fn_proto.ast.return_type.unwrap()) |return_node| {
+                                const return_unwrapped = ast.unwrapNode(decl_with_handle.handle.tree, return_node, .{});
+                                return if (ast.isIdentiferKind(decl_with_handle.handle.tree, return_unwrapped, .type))
+                                    .fn_returns_type
+                                else
+                                    .@"fn";
+                            }
+                            return .@"fn";
+                        }
+                    }
+                }
             } else if (try self.resolveTypeOfNode(doc, node)) |type_node_type| {
-                const decl = type_node_type.resolveDeclLiteralResultType();
+                if (!type_node_type.is_type_val) {
+                    return if (type_node_type.isTypeFunc())
+                        .fn_returns_type
+                    else if (type_node_type.isFunc())
+                        .@"fn"
+                    else
+                        .other;
+                }
+
+                const decl = ast.resolveDeclLiteralResultTypeSafe(type_node_type);
 
                 return if (decl.isUnionType())
                     .union_instance
@@ -463,7 +505,15 @@ pub const LintContext = struct {
                 else if (decl.isFunc())
                     .@"fn"
                 else if (isTypeUnknown(type_node_type))
-                    null
+                    .other
+                else
+                    .other;
+            }
+
+            if (maybe_value_node == null) {
+                return if ((tree.nodeTag(node) == .identifier and std.mem.eql(u8, tree.getNodeSource(node), "type")) or
+                    ast.isIdentiferKind(tree, node, .type))
+                    .type
                 else
                     .other;
             }
@@ -475,6 +525,150 @@ pub const LintContext = struct {
             const node = ast.unwrapNode(tree, value_node, .{
                 .unwrap_optional_unwrap = false,
             });
+
+            if (tree.nodeTag(node) == .identifier) {
+                const identifier_token = tree.firstToken(node);
+                const source_index = tree.tokens.items(.start)[identifier_token];
+                if (try self.analyser.lookupSymbolGlobal(
+                    doc.handle,
+                    tree.tokenSlice(identifier_token),
+                    source_index,
+                )) |decl_with_handle| {
+                    if (decl_with_handle.decl == .ast_node) {
+                        const decl_node = decl_with_handle.decl.ast_node;
+                        if (decl_with_handle.handle.tree.fullVarDecl(decl_node)) |var_decl| {
+                            if (std.mem.eql(u8, decl_with_handle.handle.uri.raw, doc.handle.uri.raw)) {
+                                return try self.resolveTypeKind(doc, .{ .var_decl = var_decl });
+                            }
+                        }
+                    }
+                }
+            }
+            if (tree.nodeTag(node) == .field_access) {
+                const lhs = tree.nodeData(node).node_and_token.@"0";
+                if (tree.nodeTag(lhs) == .identifier) {
+                    lhs_lookup: {
+                        const lhs_token = tree.firstToken(lhs);
+                        const lhs_source_index = tree.tokens.items(.start)[lhs_token];
+                        const decl_with_handle = (try self.analyser.lookupSymbolGlobal(
+                            doc.handle,
+                            tree.tokenSlice(lhs_token),
+                            lhs_source_index,
+                        )) orelse break :lhs_lookup;
+                        if (decl_with_handle.decl != .ast_node) break :lhs_lookup;
+
+                        const decl_node = decl_with_handle.decl.ast_node;
+                        const var_decl = decl_with_handle.handle.tree.fullVarDecl(decl_node) orelse break :lhs_lookup;
+                        const init_node = var_decl.ast.init_node.unwrap() orelse break :lhs_lookup;
+                        const container_decl = decl_with_handle.handle.tree.fullContainerDecl(&container_decl_buffer, init_node) orelse break :lhs_lookup;
+                        const container_token_tag = decl_with_handle.handle.tree.tokens.items(.tag)[container_decl.ast.main_token];
+                        if (container_token_tag == .keyword_enum) return .enum_instance;
+                    }
+                }
+
+                var arena_allocator = std.heap.ArenaAllocator.init(self.gpa);
+                defer arena_allocator.deinit();
+                const arena = arena_allocator.allocator();
+
+                if (try self.resolveDecl(doc.handle, node, arena)) |decl_with_handle| {
+                    if (decl_with_handle.decl == .ast_node) {
+                        const decl_node = decl_with_handle.decl.ast_node;
+                        if (decl_with_handle.handle.tree.nodeTag(decl_node) == .enum_literal) {
+                            return .enum_instance;
+                        }
+                    }
+                }
+            }
+
+            var struct_init_buffer: [2]Ast.Node.Index = undefined;
+            var fn_proto_from_init_buffer: [1]Ast.Node.Index = undefined;
+            if (tree.fullStructInit(&struct_init_buffer, node)) |struct_init| {
+                if (struct_init.ast.type_expr.unwrap()) |init_type_expr| {
+                    const init_type = ast.unwrapNode(tree, init_type_expr, .{});
+                    if (tree.fullFnProto(&fn_proto_from_init_buffer, init_type)) |fn_proto| {
+                        if (fn_proto.ast.return_type.unwrap()) |return_node| {
+                            const return_unwrapped = ast.unwrapNode(tree, return_node, .{});
+                            return if (ast.isIdentiferKind(tree, return_unwrapped, .type))
+                                .fn_returns_type
+                            else
+                                .@"fn";
+                        }
+                        return .@"fn";
+                    }
+
+                    if (tree.nodeTag(init_type) == .identifier) {
+                        const type_name_token = tree.firstToken(init_type);
+                        const source_index = tree.tokens.items(.start)[type_name_token];
+                        if (try self.analyser.lookupSymbolGlobal(
+                            doc.handle,
+                            tree.tokenSlice(type_name_token),
+                            source_index,
+                        )) |decl_with_handle| {
+                            if (decl_with_handle.decl == .ast_node) {
+                                const decl_node = decl_with_handle.decl.ast_node;
+                                if (decl_with_handle.handle.tree.fullContainerDecl(&container_decl_buffer, decl_node)) |container_decl| {
+                                    if (ast.isContainerNamespace(decl_with_handle.handle.tree, container_decl)) return null;
+                                }
+                                if (decl_with_handle.handle.tree.fullVarDecl(decl_node)) |var_decl| {
+                                    if (var_decl.ast.init_node.unwrap()) |init_node| {
+                                        if (decl_with_handle.handle.tree.fullContainerDecl(&container_decl_buffer, init_node)) |container_decl| {
+                                            const container_token_tag = decl_with_handle.handle.tree.tokens.items(.tag)[container_decl.ast.main_token];
+                                            switch (container_token_tag) {
+                                                .keyword_struct => {
+                                                    if (ast.isContainerNamespace(decl_with_handle.handle.tree, container_decl)) return null;
+                                                    return .struct_instance;
+                                                },
+                                                .keyword_union => return .union_instance,
+                                                .keyword_enum => return .enum_instance,
+                                                .keyword_opaque => return .opaque_instance,
+                                                else => {},
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else return null;
+                    }
+                }
+            }
+
+            if (tree.nodeTag(node) == .address_of) {
+                const target_node = tree.nodeData(node).node;
+
+                var fn_proto_buffer_addr_of: [1]Ast.Node.Index = undefined;
+                const target_unwrapped = ast.unwrapNode(tree, target_node, .{
+                    .unwrap_optional_unwrap = false,
+                });
+                if (tree.fullFnProto(&fn_proto_buffer_addr_of, target_unwrapped)) |fn_proto| {
+                    if (fn_proto.ast.return_type.unwrap()) |return_node| {
+                        const return_unwrapped = ast.unwrapNode(tree, return_node, .{});
+                        return if (ast.isIdentiferKind(tree, return_unwrapped, .type))
+                            .fn_returns_type
+                        else
+                            .@"fn";
+                    }
+                    return .@"fn";
+                }
+
+                var arena_allocator = std.heap.ArenaAllocator.init(self.gpa);
+                defer arena_allocator.deinit();
+                const arena = arena_allocator.allocator();
+                if (try self.resolveDecl(doc.handle, target_node, arena)) |decl_with_handle| {
+                    if (decl_with_handle.decl == .ast_node) {
+                        const decl_node = decl_with_handle.decl.ast_node;
+                        if (decl_with_handle.handle.tree.fullFnProto(&fn_proto_buffer_addr_of, decl_node)) |fn_proto| {
+                            if (fn_proto.ast.return_type.unwrap()) |return_node| {
+                                const return_unwrapped = ast.unwrapNode(decl_with_handle.handle.tree, return_node, .{});
+                                return if (ast.isIdentiferKind(decl_with_handle.handle.tree, return_unwrapped, .type))
+                                    .fn_returns_type
+                                else
+                                    .@"fn";
+                            }
+                            return .@"fn";
+                        }
+                    }
+                }
+            }
 
             // LIMITATION: All builtin calls to type of and type will return
             // `type` without any resolution.
@@ -503,7 +697,16 @@ pub const LintContext = struct {
                     inline else => |token| @panic("Unexpected container main token: " ++ @tagName(token)),
                 };
             } else if (try self.resolveTypeOfNode(doc, node)) |init_node_type| {
-                const decl = init_node_type.resolveDeclLiteralResultType();
+                if (!init_node_type.is_type_val) {
+                    return if (init_node_type.isTypeFunc())
+                        .fn_returns_type
+                    else if (init_node_type.isFunc())
+                        .@"fn"
+                    else
+                        .other;
+                }
+
+                const decl = ast.resolveDeclLiteralResultTypeSafe(init_node_type);
 
                 const is_error_container =
                     if (std.meta.hasMethod(@TypeOf(decl), "isErrorSetType"))

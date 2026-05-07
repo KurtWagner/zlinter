@@ -93,7 +93,7 @@ fn run(
             switch_info.ast.condition,
         ) orelse continue :nodes;
 
-        const resolved_switch_expr_type = switch_expr_type.resolveDeclLiteralResultType();
+        const resolved_switch_expr_type = zlinter.ast.resolveDeclLiteralResultTypeSafe(switch_expr_type);
         if (!resolved_switch_expr_type.isEnumType()) continue :nodes;
 
         var switch_expr_enum = try zlinter.ast.getEnumInfoFromType(

@@ -74,6 +74,13 @@ pub fn nodeChildrenAlloc(
     return children.toOwnedSlice(gpa);
 }
 
+/// Compatible decl-literal resolution across ZLS versions.
+/// Newer ZLS asserts when called on non-type values, so keep old behavior by
+/// returning the input unchanged unless it is a type value.
+pub fn resolveDeclLiteralResultTypeSafe(t: zls.Analyser.Type) zls.Analyser.Type {
+    return if (t.is_type_val) t.resolveDeclLiteralResultType() else t;
+}
+
 /// `errdefer` and `defer` calls
 pub const DeferBlock = struct {
     children: []const Ast.Node.Index,
@@ -89,7 +96,7 @@ pub fn deferBlock(doc: *const session.LintDocument, node: Ast.Node.Index, alloca
     const data = tree.nodeData(node);
     const exp_node =
         switch (tree.nodeTag(node)) {
-            .@"errdefer" => data.opt_token_and_node[1],
+            .@"errdefer" => data.node,
             .@"defer" => data.node,
             else => return null,
         };
@@ -239,17 +246,9 @@ test "deferBlock - has expected children" {
             &.{ "me.run()", "me.deinit(arena)" },
         },
         .{
-            \\errdefer |e| me.deinit();
+            \\errdefer me.deinit();
             ,
             &.{"me.deinit()"},
-        },
-        .{
-            \\errdefer |err| {
-            \\  me.run();
-            \\  me.deinit(arena);
-            \\}
-            ,
-            &.{ "me.run()", "me.deinit(arena)" },
         },
     }) |tuple| {
         const source, const expected = tuple;
@@ -460,7 +459,7 @@ pub fn fullStatement(tree: Ast, node: Ast.Node.Index) ?Statement {
     else switch (tree.nodeTag(node)) {
         .@"catch" => .{ .@"catch" = tree.nodeData(node).node_and_node[1] },
         .@"defer" => .{ .@"defer" = tree.nodeData(node).node },
-        .@"errdefer" => .{ .@"errdefer" = tree.nodeData(node).opt_token_and_node[1] },
+        .@"errdefer" => .{ .@"errdefer" = tree.nodeData(node).node },
         else => null,
     };
 }
@@ -1035,7 +1034,10 @@ test "getEnumInfoFromType" {
     const exhaustive_enum_decl = tree.fullVarDecl(exhaustive_enum_decl_node).?;
     const exhaustive_enum_init = exhaustive_enum_decl.ast.init_node.unwrap().?;
     const exhaustive_enum_type = (try context.resolveTypeOfNode(doc, exhaustive_enum_init)) orelse return error.TestExpectedType;
-    var exhaustive_enum_info = try getEnumInfoFromType(exhaustive_enum_type.resolveDeclLiteralResultType(), std.testing.allocator) orelse
+    var exhaustive_enum_info = try getEnumInfoFromType(
+        resolveDeclLiteralResultTypeSafe(exhaustive_enum_type),
+        std.testing.allocator,
+    ) orelse
         return error.TestExpectedEnumInfo;
     defer exhaustive_enum_info.deinit(std.testing.allocator);
 
@@ -1046,7 +1048,10 @@ test "getEnumInfoFromType" {
     const non_exhaustive_enum_decl = tree.fullVarDecl(non_exhaustive_enum_decl_node).?;
     const non_exhaustive_enum_init = non_exhaustive_enum_decl.ast.init_node.unwrap().?;
     const non_exhaustive_enum_type = (try context.resolveTypeOfNode(doc, non_exhaustive_enum_init)) orelse return error.TestExpectedType;
-    var non_exhaustive_enum_info = try getEnumInfoFromType(non_exhaustive_enum_type.resolveDeclLiteralResultType(), std.testing.allocator) orelse
+    var non_exhaustive_enum_info = try getEnumInfoFromType(
+        resolveDeclLiteralResultTypeSafe(non_exhaustive_enum_type),
+        std.testing.allocator,
+    ) orelse
         return error.TestExpectedEnumInfo;
     defer non_exhaustive_enum_info.deinit(std.testing.allocator);
 
@@ -1057,8 +1062,9 @@ test "getEnumInfoFromType" {
     const not_enum_decl = tree.fullVarDecl(not_enum_decl_node).?;
     const not_enum_init = not_enum_decl.ast.init_node.unwrap().?;
     const not_enum_type = (try context.resolveTypeOfNode(doc, not_enum_init)) orelse return error.TestExpectedType;
+    const resolved_not_enum_type = resolveDeclLiteralResultTypeSafe(not_enum_type);
     try std.testing.expect(
-        (try getEnumInfoFromType(not_enum_type.resolveDeclLiteralResultType(), std.testing.allocator)) == null,
+        (try getEnumInfoFromType(resolved_not_enum_type, std.testing.allocator)) == null,
     );
 }
 
