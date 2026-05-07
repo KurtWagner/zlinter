@@ -41,9 +41,6 @@ jobs:
       - name: "Prefetch dependencies (workaround)"
         run: sed -n 's/.*url *= *"\(.*\)".*/\1/p' build.zig.zon | xargs -t -n1 zig fetch
       
-      - name: "Prefetch ZLS dependencies (workaround)"
-        run: curl -L https://raw.githubusercontent.com/zigtools/zls/5767f2f1f15eab33f52851ad6149b1e342301a21/build.zig.zon | sed -n 's/.*url *= *"\(.*\)".*/\1/p' | xargs -t -n1 zig fetch
-
       - name: "Run unit tests with coverage"
         run: |
           kcov --version
