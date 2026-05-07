@@ -737,6 +737,35 @@ pub fn divide(x: i32, y: i32) !i32 {
 
   * **Default:** `&.{}`
 
+## `no_redundant_comptime`
+
+Flags redundant `comptime` on parameters whose types are always comptime-known.
+
+In Zig, parameters of type `type`, `comptime_int`, and `comptime_float` are always comptime. 
+Writing `comptime T: type` is equivalent to `T: type`.
+
+**Good:**
+
+```zig
+fn List(T: type) type { ... }
+fn add(a: comptime_int, b: comptime_int) comptime_int { ... }
+```
+
+**Bad:**
+
+```zig
+fn List(comptime T: type) type { ... }
+fn add(comptime a: comptime_int, comptime b: comptime_int) comptime_int { ... }
+```
+
+**Config options:**
+
+* `severity`
+
+  * The severity (off, warning, error).
+
+  * **Default:** `.warning`
+
 ## `no_swallow_error`
 
 Disallow silently swallowing errors without proper handling or logging.
