@@ -164,7 +164,8 @@ fn isFieldAccessOfRootContainer(
     const lhs = node_data.node_and_token.@"0";
 
     if (try context.resolveTypeOfNode(doc, lhs)) |t| {
-        switch (t.resolveDeclLiteralResultType().data) {
+        const resolved = zlinter.ast.resolveDeclLiteralResultTypeSafe(t);
+        switch (resolved.data) {
             .container => |scope_handle| return isContainerRoot(scope_handle),
             else => {},
         }

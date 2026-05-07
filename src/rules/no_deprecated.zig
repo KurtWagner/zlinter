@@ -208,13 +208,14 @@ fn getSymbolEnumLiteralDocComment(
         }
     }
 
-    var decl_with_handle = try context.analyser.lookupSymbolFieldInit(
+    const decl_with_type = try context.analyser.lookupSymbolFieldInit(
         doc.handle,
         name,
         ancestors.items[0],
         ancestors.items[1..],
     ) orelse return null;
 
+    const decl_with_handle = decl_with_type.@"0";
     return try decl_with_handle.docComments(arena);
 }
 
