@@ -325,9 +325,6 @@ pub const LintContext = struct {
         return self.analyser.resolveTypeOfNode(.of(node, doc.handle));
     }
 
-    // TODO: This has gotten out of hand and really needs a revamp.... patching
-    // for now to get things happy with latest changes to master but needs love
-    // as not sustainable....
     /// Resolves the type of a node that points to a type (e.g., return type) or
     /// null if it cannot be resolved.
     pub fn resolveTypeOfTypeNode(self: *LintContext, doc: *const LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
@@ -393,6 +390,9 @@ pub const LintContext = struct {
         }
     };
 
+    // TODO: This has gotten out of hand and really needs a revamp.... patching
+    // for now to get things happy with latest changes to master but needs love
+    // as not sustainable....
     /// Resolves a given declaration or container field by looking at the type
     /// node (if any) and then the value node (if any) to resolve the type.
     ///
