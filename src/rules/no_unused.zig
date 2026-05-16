@@ -171,59 +171,7 @@ fn isRootContainerExpr(
     before_offset: Ast.ByteOffset,
     depth: u8,
 ) bool {
-    if (depth > 8) return false;
-    const unwrapped = zlinter.ast.unwrapNode(tree, node, .{
-        .unwrap_optional_unwrap = false,
-    });
-
-    switch (tree.nodeTag(unwrapped)) {
-        .builtin_call_two,
-        .builtin_call_two_comma,
-        .builtin_call,
-        .builtin_call_comma,
-        => {
-            return std.mem.eql(u8, tree.tokenSlice(tree.nodeMainToken(unwrapped)), "@This");
-        },
-        .identifier => {
-            const ident = tree.getNodeSource(unwrapped);
-            const var_decl = findVarDeclByNameBefore(tree, ident, before_offset) orelse return false;
-            const init_node = var_decl.ast.init_node.unwrap() orelse return false;
-            return isRootContainerExpr(tree, init_node, before_offset, depth + 1);
-        },
-        else => return false,
-    }
-}
-
-fn findVarDeclByNameBefore(
-    tree: Ast,
-    name: []const u8,
-    before_offset: Ast.ByteOffset,
-) ?Ast.full.VarDecl {
-    var best_offset: ?Ast.ByteOffset = null;
-    var best_decl: ?Ast.full.VarDecl = null;
-    var nearest_after_offset: ?Ast.ByteOffset = null;
-    var nearest_after_decl: ?Ast.full.VarDecl = null;
-
-    var index: u32 = 1;
-    while (index < tree.nodes.len) : (index += 1) {
-        const node: Ast.Node.Index = @enumFromInt(index);
-        const var_decl = tree.fullVarDecl(node) orelse continue;
-        const name_token = var_decl.ast.mut_token + 1;
-        if (!std.mem.eql(u8, tree.tokenSlice(name_token), name)) continue;
-
-        const offset = tree.tokenStart(name_token);
-        if (offset < before_offset) {
-            if (best_offset == null or offset > best_offset.?) {
-                best_offset = offset;
-                best_decl = var_decl;
-            }
-        } else if (nearest_after_offset == null or offset < nearest_after_offset.?) {
-            nearest_after_offset = offset;
-            nearest_after_decl = var_decl;
-        }
-    }
-
-    return best_decl orelse nearest_after_decl;
+    return semantic.isRootContainerExpr(tree, node, before_offset, depth);
 }
 
 test "no_unused" {
@@ -311,3 +259,4 @@ test "no_unused" {
 const std = @import("std");
 const zlinter = @import("zlinter");
 const Ast = std.zig.Ast;
+const semantic = zlinter.semantic;

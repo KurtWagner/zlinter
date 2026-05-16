@@ -855,6 +855,66 @@ const ZlinterRun = struct {
         return try list.toOwnedSlice(b.allocator);
     }
 
+    fn moduleRootSourcePath(
+        b: *std.Build,
+        step: *std.Build.Step,
+        module: *std.Build.Module,
+    ) ?[]const u8 {
+        const root_source = module.root_source_file orelse return null;
+        const path = root_source.getPath3(b, step);
+        return b.pathResolve(&.{
+            path.root_dir.path orelse ".",
+            path.sub_path,
+        });
+    }
+
+    fn appendModuleRoot(
+        b: *std.Build,
+        list: *std.ArrayList(BuildInfo.ModuleRootEntry),
+        scope_id: []const u8,
+        root_dir_path: []const u8,
+    ) !void {
+        for (list.items) |entry| {
+            if (std.mem.eql(u8, entry.scope_id, scope_id) and
+                std.mem.eql(u8, entry.root_dir_path, root_dir_path))
+                return;
+        }
+
+        try list.append(b.allocator, .{
+            .scope_id = try b.allocator.dupe(u8, scope_id),
+            .root_dir_path = try b.allocator.dupe(u8, root_dir_path),
+        });
+    }
+
+    fn appendModuleImport(
+        b: *std.Build,
+        list: *std.ArrayList(BuildInfo.ModuleImportEntry),
+        scope_id: ?[]const u8,
+        import_name: []const u8,
+        root_source_path: []const u8,
+    ) !void {
+        for (list.items) |entry| {
+            const same_scope = if (scope_id) |scope|
+                if (entry.scope_id) |entry_scope|
+                    std.mem.eql(u8, scope, entry_scope)
+                else
+                    false
+            else
+                entry.scope_id == null;
+
+            if (same_scope and
+                std.mem.eql(u8, entry.import_name, import_name) and
+                std.mem.eql(u8, entry.root_source_path, root_source_path))
+                return;
+        }
+
+        try list.append(b.allocator, .{
+            .scope_id = if (scope_id) |scope| try b.allocator.dupe(u8, scope) else null,
+            .import_name = try b.allocator.dupe(u8, import_name),
+            .root_source_path = try b.allocator.dupe(u8, root_source_path),
+        });
+    }
+
     fn make(step: *std.Build.Step, _: std.Build.Step.MakeOptions) !void {
         const run: *ZlinterRun = @alignCast(@fieldParentPtr("step", step));
         const b = run.step.owner;
@@ -929,9 +989,62 @@ const ZlinterRun = struct {
             }
         }
 
+        var module_roots: std.ArrayList(BuildInfo.ModuleRootEntry) = .empty;
+        defer module_roots.deinit(b.allocator);
+
+        var module_imports: std.ArrayList(BuildInfo.ModuleImportEntry) = .empty;
+        defer module_imports.deinit(b.allocator);
+
+        for (run.include) |source| {
+            const compile_step = switch (source) {
+                .compiled_unit => |compiled_unit| compiled_unit.compile_step,
+                else => continue,
+            };
+            const root_module = compile_step.root_module;
+
+            const root_scope_id = moduleRootSourcePath(b, &run.step, root_module) orelse continue;
+            if (std.fs.path.dirname(root_scope_id)) |root_dir| {
+                try appendModuleRoot(
+                    b,
+                    &module_roots,
+                    root_scope_id,
+                    root_dir,
+                );
+            }
+
+            const graph = root_module.getGraph();
+            for (graph.modules) |mod| {
+                const scope_id = moduleRootSourcePath(b, &run.step, mod) orelse root_scope_id;
+                if (std.fs.path.dirname(scope_id)) |root_dir| {
+                    try appendModuleRoot(
+                        b,
+                        &module_roots,
+                        scope_id,
+                        root_dir,
+                    );
+                }
+
+                for (mod.import_table.keys(), mod.import_table.values()) |import_name, imported_module| {
+                    if (std.mem.eql(u8, import_name, "std")) continue;
+                    const imported_root = moduleRootSourcePath(b, &run.step, imported_module) orelse continue;
+
+                    try appendModuleImport(
+                        b,
+                        &module_imports,
+                        scope_id,
+                        import_name,
+                        imported_root,
+                    );
+                }
+            }
+        }
+
         const build_info_zon_bytes: []const u8 = toZonString(BuildInfo{
             .include_paths = try subPaths(&run.step, includes.items),
             .exclude_paths = try subPaths(&run.step, excludes.items),
+            .module_roots = if (module_roots.items.len == 0) null else try module_roots.toOwnedSlice(b.allocator),
+            .module_imports = if (module_imports.items.len == 0) null else try module_imports.toOwnedSlice(b.allocator),
+            .schema_version = 1,
         }, b.allocator);
 
         var environ_map = b.graph.environ_map;

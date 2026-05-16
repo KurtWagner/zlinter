@@ -4,6 +4,17 @@
 
 const BuildInfo = @This();
 
+pub const ModuleImportEntry = struct {
+    scope_id: ?[]const u8 = null,
+    import_name: []const u8,
+    root_source_path: []const u8,
+};
+
+pub const ModuleRootEntry = struct {
+    scope_id: []const u8,
+    root_dir_path: []const u8,
+};
+
 /// Similar to `Args.include_paths` but is populated by the build runner and
 /// piped into the zlinter execution.
 include_paths: ?[]const []const u8 = null,
@@ -11,6 +22,16 @@ include_paths: ?[]const []const u8 = null,
 /// Similar to `Args.exclude_paths` but is populated by the build runner and
 /// piped into the zlinter execution.
 exclude_paths: ?[]const []const u8 = null,
+
+/// Mapping of non-relative import names to module root source files emitted
+/// from build graph metadata.
+module_imports: ?[]const ModuleImportEntry = null,
+
+/// Scope roots used to disambiguate module import mappings by importer path.
+module_roots: ?[]const ModuleRootEntry = null,
+
+/// Version of build-info payload schema.
+schema_version: u16 = 1,
 
 pub const default: BuildInfo = .{};
 
@@ -23,6 +44,23 @@ pub fn deinit(self: BuildInfo, gpa: std.mem.Allocator) void {
     if (self.include_paths) |paths| {
         for (paths) |p| gpa.free(p);
         gpa.free(paths);
+    }
+
+    if (self.module_imports) |module_imports| {
+        for (module_imports) |entry| {
+            if (entry.scope_id) |scope_id| gpa.free(scope_id);
+            gpa.free(entry.import_name);
+            gpa.free(entry.root_source_path);
+        }
+        gpa.free(module_imports);
+    }
+
+    if (self.module_roots) |module_roots| {
+        for (module_roots) |entry| {
+            gpa.free(entry.scope_id);
+            gpa.free(entry.root_dir_path);
+        }
+        gpa.free(module_roots);
     }
 }
 

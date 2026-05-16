@@ -274,6 +274,7 @@ fn runLinterRules(
         gpa,
         arena.allocator(),
     );
+    context.setBuildInfo(&args.build_info);
     defer context.deinit();
 
     var enabled_rules = enabledRules(args.rules);

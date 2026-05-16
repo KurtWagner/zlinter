@@ -97,6 +97,7 @@ pub const LintContext = struct {
     gpa: std.mem.Allocator,
     io: std.Io,
     loaded_handles: std.ArrayList(*Handle),
+    semantic_ctx: semantic.SemanticContext,
 
     pub const TypeKind = enum {
         other,
@@ -152,7 +153,12 @@ pub const LintContext = struct {
             .io = io,
             .environ_map = environ_map,
             .loaded_handles = .empty,
+            .semantic_ctx = .init(null),
         };
+    }
+
+    pub fn setBuildInfo(self: *LintContext, build_info: *const BuildInfo) void {
+        self.semantic_ctx.setBuildInfo(build_info);
     }
 
     pub fn deinit(self: *LintContext) void {
@@ -404,7 +410,9 @@ test "LintDocument.isEnclosedInTestBlock" {
 }
 
 const ast = @import("ast.zig");
+const BuildInfo = @import("BuildInfo.zig");
 const comments = @import("comments.zig");
+const semantic = @import("semantic.zig");
 const std = @import("std");
 const testing = @import("testing.zig");
 const LintProblem = @import("results.zig").LintProblem;
