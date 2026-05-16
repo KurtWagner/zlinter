@@ -59,6 +59,7 @@ fn run(
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
+    _ = context;
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
@@ -88,17 +89,13 @@ fn run(
 
         const switch_info = tree.fullSwitch(node) orelse continue :nodes;
 
-        const switch_expr_type = try context.resolveTypeOfNode(
+        const switch_offset = tree.tokenStart(tree.firstToken(node));
+        var switch_expr_enum = try enumInfoFromExpr(
             doc,
             switch_info.ast.condition,
-        ) orelse continue :nodes;
-
-        const resolved_switch_expr_type = zlinter.ast.resolveDeclLiteralResultTypeSafe(switch_expr_type);
-        if (!resolved_switch_expr_type.isEnumType()) continue :nodes;
-
-        var switch_expr_enum = try zlinter.ast.getEnumInfoFromType(
-            resolved_switch_expr_type,
+            switch_offset,
             gpa,
+            0,
         ) orelse continue :nodes;
         defer switch_expr_enum.deinit(gpa);
 
@@ -123,10 +120,9 @@ fn run(
             } else {
                 case_values: for (switch_case.ast.values) |value_node| {
                     const tag_name = try tagNameFromSwitchCaseValue(
-                        context,
-                        doc,
                         tree,
                         value_node,
+                        switch_offset,
                     ) orelse continue :case_values;
 
                     if (complete_tag_set.contains(tag_name))
@@ -165,16 +161,15 @@ fn run(
 }
 
 fn tagNameFromSwitchCaseValue(
-    context: *zlinter.session.LintContext,
-    doc: *const zlinter.session.LintDocument,
     tree: Ast,
     node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
 ) error{OutOfMemory}!?[]const u8 {
     return switch (tree.nodeTag(node)) {
         // e.g., `.a`
         .enum_literal => tree.tokenSlice(tree.nodeMainToken(node)),
         // e.g., `a` where `a = MyEnum.a`
-        .identifier => try tagNameForIdentifier(context, doc, tree, node),
+        .identifier => try tagNameForIdentifier(tree, node, before_offset),
         // e.g., `MyEnum.a`
         .field_access => blk: {
             const last_token = tree.lastToken(node);
@@ -192,33 +187,560 @@ fn tagNameFromSwitchCaseValue(
 }
 
 fn tagNameForIdentifier(
-    context: *zlinter.session.LintContext,
-    doc: *const zlinter.session.LintDocument,
     tree: Ast,
     node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
 ) error{OutOfMemory}!?[]const u8 {
     const token = tree.nodeMainToken(node);
     std.debug.assert(tree.tokenTag(token) == .identifier);
 
-    const tag_name = tree.tokenSlice(token);
-    const decl = try context.analyser.lookupSymbolGlobal(
-        doc.handle,
-        tag_name,
-        tree.tokenStart(token),
-    );
+    const name = tree.tokenSlice(token);
+    const var_decl = findVarDeclByNameNear(tree, name, before_offset) orelse return null;
+    const init_node = var_decl.ast.init_node.unwrap() orelse return null;
+    const unwrapped = zlinter.ast.unwrapNode(tree, init_node, .{
+        .unwrap_optional_unwrap = false,
+    });
 
-    if (decl) |decl_node| {
-        const token_with_handle = decl_node.definitionToken(
-            &context.analyser,
-            true,
-        ) catch |e| switch (e) {
-            error.OutOfMemory => return error.OutOfMemory,
-            error.Canceled => unreachable,
-        };
-        return token_with_handle.handle.tree.tokenSlice(token_with_handle.token);
+    if (tree.nodeTag(unwrapped) == .enum_literal) {
+        return tree.tokenSlice(tree.nodeMainToken(unwrapped));
+    }
+    if (tree.nodeTag(unwrapped) == .field_access) {
+        const last_token = tree.lastToken(unwrapped);
+        if (tree.tokenTag(last_token) == .identifier) {
+            return tree.tokenSlice(last_token);
+        }
     }
 
     return null;
+}
+
+const EnumInfoLite = struct {
+    tags: []const []const u8,
+    is_non_exhaustive: bool,
+
+    pub fn deinit(self: *EnumInfoLite, gpa: std.mem.Allocator) void {
+        gpa.free(self.tags);
+        self.* = undefined;
+    }
+};
+
+fn enumInfoFromExpr(
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
+    gpa: std.mem.Allocator,
+    depth: u8,
+) !?EnumInfoLite {
+    const tree = doc.handle.tree;
+    if (depth > 12) return null;
+
+    if (try enumInfoFromKnownCallExpr(doc, node, before_offset, gpa, depth + 1)) |enum_info| {
+        return enum_info;
+    }
+
+    if (resolveEnumContainerNodeFromExpr(doc, node, before_offset, depth)) |enum_container_node| {
+        return enumInfoFromContainerNode(tree, enum_container_node, gpa);
+    }
+
+    return null;
+}
+
+fn enumInfoFromKnownCallExpr(
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
+    gpa: std.mem.Allocator,
+    depth: u8,
+) !?EnumInfoLite {
+    const tree = doc.handle.tree;
+    if (depth > 12) return null;
+
+    var call_buffer: [1]Ast.Node.Index = undefined;
+    const call = tree.fullCall(&call_buffer, node) orelse return null;
+    const fn_expr = call.ast.fn_expr;
+
+    switch (tree.nodeTag(fn_expr)) {
+        .identifier => {
+            const fn_name = tree.getNodeSource(fn_expr);
+            const fn_decl = findFnDeclByNameNear(tree, fn_name, before_offset) orelse return null;
+            const return_type_node = fn_decl.ast.return_type.unwrap() orelse return null;
+
+            if (try enumInfoFromKnownTypeExpr(doc, return_type_node, before_offset, gpa, depth + 1)) |known| {
+                return known;
+            }
+
+            if (resolveEnumContainerNodeFromTypeExpr(doc, return_type_node, before_offset, depth + 1)) |enum_node| {
+                return enumInfoFromContainerNode(tree, enum_node, gpa);
+            }
+
+            return null;
+        },
+        .field_access => {
+            const data = tree.nodeData(fn_expr).node_and_token;
+            const lhs = data.@"0";
+            const method_token = data.@"1";
+            if (tree.tokenTag(method_token) != .identifier) return null;
+
+            const method_name = tree.tokenSlice(method_token);
+            if (std.mem.eql(u8, method_name, "nodeTag") and
+                isStdAstValueExpr(doc, lhs, before_offset, depth + 1))
+            {
+                return enumInfoFromComptimeEnum(Ast.Node.Tag, gpa);
+            }
+            if (std.mem.eql(u8, method_name, "tokenTag") and
+                isStdAstValueExpr(doc, lhs, before_offset, depth + 1))
+            {
+                return enumInfoFromComptimeEnum(std.zig.Token.Tag, gpa);
+            }
+
+            return null;
+        },
+        else => return null,
+    }
+}
+
+fn enumInfoFromKnownTypeExpr(
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
+    gpa: std.mem.Allocator,
+    depth: u8,
+) !?EnumInfoLite {
+    if (depth > 12) return null;
+
+    if (isStdAstNodeTagTypeExpr(doc, node, before_offset, depth + 1)) {
+        return enumInfoFromComptimeEnum(Ast.Node.Tag, gpa);
+    }
+    if (isStdAstTokenTagTypeExpr(doc, node, before_offset, depth + 1)) {
+        return enumInfoFromComptimeEnum(std.zig.Token.Tag, gpa);
+    }
+
+    return null;
+}
+
+fn enumInfoFromComptimeEnum(comptime T: type, gpa: std.mem.Allocator) !?EnumInfoLite {
+    const fields = std.meta.fields(T);
+    var tags = try gpa.alloc([]const u8, fields.len);
+    inline for (fields, 0..) |field, i| {
+        tags[i] = field.name;
+    }
+    return .{
+        .tags = tags,
+        .is_non_exhaustive = false,
+    };
+}
+
+fn isStdAstValueExpr(
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
+    depth: u8,
+) bool {
+    const tree = doc.handle.tree;
+    if (depth > 12) return false;
+
+    const unwrapped = zlinter.ast.unwrapNode(tree, node, .{
+        .unwrap_optional_unwrap = false,
+    });
+    switch (tree.nodeTag(unwrapped)) {
+        .identifier => {
+            const ident_name = tree.getNodeSource(unwrapped);
+
+            if (resolveParamTypeNode(doc, unwrapped, ident_name)) |type_node| {
+                if (isStdAstTypeExpr(doc, type_node, before_offset, depth + 1)) return true;
+            }
+
+            const var_decl = findVarDeclByNameNear(tree, ident_name, before_offset) orelse return false;
+            if (var_decl.ast.type_node.unwrap()) |type_node| {
+                if (isStdAstTypeExpr(doc, type_node, before_offset, depth + 1)) return true;
+            }
+            if (var_decl.ast.init_node.unwrap()) |init_node| {
+                if (isStdAstTypeExpr(doc, init_node, before_offset, depth + 1)) return true;
+            }
+
+            return false;
+        },
+        else => return false,
+    }
+}
+
+fn isStdAstTypeExpr(
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
+    depth: u8,
+) bool {
+    const tree = doc.handle.tree;
+    if (depth > 12) return false;
+
+    const unwrapped = zlinter.ast.unwrapNode(tree, node, .{
+        .unwrap_optional_unwrap = false,
+    });
+
+    if (isStdZigAstPath(doc, unwrapped, before_offset, depth + 1)) return true;
+
+    if (tree.nodeTag(unwrapped) == .identifier) {
+        const ident_name = tree.getNodeSource(unwrapped);
+        const var_decl = findVarDeclByNameNear(tree, ident_name, before_offset) orelse return false;
+        const init_node = var_decl.ast.init_node.unwrap() orelse return false;
+        return isStdZigAstPath(doc, init_node, before_offset, depth + 1);
+    }
+
+    return false;
+}
+
+fn isStdAstNodeTagTypeExpr(
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
+    depth: u8,
+) bool {
+    return isStdAstNestedType(doc, node, before_offset, depth, "Node", "Tag");
+}
+
+fn isStdAstTokenTagTypeExpr(
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
+    depth: u8,
+) bool {
+    return isStdAstNestedType(doc, node, before_offset, depth, "Token", "Tag");
+}
+
+fn isStdAstNestedType(
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
+    depth: u8,
+    mid_field: []const u8,
+    leaf_field: []const u8,
+) bool {
+    const tree = doc.handle.tree;
+    if (depth > 12) return false;
+
+    const unwrapped = zlinter.ast.unwrapNode(tree, node, .{
+        .unwrap_optional_unwrap = false,
+    });
+    if (tree.nodeTag(unwrapped) != .field_access) return false;
+
+    const data = tree.nodeData(unwrapped).node_and_token;
+    const lhs = data.@"0";
+    const leaf_token = data.@"1";
+    if (tree.tokenTag(leaf_token) != .identifier) return false;
+    if (!std.mem.eql(u8, tree.tokenSlice(leaf_token), leaf_field)) return false;
+
+    const lhs_unwrapped = zlinter.ast.unwrapNode(tree, lhs, .{
+        .unwrap_optional_unwrap = false,
+    });
+    if (tree.nodeTag(lhs_unwrapped) != .field_access) return false;
+
+    const lhs_data = tree.nodeData(lhs_unwrapped).node_and_token;
+    const ast_base = lhs_data.@"0";
+    const mid_token = lhs_data.@"1";
+    if (tree.tokenTag(mid_token) != .identifier) return false;
+    if (!std.mem.eql(u8, tree.tokenSlice(mid_token), mid_field)) return false;
+
+    return isStdAstTypeExpr(doc, ast_base, before_offset, depth + 1);
+}
+
+fn isStdZigAstPath(
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
+    depth: u8,
+) bool {
+    const tree = doc.handle.tree;
+    if (depth > 12) return false;
+
+    const unwrapped = zlinter.ast.unwrapNode(tree, node, .{
+        .unwrap_optional_unwrap = false,
+    });
+
+    if (tree.nodeTag(unwrapped) != .field_access) return false;
+    const data = tree.nodeData(unwrapped).node_and_token;
+    const lhs = data.@"0";
+    const field_token = data.@"1";
+    if (tree.tokenTag(field_token) != .identifier) return false;
+    if (!std.mem.eql(u8, tree.tokenSlice(field_token), "Ast")) return false;
+
+    const lhs_unwrapped = zlinter.ast.unwrapNode(tree, lhs, .{
+        .unwrap_optional_unwrap = false,
+    });
+    if (tree.nodeTag(lhs_unwrapped) != .field_access) return false;
+
+    const lhs_data = tree.nodeData(lhs_unwrapped).node_and_token;
+    const std_expr = lhs_data.@"0";
+    const zig_token = lhs_data.@"1";
+    if (tree.tokenTag(zig_token) != .identifier) return false;
+    if (!std.mem.eql(u8, tree.tokenSlice(zig_token), "zig")) return false;
+
+    return isStdImportExpr(doc, std_expr, before_offset, depth + 1);
+}
+
+fn isStdImportExpr(
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
+    depth: u8,
+) bool {
+    const tree = doc.handle.tree;
+    if (depth > 12) return false;
+
+    const unwrapped = zlinter.ast.unwrapNode(tree, node, .{
+        .unwrap_optional_unwrap = false,
+    });
+    switch (tree.nodeTag(unwrapped)) {
+        .identifier => {
+            const ident_name = tree.getNodeSource(unwrapped);
+            const var_decl = findVarDeclByNameNear(tree, ident_name, before_offset) orelse return false;
+            const init_node = var_decl.ast.init_node.unwrap() orelse return false;
+            return isStdImportExpr(doc, init_node, before_offset, depth + 1);
+        },
+        .builtin_call_two,
+        .builtin_call_two_comma,
+        => {
+            const main_token = tree.nodeMainToken(unwrapped);
+            if (!std.mem.eql(u8, "@import", tree.tokenSlice(main_token))) return false;
+
+            const data = tree.nodeData(unwrapped);
+            const arg_node = data.opt_node_and_opt_node[0].unwrap() orelse return false;
+            if (tree.nodeTag(arg_node) != .string_literal) return false;
+
+            const import_slice = tree.tokenSlice(tree.nodeMainToken(arg_node));
+            return import_slice.len >= 2 and std.mem.eql(u8, import_slice[1 .. import_slice.len - 1], "std");
+        },
+        else => return false,
+    }
+}
+
+fn resolveEnumContainerNodeFromExpr(
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
+    depth: u8,
+) ?Ast.Node.Index {
+    const tree = doc.handle.tree;
+    if (depth > 12) return null;
+
+    const unwrapped = zlinter.ast.unwrapNode(tree, node, .{
+        .unwrap_optional_unwrap = false,
+    });
+
+    var container_decl_buffer: [2]Ast.Node.Index = undefined;
+    if (tree.fullContainerDecl(&container_decl_buffer, unwrapped)) |container_decl| {
+        if (tree.tokens.items(.tag)[container_decl.ast.main_token] == .keyword_enum) {
+            return unwrapped;
+        }
+    }
+
+    switch (tree.nodeTag(unwrapped)) {
+        .identifier => {
+            if (resolveEnumContainerFromIdentifier(doc, unwrapped, before_offset, depth + 1)) |enum_container| {
+                return enum_container;
+            }
+            return null;
+        },
+        .field_access => {
+            const lhs = tree.nodeData(unwrapped).node_and_token.@"0";
+            return resolveEnumContainerNodeFromTypeExpr(doc, lhs, before_offset, depth + 1);
+        },
+        .enum_literal => return null,
+        else => return null,
+    }
+}
+
+fn resolveEnumContainerNodeFromTypeExpr(
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
+    depth: u8,
+) ?Ast.Node.Index {
+    const tree = doc.handle.tree;
+    if (depth > 12) return null;
+
+    const unwrapped = zlinter.ast.unwrapNode(tree, node, .{});
+
+    var container_decl_buffer: [2]Ast.Node.Index = undefined;
+    if (tree.fullContainerDecl(&container_decl_buffer, unwrapped)) |container_decl| {
+        if (tree.tokens.items(.tag)[container_decl.ast.main_token] == .keyword_enum) {
+            return unwrapped;
+        }
+    }
+
+    switch (tree.nodeTag(unwrapped)) {
+        .identifier => {
+            if (resolveEnumContainerFromIdentifier(doc, unwrapped, before_offset, depth + 1)) |enum_container| {
+                return enum_container;
+            }
+            return null;
+        },
+        .field_access => {
+            const lhs = tree.nodeData(unwrapped).node_and_token.@"0";
+            return resolveEnumContainerNodeFromTypeExpr(doc, lhs, before_offset, depth + 1);
+        },
+        else => return null,
+    }
+}
+
+fn resolveEnumContainerFromIdentifier(
+    doc: *const zlinter.session.LintDocument,
+    identifier_node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
+    depth: u8,
+) ?Ast.Node.Index {
+    const tree = doc.handle.tree;
+    if (depth > 12) return null;
+
+    const ident_name = tree.getNodeSource(identifier_node);
+
+    if (resolveParamTypeNode(doc, identifier_node, ident_name)) |type_node| {
+        if (resolveEnumContainerNodeFromTypeExpr(doc, type_node, before_offset, depth + 1)) |enum_container| {
+            return enum_container;
+        }
+    }
+
+    const var_decl = findVarDeclByNameNear(tree, ident_name, before_offset) orelse return null;
+
+    if (var_decl.ast.type_node.unwrap()) |type_node| {
+        if (resolveEnumContainerNodeFromTypeExpr(doc, type_node, before_offset, depth + 1)) |enum_container| {
+            return enum_container;
+        }
+    }
+
+    if (var_decl.ast.init_node.unwrap()) |init_node| {
+        if (resolveEnumContainerNodeFromExpr(doc, init_node, before_offset, depth + 1)) |enum_container| {
+            return enum_container;
+        }
+    }
+
+    return null;
+}
+
+fn resolveParamTypeNode(
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+    param_name: []const u8,
+) ?Ast.Node.Index {
+    const tree = doc.handle.tree;
+    var current = node;
+
+    while (doc.lineage.items(.parent)[@intFromEnum(current)]) |parent| {
+        current = parent;
+        if (tree.nodeTag(current) != .fn_decl) continue;
+
+        var fn_proto_buffer: [1]Ast.Node.Index = undefined;
+        const fn_decl = zlinter.ast.fnDecl(tree, current, &fn_proto_buffer) orelse continue;
+        var param_it = fn_decl.proto.iterate(&tree);
+        while (param_it.next()) |param| {
+            const name_token = param.name_token orelse continue;
+            if (!std.mem.eql(u8, tree.tokenSlice(name_token), param_name)) continue;
+            return param.type_expr;
+        }
+        return null;
+    }
+
+    return null;
+}
+
+fn enumInfoFromContainerNode(
+    tree: Ast,
+    enum_node: Ast.Node.Index,
+    gpa: std.mem.Allocator,
+) !?EnumInfoLite {
+    var container_decl_buffer: [2]Ast.Node.Index = undefined;
+    const container_decl = tree.fullContainerDecl(&container_decl_buffer, enum_node) orelse return null;
+    if (tree.tokens.items(.tag)[container_decl.ast.main_token] != .keyword_enum) return null;
+
+    var tags: std.ArrayList([]const u8) = try .initCapacity(gpa, container_decl.ast.members.len);
+    errdefer tags.deinit(gpa);
+
+    for (container_decl.ast.members) |member| {
+        const tag_name_token = switch (tree.nodeTag(member)) {
+            .container_field_init,
+            .container_field_align,
+            .container_field,
+            => tree.nodeMainToken(member),
+            else => continue,
+        };
+        tags.appendAssumeCapacity(tree.tokenSlice(tag_name_token));
+    }
+
+    var is_non_exhaustive = false;
+    if (tags.items.len > 0 and std.mem.eql(u8, tags.items[tags.items.len - 1], "_")) {
+        is_non_exhaustive = true;
+        _ = tags.pop();
+    }
+
+    return .{
+        .tags = try tags.toOwnedSlice(gpa),
+        .is_non_exhaustive = is_non_exhaustive,
+    };
+}
+
+fn findVarDeclByNameNear(
+    tree: Ast,
+    name: []const u8,
+    before_offset: Ast.ByteOffset,
+) ?Ast.full.VarDecl {
+    var best_offset: ?Ast.ByteOffset = null;
+    var best_decl: ?Ast.full.VarDecl = null;
+    var nearest_after_offset: ?Ast.ByteOffset = null;
+    var nearest_after_decl: ?Ast.full.VarDecl = null;
+
+    var index: u32 = 1;
+    while (index < tree.nodes.len) : (index += 1) {
+        const node: Ast.Node.Index = @enumFromInt(index);
+        const var_decl = tree.fullVarDecl(node) orelse continue;
+        const name_token = var_decl.ast.mut_token + 1;
+        if (!std.mem.eql(u8, tree.tokenSlice(name_token), name)) continue;
+
+        const offset = tree.tokenStart(name_token);
+        if (offset < before_offset) {
+            if (best_offset == null or offset > best_offset.?) {
+                best_offset = offset;
+                best_decl = var_decl;
+            }
+        } else if (nearest_after_offset == null or offset < nearest_after_offset.?) {
+            nearest_after_offset = offset;
+            nearest_after_decl = var_decl;
+        }
+    }
+
+    return best_decl orelse nearest_after_decl;
+}
+
+fn findFnDeclByNameNear(
+    tree: Ast,
+    name: []const u8,
+    before_offset: Ast.ByteOffset,
+) ?Ast.full.FnProto {
+    var best_offset: ?Ast.ByteOffset = null;
+    var best_fn: ?Ast.full.FnProto = null;
+    var nearest_after_offset: ?Ast.ByteOffset = null;
+    var nearest_after_fn: ?Ast.full.FnProto = null;
+
+    var fn_proto_buffer: [1]Ast.Node.Index = undefined;
+    var index: u32 = 1;
+    while (index < tree.nodes.len) : (index += 1) {
+        const node: Ast.Node.Index = @enumFromInt(index);
+        const fn_decl = zlinter.ast.fnDecl(tree, node, &fn_proto_buffer) orelse continue;
+
+        const name_token = fn_decl.proto.name_token orelse continue;
+        if (!std.mem.eql(u8, tree.tokenSlice(name_token), name)) continue;
+
+        const offset = tree.tokenStart(name_token);
+        if (offset < before_offset) {
+            if (best_offset == null or offset > best_offset.?) {
+                best_offset = offset;
+                best_fn = fn_decl.proto;
+            }
+        } else if (nearest_after_offset == null or offset < nearest_after_offset.?) {
+            nearest_after_offset = offset;
+            nearest_after_fn = fn_decl.proto;
+        }
+    }
+
+    return best_fn orelse nearest_after_fn;
 }
 
 fn buildProblemMessage(missing: []const []const u8, gpa: std.mem.Allocator) ![]const u8 {

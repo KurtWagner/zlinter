@@ -55,6 +55,7 @@ fn run(
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
+    _ = context;
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
@@ -94,47 +95,8 @@ fn run(
         };
         if (!is_allocator_method) continue :nodes;
 
-        const decl_name, const uri = decl_name_and_uri: {
-            if (try context.analyser.resolveVarDeclAlias(
-                .{
-                    .decl = .{ .ast_node = lhs },
-                    .handle = doc.handle,
-                    .container_type = null,
-                },
-            )) |decl_handle| {
-                const uri = decl_handle.handle.uri;
-
-                const name: []const u8 = name: switch (decl_handle.decl) {
-                    .ast_node => |ast_node| {
-                        if (decl_handle.handle.tree.fullVarDecl(ast_node)) |var_decl| {
-                            if (var_decl.ast.init_node.unwrap()) |init_node| {
-                                _ = init_node;
-                                // TODO: If .call_one then check return value
-                                // std.debug.print("{} - {s}\n", .{
-                                //     decl_handle.handle.tree.nodeTag(init_node),
-                                //     decl_handle.handle.tree.getNodeSource(init_node),
-                                // });
-                            }
-
-                            const name_token = var_decl.ast.mut_token + 1;
-                            break :name decl_handle.handle.tree.tokenSlice(name_token);
-                        }
-                        break :name null;
-                    },
-                    else => break :name null,
-                } orelse continue :nodes;
-                break :decl_name_and_uri .{ name, uri };
-            } else continue :nodes;
-        };
-
-        var is_problem: bool = false;
-        for (config.detect_allocators) |allocator_kind| {
-            if (!std.mem.endsWith(u8, uri.raw, allocator_kind.file_ends_with)) continue;
-            if (!std.mem.eql(u8, decl_name, allocator_kind.decl_name)) continue;
-
-            is_problem = true;
-            break;
-        }
+        const lhs_offset = tree.tokenStart(tree.firstToken(lhs));
+        const is_problem = isKnownAllocatorObjectExpr(doc, lhs, lhs_offset, config.detect_allocators, 0);
         if (!is_problem) continue :nodes;
 
         try lint_problems.append(gpa, .{
@@ -154,6 +116,156 @@ fn run(
         )
     else
         null;
+}
+
+fn isKnownAllocatorObjectExpr(
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
+    detect_allocators: []const AllocatorKind,
+    depth: u8,
+) bool {
+    if (depth > 12) return false;
+    for (detect_allocators) |allocator_kind| {
+        if (!std.mem.endsWith(u8, allocator_kind.file_ends_with, "/std/heap.zig")) continue;
+        if (matchesStdHeapAllocatorExpr(doc, node, before_offset, allocator_kind.decl_name, depth + 1)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn matchesStdHeapAllocatorExpr(
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
+    allocator_decl_name: []const u8,
+    depth: u8,
+) bool {
+    const tree = doc.handle.tree;
+    if (depth > 12) return false;
+
+    const unwrapped = zlinter.ast.unwrapNode(tree, node, .{
+        .unwrap_optional_unwrap = false,
+    });
+    switch (tree.nodeTag(unwrapped)) {
+        .identifier => {
+            const ident = tree.getNodeSource(unwrapped);
+            const var_decl = findVarDeclByNameNear(tree, ident, before_offset) orelse return false;
+            const init_node = var_decl.ast.init_node.unwrap() orelse return false;
+            return matchesStdHeapAllocatorExpr(doc, init_node, before_offset, allocator_decl_name, depth + 1);
+        },
+        .field_access => {
+            const base = tree.nodeData(unwrapped).node_and_token.@"0";
+            const field_token = tree.nodeData(unwrapped).node_and_token.@"1";
+            const field_name = tree.tokenSlice(field_token);
+
+            if (std.mem.eql(u8, field_name, allocator_decl_name)) {
+                return isStdHeapExpr(doc, base, before_offset, depth + 1);
+            }
+            return false;
+        },
+        else => return false,
+    }
+}
+
+fn isStdHeapExpr(
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
+    depth: u8,
+) bool {
+    const tree = doc.handle.tree;
+    if (depth > 12) return false;
+
+    const unwrapped = zlinter.ast.unwrapNode(tree, node, .{
+        .unwrap_optional_unwrap = false,
+    });
+    switch (tree.nodeTag(unwrapped)) {
+        .identifier => {
+            const ident = tree.getNodeSource(unwrapped);
+            const var_decl = findVarDeclByNameNear(tree, ident, before_offset) orelse return false;
+            const init_node = var_decl.ast.init_node.unwrap() orelse return false;
+            return isStdHeapExpr(doc, init_node, before_offset, depth + 1);
+        },
+        .field_access => {
+            const base = tree.nodeData(unwrapped).node_and_token.@"0";
+            const field_token = tree.nodeData(unwrapped).node_and_token.@"1";
+            const field_name = tree.tokenSlice(field_token);
+            if (std.mem.eql(u8, field_name, "heap")) {
+                return isStdImportExpr(doc, base, before_offset, depth + 1);
+            }
+            return false;
+        },
+        else => return false,
+    }
+}
+
+fn isStdImportExpr(
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
+    depth: u8,
+) bool {
+    const tree = doc.handle.tree;
+    if (depth > 12) return false;
+
+    const unwrapped = zlinter.ast.unwrapNode(tree, node, .{
+        .unwrap_optional_unwrap = false,
+    });
+    switch (tree.nodeTag(unwrapped)) {
+        .identifier => {
+            const ident = tree.getNodeSource(unwrapped);
+            const var_decl = findVarDeclByNameNear(tree, ident, before_offset) orelse return false;
+            const init_node = var_decl.ast.init_node.unwrap() orelse return false;
+            return isStdImportExpr(doc, init_node, before_offset, depth + 1);
+        },
+        .builtin_call_two,
+        .builtin_call_two_comma,
+        => {
+            const main_token = tree.nodeMainToken(unwrapped);
+            if (!std.mem.eql(u8, "@import", tree.tokenSlice(main_token))) return false;
+            const data = tree.nodeData(unwrapped);
+            const arg_node = data.opt_node_and_opt_node[0].unwrap() orelse return false;
+            if (tree.nodeTag(arg_node) != .string_literal) return false;
+
+            const import_slice = tree.tokenSlice(tree.nodeMainToken(arg_node));
+            return import_slice.len >= 2 and std.mem.eql(u8, import_slice[1 .. import_slice.len - 1], "std");
+        },
+        else => return false,
+    }
+}
+
+fn findVarDeclByNameNear(
+    tree: Ast,
+    name: []const u8,
+    before_offset: Ast.ByteOffset,
+) ?Ast.full.VarDecl {
+    var best_offset: ?Ast.ByteOffset = null;
+    var best_decl: ?Ast.full.VarDecl = null;
+    var nearest_after_offset: ?Ast.ByteOffset = null;
+    var nearest_after_decl: ?Ast.full.VarDecl = null;
+
+    var index: u32 = 1;
+    while (index < tree.nodes.len) : (index += 1) {
+        const node: Ast.Node.Index = @enumFromInt(index);
+        const var_decl = tree.fullVarDecl(node) orelse continue;
+        const name_token = var_decl.ast.mut_token + 1;
+        if (!std.mem.eql(u8, tree.tokenSlice(name_token), name)) continue;
+
+        const offset = tree.tokenStart(name_token);
+        if (offset < before_offset) {
+            if (best_offset == null or offset > best_offset.?) {
+                best_offset = offset;
+                best_decl = var_decl;
+            }
+        } else if (nearest_after_offset == null or offset < nearest_after_offset.?) {
+            nearest_after_offset = offset;
+            nearest_after_decl = var_decl;
+        }
+    }
+
+    return best_decl orelse nearest_after_decl;
 }
 
 test {
