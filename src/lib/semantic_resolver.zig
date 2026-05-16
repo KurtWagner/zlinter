@@ -195,6 +195,20 @@ pub const Resolver = struct {
         return null;
     }
 
+    pub fn resolveContainerForResolved(
+        self: *Self,
+        resolved: ResolvedRef,
+        before_offset: Ast.ByteOffset,
+        depth: u8,
+    ) ?ContainerRef {
+        if (depth > 16) return null;
+        return switch (resolved) {
+            .container => |container| container,
+            .decl => |decl| self.resolveContainerFromDecl(decl, before_offset, depth + 1),
+            .module => null,
+        };
+    }
+
     pub fn docCommentTextForResolved(self: *Self, resolved: ResolvedRef) ?[]const u8 {
         return switch (resolved) {
             .decl => |decl| self.docCommentTextForDecl(decl),

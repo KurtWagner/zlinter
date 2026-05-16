@@ -95,11 +95,13 @@ fn run(
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
-    _ = context;
     const config = options.getConfig(Config);
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
+
+    var resolver = try zlinter.semantic_resolver.Resolver.init(context, doc, gpa);
+    defer resolver.deinit(gpa);
 
     const tree = doc.handle.tree;
 
@@ -119,8 +121,9 @@ fn run(
             if (token_tag == .keyword_export) continue :nodes;
         }
 
-        const type_kind = zlinter.type_classifier.classifyVarDecl(tree, var_decl) orelse continue :nodes;
         const name_token = var_decl.ast.mut_token + 1;
+        const before_offset = tree.tokenStart(name_token);
+        var type_kind = zlinter.type_classifier.classifyVarDecl(tree, var_decl) orelse continue :nodes;
         const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
 
         // Skip quoting-based identifiers such as @"build.zig" that intentionally
@@ -135,6 +138,31 @@ fn run(
                     const last_token = tree.lastToken(init_node);
                     const field_name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(last_token));
                     if (std.mem.eql(u8, field_name, name)) continue :nodes;
+                }
+            }
+        }
+
+        if (type_kind == .other or
+            type_kind == .struct_instance or
+            type_kind == .union_instance or
+            type_kind == .enum_instance or
+            type_kind == .opaque_instance)
+        {
+            if (var_decl.ast.init_node.unwrap()) |init_node| {
+                if (resolver.resolveExpr(doc, init_node, before_offset, 0)) |resolved| {
+                    if (resolver.resolveContainerForResolved(resolved, before_offset, 0) != null) {
+                        type_kind = .type;
+                    }
+                }
+
+                if (type_kind != .type and tree.nodeTag(init_node) == .field_access) {
+                    const data = tree.nodeData(init_node).node_and_token;
+                    const lhs = data.@"0";
+                    const field_name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(data.@"1"));
+
+                    if (looksLikeTypeName(field_name) and isImportBackedExpr(tree, lhs, before_offset, 0)) {
+                        type_kind = .type;
+                    }
                 }
             }
         }
@@ -219,6 +247,47 @@ fn isStyleCheckableIdentifier(name: []const u8) bool {
         return false;
     }
     return true;
+}
+
+fn looksLikeTypeName(name: []const u8) bool {
+    if (!zlinter.rules.LintTextStyle.title_case.check(name)) return false;
+    if (name.len < 2) return false;
+
+    for (name[1..]) |c| {
+        if (std.ascii.isLower(c)) return true;
+    }
+    return false;
+}
+
+fn isImportBackedExpr(
+    tree: Ast,
+    node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
+    depth: u8,
+) bool {
+    if (depth > 8) return false;
+
+    const unwrapped = zlinter.ast.unwrapNode(tree, node, .{
+        .unwrap_optional_unwrap = false,
+    });
+
+    if (zlinter.ast.importPath(tree, unwrapped) != null) return true;
+
+    return switch (tree.nodeTag(unwrapped)) {
+        .identifier => blk: {
+            const ident = tree.getNodeSource(unwrapped);
+            const var_decl = zlinter.semantic.findVarDeclByNameBefore(tree, ident, before_offset) orelse break :blk false;
+            const init_node = var_decl.ast.init_node.unwrap() orelse break :blk false;
+            break :blk isImportBackedExpr(tree, init_node, before_offset, depth + 1);
+        },
+        .field_access => isImportBackedExpr(
+            tree,
+            tree.nodeData(unwrapped).node_and_token.@"0",
+            before_offset,
+            depth + 1,
+        ),
+        else => false,
+    };
 }
 
 test {
@@ -473,6 +542,52 @@ test "name lengths" {
         },
         &.{},
     );
+}
+
+test "declaration_naming - imported type alias is treated as type" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    const environ_map: std.process.Environ.Map = .init(arena.allocator());
+
+    var context: zlinter.session.LintContext = undefined;
+    try context.init(std.testing.io, &environ_map, std.testing.allocator);
+    defer context.deinit();
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try zlinter.testing.writeFile(
+        tmp.dir,
+        "dep.zig",
+        "pub const ResolvedType = struct {};\n",
+    );
+
+    const source: [:0]const u8 =
+        \\const dep = @import("./dep.zig");
+        \\const ResolvedType = dep.ResolvedType;
+    ;
+
+    const doc = try zlinter.testing.loadFakeDocument(
+        &context,
+        tmp.dir,
+        "main.zig",
+        source,
+        arena.allocator(),
+    );
+
+    const rule = buildRule(.{});
+    var config = Config{};
+    var result = try rule.run(
+        rule,
+        &context,
+        doc,
+        std.testing.allocator,
+        .{ .config = &config },
+    );
+    defer if (result) |*r| r.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(usize, 0), if (result) |r| r.problems.len else 0);
 }
 
 const std = @import("std");
