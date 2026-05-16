@@ -59,7 +59,7 @@ fn run(
     var index: u32 = 1;
     nodes: while (index < tree.nodes.len) : (index += 1) {
         const node: Ast.Node.Index = @enumFromInt(index);
-        const fn_proto = fnProto(tree, &fn_buffer, node) orelse continue :nodes;
+        const fn_proto = zlinter.ast.fnProto(tree, &fn_buffer, node) orelse continue :nodes;
 
         if (config.exclude_extern and fn_proto.extern_export_inline_token != null) {
             const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
@@ -90,16 +90,6 @@ fn run(
         )
     else
         null;
-}
-
-inline fn fnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?Ast.full.FnProto {
-    return switch (tree.nodeTag(node)) {
-        .fn_proto => tree.fnProto(node),
-        .fn_proto_multi => tree.fnProtoMulti(node),
-        .fn_proto_one => tree.fnProtoOne(buffer, node),
-        .fn_proto_simple => tree.fnProtoSimple(buffer, node),
-        else => null,
-    };
 }
 
 test {

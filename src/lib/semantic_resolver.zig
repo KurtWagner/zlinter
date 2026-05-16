@@ -520,37 +520,17 @@ pub const Resolver = struct {
         const file = self.file_cache.items[file_index];
         const tree = file.tree;
 
-        const unwrapped = ast_helpers.unwrapNode(tree, init_node, .{
-            .unwrap_optional_unwrap = false,
-        });
+        const import_path = ast_helpers.importPath(tree, init_node) orelse return null;
+        if (std.mem.eql(u8, import_path, "std")) return null;
 
-        switch (tree.nodeTag(unwrapped)) {
-            .builtin_call_two,
-            .builtin_call_two_comma,
-            => {
-                if (!std.mem.eql(u8, "@import", tree.tokenSlice(tree.nodeMainToken(unwrapped)))) return null;
-                const data = tree.nodeData(unwrapped);
-                const arg_node = data.opt_node_and_opt_node[0].unwrap() orelse return null;
-                if (tree.nodeTag(arg_node) != .string_literal) return null;
+        const abs_path = self.context.semantic_ctx.resolveImportPathAlloc(
+            file.abs_path,
+            import_path,
+            self.gpa,
+        ) orelse return null;
+        defer self.gpa.free(abs_path);
 
-                const import_token = tree.nodeMainToken(arg_node);
-                const import_slice = tree.tokenSlice(import_token);
-                if (import_slice.len < 2) return null;
-
-                const import_path = import_slice[1 .. import_slice.len - 1];
-                if (std.mem.eql(u8, import_path, "std")) return null;
-
-                const abs_path = self.context.semantic_ctx.resolveImportPathAlloc(
-                    file.abs_path,
-                    import_path,
-                    self.gpa,
-                ) orelse return null;
-                defer self.gpa.free(abs_path);
-
-                return self.getOrLoadFileByAbsPath(abs_path) catch null;
-            },
-            else => return null,
-        }
+        return self.getOrLoadFileByAbsPath(abs_path) catch null;
     }
 
     fn getOrLoadFileByAbsPath(self: *Self, abs_path: []const u8) !usize {

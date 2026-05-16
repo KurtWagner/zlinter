@@ -756,6 +756,54 @@ pub fn fnProtoReturnsError(tree: Ast, fn_proto: Ast.full.FnProto) bool {
     };
 }
 
+/// Returns full function proto if node is any function-proto variant.
+pub fn fnProto(
+    tree: Ast,
+    buffer: *[1]Ast.Node.Index,
+    node: Ast.Node.Index,
+) ?Ast.full.FnProto {
+    return switch (tree.nodeTag(node)) {
+        .fn_proto => tree.fnProto(node),
+        .fn_proto_multi => tree.fnProtoMulti(node),
+        .fn_proto_one => tree.fnProtoOne(buffer, node),
+        .fn_proto_simple => tree.fnProtoSimple(buffer, node),
+        else => null,
+    };
+}
+
+/// Returns import path (without quotes) if node is an `@import("...")` call.
+pub fn importPath(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
+    const unwrapped = unwrapNode(tree, node, .{
+        .unwrap_optional_unwrap = false,
+    });
+
+    const arg_node: Ast.Node.Index = switch (tree.nodeTag(unwrapped)) {
+        .builtin_call_two,
+        .builtin_call_two_comma,
+        => blk: {
+            if (!std.mem.eql(u8, "@import", tree.tokenSlice(tree.nodeMainToken(unwrapped)))) return null;
+            const data = tree.nodeData(unwrapped);
+            break :blk data.opt_node_and_opt_node[0].unwrap() orelse return null;
+        },
+        .builtin_call,
+        .builtin_call_comma,
+        => blk: {
+            if (!std.mem.eql(u8, "@import", tree.tokenSlice(tree.nodeMainToken(unwrapped)))) return null;
+            const data = tree.nodeData(unwrapped);
+            const sub_range = tree.extraData(data.node_and_extra[1], Ast.Node.SubRange);
+            const args = tree.extraDataSlice(sub_range, Ast.Node.Index);
+            if (args.len == 0) return null;
+            break :blk args[0];
+        },
+        else => return null,
+    };
+
+    if (tree.nodeTag(arg_node) != .string_literal) return null;
+    const import_slice = tree.tokenSlice(tree.nodeMainToken(arg_node));
+    if (import_slice.len < 2) return null;
+    return import_slice[1 .. import_slice.len - 1];
+}
+
 test "fnProtoReturnsError" {
     var buffer: [1]Ast.Node.Index = undefined;
     inline for (&.{

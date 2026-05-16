@@ -129,7 +129,7 @@ fn run(
 
         if (config.exclude_aliases) {
             if (var_decl.ast.init_node.unwrap()) |init_node| {
-                if (isImportBuiltinCall(tree, init_node)) continue :nodes;
+                if (zlinter.ast.importPath(tree, init_node) != null) continue :nodes;
 
                 if (tree.nodeTag(init_node) == .field_access) {
                     const last_token = tree.lastToken(init_node);
@@ -210,20 +210,6 @@ fn run(
         )
     else
         null;
-}
-
-fn isImportBuiltinCall(tree: Ast, node: Ast.Node.Index) bool {
-    const unwrapped = zlinter.ast.unwrapNode(tree, node, .{
-        .unwrap_optional_unwrap = false,
-    });
-    return switch (tree.nodeTag(unwrapped)) {
-        .builtin_call_two,
-        .builtin_call_two_comma,
-        .builtin_call,
-        .builtin_call_comma,
-        => std.mem.eql(u8, tree.tokenSlice(tree.nodeMainToken(unwrapped)), "@import"),
-        else => false,
-    };
 }
 
 fn isStyleCheckableIdentifier(name: []const u8) bool {

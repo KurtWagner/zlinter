@@ -266,13 +266,7 @@ pub fn namedFnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index)
 
 /// Returns fn proto if node is fn proto and has a name token.
 pub fn fnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?Ast.full.FnProto {
-    if (switch (tree.nodeTag(node)) {
-        .fn_proto => tree.fnProto(node),
-        .fn_proto_multi => tree.fnProtoMulti(node),
-        .fn_proto_one => tree.fnProtoOne(buffer, node),
-        .fn_proto_simple => tree.fnProtoSimple(buffer, node),
-        else => null,
-    }) |fn_proto| {
+    if (zlinter.ast.fnProto(tree, buffer, node)) |fn_proto| {
         return fn_proto;
     }
     return null;

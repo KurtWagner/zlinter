@@ -196,7 +196,7 @@ fn resolveScopedImports(
         const var_decl = tree.fullVarDecl(node) orelse continue;
 
         const init_node = var_decl.ast.init_node.unwrap() orelse continue;
-        const import_path = isImportCall(tree, init_node) orelse continue;
+        const import_path = zlinter.ast.importPath(tree, init_node) orelse continue;
         const parent = connections.parent orelse continue;
 
         const decl_name = tree.tokenSlice(var_decl.ast.mut_token + 1);
@@ -225,28 +225,6 @@ fn resolveScopedImports(
         }
     }
     return scoped_imports;
-}
-
-/// Returns the import path if `@import` built in call.
-fn isImportCall(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
-    switch (tree.nodeTag(node)) {
-        .builtin_call_two,
-        .builtin_call_two_comma,
-        => {
-            const main_token = tree.nodeMainToken(node);
-            if (!std.mem.eql(u8, "@import", tree.tokenSlice(main_token))) return null;
-
-            const data = tree.nodeData(node);
-            const lhs_node = data.opt_node_and_opt_node[0].unwrap() orelse return null;
-
-            std.debug.assert(tree.nodeTag(lhs_node) == .string_literal);
-
-            const lhs_content = tree.tokenSlice(tree.nodeMainToken(lhs_node));
-            std.debug.assert(lhs_content.len > 2);
-            return lhs_content[1 .. lhs_content.len - 1];
-        },
-        else => return null,
-    }
 }
 
 fn classifyImportPath(path: []const u8) ImportDecl.Classification {
