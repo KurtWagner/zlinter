@@ -147,7 +147,7 @@ fn processBlock(
     var call_buffer: [1]Ast.Node.Index = undefined;
 
     for (doc.lineage.items(.children)[@intFromEnum(block_node)] orelse &.{}) |child_node| {
-        if (try declRequiringCleanup(context, doc, child_node)) |decl_ref| {
+        if (try declRequiringCleanup(doc, child_node)) |decl_ref| {
             try cleanup_symbols.put(
                 try arena.dupe(u8, doc.handle.tree.tokenSlice(decl_ref.decl_name_token)),
                 child_node,
@@ -198,7 +198,6 @@ const DeclRef = struct {
 /// Returns a declaration reference if the given node is a declaration node
 /// that looks like it needs to be cleaned up (e.g., if it has a `deinit` method)
 fn declRequiringCleanup(
-    context: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
     maybe_var_decl_node: Ast.Node.Index,
 ) !?DeclRef {
@@ -233,54 +232,13 @@ fn declRequiringCleanup(
             // Try and reduce some noise when using arenas although for anyone
             // using this rule being pedantic and calling deinit on errdefer
             // isnt the absolute worst...?
-            !hasNonFreeingAllocatorParam(doc, call.params)
+            !hasNonFreeingAllocatorParam(doc, call.params) and
+                !hasBorrowedBufferParam(doc, call.params)
         else
             false,
     }) return null;
 
-    const var_decl_type = try context.resolveTypeOfNode(doc, maybe_var_decl_node) orelse return null;
-    switch (var_decl_type.data) {
-        .container => |container| {
-            const scope_handle = container.scope_handle;
-            const node = scope_handle.toNode();
-            const tag = scope_handle.handle.tree.nodeTag(node);
-            switch (tag) {
-                .container_decl,
-                .container_decl_arg,
-                .container_decl_arg_trailing,
-                .container_decl_trailing,
-                .container_decl_two,
-                .container_decl_two_trailing,
-                => {
-                    const scope_tree = scope_handle.handle.tree;
-
-                    const has_deinit_method: bool = has_deinit_method: {
-                        var buffer: [2]Ast.Node.Index = undefined;
-                        const container_decl = scope_tree.fullContainerDecl(&buffer, node).?;
-                        for (container_decl.ast.members) |member| {
-                            var fn_proto_buffer: [1]Ast.Node.Index = undefined;
-                            const fn_decl = zlinter.ast.fnDecl(scope_tree, member, &fn_proto_buffer) orelse continue;
-
-                            if (zlinter.ast.fnProtoVisibility(scope_tree, fn_decl.proto) == .private) continue;
-
-                            const name_token = fn_decl.proto.name_token orelse continue;
-                            const name = scope_tree.tokenSlice(name_token);
-
-                            if (std.mem.eql(u8, name, "deinit")) break :has_deinit_method true;
-                        }
-                        break :has_deinit_method false;
-                    };
-                    if (!has_deinit_method) return null;
-
-                    return .{ .decl_name_token = var_decl.ast.mut_token + 1 };
-                },
-                else => {},
-            }
-        },
-        else => {},
-    }
-
-    return null;
+    return .{ .decl_name_token = var_decl.ast.mut_token + 1 };
 }
 
 /// Returns true if it looks like based on parameters that the given call use
@@ -324,6 +282,22 @@ fn hasNonFreeingAllocatorParam(doc: *const zlinter.session.LintDocument, params:
                     .enum_literal, .other, .direct => {},
                 }
             },
+        }
+    }
+    return false;
+}
+
+/// Returns true if params indicate a fixed/borrowed buffer style initializer
+/// (e.g. `.init(&buffer)`), which typically should not require errdefer cleanup.
+fn hasBorrowedBufferParam(doc: *const zlinter.session.LintDocument, params: []const Ast.Node.Index) bool {
+    const tree = doc.handle.tree;
+    for (params) |param_node| {
+        const unwrapped = zlinter.ast.unwrapNode(tree, param_node, .{
+            .unwrap_optional_unwrap = false,
+        });
+        switch (tree.nodeTag(unwrapped)) {
+            .address_of => return true,
+            else => {},
         }
     }
     return false;
@@ -399,7 +373,7 @@ test "hasNonFreeingAllocatorParam" {
         const environ_map: std.process.Environ.Map = .init(arena.allocator());
 
         var context: zlinter.session.LintContext = undefined;
-        try context.init(.{}, std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
+        try context.init(std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
         defer context.deinit();
 
         var tmp = std.testing.tmpDir(.{});

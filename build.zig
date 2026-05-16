@@ -1,12 +1,5 @@
 const @"build.zig" = @This();
 
-const zls_version: []const u8 = switch (version.zig) {
-    .@"0.17" => "0.17.0-dev",
-    .@"0.16" => "0.16.0",
-    .@"0.15" => "0.15.0",
-    .@"0.14" => "0.14.0",
-};
-
 pub const BuiltinLintRule = enum {
     field_naming,
     field_ordering,
@@ -202,14 +195,6 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/lib/zlinter.zig"),
         .target = target,
         .optimize = optimize,
-        .imports = &.{.{
-            .name = "zls",
-            .module = b.dependency("zls", .{
-                .target = target,
-                .optimize = optimize,
-                .@"version-string" = zls_version,
-            }).module("zls"),
-        }},
     });
 
     const zlinter_import = std.Build.Module.Import{
@@ -616,18 +601,26 @@ fn addWatchInput(
     var it = try src_dir.walk(b.allocator);
     defer it.deinit();
 
-    while (try it.next(io)) |entry| {
+    while (true) {
+        const entry = it.next(io) catch |e| switch (e) {
+            // Directory contents can change while we are building watcher
+            // inputs. Treat these as transient and stop deriving fine-grained
+            // children; the parent directory watch remains active.
+            error.FileNotFound, error.NotDir => break,
+            else => return e,
+        } orelse break;
+
         switch (entry.kind) {
             .directory => if (needs_dir_derived) {
                 const entry_path = try src_dir_path.join(b.allocator, entry.path);
-                try step.addDirectoryWatchInputFromPath(entry_path);
+                step.addDirectoryWatchInputFromPath(entry_path) catch continue;
             },
             .file => {
                 const entry_path = try src_dir_path.joinString(b.allocator, entry.path);
                 defer b.allocator.free(entry_path);
 
                 if (kind != .lintable_file or isLintableFilePath(entry_path) catch false) {
-                    try step.addWatchInput(try file_or_dir.join(b.allocator, entry.path));
+                    step.addWatchInput(try file_or_dir.join(b.allocator, entry.path)) catch continue;
                 }
             },
             else => continue,
@@ -809,13 +802,6 @@ const ZlinterRun = struct {
         if (owner.args) |args| self.addArgs(args);
         if (owner.verbose) self.addArgs(&.{"--verbose"});
 
-        self.addArgs(&.{ "--zig_exe", owner.graph.zig_exe });
-        if (owner.graph.global_cache_root.path) |p|
-            self.addArgs(&.{ "--global_cache_root", p });
-
-        if (owner.graph.zig_lib_directory.path) |p|
-            self.addArgs(&.{ "--zig_lib_directory", p });
-
         const bin_file = exe.getEmittedBin();
         bin_file.addStepDependencies(&self.step);
 
@@ -829,7 +815,11 @@ const ZlinterRun = struct {
                     &self.step,
                     path,
                     .lintable_file,
-                ) catch @panic("OOM"),
+                ) catch {
+                    // Fallback to coarse file/dir watch if we cannot derive
+                    // fine-grained entries (e.g., transient filesystem race).
+                    self.step.addWatchInput(path) catch @panic("OOM");
+                },
             }
         }
 

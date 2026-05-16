@@ -543,13 +543,6 @@ pub fn nodeChildrenAlloc(
     return children.toOwnedSlice(gpa);
 }
 
-/// Compatible decl-literal resolution across ZLS versions.
-/// Newer ZLS asserts when called on non-type values, so keep old behavior by
-/// returning the input unchanged unless it is a type value.
-pub fn resolveDeclLiteralResultTypeSafe(t: zls.Analyser.Type) zls.Analyser.Type {
-    return if (t.is_type_val) t.resolveDeclLiteralResultType() else t;
-}
-
 /// `errdefer` and `defer` calls
 pub const DeferBlock = struct {
     children: []const Ast.Node.Index,
@@ -728,7 +721,7 @@ test "deferBlock - has expected children" {
         const environ_map: std.process.Environ.Map = .init(arena.allocator());
 
         var context: session.LintContext = undefined;
-        try context.init(.{}, std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
+        try context.init(std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
         defer context.deinit();
 
         var tmp = std.testing.tmpDir(.{});
@@ -1035,65 +1028,6 @@ pub fn isEnumLiteral(tree: Ast, node: Ast.Node.Index, enum_names: []const []cons
     return false;
 }
 
-pub const EnumInfo = struct {
-    tags: []const []const u8,
-    is_non_exhaustive: bool,
-
-    pub fn deinit(self: *EnumInfo, gpa: std.mem.Allocator) void {
-        gpa.free(self.tags);
-        self.* = undefined;
-    }
-};
-
-/// Returns enum tag info for a resolved enum type. Returns null if the type
-/// is not a container-backed enum or cannot be resolved.
-pub fn getEnumInfoFromType(enum_type: zls.Analyser.Type, gpa: std.mem.Allocator) !?EnumInfo {
-    const container = switch (enum_type.data) {
-        .container => |info| info,
-        else => return null,
-    };
-
-    const handle = container.scope_handle.handle;
-    const node = container.scope_handle.toNode();
-    const enum_tree = handle.tree;
-
-    var container_decl_buffer: [2]Ast.Node.Index = undefined;
-    const container_decl = enum_tree.fullContainerDecl(
-        &container_decl_buffer,
-        node,
-    ) orelse return null;
-
-    var tags: std.ArrayList([]const u8) = try .initCapacity(
-        gpa,
-        container_decl.ast.members.len,
-    );
-    errdefer tags.deinit(gpa);
-
-    members: for (container_decl.ast.members) |member| {
-        const name_token = switch (enum_tree.nodeTag(member)) {
-            .container_field_init,
-            .container_field_align,
-            .container_field,
-            => enum_tree.nodeMainToken(member),
-            else => continue :members,
-        };
-        tags.appendAssumeCapacity(enum_tree.tokenSlice(name_token));
-    }
-
-    var is_non_exhaustive = false;
-    if (tags.items.len > 0 and
-        std.mem.eql(u8, tags.items[tags.items.len - 1], "_"))
-    {
-        is_non_exhaustive = true;
-        _ = tags.pop();
-    }
-
-    return .{
-        .tags = try tags.toOwnedSlice(gpa),
-        .is_non_exhaustive = is_non_exhaustive,
-    };
-}
-
 test "isEnumLiteral" {
     inline for (&.{
         .{
@@ -1314,7 +1248,7 @@ test "fnCall - direct call without params" {
     const environ_map: std.process.Environ.Map = .init(arena.allocator());
 
     var context: session.LintContext = undefined;
-    try context.init(.{}, std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
+    try context.init(std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
     defer context.deinit();
 
     var tmp = std.testing.tmpDir(.{});
@@ -1358,7 +1292,7 @@ test "fnCall - single field call with params" {
     const environ_map: std.process.Environ.Map = .init(arena.allocator());
 
     var context: session.LintContext = undefined;
-    try context.init(.{}, std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
+    try context.init(std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
     defer context.deinit();
 
     var tmp = std.testing.tmpDir(.{});
@@ -1432,7 +1366,7 @@ test "findFnCall" {
         const environ_map: std.process.Environ.Map = .init(arena.allocator());
 
         var context: session.LintContext = undefined;
-        try context.init(.{}, std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
+        try context.init(std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
         defer context.deinit();
 
         var tmp = std.testing.tmpDir(.{});
@@ -1470,77 +1404,9 @@ test "findFnCall" {
     }
 }
 
-test "getEnumInfoFromType" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-
-    const environ_map: std.process.Environ.Map = .init(arena.allocator());
-
-    var context: session.LintContext = undefined;
-    try context.init(.{}, std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
-    defer context.deinit();
-
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-
-    const source: [:0]const u8 =
-        \\const E = enum { a, b };
-        \\const NE = enum(u8) { a, b, _ };
-        \\const X = 1;
-    ;
-
-    const doc = try testing.loadFakeDocument(
-        &context,
-        tmp.dir,
-        "test.zig",
-        source,
-        arena.allocator(),
-    );
-
-    const tree = doc.handle.tree;
-
-    const exhaustive_enum_decl_node = try testing.expectVarDecl(tree, "E");
-    const exhaustive_enum_decl = tree.fullVarDecl(exhaustive_enum_decl_node).?;
-    const exhaustive_enum_init = exhaustive_enum_decl.ast.init_node.unwrap().?;
-    const exhaustive_enum_type = (try context.resolveTypeOfNode(doc, exhaustive_enum_init)) orelse return error.TestExpectedType;
-    var exhaustive_enum_info = try getEnumInfoFromType(
-        resolveDeclLiteralResultTypeSafe(exhaustive_enum_type),
-        std.testing.allocator,
-    ) orelse
-        return error.TestExpectedEnumInfo;
-    defer exhaustive_enum_info.deinit(std.testing.allocator);
-
-    try std.testing.expect(!exhaustive_enum_info.is_non_exhaustive);
-    try testing.expectContainsExactlyStrings(&.{ "a", "b" }, exhaustive_enum_info.tags);
-
-    const non_exhaustive_enum_decl_node = try testing.expectVarDecl(tree, "NE");
-    const non_exhaustive_enum_decl = tree.fullVarDecl(non_exhaustive_enum_decl_node).?;
-    const non_exhaustive_enum_init = non_exhaustive_enum_decl.ast.init_node.unwrap().?;
-    const non_exhaustive_enum_type = (try context.resolveTypeOfNode(doc, non_exhaustive_enum_init)) orelse return error.TestExpectedType;
-    var non_exhaustive_enum_info = try getEnumInfoFromType(
-        resolveDeclLiteralResultTypeSafe(non_exhaustive_enum_type),
-        std.testing.allocator,
-    ) orelse
-        return error.TestExpectedEnumInfo;
-    defer non_exhaustive_enum_info.deinit(std.testing.allocator);
-
-    try std.testing.expect(non_exhaustive_enum_info.is_non_exhaustive);
-    try testing.expectContainsExactlyStrings(&.{ "a", "b" }, non_exhaustive_enum_info.tags);
-
-    const not_enum_decl_node = try testing.expectVarDecl(tree, "X");
-    const not_enum_decl = tree.fullVarDecl(not_enum_decl_node).?;
-    const not_enum_init = not_enum_decl.ast.init_node.unwrap().?;
-    const not_enum_type = (try context.resolveTypeOfNode(doc, not_enum_init)) orelse return error.TestExpectedType;
-    const resolved_not_enum_type = resolveDeclLiteralResultTypeSafe(not_enum_type);
-    try std.testing.expect(
-        (try getEnumInfoFromType(resolved_not_enum_type, std.testing.allocator)) == null,
-    );
-}
-
-const session = @import("session.zig");
 const std = @import("std");
+const session = @import("session.zig");
 const testing = @import("testing.zig");
-const zls = @import("zls");
 const Ast = std.zig.Ast;
 
 test {

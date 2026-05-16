@@ -269,11 +269,6 @@ fn runLinterRules(
 
     var context: zlinter.session.LintContext = undefined;
     try context.init(
-        .{
-            .zig_exe_path = args.zig_exe,
-            .zig_lib_path = args.zig_lib_directory,
-            .global_cache_path = args.global_cache_root,
-        },
         io,
         environ_map,
         gpa,

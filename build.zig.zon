@@ -3,14 +3,7 @@
     .fingerprint = 0x10e04548f134343a,
     .version = "0.0.1",
     .minimum_zig_version = "0.15.1",
-    .dependencies = .{
-        .zls = .{
-            // Update with `zig fetch --save git+https://github.com/zigtools/zls#master`
-            // IF changed THEN update .github/coverage.yml
-            .url = "git+https://github.com/zigtools/zls?ref=master#5767f2f1f15eab33f52851ad6149b1e342301a21",
-            .hash = "zls-0.17.0-dev-rmm5fhMDJgDo4Jkzo10n28G-KLSEKAv_qNVfqMPyT5Vb",
-        },
-    },
+    .dependencies = .{},
     .paths = .{
         "build.zig",
         "build_rules.zig",

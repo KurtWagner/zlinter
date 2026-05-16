@@ -226,7 +226,6 @@ fn runRule(
 
     var context: LintContext = undefined;
     try context.init(
-        .{},
         std.testing.io,
         &environ_map,
         std.testing.allocator,

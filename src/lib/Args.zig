@@ -1,18 +1,6 @@
 //! Parsed from command line arguments passed to the lint executable.
 const Args = @This();
 
-/// Path to the zig executable used to build and run linter - needed for
-/// analysing zig standard library.
-zig_exe: ?[]const u8 = null,
-
-/// Zig global cache path used to build and run linter - needed for
-/// analysing zig standard library.
-global_cache_root: ?[]const u8 = null,
-
-/// Zig lib path used to build and run linter - needed for analysing zig
-/// standard library.
-zig_lib_directory: ?[]const u8 = null,
-
 /// Indicates whether to run the linter in fix mode, where it'll attempt to
 /// fix any discovered issues instead of reporting them.
 fix: bool = false,
@@ -74,15 +62,6 @@ fix_passes: u8 = default_fix_passes,
 const default_fix_passes = 20;
 
 pub fn deinit(self: Args, allocator: std.mem.Allocator) void {
-    if (self.zig_exe) |zig_exe|
-        allocator.free(zig_exe);
-
-    if (self.global_cache_root) |global_cache_root|
-        allocator.free(global_cache_root);
-
-    if (self.zig_lib_directory) |zig_lib_directory|
-        allocator.free(zig_lib_directory);
-
     if (self.rule_config_overrides) |rule_config_overrides| {
         rule_config_overrides.deinit();
         allocator.destroy(rule_config_overrides);
@@ -149,9 +128,6 @@ pub fn allocParse(
         quiet_arg,
         verbose_arg,
         help_arg,
-        zig_exe_arg,
-        zig_lib_directory_arg,
-        global_cache_root_arg,
         unknown_arg,
         format_arg,
         rule_arg,
@@ -173,9 +149,6 @@ pub fn allocParse(
         .{ "--include", .include_path_arg },
         .{ "--exclude", .exclude_path_arg },
         .{ "--filter", .filter_path_arg },
-        .{ "--zig_exe", .zig_exe_arg },
-        .{ "--zig_lib_directory", .zig_lib_directory_arg },
-        .{ "--global_cache_root", .global_cache_root_arg },
         .{ "--format", .format_arg },
         .{ "--rule-config", .rule_config_arg },
         .{ "--stdin", .stdin_arg },
@@ -190,33 +163,6 @@ pub fn allocParse(
             index += 1; // ignore first arg as this is the binary.
             if (index < args.len)
                 continue :state flags.get(args[index]) orelse .unknown_arg;
-        },
-        .zig_exe_arg => {
-            index += 1;
-            if (index == args.len) {
-                rendering.process_printer.println(.err, "--zig_exe missing path", .{});
-                return error.InvalidArgs;
-            }
-            lint_args.zig_exe = try allocator.dupe(u8, args[index]);
-            continue :state State.parsing;
-        },
-        .zig_lib_directory_arg => {
-            index += 1;
-            if (index == args.len) {
-                rendering.process_printer.println(.err, "--zig_lib_directory missing path", .{});
-                return error.InvalidArgs;
-            }
-            lint_args.zig_lib_directory = try allocator.dupe(u8, args[index]);
-            continue :state State.parsing;
-        },
-        .global_cache_root_arg => {
-            index += 1;
-            if (index == args.len) {
-                rendering.process_printer.println(.err, "--global_cache_root missing path", .{});
-                return error.InvalidArgs;
-            }
-            lint_args.global_cache_root = try allocator.dupe(u8, args[index]);
-            continue :state State.parsing;
         },
         .rule_arg => {
             index += 1;
@@ -775,54 +721,6 @@ test "allocParse with all combinations" {
         .unknown_args = @constCast(&[_][]const u8{
             "--unknown",
         }),
-    }, args);
-}
-
-test "allocParse with zig_exe arg" {
-    var stdin_fbs = std.Io.Reader.fixed("");
-
-    const args = try allocParse(
-        testing.cliArgs(&.{ "--zig_exe", "/some/path here/zig" }),
-        &.{},
-        std.testing.allocator,
-        &stdin_fbs,
-    );
-    defer args.deinit(std.testing.allocator);
-
-    try std.testing.expectEqualDeep(Args{
-        .zig_exe = "/some/path here/zig",
-    }, args);
-}
-
-test "allocParse with global_cache_root arg" {
-    var stdin_fbs = std.Io.Reader.fixed("");
-
-    const args = try allocParse(
-        testing.cliArgs(&.{ "--global_cache_root", "/some/path here/cache" }),
-        &.{},
-        std.testing.allocator,
-        &stdin_fbs,
-    );
-    defer args.deinit(std.testing.allocator);
-
-    try std.testing.expectEqualDeep(Args{
-        .global_cache_root = "/some/path here/cache",
-    }, args);
-}
-
-test "allocParse with zig_lib_directory arg" {
-    var stdin_fbs = std.Io.Reader.fixed("");
-
-    const args = try allocParse(
-        testing.cliArgs(&.{ "--zig_lib_directory", "/some/path here/lib" }),
-        &.{},
-        std.testing.allocator,
-        &stdin_fbs,
-    );
-    defer args.deinit(std.testing.allocator);
-
-    try std.testing.expectEqualDeep(Args{
-        .zig_lib_directory = "/some/path here/lib",
     }, args);
 }
 
