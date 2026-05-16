@@ -1,0 +1,11 @@
+error Type declaration should be TitleCase [test_cases/declaration_naming/regression_216.input.zig:2:7] declaration_naming
+
+ 2 | const bad_type = @This();
+   |       ^^^^^^^^
+
+error Variable declaration should be snake_case [test_cases/declaration_naming/regression_216.input.zig:11:9] declaration_naming
+
+ 11 |     var badResult: RunResult = .tool_error;
+    |         ^^^^^^^^^
+
+x 2 errors

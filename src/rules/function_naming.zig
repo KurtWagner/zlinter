@@ -75,6 +75,7 @@ fn run(
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
+    _ = context;
     const config = options.getConfig(Config);
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
@@ -99,13 +100,13 @@ fn run(
             const fn_name_token = fn_proto.name_token.?;
             const fn_name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(fn_name_token));
 
-            const return_type = (try context.resolveTypeOfTypeNode(
-                doc,
+            const return_type_kind = zlinter.type_classifier.classifyTypeNode(
+                tree,
                 fn_proto.ast.return_type.unwrap().?,
-            )) orelse continue :nodes;
+            ) orelse .other;
 
             const error_message: ?[]const u8, const severity: ?zlinter.rules.LintProblemSeverity = msg: {
-                if (return_type.isMetaType()) {
+                if (return_type_kind == .type) {
                     if (!config.function_that_returns_type.style.check(fn_name)) {
                         break :msg .{
                             try std.fmt.allocPrint(gpa, "Callable returning `type` should be {s}", .{config.function_that_returns_type.style.name()}),
@@ -161,9 +162,7 @@ fn run(
 
                 if (identifier.len == 1 and identifier[0] == '_') continue;
 
-                const type_kind = try classifyParamTypeKind(
-                    context,
-                    doc,
+                const type_kind = classifyParamTypeKind(
                     tree,
                     param,
                     param_kinds.items,
@@ -216,22 +215,17 @@ fn run(
 // TODO: Move this classification into a shared helper (e.g., in session/context)
 // so declaration_naming and field_naming can reuse the same logic.
 fn classifyParamTypeKind(
-    context: *zlinter.session.LintContext,
-    doc: *const zlinter.session.LintDocument,
     tree: Ast,
     param: Ast.Node.Index,
     seen_param_kinds: []const ParamKind,
-) !?zlinter.session.LintContext.TypeKind {
+) ?zlinter.session.LintContext.TypeKind {
     const param_type_node = zlinter.ast.unwrapNode(
         tree,
         param,
         .{},
     );
 
-    var type_kind = try context.resolveTypeKind(
-        doc,
-        .{ .type_node = param },
-    );
+    const type_kind = zlinter.type_classifier.classifyTypeNode(tree, param);
     if ((type_kind orelse .other) != .other) {
         if (type_kind == .type) {
             const is_type_literal = tree.nodeTag(param_type_node) == .identifier and
@@ -254,31 +248,7 @@ fn classifyParamTypeKind(
             };
         }
     }
-
-    const type_name_token = tree.firstToken(param_type_node);
-    const source_index = tree.tokens.items(.start)[type_name_token];
-    if (try context.analyser.lookupSymbolGlobal(
-        doc.handle,
-        type_name,
-        source_index,
-    )) |decl_with_handle| {
-        if (decl_with_handle.decl == .ast_node) {
-            if (decl_with_handle.handle.tree.fullVarDecl(
-                decl_with_handle.decl.ast_node,
-            )) |var_decl| {
-                type_kind = try context.resolveTypeKind(
-                    doc,
-                    .{ .var_decl = var_decl },
-                );
-            }
-        }
-    }
     if ((type_kind orelse .other) != .other) return type_kind;
-
-    if (try context.resolveTypeOfTypeNode(doc, param)) |param_type| {
-        if (param_type.isTypeFunc()) return .fn_type_returns_type;
-        if (param_type.isFunc()) return .fn_type;
-    }
 
     if (std.mem.endsWith(u8, type_name, "FnType")) return .fn_type_returns_type;
     if (std.mem.endsWith(u8, type_name, "Type")) return .type;

@@ -1,0 +1,11 @@
+error Struct fields should be snake_case [test_cases/field_naming/regression_216.input.zig:5:5] field_naming
+
+ 5 |     lineageBad: *const NodeLineage,
+   |     ^^^^^^^^^^
+
+error Type fields should be TitleCase [test_cases/field_naming/regression_216.input.zig:7:5] field_naming
+
+ 7 |     bad_type_field: type,
+   |     ^^^^^^^^^^^^^^
+
+x 2 errors

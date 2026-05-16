@@ -146,6 +146,7 @@ fn run(
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
+    _ = context;
     const config = options.getConfig(Config);
 
     var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
@@ -217,7 +218,7 @@ fn run(
 
             fields: for (container_decl.ast.members) |member| {
                 if (tree.fullContainerField(member)) |container_field| {
-                    const type_kind = try context.resolveTypeKind(doc, .{ .container_field = container_field });
+                    const type_kind = zlinter.type_classifier.classifyContainerField(tree, container_field);
                     const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const container_kind: zlinter.session.LintContext.TypeKind = tuple: {
                         break :tuple switch (container_tag) {
                             .keyword_struct => if (type_kind) |kind|

@@ -95,6 +95,7 @@ fn run(
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
+    _ = context;
     const config = options.getConfig(Config);
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
@@ -118,12 +119,18 @@ fn run(
             if (token_tag == .keyword_export) continue :nodes;
         }
 
-        const type_kind = try context.resolveTypeKind(doc, .{ .var_decl = var_decl }) orelse continue :nodes;
+        const type_kind = zlinter.type_classifier.classifyVarDecl(tree, var_decl) orelse continue :nodes;
         const name_token = var_decl.ast.mut_token + 1;
         const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
 
+        // Skip quoting-based identifiers such as @"build.zig" that intentionally
+        // contain punctuation and are not style-comparable.
+        if (!isStyleCheckableIdentifier(name)) continue :nodes;
+
         if (config.exclude_aliases) {
             if (var_decl.ast.init_node.unwrap()) |init_node| {
+                if (isImportBuiltinCall(tree, init_node)) continue :nodes;
+
                 if (tree.nodeTag(init_node) == .field_access) {
                     const last_token = tree.lastToken(init_node);
                     const field_name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(last_token));
@@ -203,6 +210,29 @@ fn run(
         )
     else
         null;
+}
+
+fn isImportBuiltinCall(tree: Ast, node: Ast.Node.Index) bool {
+    const unwrapped = zlinter.ast.unwrapNode(tree, node, .{
+        .unwrap_optional_unwrap = false,
+    });
+    return switch (tree.nodeTag(unwrapped)) {
+        .builtin_call_two,
+        .builtin_call_two_comma,
+        .builtin_call,
+        .builtin_call_comma,
+        => std.mem.eql(u8, tree.tokenSlice(tree.nodeMainToken(unwrapped)), "@import"),
+        else => false,
+    };
+}
+
+fn isStyleCheckableIdentifier(name: []const u8) bool {
+    if (name.len == 0) return false;
+    for (name) |c| {
+        if (std.ascii.isAlphanumeric(c) or c == '_') continue;
+        return false;
+    }
+    return true;
 }
 
 test {

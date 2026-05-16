@@ -1,0 +1,6 @@
+error Constant declaration should be snake_case [test_cases/declaration_naming/regression_217.input.zig:7:7] declaration_naming
+
+ 7 | const badName = 1;
+   |       ^^^^^^^
+
+x 1 errors
