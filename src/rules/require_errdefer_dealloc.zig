@@ -206,29 +206,20 @@ fn declRequiringCleanup(
     const init_node = var_decl.ast.init_node.unwrap() orelse return null;
     var call_buffer: [1]Ast.Node.Index = undefined;
 
-    // In an attempt to reduce noise we only care if initialized to `empty` or
-    // `init` field or through an `init` or `initCapacity` call. I'm torn by
-    // this as maybe this rule should just be pedantic with a block list
-    // configuration as only those most pedantic would care about this rule?
+    // In an attempt to reduce noise we only care about init-like calls that
+    // also look allocator-backed, or managed-style `.empty` aliases.
     if (!switch (tree.nodeTag(init_node)) {
-        // e.g., `ArrayList(u8).empty`
-        .field_access => zlinter.ast.isFieldVarAccess(
-            tree,
-            init_node,
-            &.{ "empty", "init" },
-        ),
-        // e.g., `.empty`
-        .enum_literal => zlinter.ast.isEnumLiteral(
-            tree,
-            init_node,
-            &.{ "empty", "init" },
-        ),
+        // e.g., `AutoHashMapUnmanaged(...).empty`
+        .field_access => isLikelyManagedEmptyInit(tree, var_decl, init_node),
+        // e.g., `.empty` with explicit managed-style type annotation
+        .enum_literal => isLikelyManagedEmptyInit(tree, var_decl, init_node),
         else => if (zlinter.ast.fnCall(
             doc,
             init_node,
             &call_buffer,
             &.{ "init", "initCapacity" },
         )) |call|
+            hasLikelyOwningAllocatorParam(doc, call.params) and
             // Try and reduce some noise when using arenas although for anyone
             // using this rule being pedantic and calling deinit on errdefer
             // isnt the absolute worst...?
@@ -239,6 +230,85 @@ fn declRequiringCleanup(
     }) return null;
 
     return .{ .decl_name_token = var_decl.ast.mut_token + 1 };
+}
+
+fn hasLikelyOwningAllocatorParam(doc: *const zlinter.session.LintDocument, params: []const Ast.Node.Index) bool {
+    const tree = doc.handle.tree;
+    var call_buffer: [1]Ast.Node.Index = undefined;
+    var found_ambiguous_single_param = false;
+    for (params) |param_node| {
+        const unwrapped = zlinter.ast.unwrapNode(tree, param_node, .{
+            .unwrap_optional_unwrap = false,
+        });
+        switch (tree.nodeTag(unwrapped)) {
+            .identifier => {
+                const name = tree.getNodeSource(unwrapped);
+                if (std.mem.eql(u8, name, "allocator") or
+                    std.mem.eql(u8, name, "gpa") or
+                    std.mem.endsWith(u8, name, "_allocator"))
+                {
+                    return true;
+                }
+
+                found_ambiguous_single_param = true;
+            },
+            .field_access => {
+                if (zlinter.ast.isFieldVarAccess(tree, unwrapped, &.{ "allocator", "c_allocator", "page_allocator" })) {
+                    return true;
+                }
+                found_ambiguous_single_param = true;
+            },
+            else => if (zlinter.ast.fnCall(doc, unwrapped, &call_buffer, &.{"allocator"})) |_| {
+                return true;
+            } else {
+                found_ambiguous_single_param = true;
+            },
+        }
+    }
+    // Keep a conservative signal for single-arg init calls where the argument
+    // name is ambiguous but often allocator-like in practice.
+    return params.len == 1 and found_ambiguous_single_param;
+}
+
+fn isLikelyManagedEmptyInit(tree: Ast, var_decl: Ast.full.VarDecl, init_node: Ast.Node.Index) bool {
+    const field_name = switch (tree.nodeTag(init_node)) {
+        .field_access => tree.tokenSlice(tree.lastToken(init_node)),
+        .enum_literal => tree.tokenSlice(tree.nodeMainToken(init_node)),
+        else => return false,
+    };
+    if (!(std.mem.eql(u8, field_name, "empty") or std.mem.eql(u8, field_name, "init"))) return false;
+
+    if (var_decl.ast.type_node.unwrap()) |type_node| {
+        const type_source = tree.getNodeSource(zlinter.ast.unwrapNode(tree, type_node, .{}));
+        if (containsAsciiIgnoreCase(type_source, "managed")) return true;
+    }
+
+    if (tree.nodeTag(init_node) == .field_access) {
+        const lhs = tree.nodeData(init_node).node_and_token.@"0";
+        const lhs_source = tree.getNodeSource(zlinter.ast.unwrapNode(tree, lhs, .{}));
+        if (containsAsciiIgnoreCase(lhs_source, "managed")) return true;
+    }
+
+    return false;
+}
+
+fn containsAsciiIgnoreCase(haystack: []const u8, needle: []const u8) bool {
+    if (needle.len == 0) return true;
+    if (haystack.len < needle.len) return false;
+
+    var i: usize = 0;
+    while (i + needle.len <= haystack.len) : (i += 1) {
+        var match = true;
+        var j: usize = 0;
+        while (j < needle.len) : (j += 1) {
+            if (std.ascii.toLower(haystack[i + j]) != std.ascii.toLower(needle[j])) {
+                match = false;
+                break;
+            }
+        }
+        if (match) return true;
+    }
+    return false;
 }
 
 /// Returns true if it looks like based on parameters that the given call use
@@ -402,6 +472,50 @@ test "hasNonFreeingAllocatorParam" {
         );
         try std.testing.expectEqual(expected, actual);
     }
+}
+
+test "require_errdefer_dealloc - ignores init call without allocator-like params" {
+    const source: [:0]const u8 =
+        \\const ChildIterator = struct {
+        \\  fn init(_: u8, _: u8) ChildIterator {
+        \\    return .{};
+        \\  }
+        \\};
+        \\
+        \\fn parse() !void {
+        \\  var it = ChildIterator.init(1, 2);
+        \\  _ = &it;
+        \\}
+    ;
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{ .severity = .@"error" },
+        &.{},
+    );
+}
+
+test "require_errdefer_dealloc - ignores .empty field alias init" {
+    const source: [:0]const u8 =
+        \\const Context = struct {
+        \\  pub const empty: Context = .{};
+        \\};
+        \\
+        \\fn parse() !void {
+        \\  var ctx = Context.empty;
+        \\  _ = &ctx;
+        \\}
+    ;
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{ .severity = .@"error" },
+        &.{},
+    );
 }
 
 test {
