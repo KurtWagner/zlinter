@@ -37,9 +37,7 @@ fn run(
 
     var arena_allocator = std.heap.ArenaAllocator.init(gpa);
     defer arena_allocator.deinit();
-    const arena = arena_allocator.allocator();
-
-    var resolver = try NativeResolver.init(context, doc, gpa, arena);
+    var resolver = try NativeResolver.init(context, doc, gpa);
     defer resolver.deinit(gpa);
 
     const tree = doc.handle.tree;
@@ -53,7 +51,6 @@ fn run(
             .enum_literal => try handleEnumLiteral(
                 rule,
                 gpa,
-                arena,
                 &resolver,
                 doc,
                 node,
@@ -63,7 +60,6 @@ fn run(
             .field_access => try handleFieldAccess(
                 rule,
                 gpa,
-                arena,
                 &resolver,
                 doc,
                 node,
@@ -73,7 +69,6 @@ fn run(
             .identifier => try handleIdentifierAccess(
                 rule,
                 gpa,
-                arena,
                 &resolver,
                 doc,
                 node,
@@ -101,14 +96,12 @@ fn run(
 fn handleIdentifierAccess(
     rule: zlinter.rules.LintRule,
     gpa: std.mem.Allocator,
-    arena: std.mem.Allocator,
     resolver: *NativeResolver,
     doc: *const zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     lint_problems: *std.ArrayList(zlinter.results.LintProblem),
     config: Config,
 ) !void {
-    _ = arena;
     const tree = doc.handle.tree;
     const identifier_token = tree.nodeMainToken(node_index);
 
@@ -132,14 +125,12 @@ fn handleIdentifierAccess(
 fn handleEnumLiteral(
     rule: zlinter.rules.LintRule,
     gpa: std.mem.Allocator,
-    arena: std.mem.Allocator,
     resolver: *NativeResolver,
     doc: *const zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     lint_problems: *std.ArrayList(zlinter.results.LintProblem),
     config: Config,
 ) !void {
-    _ = arena;
     const tree = doc.handle.tree;
     const tag_name = tree.tokenSlice(tree.nodeMainToken(node_index));
     const source_index = tree.tokens.items(.start)[tree.nodeMainToken(node_index)];
@@ -161,14 +152,12 @@ fn handleEnumLiteral(
 fn handleFieldAccess(
     rule: zlinter.rules.LintRule,
     gpa: std.mem.Allocator,
-    arena: std.mem.Allocator,
     resolver: *NativeResolver,
     doc: *const zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     lint_problems: *std.ArrayList(zlinter.results.LintProblem),
     config: Config,
 ) !void {
-    _ = arena;
     const tree = doc.handle.tree;
     const source_index = tree.tokens.items(.start)[tree.firstToken(node_index)];
     const resolved = resolver.resolveExpr(doc, node_index, source_index, 0) orelse return;

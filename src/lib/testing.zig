@@ -229,7 +229,6 @@ fn runRule(
         std.testing.io,
         &environ_map,
         std.testing.allocator,
-        arena.allocator(),
     );
     defer context.deinit();
 

@@ -36,7 +36,6 @@ pub const Resolver = struct {
         context: *session.LintContext,
         doc: *const session.LintDocument,
         gpa: std.mem.Allocator,
-        arena: std.mem.Allocator,
     ) !Self {
         var self = Self{
             .context = context,
@@ -55,7 +54,6 @@ pub const Resolver = struct {
             .is_borrowed = true,
         });
 
-        _ = arena;
         return self;
     }
 
@@ -91,7 +89,7 @@ pub const Resolver = struct {
                 }
 
                 if (self.lookupDeclByNameNear(0, name, before_offset)) |decl| {
-                    return self.resolveDeclOrAlias(decl, before_offset, depth + 1);
+                    return self.resolveDeclOrAlias(decl, depth + 1);
                 }
                 return null;
             },
@@ -286,7 +284,7 @@ pub const Resolver = struct {
         return best_decl orelse nearest_after_decl;
     }
 
-    fn resolveDeclOrAlias(self: *Self, decl: DeclRef, _: Ast.ByteOffset, depth: u8) ?ResolvedRef {
+    fn resolveDeclOrAlias(self: *Self, decl: DeclRef, depth: u8) ?ResolvedRef {
         if (depth > 16) return null;
         const file = self.file_cache.items[decl.file_index];
         const tree = file.tree;
@@ -325,7 +323,7 @@ pub const Resolver = struct {
             .identifier => {
                 const name = tree.getNodeSource(unwrapped);
                 if (self.lookupDeclByNameNear(file_index, name, before_offset)) |decl| {
-                    return self.resolveDeclOrAlias(decl, before_offset, depth + 1);
+                    return self.resolveDeclOrAlias(decl, depth + 1);
                 }
                 return null;
             },
@@ -353,11 +351,11 @@ pub const Resolver = struct {
         switch (resolved) {
             .module => |file_index| {
                 const decl = self.lookupTopLevelDecl(file_index, field_name) orelse return null;
-                return self.resolveDeclOrAlias(decl, before_offset, depth + 1);
+                return self.resolveDeclOrAlias(decl, depth + 1);
             },
             .container => |container| {
                 const member = self.resolveContainerMember(container, field_name) orelse return null;
-                return self.resolveDeclOrAlias(member, before_offset, depth + 1);
+                return self.resolveDeclOrAlias(member, depth + 1);
             },
             .decl => |decl| {
                 if (self.resolveVarInitResolved(decl, depth + 1)) |target| {
@@ -366,7 +364,7 @@ pub const Resolver = struct {
                 }
                 if (self.resolveContainerFromDecl(decl, before_offset, depth + 1)) |container| {
                     const member = self.resolveContainerMember(container, field_name) orelse return null;
-                    return self.resolveDeclOrAlias(member, before_offset, depth + 1);
+                    return self.resolveDeclOrAlias(member, depth + 1);
                 }
                 return null;
             },

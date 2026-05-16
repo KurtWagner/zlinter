@@ -144,10 +144,7 @@ pub const LintContext = struct {
         io: std.Io,
         environ_map: *const std.process.Environ.Map,
         gpa: std.mem.Allocator,
-        arena: std.mem.Allocator,
     ) !void {
-        _ = arena;
-
         self.* = .{
             .gpa = gpa,
             .io = io,
@@ -285,7 +282,7 @@ test "LintDocument.isEnclosedInTestBlock" {
     const environ_map: std.process.Environ.Map = .init(arena.allocator());
 
     var context: LintContext = undefined;
-    try context.init(std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
+    try context.init(std.testing.io, &environ_map, std.testing.allocator);
     defer context.deinit();
 
     var tmp = std.testing.tmpDir(.{});

@@ -272,7 +272,6 @@ fn runLinterRules(
         io,
         environ_map,
         gpa,
-        arena.allocator(),
     );
     context.setBuildInfo(&args.build_info);
     defer context.deinit();

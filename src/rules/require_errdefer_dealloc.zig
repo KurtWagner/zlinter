@@ -373,7 +373,7 @@ test "hasNonFreeingAllocatorParam" {
         const environ_map: std.process.Environ.Map = .init(arena.allocator());
 
         var context: zlinter.session.LintContext = undefined;
-        try context.init(std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
+        try context.init(std.testing.io, &environ_map, std.testing.allocator);
         defer context.deinit();
 
         var tmp = std.testing.tmpDir(.{});

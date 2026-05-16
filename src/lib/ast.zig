@@ -721,7 +721,7 @@ test "deferBlock - has expected children" {
         const environ_map: std.process.Environ.Map = .init(arena.allocator());
 
         var context: session.LintContext = undefined;
-        try context.init(std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
+        try context.init(std.testing.io, &environ_map, std.testing.allocator);
         defer context.deinit();
 
         var tmp = std.testing.tmpDir(.{});
@@ -1296,7 +1296,7 @@ test "fnCall - direct call without params" {
     const environ_map: std.process.Environ.Map = .init(arena.allocator());
 
     var context: session.LintContext = undefined;
-    try context.init(std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
+    try context.init(std.testing.io, &environ_map, std.testing.allocator);
     defer context.deinit();
 
     var tmp = std.testing.tmpDir(.{});
@@ -1340,7 +1340,7 @@ test "fnCall - single field call with params" {
     const environ_map: std.process.Environ.Map = .init(arena.allocator());
 
     var context: session.LintContext = undefined;
-    try context.init(std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
+    try context.init(std.testing.io, &environ_map, std.testing.allocator);
     defer context.deinit();
 
     var tmp = std.testing.tmpDir(.{});
@@ -1414,7 +1414,7 @@ test "findFnCall" {
         const environ_map: std.process.Environ.Map = .init(arena.allocator());
 
         var context: session.LintContext = undefined;
-        try context.init(std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
+        try context.init(std.testing.io, &environ_map, std.testing.allocator);
         defer context.deinit();
 
         var tmp = std.testing.tmpDir(.{});
