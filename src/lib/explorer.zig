@@ -124,7 +124,7 @@ fn iterateChildren(
     comptime Error: type,
     comptime callback: fn (@TypeOf(context), *const Ast, Ast.Node.Index) Error!void,
 ) Error!void {
-    var it = zls.ast.Iterator.init(tree, node);
+    var it = ast.ChildIterator.init(tree, node);
     while (it.next(tree)) |child_node| {
         try callback(context, tree, child_node);
     }
@@ -181,8 +181,8 @@ fn tokensToJson(tree: Ast, arena: std.mem.Allocator) !std.json.Array {
 }
 
 const std = @import("std");
+const ast = @import("ast.zig");
 const Ast = std.zig.Ast;
-const zls = @import("zls");
 
 test {
     std.testing.refAllDecls(@This());
