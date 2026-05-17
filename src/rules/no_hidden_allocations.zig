@@ -151,7 +151,12 @@ fn matchesStdHeapAllocatorExpr(
     switch (tree.nodeTag(unwrapped)) {
         .identifier => {
             const ident = tree.getNodeSource(unwrapped);
-            const var_decl = semantic.findVarDeclByNameNear(tree, ident, before_offset) orelse return false;
+            const var_decl = semantic.findVarDeclByNameNearIndexed(
+                tree,
+                &doc.handle.decl_index,
+                ident,
+                before_offset,
+            ) orelse return false;
             const init_node = var_decl.ast.init_node.unwrap() orelse return false;
             return matchesStdHeapAllocatorExpr(doc, init_node, before_offset, allocator_decl_name, depth + 1);
         },
@@ -184,7 +189,12 @@ fn isStdHeapExpr(
     switch (tree.nodeTag(unwrapped)) {
         .identifier => {
             const ident = tree.getNodeSource(unwrapped);
-            const var_decl = semantic.findVarDeclByNameNear(tree, ident, before_offset) orelse return false;
+            const var_decl = semantic.findVarDeclByNameNearIndexed(
+                tree,
+                &doc.handle.decl_index,
+                ident,
+                before_offset,
+            ) orelse return false;
             const init_node = var_decl.ast.init_node.unwrap() orelse return false;
             return isStdHeapExpr(doc, init_node, before_offset, depth + 1);
         },
@@ -193,7 +203,13 @@ fn isStdHeapExpr(
             const field_token = tree.nodeData(unwrapped).node_and_token.@"1";
             const field_name = tree.tokenSlice(field_token);
             if (std.mem.eql(u8, field_name, "heap")) {
-                return semantic.isStdImportExpr(tree, base, before_offset, depth + 1);
+                return semantic.isStdImportExprIndexed(
+                    tree,
+                    &doc.handle.decl_index,
+                    base,
+                    before_offset,
+                    depth + 1,
+                );
             }
             return false;
         },

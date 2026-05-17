@@ -120,7 +120,7 @@ fn run(
             } else {
                 case_values: for (switch_case.ast.values) |value_node| {
                     const tag_name = try tagNameFromSwitchCaseValue(
-                        tree,
+                        doc,
                         value_node,
                         switch_offset,
                     ) orelse continue :case_values;
@@ -161,15 +161,16 @@ fn run(
 }
 
 fn tagNameFromSwitchCaseValue(
-    tree: Ast,
+    doc: *const zlinter.session.LintDocument,
     node: Ast.Node.Index,
     before_offset: Ast.ByteOffset,
 ) error{OutOfMemory}!?[]const u8 {
+    const tree = doc.handle.tree;
     return switch (tree.nodeTag(node)) {
         // e.g., `.a`
         .enum_literal => tree.tokenSlice(tree.nodeMainToken(node)),
         // e.g., `a` where `a = MyEnum.a`
-        .identifier => try tagNameForIdentifier(tree, node, before_offset),
+        .identifier => try tagNameForIdentifier(doc, node, before_offset),
         // e.g., `MyEnum.a`
         .field_access => blk: {
             const last_token = tree.lastToken(node);
@@ -187,15 +188,21 @@ fn tagNameFromSwitchCaseValue(
 }
 
 fn tagNameForIdentifier(
-    tree: Ast,
+    doc: *const zlinter.session.LintDocument,
     node: Ast.Node.Index,
     before_offset: Ast.ByteOffset,
 ) error{OutOfMemory}!?[]const u8 {
+    const tree = doc.handle.tree;
     const token = tree.nodeMainToken(node);
     std.debug.assert(tree.tokenTag(token) == .identifier);
 
     const name = tree.tokenSlice(token);
-    const var_decl = semantic.findVarDeclByNameNear(tree, name, before_offset) orelse return null;
+    const var_decl = semantic.findVarDeclByNameNearIndexed(
+        tree,
+        &doc.handle.decl_index,
+        name,
+        before_offset,
+    ) orelse return null;
     const init_node = var_decl.ast.init_node.unwrap() orelse return null;
     const unwrapped = zlinter.ast.unwrapNode(tree, init_node, .{
         .unwrap_optional_unwrap = false,
@@ -262,7 +269,12 @@ fn enumInfoFromKnownCallExpr(
     switch (tree.nodeTag(fn_expr)) {
         .identifier => {
             const fn_name = tree.getNodeSource(fn_expr);
-            const fn_decl = semantic.findFnDeclByNameNear(tree, fn_name, before_offset) orelse return null;
+            const fn_decl = semantic.findFnDeclByNameNearIndexed(
+                tree,
+                &doc.handle.decl_index,
+                fn_name,
+                before_offset,
+            ) orelse return null;
             const return_type_node = fn_decl.ast.return_type.unwrap() orelse return null;
 
             if (try enumInfoFromKnownTypeExpr(doc, return_type_node, before_offset, gpa, depth + 1)) |known| {
@@ -350,7 +362,12 @@ fn isStdAstValueExpr(
                 if (isStdAstTypeExpr(doc, type_node, before_offset, depth + 1)) return true;
             }
 
-            const var_decl = semantic.findVarDeclByNameNear(tree, ident_name, before_offset) orelse return false;
+            const var_decl = semantic.findVarDeclByNameNearIndexed(
+                tree,
+                &doc.handle.decl_index,
+                ident_name,
+                before_offset,
+            ) orelse return false;
             if (var_decl.ast.type_node.unwrap()) |type_node| {
                 if (isStdAstTypeExpr(doc, type_node, before_offset, depth + 1)) return true;
             }
@@ -381,7 +398,12 @@ fn isStdAstTypeExpr(
 
     if (tree.nodeTag(unwrapped) == .identifier) {
         const ident_name = tree.getNodeSource(unwrapped);
-        const var_decl = semantic.findVarDeclByNameNear(tree, ident_name, before_offset) orelse return false;
+        const var_decl = semantic.findVarDeclByNameNearIndexed(
+            tree,
+            &doc.handle.decl_index,
+            ident_name,
+            before_offset,
+        ) orelse return false;
         const init_node = var_decl.ast.init_node.unwrap() orelse return false;
         return isStdZigAstPath(doc, init_node, before_offset, depth + 1);
     }
@@ -474,7 +496,13 @@ fn isStdZigAstPath(
     if (tree.tokenTag(zig_token) != .identifier) return false;
     if (!std.mem.eql(u8, tree.tokenSlice(zig_token), "zig")) return false;
 
-    return semantic.isStdImportExpr(tree, std_expr, before_offset, depth + 1);
+    return semantic.isStdImportExprIndexed(
+        tree,
+        &doc.handle.decl_index,
+        std_expr,
+        before_offset,
+        depth + 1,
+    );
 }
 
 fn resolveEnumContainerNodeFromExpr(
@@ -563,7 +591,12 @@ fn resolveEnumContainerFromIdentifier(
         }
     }
 
-    const var_decl = semantic.findVarDeclByNameNear(tree, ident_name, before_offset) orelse return null;
+    const var_decl = semantic.findVarDeclByNameNearIndexed(
+        tree,
+        &doc.handle.decl_index,
+        ident_name,
+        before_offset,
+    ) orelse return null;
 
     if (var_decl.ast.type_node.unwrap()) |type_node| {
         if (resolveEnumContainerNodeFromTypeExpr(doc, type_node, before_offset, depth + 1)) |enum_container| {

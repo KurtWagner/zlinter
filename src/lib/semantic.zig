@@ -76,7 +76,126 @@ fn scopeFromImporter(
     return best_scope;
 }
 
+pub const DeclHit = struct {
+    node: Ast.Node.Index,
+    offset: Ast.ByteOffset,
+};
+
+pub const DeclIndex = struct {
+    var_decls: std.StringHashMapUnmanaged(std.ArrayListUnmanaged(DeclHit)),
+    fn_decls: std.StringHashMapUnmanaged(std.ArrayListUnmanaged(DeclHit)),
+
+    pub fn init(tree: Ast, gpa: std.mem.Allocator) !DeclIndex {
+        var self: DeclIndex = .{
+            .var_decls = .empty,
+            .fn_decls = .empty,
+        };
+        errdefer self.deinit(gpa);
+
+        var fn_proto_buffer: [1]Ast.Node.Index = undefined;
+        var index: u32 = 1;
+        while (index < tree.nodes.len) : (index += 1) {
+            const node: Ast.Node.Index = @enumFromInt(index);
+
+            if (tree.fullVarDecl(node)) |var_decl| {
+                const name_token = var_decl.ast.mut_token + 1;
+                const gop = try self.var_decls.getOrPut(gpa, tree.tokenSlice(name_token));
+                if (!gop.found_existing) gop.value_ptr.* = .empty;
+                try gop.value_ptr.append(gpa, .{
+                    .node = node,
+                    .offset = tree.tokenStart(name_token),
+                });
+                continue;
+            }
+
+            if (ast_helpers.fnDecl(tree, node, &fn_proto_buffer)) |fn_decl| {
+                const name_token = fn_decl.proto.name_token orelse continue;
+                const gop = try self.fn_decls.getOrPut(gpa, tree.tokenSlice(name_token));
+                if (!gop.found_existing) gop.value_ptr.* = .empty;
+                try gop.value_ptr.append(gpa, .{
+                    .node = node,
+                    .offset = tree.tokenStart(name_token),
+                });
+            }
+        }
+
+        var var_it = self.var_decls.iterator();
+        while (var_it.next()) |entry| {
+            std.mem.sort(DeclHit, entry.value_ptr.items, {}, cmpDeclHitOffset);
+        }
+
+        var fn_it = self.fn_decls.iterator();
+        while (fn_it.next()) |entry| {
+            std.mem.sort(DeclHit, entry.value_ptr.items, {}, cmpDeclHitOffset);
+        }
+
+        return self;
+    }
+
+    pub fn deinit(self: *DeclIndex, gpa: std.mem.Allocator) void {
+        var var_it = self.var_decls.valueIterator();
+        while (var_it.next()) |items| {
+            items.deinit(gpa);
+        }
+        self.var_decls.deinit(gpa);
+
+        var fn_it = self.fn_decls.valueIterator();
+        while (fn_it.next()) |items| {
+            items.deinit(gpa);
+        }
+        self.fn_decls.deinit(gpa);
+    }
+
+    pub fn findVarDeclHitNear(
+        self: *const DeclIndex,
+        name: []const u8,
+        before_offset: Ast.ByteOffset,
+    ) ?DeclHit {
+        const hits = self.var_decls.get(name) orelse return null;
+        return findNearestHit(hits.items, before_offset);
+    }
+
+    pub fn findFnDeclHitNear(
+        self: *const DeclIndex,
+        name: []const u8,
+        before_offset: Ast.ByteOffset,
+    ) ?DeclHit {
+        const hits = self.fn_decls.get(name) orelse return null;
+        return findNearestHit(hits.items, before_offset);
+    }
+};
+
+fn cmpDeclHitOffset(_: void, a: DeclHit, b: DeclHit) bool {
+    return a.offset < b.offset;
+}
+
+fn findNearestHit(hits: []const DeclHit, before_offset: Ast.ByteOffset) ?DeclHit {
+    if (hits.len == 0) return null;
+
+    var lo: usize = 0;
+    var hi: usize = hits.len;
+    while (lo < hi) {
+        const mid = lo + (hi - lo) / 2;
+        if (hits[mid].offset < before_offset) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+
+    if (lo > 0) return hits[lo - 1];
+    return hits[0];
+}
+
 pub fn findVarDeclByNameNear(
+    tree: Ast,
+    name: []const u8,
+    before_offset: Ast.ByteOffset,
+) ?Ast.full.VarDecl {
+    return findVarDeclByNameNearScan(tree, name, before_offset);
+}
+
+fn findVarDeclByNameNearScan(
     tree: Ast,
     name: []const u8,
     before_offset: Ast.ByteOffset,
@@ -108,6 +227,16 @@ pub fn findVarDeclByNameNear(
     return best_decl orelse nearest_after_decl;
 }
 
+pub fn findVarDeclByNameNearIndexed(
+    tree: Ast,
+    decl_index: *const DeclIndex,
+    name: []const u8,
+    before_offset: Ast.ByteOffset,
+) ?Ast.full.VarDecl {
+    const hit = decl_index.findVarDeclHitNear(name, before_offset) orelse return null;
+    return tree.fullVarDecl(hit.node);
+}
+
 pub fn findVarDeclByNameBefore(
     tree: Ast,
     name: []const u8,
@@ -116,7 +245,24 @@ pub fn findVarDeclByNameBefore(
     return findVarDeclByNameNear(tree, name, before_offset);
 }
 
+pub fn findVarDeclByNameBeforeIndexed(
+    tree: Ast,
+    decl_index: *const DeclIndex,
+    name: []const u8,
+    before_offset: Ast.ByteOffset,
+) ?Ast.full.VarDecl {
+    return findVarDeclByNameNearIndexed(tree, decl_index, name, before_offset);
+}
+
 pub fn findFnDeclByNameNear(
+    tree: Ast,
+    name: []const u8,
+    before_offset: Ast.ByteOffset,
+) ?Ast.full.FnProto {
+    return findFnDeclByNameNearScan(tree, name, before_offset);
+}
+
+fn findFnDeclByNameNearScan(
     tree: Ast,
     name: []const u8,
     before_offset: Ast.ByteOffset,
@@ -148,6 +294,19 @@ pub fn findFnDeclByNameNear(
     }
 
     return best_fn orelse nearest_after_fn;
+}
+
+pub fn findFnDeclByNameNearIndexed(
+    tree: Ast,
+    decl_index: *const DeclIndex,
+    name: []const u8,
+    before_offset: Ast.ByteOffset,
+) ?Ast.full.FnProto {
+    const hit = decl_index.findFnDeclHitNear(name, before_offset) orelse return null;
+
+    var fn_proto_buffer: [1]Ast.Node.Index = undefined;
+    const fn_decl = ast_helpers.fnDecl(tree, hit.node, &fn_proto_buffer) orelse return null;
+    return fn_decl.proto;
 }
 
 pub fn resolveParamTypeNode(
@@ -182,6 +341,26 @@ pub fn isStdImportExpr(
     before_offset: Ast.ByteOffset,
     depth: u8,
 ) bool {
+    return isStdImportExprWithIndex(tree, null, node, before_offset, depth);
+}
+
+pub fn isStdImportExprIndexed(
+    tree: Ast,
+    decl_index: *const DeclIndex,
+    node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
+    depth: u8,
+) bool {
+    return isStdImportExprWithIndex(tree, decl_index, node, before_offset, depth);
+}
+
+fn isStdImportExprWithIndex(
+    tree: Ast,
+    decl_index: ?*const DeclIndex,
+    node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
+    depth: u8,
+) bool {
     if (depth > 12) return false;
 
     const unwrapped = ast_helpers.unwrapNode(tree, node, .{
@@ -190,9 +369,12 @@ pub fn isStdImportExpr(
     switch (tree.nodeTag(unwrapped)) {
         .identifier => {
             const ident = tree.getNodeSource(unwrapped);
-            const var_decl = findVarDeclByNameNear(tree, ident, before_offset) orelse return false;
+            const var_decl = (if (decl_index) |index|
+                findVarDeclByNameNearIndexed(tree, index, ident, before_offset)
+            else
+                findVarDeclByNameNear(tree, ident, before_offset)) orelse return false;
             const init_node = var_decl.ast.init_node.unwrap() orelse return false;
-            return isStdImportExpr(tree, init_node, before_offset, depth + 1);
+            return isStdImportExprWithIndex(tree, decl_index, init_node, before_offset, depth + 1);
         },
         .builtin_call_two,
         .builtin_call_two_comma,
@@ -216,6 +398,26 @@ pub fn isRootContainerExpr(
     before_offset: Ast.ByteOffset,
     depth: u8,
 ) bool {
+    return isRootContainerExprWithIndex(tree, null, node, before_offset, depth);
+}
+
+pub fn isRootContainerExprIndexed(
+    tree: Ast,
+    decl_index: *const DeclIndex,
+    node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
+    depth: u8,
+) bool {
+    return isRootContainerExprWithIndex(tree, decl_index, node, before_offset, depth);
+}
+
+fn isRootContainerExprWithIndex(
+    tree: Ast,
+    decl_index: ?*const DeclIndex,
+    node: Ast.Node.Index,
+    before_offset: Ast.ByteOffset,
+    depth: u8,
+) bool {
     if (depth > 8) return false;
     const unwrapped = ast_helpers.unwrapNode(tree, node, .{
         .unwrap_optional_unwrap = false,
@@ -229,9 +431,12 @@ pub fn isRootContainerExpr(
         => return std.mem.eql(u8, tree.tokenSlice(tree.nodeMainToken(unwrapped)), "@This"),
         .identifier => {
             const ident = tree.getNodeSource(unwrapped);
-            const var_decl = findVarDeclByNameBefore(tree, ident, before_offset) orelse return false;
+            const var_decl = (if (decl_index) |index|
+                findVarDeclByNameBeforeIndexed(tree, index, ident, before_offset)
+            else
+                findVarDeclByNameBefore(tree, ident, before_offset)) orelse return false;
             const init_node = var_decl.ast.init_node.unwrap() orelse return false;
-            return isRootContainerExpr(tree, init_node, before_offset, depth + 1);
+            return isRootContainerExprWithIndex(tree, decl_index, init_node, before_offset, depth + 1);
         },
         else => return false,
     }

@@ -9,6 +9,7 @@ pub const Handle = struct {
     abs_path: []const u8,
     source_owned: [:0]u8,
     tree: Ast,
+    decl_index: semantic.DeclIndex,
 };
 
 /// A loaded and parsed zig file that is given to lint rules.
@@ -93,10 +94,36 @@ fn isTestOnlyCondition(tree: Ast, if_statement: Ast.full.If) bool {
 
 /// The context of document and rule execution.
 pub const LintContext = struct {
+    const ImportCacheKey = struct {
+        importer_abs_path: []const u8,
+        import_path: []const u8,
+    };
+
+    const ImportCacheContext = struct {
+        pub fn hash(_: @This(), key: ImportCacheKey) u64 {
+            var hasher = std.hash.Wyhash.init(0);
+            hasher.update(key.importer_abs_path);
+            hasher.update(&[_]u8{0});
+            hasher.update(key.import_path);
+            return hasher.final();
+        }
+
+        pub fn eql(_: @This(), lhs: ImportCacheKey, rhs: ImportCacheKey) bool {
+            return std.mem.eql(u8, lhs.importer_abs_path, rhs.importer_abs_path) and
+                std.mem.eql(u8, lhs.import_path, rhs.import_path);
+        }
+    };
+
     environ_map: *const std.process.Environ.Map,
     gpa: std.mem.Allocator,
     io: std.Io,
     loaded_handles: std.ArrayList(*Handle),
+    import_handle_cache: std.HashMapUnmanaged(
+        ImportCacheKey,
+        ?*Handle,
+        ImportCacheContext,
+        std.hash_map.default_max_load_percentage,
+    ),
     semantic_ctx: semantic.SemanticContext,
 
     pub const TypeKind = enum {
@@ -150,6 +177,7 @@ pub const LintContext = struct {
             .io = io,
             .environ_map = environ_map,
             .loaded_handles = .empty,
+            .import_handle_cache = .empty,
             .semantic_ctx = .init(null),
         };
     }
@@ -159,7 +187,15 @@ pub const LintContext = struct {
     }
 
     pub fn deinit(self: *LintContext) void {
+        var import_cache_it = self.import_handle_cache.keyIterator();
+        while (import_cache_it.next()) |key| {
+            self.gpa.free(key.importer_abs_path);
+            self.gpa.free(key.import_path);
+        }
+        self.import_handle_cache.deinit(self.gpa);
+
         for (self.loaded_handles.items) |handle| {
+            handle.decl_index.deinit(self.gpa);
             handle.tree.deinit(self.gpa);
             self.gpa.free(handle.source_owned);
             self.gpa.free(handle.abs_path);
@@ -168,22 +204,13 @@ pub const LintContext = struct {
         self.loaded_handles.deinit(self.gpa);
     }
 
-    /// Loads and parses a zig file into a document.
+    /// Returns an existing parsed handle for `abs_path` or parses and caches it.
     ///
-    /// Caller is responsible for calling `doc.deinit` when done.
-    pub fn initDocument(
-        self: *LintContext,
-        path: []const u8,
-        gpa: std.mem.Allocator,
-        doc: *LintDocument,
-    ) !void {
-        var real_path_buf: [std.fs.max_path_bytes]u8 = undefined;
-        const abs_path_len = try std.Io.Dir.cwd().realPathFile(
-            self.io,
-            path,
-            &real_path_buf,
-        );
-        const abs_path = real_path_buf[0..abs_path_len];
+    /// `abs_path` should be an absolute path.
+    pub fn getOrLoadHandle(self: *LintContext, abs_path: []const u8) !*Handle {
+        for (self.loaded_handles.items) |handle| {
+            if (std.mem.eql(u8, handle.abs_path, abs_path)) return handle;
+        }
 
         const source = try std.Io.Dir.cwd().readFileAllocOptions(
             self.io,
@@ -203,16 +230,76 @@ pub const LintContext = struct {
         var tree = try Ast.parse(self.gpa, source_z, .zig);
         errdefer tree.deinit(self.gpa);
 
+        var decl_index = try semantic.DeclIndex.init(tree, self.gpa);
+        errdefer decl_index.deinit(self.gpa);
+
         const handle = try self.gpa.create(Handle);
         errdefer self.gpa.destroy(handle);
         handle.* = .{
             .abs_path = try self.gpa.dupe(u8, abs_path),
             .source_owned = source_z,
             .tree = tree,
+            .decl_index = decl_index,
         };
         errdefer self.gpa.free(handle.abs_path);
 
         try self.loaded_handles.append(self.gpa, handle);
+        return handle;
+    }
+
+    /// Resolves `import_path` from `importer_abs_path` and memoizes result for
+    /// this lint run. Returned handle is loaded in `loaded_handles`.
+    pub fn resolveImportHandle(
+        self: *LintContext,
+        importer_abs_path: []const u8,
+        import_path: []const u8,
+    ) !?*Handle {
+        if (std.mem.eql(u8, import_path, "std")) return null;
+
+        if (self.import_handle_cache.get(.{
+            .importer_abs_path = importer_abs_path,
+            .import_path = import_path,
+        })) |cached| {
+            return cached;
+        }
+
+        const key = ImportCacheKey{
+            .importer_abs_path = try self.gpa.dupe(u8, importer_abs_path),
+            .import_path = try self.gpa.dupe(u8, import_path),
+        };
+        errdefer self.gpa.free(key.import_path);
+        errdefer self.gpa.free(key.importer_abs_path);
+
+        var resolved: ?*Handle = null;
+        if (self.semantic_ctx.resolveImportPathAlloc(importer_abs_path, import_path, self.gpa)) |abs_path| {
+            defer self.gpa.free(abs_path);
+            resolved = self.getOrLoadHandle(abs_path) catch |e| switch (e) {
+                error.FileNotFound => null,
+                else => return e,
+            };
+        }
+
+        try self.import_handle_cache.put(self.gpa, key, resolved);
+        return resolved;
+    }
+
+    /// Loads and parses a zig file into a document.
+    ///
+    /// Caller is responsible for calling `doc.deinit` when done.
+    pub fn initDocument(
+        self: *LintContext,
+        path: []const u8,
+        gpa: std.mem.Allocator,
+        doc: *LintDocument,
+    ) !void {
+        var real_path_buf: [std.fs.max_path_bytes]u8 = undefined;
+        const abs_path_len = try std.Io.Dir.cwd().realPathFile(
+            self.io,
+            path,
+            &real_path_buf,
+        );
+        const abs_path = real_path_buf[0..abs_path_len];
+        const handle = try self.getOrLoadHandle(abs_path);
 
         var src_comments = try comments.allocParse(handle.tree.source, gpa);
         errdefer src_comments.deinit(gpa);

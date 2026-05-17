@@ -162,16 +162,23 @@ fn isFieldAccessOfRootContainer(
     const node_data = tree.nodeData(node);
     const lhs = node_data.node_and_token.@"0";
     const lhs_offset = tree.tokenStart(tree.firstToken(lhs));
-    return isRootContainerExpr(tree, lhs, lhs_offset, 0);
+    return isRootContainerExpr(doc, tree, lhs, lhs_offset, 0);
 }
 
 fn isRootContainerExpr(
+    doc: *const zlinter.session.LintDocument,
     tree: Ast,
     node: Ast.Node.Index,
     before_offset: Ast.ByteOffset,
     depth: u8,
 ) bool {
-    return semantic.isRootContainerExpr(tree, node, before_offset, depth);
+    return semantic.isRootContainerExprIndexed(
+        tree,
+        &doc.handle.decl_index,
+        node,
+        before_offset,
+        depth,
+    );
 }
 
 test "no_unused" {

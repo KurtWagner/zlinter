@@ -10,10 +10,10 @@ pub const Resolver = struct {
     file_cache: std.ArrayList(FileContext),
 
     const FileContext = struct {
+        handle: *session.Handle,
         abs_path: []const u8,
         tree: Ast,
-        source_owned: ?[:0]u8 = null,
-        is_borrowed: bool = false,
+        decl_index: *const semantic.DeclIndex,
     };
 
     pub const DeclRef = struct {
@@ -45,24 +45,17 @@ pub const Resolver = struct {
         };
         errdefer self.deinit(gpa);
 
-        const abs_path = try gpa.dupe(u8, doc.path);
-        errdefer gpa.free(abs_path);
-
         try self.file_cache.append(gpa, .{
-            .abs_path = abs_path,
+            .handle = doc.handle,
+            .abs_path = doc.handle.abs_path,
             .tree = doc.handle.tree,
-            .is_borrowed = true,
+            .decl_index = &doc.handle.decl_index,
         });
 
         return self;
     }
 
     pub fn deinit(self: *Self, gpa: std.mem.Allocator) void {
-        for (self.file_cache.items) |*file| {
-            gpa.free(file.abs_path);
-            if (file.source_owned) |source| gpa.free(source);
-            if (!file.is_borrowed) file.tree.deinit(gpa);
-        }
         self.file_cache.deinit(gpa);
     }
 
@@ -251,51 +244,10 @@ pub const Resolver = struct {
         before_offset: Ast.ByteOffset,
     ) ?DeclRef {
         const file = self.file_cache.items[file_index];
-        const tree = file.tree;
-
-        var best_offset: ?Ast.ByteOffset = null;
-        var best_decl: ?DeclRef = null;
-        var nearest_after_offset: ?Ast.ByteOffset = null;
-        var nearest_after_decl: ?DeclRef = null;
-
-        var fn_proto_buffer: [1]Ast.Node.Index = undefined;
-        var index: u32 = 1;
-        while (index < tree.nodes.len) : (index += 1) {
-            const node: Ast.Node.Index = @enumFromInt(index);
-
-            if (tree.fullVarDecl(node)) |var_decl| {
-                const name_token = var_decl.ast.mut_token + 1;
-                if (!std.mem.eql(u8, tree.tokenSlice(name_token), name)) continue;
-                const offset = tree.tokenStart(name_token);
-                if (offset < before_offset) {
-                    if (best_offset == null or offset > best_offset.?) {
-                        best_offset = offset;
-                        best_decl = .{ .file_index = file_index, .node = node };
-                    }
-                } else if (nearest_after_offset == null or offset < nearest_after_offset.?) {
-                    nearest_after_offset = offset;
-                    nearest_after_decl = .{ .file_index = file_index, .node = node };
-                }
-                continue;
-            }
-
-            if (ast_helpers.fnDecl(tree, node, &fn_proto_buffer)) |fn_decl| {
-                const name_token = fn_decl.proto.name_token orelse continue;
-                if (!std.mem.eql(u8, tree.tokenSlice(name_token), name)) continue;
-                const offset = tree.tokenStart(name_token);
-                if (offset < before_offset) {
-                    if (best_offset == null or offset > best_offset.?) {
-                        best_offset = offset;
-                        best_decl = .{ .file_index = file_index, .node = node };
-                    }
-                } else if (nearest_after_offset == null or offset < nearest_after_offset.?) {
-                    nearest_after_offset = offset;
-                    nearest_after_decl = .{ .file_index = file_index, .node = node };
-                }
-            }
-        }
-
-        return best_decl orelse nearest_after_decl;
+        const var_hit = file.decl_index.findVarDeclHitNear(name, before_offset);
+        const fn_hit = file.decl_index.findFnDeclHitNear(name, before_offset);
+        const hit = pickBestDeclHit(var_hit, fn_hit, before_offset) orelse return null;
+        return .{ .file_index = file_index, .node = hit.node };
     }
 
     fn resolveDeclOrAlias(self: *Self, decl: DeclRef, depth: u8) ?ResolvedRef {
@@ -533,50 +485,51 @@ pub const Resolver = struct {
         const tree = file.tree;
 
         const import_path = ast_helpers.importPath(tree, init_node) orelse return null;
-        if (std.mem.eql(u8, import_path, "std")) return null;
-
-        const abs_path = self.context.semantic_ctx.resolveImportPathAlloc(
+        const handle = self.context.resolveImportHandle(
             file.abs_path,
             import_path,
-            self.gpa,
-        ) orelse return null;
-        defer self.gpa.free(abs_path);
+        ) catch return null;
+        const import_handle = handle orelse return null;
 
-        return self.getOrLoadFileByAbsPath(abs_path) catch null;
+        return self.getOrLoadFileByHandle(import_handle) catch null;
     }
 
-    fn getOrLoadFileByAbsPath(self: *Self, abs_path: []const u8) !usize {
+    fn getOrLoadFileByHandle(self: *Self, handle: *session.Handle) !usize {
         for (self.file_cache.items, 0..) |file, i| {
-            if (std.mem.eql(u8, file.abs_path, abs_path)) return i;
+            if (std.mem.eql(u8, file.abs_path, handle.abs_path)) return i;
         }
 
-        const source = std.Io.Dir.cwd().readFileAllocOptions(
-            self.context.io,
-            abs_path,
-            self.gpa,
-            .limited(max_file_size_bytes),
-            .of(u8),
-            0,
-        ) catch return error.FileNotFound;
-        errdefer self.gpa.free(source);
-
-        var source_z: [:0]u8 = try self.gpa.allocSentinel(u8, source.len, 0);
-        errdefer self.gpa.free(source_z);
-        @memcpy(source_z[0..source.len], source);
-        self.gpa.free(source);
-
-        var tree = try Ast.parse(self.gpa, source_z, .zig);
-        errdefer tree.deinit(self.gpa);
-
         try self.file_cache.append(self.gpa, .{
-            .abs_path = try self.gpa.dupe(u8, abs_path),
-            .tree = tree,
-            .source_owned = source_z,
-            .is_borrowed = false,
+            .handle = handle,
+            .abs_path = handle.abs_path,
+            .tree = handle.tree,
+            .decl_index = &handle.decl_index,
         });
         return self.file_cache.items.len - 1;
     }
 };
+
+fn pickBestDeclHit(
+    var_hit: ?semantic.DeclHit,
+    fn_hit: ?semantic.DeclHit,
+    before_offset: Ast.ByteOffset,
+) ?semantic.DeclHit {
+    if (var_hit == null) return fn_hit;
+    if (fn_hit == null) return var_hit;
+
+    const lhs = var_hit.?;
+    const rhs = fn_hit.?;
+
+    const lhs_before = lhs.offset < before_offset;
+    const rhs_before = rhs.offset < before_offset;
+
+    if (lhs_before and !rhs_before) return lhs;
+    if (!lhs_before and rhs_before) return rhs;
+    if (lhs_before and rhs_before) {
+        return if (lhs.offset >= rhs.offset) lhs else rhs;
+    }
+    return if (lhs.offset <= rhs.offset) lhs else rhs;
+}
 
 pub fn docCommentTextFromNode(tree: Ast, node: Ast.Node.Index, gpa: std.mem.Allocator) !?[]const u8 {
     const first_token = tree.firstToken(node);
@@ -633,8 +586,6 @@ fn inferStructInitFieldName(
     }
     return null;
 }
-
-const max_file_size_bytes = 8 * 1024 * 1024;
 
 const std = @import("std");
 const Ast = std.zig.Ast;
