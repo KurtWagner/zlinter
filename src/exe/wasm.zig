@@ -7,7 +7,7 @@ export fn parse(buffer: [*]u8, len: u32) u32 {
     var arena = std.heap.ArenaAllocator.init(std.heap.wasm_allocator);
     defer arena.deinit();
 
-    const source: [:0]const u8 = arena.allocator().dupeZ(u8, buffer[0..len]) catch @panic("OOM");
+    const source: [:0]const u8 = arena.allocator().dupeSentinel(u8, buffer[0..len], 0) catch @panic("OOM");
     const json = zlinter.explorer.parseToJsonStringAlloc(source, arena.allocator()) catch @panic("OOM");
 
     @memcpy(buffer, json);

@@ -889,7 +889,7 @@ test "allocParse fuzz" {
         var raw_args: [max_args][:0]u8 = undefined;
         for (0..raw_args.len) |i| {
             rand.bytes(&buffer);
-            raw_args[i] = try fba.allocator().dupeZ(u8, buffer[0..]);
+            raw_args[i] = try fba.allocator().dupeSentinel(u8, buffer[0..], 0);
         }
 
         var stdin_fbs = std.Io.Reader.fixed("");

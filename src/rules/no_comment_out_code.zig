@@ -134,7 +134,7 @@ fn looksLikeCode(content: []const u8, gpa: std.mem.Allocator) !bool {
     defer gpa.free(buffer);
 
     const looks_like_statement = looks_like_statement: {
-        const container_code = std.fmt.bufPrintZ(buffer, statement_container_fmt, .{content}) catch unreachable;
+        const container_code = std.fmt.bufPrintSentinel(buffer, statement_container_fmt, .{content}, 0) catch unreachable;
         var tree = try Ast.parse(gpa, container_code, .zig);
         defer tree.deinit(gpa);
 
@@ -146,7 +146,7 @@ fn looksLikeCode(content: []const u8, gpa: std.mem.Allocator) !bool {
     if (looks_like_statement) return true;
 
     const looks_like_declaration = looks_like_declaration: {
-        const root_code = std.fmt.bufPrintZ(buffer, declaration_container_fmt, .{content}) catch unreachable;
+        const root_code = std.fmt.bufPrintSentinel(buffer, declaration_container_fmt, .{content}, 0) catch unreachable;
         var tree = try Ast.parse(gpa, root_code, .zig);
         defer tree.deinit(gpa);
 
