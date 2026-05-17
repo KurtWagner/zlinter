@@ -1,0 +1,15 @@
+warning Avoid code in comments [test_cases/no_comment_out_code/separated_statement_comment_groups.input.zig:7:5] no_comment_out_code
+
+ 7 |     // std.debug.print("{d}", .{1});
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Avoid code in comments [test_cases/no_comment_out_code/separated_statement_comment_groups.input.zig:9:5] no_comment_out_code
+
+ 9 |     // if (x > 0) {
+   |     ^^^^^^^^^^^^^^^
+ 10 |     //     std.debug.print("{d}", .{x});
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 11 |     // }
+    | ^^^^^^^^^
+
+x 2 warnings

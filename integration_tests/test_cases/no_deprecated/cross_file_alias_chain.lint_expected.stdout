@@ -1,0 +1,21 @@
+warning Deprecated: - Super dooper deprecated [test_cases/no_deprecated/cross_file_alias_chain.input.zig:6:18] no_deprecated
+
+ 6 |     const data = refs2.MyDeprecatedData{
+   |                  ^^^^^^^^^^^^^^^^^^^^^^
+
+warning Deprecated: - big time [test_cases/no_deprecated/cross_file_alias_chain.input.zig:11:9] no_deprecated
+
+ 11 |     _ = data.deprecated_field;
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+warning Deprecated: - please no more [test_cases/no_deprecated/cross_file_alias_chain.input.zig:13:29] no_deprecated
+
+ 13 |     var state: StateAlias = .really_deprecated;
+    |                             ^^^^^^^^^^^^^^^^^^
+
+warning Deprecated: Don't call this [test_cases/no_deprecated/cross_file_alias_chain.input.zig:16:9] no_deprecated
+
+ 16 |     _ = refs2.doNotCallDeprecated();
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+x 4 warnings

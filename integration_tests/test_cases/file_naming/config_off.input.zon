@@ -1,0 +1,6 @@
+.{
+    .file_struct = .{
+        .style = .title_case,
+        .severity = .off,
+    },
+}

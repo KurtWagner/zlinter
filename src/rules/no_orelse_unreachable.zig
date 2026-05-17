@@ -43,7 +43,8 @@ fn run(
         const data = tree.nodeData(node);
         const rhs = data.node_and_node.@"1";
 
-        if (tree.nodeTag(rhs) != .unreachable_literal) continue;
+        const rhs_tag = tree.nodeTag(rhs);
+        if (rhs_tag != .unreachable_literal and !isUnreachableBlock(tree, rhs)) continue;
 
         try lint_problems.append(gpa, .{
             .rule_id = rule.rule_id,
@@ -64,6 +65,20 @@ fn run(
         null;
 }
 
+fn isUnreachableBlock(tree: Ast, node: Ast.Node.Index) bool {
+    const tag = tree.nodeTag(node);
+    if (tag != .block_two and tag != .block_two_semicolon) return false;
+
+    const data = tree.nodeData(node);
+    const lhs = data.opt_node_and_opt_node.@"0".unwrap();
+    const rhs = data.opt_node_and_opt_node.@"1".unwrap();
+
+    if (lhs) |lhs_node| {
+        return rhs == null and tree.nodeTag(lhs_node) == .unreachable_literal;
+    }
+    return false;
+}
+
 test {
     std.testing.refAllDecls(@This());
 }
@@ -72,6 +87,7 @@ test "no_orelse_unreachable" {
     const rule = buildRule(.{});
     const source: [:0]const u8 =
         \\const a = b orelse unreachable;
+        \\const d = e orelse { unreachable; };
         \\const c = d.?;
         \\const e = f orelse 1;
     ;
@@ -89,6 +105,12 @@ test "no_orelse_unreachable" {
                     .rule_id = "no_orelse_unreachable",
                     .severity = severity,
                     .slice = "b orelse unreachable",
+                    .message = "Prefer `.?` over `orelse unreachable`",
+                },
+                .{
+                    .rule_id = "no_orelse_unreachable",
+                    .severity = severity,
+                    .slice = "e orelse { unreachable; }",
                     .message = "Prefer `.?` over `orelse unreachable`",
                 },
             },

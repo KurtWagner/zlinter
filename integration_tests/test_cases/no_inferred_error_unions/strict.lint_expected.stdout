@@ -1,0 +1,11 @@
+warning Function returns an inferred error union. Prefer an explicit error set [test_cases/no_inferred_error_unions/strict.input.zig:5:1] no_inferred_error_unions
+
+ 5 | pub fn anyerrorBad() anyerror!void {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Function returns an inferred error union. Prefer an explicit error set [test_cases/no_inferred_error_unions/strict.input.zig:1:1] no_inferred_error_unions
+
+ 1 | fn privateBad() !void {
+   | ^^^^^^^^^^^^^^^^^^^^^
+
+x 2 warnings
