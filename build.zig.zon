@@ -7,8 +7,8 @@
         .zls = .{
             // Update with `zig fetch --save git+https://github.com/zigtools/zls#master`
             // IF changed THEN update .github/coverage.yml
-            .url = "git+https://github.com/zigtools/zls?ref=master#5767f2f1f15eab33f52851ad6149b1e342301a21",
-            .hash = "zls-0.17.0-dev-rmm5fhMDJgDo4Jkzo10n28G-KLSEKAv_qNVfqMPyT5Vb",
+            .url = "git+https://github.com/zigtools/zls?ref=master#e4bfcd4a0fdc71544f2c399de4d9db20bc0f3a78",
+            .hash = "zls-0.17.0-dev-rmm5fsAcJgBrbImURX8eRYNgmpyYZBZX-2_3YO7dIjPs",
         },
     },
     .paths = .{
