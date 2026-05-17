@@ -1,0 +1,4 @@
+.{
+    .allow_private = false,
+    .allow_anyerror = false,
+}

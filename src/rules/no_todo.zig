@@ -110,7 +110,7 @@ fn isExcluded(content: []const u8, config: Config) bool {
         if (config.exclude_if_contains_issue_number and looksLikeIssueId(word)) {
             return true;
         }
-        if (config.exclude_if_contains_issue_number and looksLikeUrl(word)) {
+        if (config.exclude_if_contains_url and looksLikeUrl(word)) {
             return true;
         }
     }

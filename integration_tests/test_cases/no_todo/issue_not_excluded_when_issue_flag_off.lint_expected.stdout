@@ -1,0 +1,6 @@
+warning Avoid todo comments [test_cases/no_todo/issue_not_excluded_when_issue_flag_off.input.zig:1:1] no_todo
+
+ 1 | // TODO: fix #123
+   | ^^^^^^^^^^^^^^^^^^
+
+x 1 warnings
