@@ -183,13 +183,18 @@ pub const LintContext = struct {
                 .zig_exe_path = config.zig_exe_path,
                 .zig_lib_dir = dir: {
                     if (config.zig_lib_path) |zig_lib_path| {
-                        if (std.Io.Dir.openDirAbsolute(io, zig_lib_path, .{})) |zig_lib_dir| {
+                        const absolute_zig_lib_path = std.Io.Dir.cwd().realPathFileAlloc(io, zig_lib_path, arena) catch |err| {
+                            std.log.err("failed to resolve zig library directory '{s}': {s}", .{ zig_lib_path, @errorName(err) });
+                            break :dir null;
+                        };
+
+                        if (std.Io.Dir.openDirAbsolute(io, absolute_zig_lib_path, .{})) |zig_lib_dir| {
                             break :dir .{
                                 .handle = zig_lib_dir,
-                                .path = zig_lib_path,
+                                .path = absolute_zig_lib_path,
                             };
                         } else |err| {
-                            std.log.err("failed to open zig library directory '{s}': {s}", .{ zig_lib_path, @errorName(err) });
+                            std.log.err("failed to open zig library directory '{s}': {s}", .{ absolute_zig_lib_path, @errorName(err) });
                         }
                     }
                     break :dir null;
@@ -198,13 +203,18 @@ pub const LintContext = struct {
                 .builtin_path = config.builtin_path,
                 .global_cache_dir = dir: {
                     if (config.global_cache_path) |global_cache_path| {
-                        if (std.Io.Dir.openDirAbsolute(io, global_cache_path, .{})) |global_cache_dir| {
+                        const absolute_global_cache_path = std.Io.Dir.cwd().realPathFileAlloc(io, global_cache_path, arena) catch |err| {
+                            std.log.err("failed to resolve global cache directory '{s}': {s}", .{ global_cache_path, @errorName(err) });
+                            break :dir null;
+                        };
+
+                        if (std.Io.Dir.openDirAbsolute(io, absolute_global_cache_path, .{})) |global_cache_dir| {
                             break :dir .{
                                 .handle = global_cache_dir,
-                                .path = global_cache_path,
+                                .path = absolute_global_cache_path,
                             };
                         } else |err| {
-                            std.log.err("failed to open zig library directory '{s}': {s}", .{ global_cache_path, @errorName(err) });
+                            std.log.err("failed to open global cache directory '{s}': {s}", .{ absolute_global_cache_path, @errorName(err) });
                         }
                     }
                     break :dir null;
@@ -962,7 +972,7 @@ test "LintDocument.isEnclosedInTestBlock" {
         \\ const is_not_in_test = 1;
         \\
         \\ if (builtin.is_test) {
-        \\  const is_in_test_if_condition_a = 1;  
+        \\  const is_in_test_if_condition_a = 1;
         \\ }
         \\ if (anything.is_test) {
         \\  const is_in_test_if_condition_b = 1;
