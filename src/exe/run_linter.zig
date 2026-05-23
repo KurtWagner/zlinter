@@ -706,7 +706,7 @@ fn buildFilterIndex(io: std.Io, cwd: []const u8, gpa: std.mem.Allocator, dir: st
 /// indices in the rules array. This is what allows people to filter runs with
 /// the `--rule` CLI argument.
 fn enabledRules(filter_rule_ids: ?[]const []const u8) std.StaticBitSet(rules.len) {
-    var bitset: std.StaticBitSet(rules.len) = .initFull();
+    var bitset: std.StaticBitSet(rules.len) = .full;
     if (filter_rule_ids == null) return bitset;
 
     bitset.toggleAll();
