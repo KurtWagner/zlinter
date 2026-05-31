@@ -252,7 +252,9 @@ pub fn build(b: *std.Build) void {
     // ------------------------------------------------------------------------
     // zig build test
     // ------------------------------------------------------------------------
-    const kcov_bin = b.findProgram(&.{"kcov"}, &.{}) catch "kcov";
+    const kcov_bin = b.findProgram(
+        .{ .names = &.{"kcov"} },
+    ) orelse "kcov";
     const merge_coverage = std.Build.Step.Run.create(b, "Unit test coverage");
     merge_coverage.rename_step_with_output_arg = false;
     merge_coverage.addArgs(&.{ kcov_bin, "--merge" });
