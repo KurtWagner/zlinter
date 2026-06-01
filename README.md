@@ -1,3 +1,6 @@
+> [!WARNING]
+>  Latest on master / 0.17.x branch will be broken until we (and dependencies) migrate to the reworked build system [#149](https://github.com/KurtWagner/zlinter/issues/149). 0.16, 0.15 and 0.14 branches are still ok.
+
 <div align=center>
 
 <img width="128" height="128" src="icon_512.png" alt="Zlinter icon">
