@@ -606,8 +606,15 @@ fn buildStep(
                 _ = unit;
             },
             .path => |path| {
-                _ = path;
-                // TODO: #149 - implement this
+                switch (path) {
+                    .src_path => |source_path| {
+                        include_paths.append(b.allocator, source_path.sub_path) catch @panic("OOM");
+                    },
+                    .cwd_relative => |relative_path| {
+                        include_paths.append(b.allocator, relative_path) catch @panic("OOM");
+                    },
+                    else => @panic("Unsupported lazy path"),
+                }
             },
         }
     }
@@ -615,8 +622,15 @@ fn buildStep(
     for (exclude) |source| {
         switch (source) {
             .path => |path| {
-                _ = path;
-                // TODO: #149 - implement this
+                switch (path) {
+                    .src_path => |source_path| {
+                        exclude_paths.append(b.allocator, source_path.sub_path) catch @panic("OOM");
+                    },
+                    .cwd_relative => |relative_path| {
+                        exclude_paths.append(b.allocator, relative_path) catch @panic("OOM");
+                    },
+                    else => @panic("Unsupported lazy path"),
+                }
             },
         }
     }
