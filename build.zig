@@ -202,14 +202,16 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/lib/zlinter.zig"),
         .target = target,
         .optimize = optimize,
-        .imports = &.{.{
-            .name = "zls",
-            .module = b.dependency("zls", .{
-                .target = target,
-                .optimize = optimize,
-                .@"version-string" = zls_version,
-            }).module("zls"),
-        }},
+        .imports = &.{
+            // .{
+            //     .name = "zls",
+            //     .module = b.dependency("zls", .{
+            //         .target = target,
+            //         .optimize = optimize,
+            //         .@"version-string" = zls_version,
+            //     }).module("zls"),
+            // },
+        },
     });
 
     const zlinter_import = std.Build.Module.Import{
@@ -277,11 +279,12 @@ pub fn build(b: *std.Build) void {
 
     // Add directory and file inputs to ensure that we can watch and re-run tests
     // as these can't be resolved magicaly through the system call.
-    addWatchInput(b, &run_integration_tests.step, b.path("./integration_tests/src"), .none) catch @panic("OOM");
-    addWatchInput(b, &run_integration_tests.step, b.path("./integration_tests/test_cases"), .none) catch @panic("OOM");
-    addWatchInput(b, &run_integration_tests.step, b.path("./src"), .none) catch @panic("OOM");
-    addWatchInput(b, &run_integration_tests.step, b.path("./integration_tests/build.zig"), .none) catch @panic("OOM");
-    addWatchInput(b, &run_integration_tests.step, b.path("./build_rules.zig"), .none) catch @panic("OOM");
+    // TODO: #149 - Look into adding this back
+    // addWatchInput(b, &run_integration_tests.step, b.path("./integration_tests/src"), .none) catch @panic("OOM");
+    // addWatchInput(b, &run_integration_tests.step, b.path("./integration_tests/test_cases"), .none) catch @panic("OOM");
+    // addWatchInput(b, &run_integration_tests.step, b.path("./src"), .none) catch @panic("OOM");
+    // addWatchInput(b, &run_integration_tests.step, b.path("./integration_tests/build.zig"), .none) catch @panic("OOM");
+    // addWatchInput(b, &run_integration_tests.step, b.path("./build_rules.zig"), .none) catch @panic("OOM");
 
     const integration_test_step = b.step("integration-test", "Run integration tests");
     integration_test_step.dependOn(&run_integration_tests.step);
@@ -300,7 +303,8 @@ pub fn build(b: *std.Build) void {
         \\x 1 warnings
         \\
     , .{"src" ++ std.fs.path.sep_str ++ "check_compiled_source" ++ std.fs.path.sep_str ++ "used.zig"}));
-    addWatchInput(b, &run_integration_check.step, b.path("./integration_tests/src/check_compiled_source"), .none) catch @panic("OOM");
+    // TODO: #149 - try and add this back
+    // addWatchInput(b, &run_integration_check.step, b.path("./integration_tests/src/check_compiled_source"), .none) catch @panic("OOM");
 
     const integration_check_step = b.step("integration-check", "Run integration checks");
     integration_check_step.dependOn(&run_integration_check.step);
@@ -376,7 +380,7 @@ pub fn build(b: *std.Build) void {
     const write_file = b.addWriteFiles();
     const write_index_html = write_file.add(
         "website/explorer/index.html",
-        readHtmlTemplate(b, b.path("website/explorer/index.template.html")) catch @panic("OOM"),
+        readHtmlTemplate(b, "website/explorer/index.template.html") catch @panic("OOM"),
     );
     const install_index_html = b.addInstallFile(
         write_index_html,
@@ -483,7 +487,7 @@ pub fn build(b: *std.Build) void {
                 .optimize = .Debug,
             }),
         }));
-        var step = &doc_build_run.step;
+        const step = &doc_build_run.step;
 
         var install_step = b.addInstallFileWithDir(
             doc_build_run.addOutputFileArg("RULES.md"),
@@ -492,11 +496,15 @@ pub fn build(b: *std.Build) void {
         );
         install_step.step.dependOn(step);
 
-        const rules_lazy_path = b.path("src/rules");
-        const rules_path = rules_lazy_path.getPath3(b, step);
-        _ = step.addDirectoryWatchInput(rules_lazy_path) catch @panic("OOM");
+        // TODO: #149 - bring this back?
+        // const rules_lazy_path = b.path("src/rules");
+        // _ = step.addDirectoryWatchInput(rules_lazy_path) catch @panic("OOM");
 
-        var rules_dir = rules_path.root_dir.handle.openDir(io, rules_path.subPathOrDot(), .{ .iterate = true }) catch @panic("unable to open rules/ directory");
+        var rules_dir = b.root.openDir(
+            io,
+            "src/rules",
+            .{ .iterate = true },
+        ) catch @panic("unable to open rules/ directory");
         defer rules_dir.close(io);
         {
             var it = rules_dir.walk(b.allocator) catch @panic("OOM");
@@ -571,14 +579,64 @@ fn buildStep(
         .use_llvm = true,
     });
 
-    const zlinter_run = ZlinterRun.create(
-        b,
-        zlinter_exe,
-        include,
-        exclude,
-    );
+    var run = b.addRunArtifact(zlinter_exe);
+    run.addPassthruArgs();
 
-    return &zlinter_run.step;
+    run.addArg("--zig_exe");
+    run.addFileArg(.zig_exe);
+
+    run.addArg("--global_cache_root");
+    run.addFileArg(.cache_root);
+
+    run.addArg("--zig_lib_directory");
+    run.addFileArg(.zig_lib);
+
+    var include_paths: std.ArrayList([]const u8) = .empty;
+    defer include_paths.deinit(b.allocator);
+
+    var exclude_paths: std.ArrayList([]const u8) = .empty;
+    defer exclude_paths.deinit(b.allocator);
+
+    for (include) |source| {
+        switch (source) {
+            .compiled_unit => |unit| {
+                // TODO: #149 - implement this
+                _ = unit;
+            },
+            .path => |path| {
+                _ = path;
+                // TODO: #149 - implement this
+            },
+        }
+    }
+
+    for (exclude) |source| {
+        switch (source) {
+            .path => |path| {
+                _ = path;
+                // TODO: #149 - implement this
+            },
+        }
+    }
+
+    const build_info_zon_bytes: []const u8 = toZonString(BuildInfo{
+        .include_paths = include_paths.items,
+        .exclude_paths = exclude_paths.items,
+    }, b.allocator);
+
+    run.addArg("--stdin");
+    run.setStdIn(.{ .bytes = build_info_zon_bytes });
+
+    return &run.step;
+
+    // const zlinter_run = ZlinterRun.create(
+    //     b,
+    //     zlinter_exe,
+    //     include,
+    //     exclude,
+    // );
+
+    // return &zlinter_run.step;
 }
 
 fn checkNoNameCollision(comptime name: []const u8) []const u8 {
@@ -592,51 +650,51 @@ fn checkNoNameCollision(comptime name: []const u8) []const u8 {
     return name;
 }
 
-fn addWatchInput(
-    b: *std.Build,
-    step: *std.Build.Step,
-    file_or_dir: std.Build.LazyPath,
-    kind: enum { none, lintable_file },
-) !void {
-    const src_dir_path = file_or_dir.getPath3(b, step);
+// fn addWatchInput(
+//     b: *std.Build,
+//     step: *std.Build.Step,
+//     file_or_dir: std.Build.LazyPath,
+//     kind: enum { none, lintable_file },
+// ) !void {
+//     const src_dir_path = file_or_dir.getPath3(b, step);
 
-    const io = b.graph.io;
-    var src_dir = src_dir_path.root_dir.handle.openDir(
-        io,
-        src_dir_path.subPathOrDot(),
-        .{ .iterate = true },
-    ) catch |e| switch (e) {
-        error.NotDir => {
-            try step.addWatchInput(file_or_dir);
-            return;
-        },
-        else => @panic(b.fmt("Unable to open directory '{f}': {t}", .{ src_dir_path, e })),
-    };
-    defer src_dir.close(io);
+//     const io = b.graph.io;
+//     var src_dir = src_dir_path.root_dir.handle.openDir(
+//         io,
+//         src_dir_path.subPathOrDot(),
+//         .{ .iterate = true },
+//     ) catch |e| switch (e) {
+//         error.NotDir => {
+//             try step.addWatchInput(file_or_dir);
+//             return;
+//         },
+//         else => @panic(b.fmt("Unable to open directory '{f}': {t}", .{ src_dir_path, e })),
+//     };
+//     defer src_dir.close(io);
 
-    const needs_dir_derived = try step.addDirectoryWatchInput(file_or_dir);
+//     const needs_dir_derived = try step.addDirectoryWatchInput(file_or_dir);
 
-    var it = try src_dir.walk(b.allocator);
-    defer it.deinit();
+//     var it = try src_dir.walk(b.allocator);
+//     defer it.deinit();
 
-    while (try it.next(io)) |entry| {
-        switch (entry.kind) {
-            .directory => if (needs_dir_derived) {
-                const entry_path = try src_dir_path.join(b.allocator, entry.path);
-                try step.addDirectoryWatchInputFromPath(entry_path);
-            },
-            .file => {
-                const entry_path = try src_dir_path.joinString(b.allocator, entry.path);
-                defer b.allocator.free(entry_path);
+//     while (try it.next(io)) |entry| {
+//         switch (entry.kind) {
+//             .directory => if (needs_dir_derived) {
+//                 const entry_path = try src_dir_path.join(b.allocator, entry.path);
+//                 try step.addDirectoryWatchInputFromPath(entry_path);
+//             },
+//             .file => {
+//                 const entry_path = try src_dir_path.joinString(b.allocator, entry.path);
+//                 defer b.allocator.free(entry_path);
 
-                if (kind != .lintable_file or isLintableFilePath(entry_path) catch false) {
-                    try step.addWatchInput(try file_or_dir.join(b.allocator, entry.path));
-                }
-            },
-            else => continue,
-        }
-    }
-}
+//                 if (kind != .lintable_file or isLintableFilePath(entry_path) catch false) {
+//                     try step.addWatchInput(try file_or_dir.join(b.allocator, entry.path));
+//                 }
+//             },
+//             else => continue,
+//         }
+//     }
+// }
 
 fn buildRule(
     b: *std.Build,
@@ -769,327 +827,327 @@ fn createRulesModule(
     return module;
 }
 
-const ZlinterRun = struct {
-    step: std.Build.Step,
+// const ZlinterRun = struct {
+//     step: std.Build.Step,
 
-    /// CLI arguments to be passed to zlinter when executed
-    argv: std.ArrayList(Arg),
+//     /// CLI arguments to be passed to zlinter when executed
+//     argv: std.ArrayList(Arg),
 
-    /// Exclude paths confiured within the build file.
-    exclude: []const LintExcludeSource,
+//     /// Exclude paths confiured within the build file.
+//     exclude: []const LintExcludeSource,
 
-    /// The sources to lint (e.g., an executable or library).
-    include: []const LintIncludeSource,
+//     /// The sources to lint (e.g., an executable or library).
+//     include: []const LintIncludeSource,
 
-    const Arg = union(enum) {
-        artifact: *std.Build.Step.Compile,
-        bytes: []const u8,
-    };
+//     const Arg = union(enum) {
+//         artifact: *std.Build.Step.Compile,
+//         bytes: []const u8,
+//     };
 
-    pub fn create(
-        owner: *std.Build,
-        exe: *std.Build.Step.Compile,
-        include: []const LintIncludeSource,
-        exclude: []const LintExcludeSource,
-    ) *ZlinterRun {
-        const arena = owner.allocator;
+//     pub fn create(
+//         owner: *std.Build,
+//         exe: *std.Build.Step.Compile,
+//         include: []const LintIncludeSource,
+//         exclude: []const LintExcludeSource,
+//     ) *ZlinterRun {
+//         const arena = owner.allocator;
 
-        const self = arena.create(ZlinterRun) catch @panic("OOM");
-        self.* = .{
-            .step = std.Build.Step.init(.{
-                .id = .custom,
-                .name = "Run zlinter",
-                .owner = owner,
-                .makeFn = make,
-            }),
-            .argv = .empty,
-            .exclude = exclude,
-            .include = include,
-        };
+//         const self = arena.create(ZlinterRun) catch @panic("OOM");
+//         self.* = .{
+//             .step = std.Build.Step.init(.{
+//                 .id = .custom,
+//                 .name = "Run zlinter",
+//                 .owner = owner,
+//                 .makeFn = make,
+//             }),
+//             .argv = .empty,
+//             .exclude = exclude,
+//             .include = include,
+//         };
 
-        self.argv.append(arena, .{ .artifact = exe }) catch @panic("OOM");
+//         self.argv.append(arena, .{ .artifact = exe }) catch @panic("OOM");
 
-        if (owner.args) |args| self.addArgs(args);
-        if (owner.verbose) self.addArgs(&.{"--verbose"});
+//         if (owner.args) |args| self.addArgs(args);
+//         if (owner.verbose) self.addArgs(&.{"--verbose"});
 
-        self.addArgs(&.{ "--zig_exe", owner.graph.zig_exe });
-        if (owner.graph.global_cache_root.path) |p|
-            self.addArgs(&.{ "--global_cache_root", p });
+//         self.addArgs(&.{ "--zig_exe", owner.graph.zig_exe });
+//         if (owner.graph.global_cache_root.path) |p|
+//             self.addArgs(&.{ "--global_cache_root", p });
 
-        if (owner.graph.zig_lib_directory.path) |p|
-            self.addArgs(&.{ "--zig_lib_directory", p });
+//         if (owner.graph.zig_lib_directory.path) |p|
+//             self.addArgs(&.{ "--zig_lib_directory", p });
 
-        const bin_file = exe.getEmittedBin();
-        bin_file.addStepDependencies(&self.step);
+//         const bin_file = exe.getEmittedBin();
+//         bin_file.addStepDependencies(&self.step);
 
-        for (include) |s| {
-            switch (s) {
-                .compiled_unit => |info| self.step.dependOn(
-                    &info.compile_step.step,
-                ),
-                .path => |path| addWatchInput(
-                    owner,
-                    &self.step,
-                    path,
-                    .lintable_file,
-                ) catch @panic("OOM"),
-            }
-        }
+//         for (include) |s| {
+//             switch (s) {
+//                 .compiled_unit => |info| self.step.dependOn(
+//                     &info.compile_step.step,
+//                 ),
+//                 .path => |path| addWatchInput(
+//                     owner,
+//                     &self.step,
+//                     path,
+//                     .lintable_file,
+//                 ) catch @panic("OOM"),
+//             }
+//         }
 
-        return self;
-    }
+//         return self;
+//     }
 
-    fn addArgs(run: *ZlinterRun, args: []const []const u8) void {
-        const b = run.step.owner;
-        for (args) |arg|
-            run.argv.append(b.allocator, .{ .bytes = b.dupe(arg) }) catch @panic("OOM");
-    }
+//     fn addArgs(run: *ZlinterRun, args: []const []const u8) void {
+//         const b = run.step.owner;
+//         for (args) |arg|
+//             run.argv.append(b.allocator, .{ .bytes = b.dupe(arg) }) catch @panic("OOM");
+//     }
 
-    fn subPaths(
-        step: *std.Build.Step,
-        paths: []const std.Build.LazyPath,
-    ) error{OutOfMemory}!?[]const []const u8 {
-        if (paths.len == 0) return null;
+//     fn subPaths(
+//         step: *std.Build.Step,
+//         paths: []const std.Build.LazyPath,
+//     ) error{OutOfMemory}!?[]const []const u8 {
+//         if (paths.len == 0) return null;
 
-        const b = step.owner;
+//         const b = step.owner;
 
-        var list: std.ArrayList([]const u8) = try .initCapacity(
-            b.allocator,
-            paths.len,
-        );
-        defer list.deinit(b.allocator);
+//         var list: std.ArrayList([]const u8) = try .initCapacity(
+//             b.allocator,
+//             paths.len,
+//         );
+//         defer list.deinit(b.allocator);
 
-        for (paths) |path| {
-            list.appendAssumeCapacity(
-                path.getPath3(b, step).subPathOrDot(),
-            );
-        }
+//         for (paths) |path| {
+//             list.appendAssumeCapacity(
+//                 path.getPath3(b, step).subPathOrDot(),
+//             );
+//         }
 
-        return try list.toOwnedSlice(b.allocator);
-    }
+//         return try list.toOwnedSlice(b.allocator);
+//     }
 
-    fn make(step: *std.Build.Step, _: std.Build.Step.MakeOptions) !void {
-        const run: *ZlinterRun = @alignCast(@fieldParentPtr("step", step));
-        const b = run.step.owner;
-        const io = b.graph.io;
-        const arena = b.allocator;
+//     fn make(step: *std.Build.Step, _: std.Build.Step.MakeOptions) !void {
+//         const run: *ZlinterRun = @alignCast(@fieldParentPtr("step", step));
+//         const b = run.step.owner;
+//         const io = b.graph.io;
+//         const arena = b.allocator;
 
-        var cwd_buff: [std.fs.max_path_bytes]u8 = undefined;
-        const cwd: BuildCwd = .init(io, &cwd_buff);
+//         var cwd_buff: [std.fs.max_path_bytes]u8 = undefined;
+//         const cwd: BuildCwd = .init(io, &cwd_buff);
 
-        var includes: std.ArrayList(std.Build.LazyPath) = try .initCapacity(
-            b.allocator,
-            @max(1, run.include.len),
-        );
-        defer includes.deinit(b.allocator);
+//         var includes: std.ArrayList(std.Build.LazyPath) = try .initCapacity(
+//             b.allocator,
+//             @max(1, run.include.len),
+//         );
+//         defer includes.deinit(b.allocator);
 
-        for (run.include) |source| {
-            switch (source) {
-                .compiled_unit => |info| {
-                    var exe = info.compile_step;
+//         for (run.include) |source| {
+//             switch (source) {
+//                 .compiled_unit => |info| {
+//                     var exe = info.compile_step;
 
-                    // TODO: Use graph for import map.
-                    const graph = exe.root_module.getGraph();
-                    _ = graph;
+//                     // TODO: Use graph for import map.
+//                     const graph = exe.root_module.getGraph();
+//                     _ = graph;
 
-                    var inputs = exe.step.inputs;
-                    std.debug.assert(inputs.populated());
+//                     var inputs = exe.step.inputs;
+//                     std.debug.assert(inputs.populated());
 
-                    var it = inputs.table.iterator();
-                    while (it.next()) |entry| {
-                        const p = entry.key_ptr.*;
-                        sub_paths: for (entry.value_ptr.items) |sub_path| {
-                            var buf: [std.fs.max_path_bytes]u8 = undefined;
-                            const joined_path = if (p.sub_path.len == 0) sub_path else p: {
-                                const fmt = "{s}" ++ std.fs.path.sep_str ++ "{s}";
-                                break :p std.fmt.bufPrint(
-                                    &buf,
-                                    fmt,
-                                    .{ p.sub_path, sub_path },
-                                ) catch {
-                                    std.debug.print(
-                                        "Warning: Name too long - " ++ fmt,
-                                        .{ p.sub_path, sub_path },
-                                    );
-                                    continue :sub_paths;
-                                };
-                            };
-                            std.debug.assert(joined_path.len > 0);
+//                     var it = inputs.table.iterator();
+//                     while (it.next()) |entry| {
+//                         const p = entry.key_ptr.*;
+//                         sub_paths: for (entry.value_ptr.items) |sub_path| {
+//                             var buf: [std.fs.max_path_bytes]u8 = undefined;
+//                             const joined_path = if (p.sub_path.len == 0) sub_path else p: {
+//                                 const fmt = "{s}" ++ std.fs.path.sep_str ++ "{s}";
+//                                 break :p std.fmt.bufPrint(
+//                                     &buf,
+//                                     fmt,
+//                                     .{ p.sub_path, sub_path },
+//                                 ) catch {
+//                                     std.debug.print(
+//                                         "Warning: Name too long - " ++ fmt,
+//                                         .{ p.sub_path, sub_path },
+//                                     );
+//                                     continue :sub_paths;
+//                                 };
+//                             };
+//                             std.debug.assert(joined_path.len > 0);
 
-                            if (!try isLintableFilePath(joined_path)) continue :sub_paths;
+//                             if (!try isLintableFilePath(joined_path)) continue :sub_paths;
 
-                            if (cwd.relativePath(b, joined_path)) |path| {
-                                try includes.append(b.allocator, path);
-                            }
-                        }
-                    }
-                },
-                .path => |path| try includes.append(
-                    b.allocator,
-                    path,
-                ),
-            }
-        }
-        if (includes.items.len == 0) {
-            includes.appendAssumeCapacity(b.path("./"));
-        }
+//                             if (cwd.relativePath(b, joined_path)) |path| {
+//                                 try includes.append(b.allocator, path);
+//                             }
+//                         }
+//                     }
+//                 },
+//                 .path => |path| try includes.append(
+//                     b.allocator,
+//                     path,
+//                 ),
+//             }
+//         }
+//         if (includes.items.len == 0) {
+//             includes.appendAssumeCapacity(b.path("./"));
+//         }
 
-        var excludes: std.ArrayList(std.Build.LazyPath) = try .initCapacity(b.allocator, run.exclude.len);
-        defer excludes.deinit(b.allocator);
-        for (run.exclude) |exclude| {
-            switch (exclude) {
-                .path => |path| excludes.appendAssumeCapacity(path),
-            }
-        }
+//         var excludes: std.ArrayList(std.Build.LazyPath) = try .initCapacity(b.allocator, run.exclude.len);
+//         defer excludes.deinit(b.allocator);
+//         for (run.exclude) |exclude| {
+//             switch (exclude) {
+//                 .path => |path| excludes.appendAssumeCapacity(path),
+//             }
+//         }
 
-        const build_info_zon_bytes: []const u8 = toZonString(BuildInfo{
-            .include_paths = try subPaths(&run.step, includes.items),
-            .exclude_paths = try subPaths(&run.step, excludes.items),
-        }, b.allocator);
+//         const build_info_zon_bytes: []const u8 = toZonString(BuildInfo{
+//             .include_paths = try subPaths(&run.step, includes.items),
+//             .exclude_paths = try subPaths(&run.step, excludes.items),
+//         }, b.allocator);
 
-        var environ_map = b.graph.environ_map;
+//         var environ_map = b.graph.environ_map;
 
-        var argv_list = std.ArrayList([]const u8).initCapacity(
-            arena,
-            run.argv.items.len + 1,
-        ) catch @panic("OOM");
+//         var argv_list = std.ArrayList([]const u8).initCapacity(
+//             arena,
+//             run.argv.items.len + 1,
+//         ) catch @panic("OOM");
 
-        for (run.argv.items) |arg| {
-            switch (arg) {
-                .bytes => |bytes| {
-                    try argv_list.append(arena, bytes);
-                },
-                .artifact => |artifact| {
-                    if (artifact.rootModuleTarget().os.tag == .windows) {
-                        // Windows doesn't have rpaths so add .dll search paths to PATH environment variable
-                        const chase_dynamics = true;
-                        const compiles = artifact.getCompileDependencies(chase_dynamics);
-                        for (compiles) |compile| {
-                            if (compile.root_module.resolved_target.?.result.os.tag == .windows) continue;
-                            if (compile.isDynamicLibrary()) continue;
+//         for (run.argv.items) |arg| {
+//             switch (arg) {
+//                 .bytes => |bytes| {
+//                     try argv_list.append(arena, bytes);
+//                 },
+//                 .artifact => |artifact| {
+//                     if (artifact.rootModuleTarget().os.tag == .windows) {
+//                         // Windows doesn't have rpaths so add .dll search paths to PATH environment variable
+//                         const chase_dynamics = true;
+//                         const compiles = artifact.getCompileDependencies(chase_dynamics);
+//                         for (compiles) |compile| {
+//                             if (compile.root_module.resolved_target.?.result.os.tag == .windows) continue;
+//                             if (compile.isDynamicLibrary()) continue;
 
-                            const bin_path = compile.getEmittedBin().getPath3(b, &run.step);
-                            const search_path = std.fs.path.dirname(b.pathResolve(&.{ bin_path.root_dir.path orelse ".", bin_path.sub_path })).?;
-                            const key = "PATH";
-                            if (environ_map.get(key)) |prev_path| {
-                                environ_map.put(key, b.fmt("{s}{c}{s}", .{
-                                    prev_path,
-                                    std.fs.path.delimiter,
-                                    search_path,
-                                })) catch @panic("OOM");
-                            } else {
-                                environ_map.put(key, b.dupePath(search_path)) catch @panic("OOM");
-                            }
-                        }
-                    }
-                    const file_path = artifact.installed_path orelse artifact.generated_bin.?.path.?;
-                    try argv_list.append(arena, b.dupe(file_path));
-                },
-            }
-        }
+//                             const bin_path = compile.getEmittedBin().getPath3(b, &run.step);
+//                             const search_path = std.fs.path.dirname(b.pathResolve(&.{ bin_path.root_dir.path orelse ".", bin_path.sub_path })).?;
+//                             const key = "PATH";
+//                             if (environ_map.get(key)) |prev_path| {
+//                                 environ_map.put(key, b.fmt("{s}{c}{s}", .{
+//                                     prev_path,
+//                                     std.fs.path.delimiter,
+//                                     search_path,
+//                                 })) catch @panic("OOM");
+//                             } else {
+//                                 environ_map.put(key, b.dupePath(search_path)) catch @panic("OOM");
+//                             }
+//                         }
+//                     }
+//                     const file_path = artifact.installed_path orelse artifact.generated_bin.?.path.?;
+//                     try argv_list.append(arena, b.dupe(file_path));
+//                 },
+//             }
+//         }
 
-        // We're always sending "build_info_zon_bytes" in stdin
-        argv_list.append(arena, "--stdin") catch @panic("OOM");
+//         // We're always sending "build_info_zon_bytes" in stdin
+//         argv_list.append(arena, "--stdin") catch @panic("OOM");
 
-        if (!std.process.can_spawn) {
-            return run.step.fail("Host cannot spawn zlinter:\n\t{s}", .{
-                std.Build.Step.allocPrintCmd(
-                    arena,
-                    b.build_root.path,
-                    argv_list.items,
-                ) catch @panic("OOM"),
-            });
-        }
+//         if (!std.process.can_spawn) {
+//             return run.step.fail("Host cannot spawn zlinter:\n\t{s}", .{
+//                 std.Build.Step.allocPrintCmd(
+//                     arena,
+//                     b.build_root.path,
+//                     argv_list.items,
+//                 ) catch @panic("OOM"),
+//             });
+//         }
 
-        if (b.verbose) {
-            std.debug.print("zlinter command:\n\t{s}\n", .{
-                std.Build.Step.allocPrintCmd(
-                    arena,
-                    .inherit,
-                    null,
-                    argv_list.items,
-                ) catch @panic("OOM"),
-            });
-        }
+//         if (b.verbose) {
+//             std.debug.print("zlinter command:\n\t{s}\n", .{
+//                 std.Build.Step.allocPrintCmd(
+//                     arena,
+//                     .inherit,
+//                     null,
+//                     argv_list.items,
+//                 ) catch @panic("OOM"),
+//             });
+//         }
 
-        const start_time = std.Io.Clock.awake.now(io);
+//         const start_time = std.Io.Clock.awake.now(io);
 
-        _ = std.debug.lockStderr(&.{});
-        defer std.debug.unlockStderr();
+//         _ = std.debug.lockStderr(&.{});
+//         defer std.debug.unlockStderr();
 
-        var child = std.process.spawn(io, .{
-            .argv = argv_list.items,
-            .cwd = .{ .dir = b.build_root.handle },
-            .environ_map = &environ_map,
-            // As we're using stdout and stderr inherit we don't want to update
-            // parent of childs progress (i.e commented out as deliberately not set)
-            // .progress_node = options.progress_node,
-            .request_resource_usage_statistics = true,
-            .stdout = .inherit,
-            .stderr = .inherit,
-            .stdin = .pipe, // Otherwise, `.Ignore` if not sending stdin
-        }) catch |err| {
-            return run.step.fail("Unable to spawn zlinter: {s}", .{@errorName(err)});
-        };
+//         var child = std.process.spawn(io, .{
+//             .argv = argv_list.items,
+//             .cwd = .{ .dir = b.build_root.handle },
+//             .environ_map = &environ_map,
+//             // As we're using stdout and stderr inherit we don't want to update
+//             // parent of childs progress (i.e commented out as deliberately not set)
+//             // .progress_node = options.progress_node,
+//             .request_resource_usage_statistics = true,
+//             .stdout = .inherit,
+//             .stderr = .inherit,
+//             .stdin = .pipe, // Otherwise, `.Ignore` if not sending stdin
+//         }) catch |err| {
+//             return run.step.fail("Unable to spawn zlinter: {s}", .{@errorName(err)});
+//         };
 
-        errdefer child.kill(io);
+//         errdefer child.kill(io);
 
-        {
-            if (b.verbose)
-                std.debug.print("Writing stdin: '{s}'\n", .{build_info_zon_bytes});
+//         {
+//             if (b.verbose)
+//                 std.debug.print("Writing stdin: '{s}'\n", .{build_info_zon_bytes});
 
-            var stdin_file = child.stdin.?;
+//             var stdin_file = child.stdin.?;
 
-            var buffer: [1024]u8 = undefined;
-            var writer = stdin_file.writer(io, &buffer);
-            writer.interface.writeInt(usize, build_info_zon_bytes.len, .little) catch @panic("stdin write failed");
-            writer.interface.writeAll(build_info_zon_bytes) catch @panic("stdin write failed");
-            writer.interface.flush() catch @panic("Flush failed");
-        }
+//             var buffer: [1024]u8 = undefined;
+//             var writer = stdin_file.writer(io, &buffer);
+//             writer.interface.writeInt(usize, build_info_zon_bytes.len, .little) catch @panic("stdin write failed");
+//             writer.interface.writeAll(build_info_zon_bytes) catch @panic("stdin write failed");
+//             writer.interface.flush() catch @panic("Flush failed");
+//         }
 
-        const term = try child.wait(io);
+//         const term = try child.wait(io);
 
-        step.result_duration_ns = @intCast(start_time.untilNow(io, .awake).toNanoseconds());
-        step.result_peak_rss = child.resource_usage_statistics.getMaxRss() orelse 0;
-        step.test_results = .{};
+//         step.result_duration_ns = @intCast(start_time.untilNow(io, .awake).toNanoseconds());
+//         step.result_peak_rss = child.resource_usage_statistics.getMaxRss() orelse 0;
+//         step.test_results = .{};
 
-        switch (term) {
-            .exited => |code| {
-                // These codes are defined in run_linter.zig
-                const success = 0;
-                const lint_error = 2;
-                const usage_error = 3;
-                if (code == lint_error) {
-                    return step.fail("zlinter detected issues", .{});
-                } else if (code == usage_error) {
-                    return step.fail("zlinter usage error", .{});
-                } else if (code != success) {
-                    return step.fail("zlinter command crashed:\n\t{s}", .{
-                        std.Build.Step.allocPrintCmd(
-                            arena,
-                            .inherit,
-                            null,
-                            argv_list.items,
-                        ) catch @panic("OOM"),
-                    });
-                }
-            },
-            .signal, .stopped, .unknown => {
-                return step.fail("zlinter was terminated unexpectedly:\n\t{s}", .{
-                    std.Build.Step.allocPrintCmd(
-                        arena,
-                        .inherit,
-                        null,
-                        argv_list.items,
-                    ) catch @panic("OOM"),
-                });
-            },
-        }
-    }
-};
+//         switch (term) {
+//             .exited => |code| {
+//                 // These codes are defined in run_linter.zig
+//                 const success = 0;
+//                 const lint_error = 2;
+//                 const usage_error = 3;
+//                 if (code == lint_error) {
+//                     return step.fail("zlinter detected issues", .{});
+//                 } else if (code == usage_error) {
+//                     return step.fail("zlinter usage error", .{});
+//                 } else if (code != success) {
+//                     return step.fail("zlinter command crashed:\n\t{s}", .{
+//                         std.Build.Step.allocPrintCmd(
+//                             arena,
+//                             .inherit,
+//                             null,
+//                             argv_list.items,
+//                         ) catch @panic("OOM"),
+//                     });
+//                 }
+//             },
+//             .signal, .stopped, .unknown => {
+//                 return step.fail("zlinter was terminated unexpectedly:\n\t{s}", .{
+//                     std.Build.Step.allocPrintCmd(
+//                         arena,
+//                         .inherit,
+//                         null,
+//                         argv_list.items,
+//                     ) catch @panic("OOM"),
+//                 });
+//             },
+//         }
+//     }
+// };
 
-fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
-    const rules_path = path.getPath3(b, null);
+fn readHtmlTemplate(b: *std.Build, path: []const u8) ![]const u8 {
+    const rules_path = try b.root.join(b.allocator, path);
 
     const io = b.graph.io;
     var file = try rules_path.root_dir.handle.openFile(io, rules_path.subPathOrDot(), .{});
