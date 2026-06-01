@@ -81,12 +81,10 @@ pub const DocumentStore = struct {
         if (self.config.zig_lib_dir) |dir| {
             var handle = dir.handle;
             handle.close(self.io);
-            self.allocator.free(dir.path);
         }
         if (self.config.global_cache_dir) |dir| {
             var handle = dir.handle;
             handle.close(self.io);
-            self.allocator.free(dir.path);
         }
     }
 
