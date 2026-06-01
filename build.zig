@@ -198,19 +198,21 @@ pub fn build(b: *std.Build) void {
     const test_focus_on_rule = b.option([]const u8, "test_focus_on_rule", "Only run integration tests for this rule");
     const io = b.graph.io;
 
+    const zls_module = b.createModule(.{
+        .root_source_file = b.path("src/lib/zls_stub.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const zlinter_lib_module = b.addModule("zlinter", .{
         .root_source_file = b.path("src/lib/zlinter.zig"),
         .target = target,
         .optimize = optimize,
         .imports = &.{
-            // .{
-            //     .name = "zls",
-            //     .module = b.dependency("zls", .{
-            //         .target = target,
-            //         .optimize = optimize,
-            //         .@"version-string" = zls_version,
-            //     }).module("zls"),
-            // },
+            .{
+                .name = "zls",
+                .module = zls_module,
+            },
         },
     });
 
@@ -625,7 +627,14 @@ fn buildStep(
     }, b.allocator);
 
     run.addArg("--stdin");
-    run.setStdIn(.{ .bytes = build_info_zon_bytes });
+
+    var buff = std.Io.Writer.Allocating.init(b.allocator);
+
+    // TODO: #149 - Use u32 instead of usize and try and avoid build_info_zon_bytes written twice
+    buff.writer.writeInt(usize, build_info_zon_bytes.len, .little) catch @panic("stdin write failed");
+    buff.writer.writeAll(build_info_zon_bytes) catch @panic("stdin write failed");
+
+    run.setStdIn(.{ .bytes = buff.written() });
 
     return &run.step;
 

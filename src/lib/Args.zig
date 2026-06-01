@@ -272,9 +272,11 @@ pub fn allocParse(
                 rendering.process_printer.println(.err, "--format missing value", .{});
                 return error.InvalidArgs;
             }
-            inline for (std.meta.fieldNames(@FieldType(Args, "format")), 0..) |field_name, i| {
+
+            const field_names = comptime std.meta.fieldNames(@FieldType(Args, "format"));
+            inline for (field_names, 0..) |field_name, i| {
                 if (std.mem.eql(u8, args[index], field_name)) {
-                    lint_args.format = @enumFromInt(std.meta.fieldValues(@FieldType(Args, "format"))[i]);
+                    lint_args.format = @enumFromInt(i);
                     continue :state State.parsing;
                 }
             }

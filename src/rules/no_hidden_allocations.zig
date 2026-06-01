@@ -85,9 +85,9 @@ fn run(
         // is identifier a method on Allocator e.g., something.alloc(..) or something.create(..)
         const is_allocator_method = is_allocator_method: {
             const actual_name = tree.tokenSlice(identifier);
-            inline for (@typeInfo(std.mem.Allocator).@"struct".decls) |decl| {
-                if (comptime std.meta.hasMethod(std.mem.Allocator, decl.name)) {
-                    if (std.mem.eql(u8, actual_name, decl.name)) break :is_allocator_method true;
+            inline for (@typeInfo(std.mem.Allocator).@"struct".decl_names) |decl_name| {
+                if (comptime std.meta.hasMethod(std.mem.Allocator, decl_name)) {
+                    if (std.mem.eql(u8, actual_name, decl_name)) break :is_allocator_method true;
                 }
             }
             break :is_allocator_method false;
