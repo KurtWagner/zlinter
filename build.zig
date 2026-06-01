@@ -596,6 +596,9 @@ fn buildStep(
     var include_paths: std.ArrayList([]const u8) = .empty;
     defer include_paths.deinit(b.allocator);
 
+    var include_step_names: std.ArrayList([]const u8) = .empty;
+    defer include_step_names.deinit(b.allocator);
+
     var exclude_paths: std.ArrayList([]const u8) = .empty;
     defer exclude_paths.deinit(b.allocator);
 
@@ -603,7 +606,10 @@ fn buildStep(
         switch (source) {
             .compiled_unit => |unit| {
                 // TODO: #149 - implement this
-                _ = unit;
+                include_step_names.append(
+                    b.allocator,
+                    unit.compile_step.name,
+                ) catch @panic("OOM");
             },
             .path => |path| {
                 switch (path) {
@@ -638,6 +644,7 @@ fn buildStep(
     const build_info_zon_bytes: []const u8 = toZonString(BuildInfo{
         .include_paths = if (include_paths.items.len > 0) include_paths.items else null,
         .exclude_paths = if (exclude_paths.items.len > 0) exclude_paths.items else null,
+        .include_step_names = if (include_step_names.items.len > 0) include_step_names.items else null,
     }, b.allocator);
 
     run.addArg("--stdin");
