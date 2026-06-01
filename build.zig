@@ -622,8 +622,8 @@ fn buildStep(
     }
 
     const build_info_zon_bytes: []const u8 = toZonString(BuildInfo{
-        .include_paths = include_paths.items,
-        .exclude_paths = exclude_paths.items,
+        .include_paths = if (include_paths.items.len > 0) include_paths.items else null,
+        .exclude_paths = if (exclude_paths.items.len > 0) exclude_paths.items else null,
     }, b.allocator);
 
     run.addArg("--stdin");
