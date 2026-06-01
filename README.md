@@ -1,5 +1,5 @@
 > [!WARNING]
->  Latest on master / 0.17.x branch will be broken until we (and dependencies) migrate to the reworked build system [#149](https://github.com/KurtWagner/zlinter/issues/149). 0.16, 0.15 and 0.14 branches are still ok.
+> Latest on master / 0.17.x branch will be broken until we (and dependencies) migrate to the reworked build system [#149](https://github.com/KurtWagner/zlinter/issues/149). 0.16, 0.15 and 0.14 branches are still ok.
 
 <div align=center>
 
@@ -149,8 +149,8 @@ so this is not recommended outside of testing zlinters rules for your project:
   const lint_cmd = b.step("lint", "Lint source code.");
   lint_cmd.dependOn(step: {
       var builder = zlinter.builder(b, .{});
-      inline for (@typeInfo(zlinter.BuiltinLintRule).@"enum".fields) |f| {
-          builder.addRule(.{ .builtin = @enumFromInt(f.value) }, .{});
+      inline for (@typeInfo(zlinter.BuiltinLintRule).@"enum".field_values) |field_value| {
+          builder.addRule(.{ .builtin = @enumFromInt(field_value) }, .{});
       }
       break :step builder.build();
   });
