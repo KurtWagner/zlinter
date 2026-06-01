@@ -225,14 +225,15 @@ pub fn build(b: *std.Build) void {
     // --------------------------------------------------------------------
     // Generate dynamic rules list and configs
     // --------------------------------------------------------------------
+    const builtin_rule_names = comptime std.meta.fieldNames(BuiltinLintRule);
     // zlinter-disable-next-line no_undefined - immediately set in inline loop
-    var rules: [@typeInfo(BuiltinLintRule).@"enum".field_names.len]BuiltRule = undefined;
+    var rules: [builtin_rule_names.len]BuiltRule = undefined;
     // zlinter-disable-next-line no_undefined - immediately set in inline loop
-    var rule_imports: [@typeInfo(BuiltinLintRule).@"enum".field_names.len]std.Build.Module.Import = undefined;
+    var rule_imports: [builtin_rule_names.len]std.Build.Module.Import = undefined;
 
-    inline for (std.meta.fields(BuiltinLintRule), 0..) |enum_type, i| {
+    inline for (builtin_rule_names, 0..) |enum_type_name, i| {
         const rule_module = b.createModule(.{
-            .root_source_file = b.path("src/rules/" ++ enum_type.name ++ ".zig"),
+            .root_source_file = b.path("src/rules/" ++ enum_type_name ++ ".zig"),
             .target = target,
             .optimize = optimize,
             .imports = &.{zlinter_import},
@@ -240,7 +241,7 @@ pub fn build(b: *std.Build) void {
 
         // Rule as import:
         rule_imports[i] = .{
-            .name = enum_type.name,
+            .name = enum_type_name,
             .module = rule_module,
         };
         rules[i] = .{
