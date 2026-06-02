@@ -1,12 +1,5 @@
 const @"build.zig" = @This();
 
-const zls_version: []const u8 = switch (version.zig) {
-    .@"0.17" => "0.17.0-dev",
-    .@"0.16" => "0.16.0",
-    .@"0.15" => "0.15.0",
-    .@"0.14" => "0.14.0",
-};
-
 pub const BuiltinLintRule = enum {
     field_naming,
     field_ordering,
@@ -185,7 +178,7 @@ pub fn build(b: *std.Build) void {
     const test_focus_on_rule = b.option([]const u8, "test_focus_on_rule", "Only run integration tests for this rule");
     const io = b.graph.io;
 
-    const zls_module = b.createModule(.{
+    const zls_stub_module = b.createModule(.{
         .root_source_file = b.path("src/lib/zls_stub.zig"),
         .target = target,
         .optimize = optimize,
@@ -198,7 +191,7 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{
                 .name = "zls",
-                .module = zls_module,
+                .module = zls_stub_module,
             },
         },
     });
@@ -607,15 +600,6 @@ fn buildStep(
     run.setStdIn(.{ .bytes = buff.written() });
 
     return &run.step;
-
-    // const zlinter_run = ZlinterRun.create(
-    //     b,
-    //     zlinter_exe,
-    //     include,
-    //     exclude,
-    // );
-
-    // return &zlinter_run.step;
 }
 
 fn checkNoNameCollision(comptime name: []const u8) []const u8 {
@@ -628,52 +612,6 @@ fn checkNoNameCollision(comptime name: []const u8) []const u8 {
     }
     return name;
 }
-
-// fn addWatchInput(
-//     b: *std.Build,
-//     step: *std.Build.Step,
-//     file_or_dir: std.Build.LazyPath,
-//     kind: enum { none, lintable_file },
-// ) !void {
-//     const src_dir_path = file_or_dir.getPath3(b, step);
-
-//     const io = b.graph.io;
-//     var src_dir = src_dir_path.root_dir.handle.openDir(
-//         io,
-//         src_dir_path.subPathOrDot(),
-//         .{ .iterate = true },
-//     ) catch |e| switch (e) {
-//         error.NotDir => {
-//             try step.addWatchInput(file_or_dir);
-//             return;
-//         },
-//         else => @panic(b.fmt("Unable to open directory '{f}': {t}", .{ src_dir_path, e })),
-//     };
-//     defer src_dir.close(io);
-
-//     const needs_dir_derived = try step.addDirectoryWatchInput(file_or_dir);
-
-//     var it = try src_dir.walk(b.allocator);
-//     defer it.deinit();
-
-//     while (try it.next(io)) |entry| {
-//         switch (entry.kind) {
-//             .directory => if (needs_dir_derived) {
-//                 const entry_path = try src_dir_path.join(b.allocator, entry.path);
-//                 try step.addDirectoryWatchInputFromPath(entry_path);
-//             },
-//             .file => {
-//                 const entry_path = try src_dir_path.joinString(b.allocator, entry.path);
-//                 defer b.allocator.free(entry_path);
-
-//                 if (kind != .lintable_file or isLintableFilePath(entry_path) catch false) {
-//                     try step.addWatchInput(try file_or_dir.join(b.allocator, entry.path));
-//                 }
-//             },
-//             else => continue,
-//         }
-//     }
-// }
 
 fn buildRule(
     b: *std.Build,
