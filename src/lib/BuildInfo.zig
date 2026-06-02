@@ -12,9 +12,6 @@ include_paths: ?[]const []const u8 = null,
 /// piped into the zlinter execution.
 exclude_paths: ?[]const []const u8 = null,
 
-/// Names of compiled unit step names to include.
-include_step_names: ?[]const []const u8 = null,
-
 pub const default: BuildInfo = .{};
 
 pub fn deinit(self: BuildInfo, gpa: std.mem.Allocator) void {
@@ -24,11 +21,6 @@ pub fn deinit(self: BuildInfo, gpa: std.mem.Allocator) void {
     }
 
     if (self.include_paths) |paths| {
-        for (paths) |p| gpa.free(p);
-        gpa.free(paths);
-    }
-
-    if (self.include_step_names) |paths| {
         for (paths) |p| gpa.free(p);
         gpa.free(paths);
     }

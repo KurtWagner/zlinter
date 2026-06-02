@@ -8,7 +8,7 @@ pub fn build(b: *std.Build) !void {
     const test_focus_on_rule = b.option([]const u8, "test_focus_on_rule", "Only run tests for this rule");
     const test_step = b.step("test", "Run tests");
 
-    const test_cases_path = b.path("test_cases/").getPath3(b, null).sub_path;
+    const test_cases_path = "test_cases/";
     var test_cases_dir = try std.Io.Dir.cwd().openDir(io, test_cases_path, .{ .iterate = true });
     defer test_cases_dir.close(io);
 
@@ -70,49 +70,18 @@ pub fn build(b: *std.Build) !void {
     const lint_cmd = b.step("lint", "Lint source code.");
     lint_cmd.dependOn(step: {
         var builder = zlinter.builder(b, .{ .target = target });
-        inline for (@typeInfo(zlinter.BuiltinLintRule).@"enum".field_values) |field_value| {
-            builder.addRule(.{ .builtin = @enumFromInt(field_value) }, .{});
+        inline for (@typeInfo(zlinter.BuiltinLintRule).@"enum".fields) |field| {
+            builder.addRule(.{ .builtin = @enumFromInt(field.value) }, .{});
         }
         builder.addRule(.{ .custom = .{ .name = "no_cats", .path = "src/no_cats.zig" } }, .{});
         break :step builder.build();
     });
 
-    // See: src/check_compiled_source/README.md
-    {
-        const lint_integration_cmd = b.step("check-compiled-source", "");
-        lint_integration_cmd.dependOn(step: {
-            var builder = zlinter.builder(b, .{ .target = target });
-            builder.addRule(
-                .{ .custom = .{
-                    .name = "no_cats",
-                    .path = "src/no_cats.zig",
-                } },
-                .{
-                    .severity = .@"error",
-                },
-            );
-            builder.addRule(
-                .{ .builtin = .no_panic },
-                .{ .severity = .warning },
-            );
-            builder.addSource(.compiled(b.addLibrary(.{
-                .name = "main",
-                .root_module = b.addModule("main", .{
-                    .root_source_file = b.path("src/check_compiled_source/main.zig"),
-                    .target = target,
-                    .optimize = optimize,
-                }),
-            })));
-            builder.addPaths(.{ .exclude = &.{b.path("src/check_compiled_source/excluded.zig")} });
-            break :step builder.build();
-        });
-    }
 }
 
 fn addFileArgIfExists(b: *std.Build, step: *std.Build.Step.Run, raw_path: []const u8) void {
-    var path = b.path(raw_path);
-    const relative_path = path.getPath3(b, &step.step).sub_path;
-    const exists = if (std.Io.Dir.cwd().access(b.graph.io, relative_path, .{})) true else |e| e != error.FileNotFound;
+    const path = b.path(raw_path);
+    const exists = if (std.Io.Dir.cwd().access(b.graph.io, raw_path, .{})) true else |e| e != error.FileNotFound;
     if (exists) {
         step.addFileArg(path);
     }
