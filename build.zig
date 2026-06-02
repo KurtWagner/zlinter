@@ -799,69 +799,6 @@ fn readHtmlTemplate(b: *std.Build, path: []const u8) ![]const u8 {
     return try out.toOwnedSlice();
 }
 
-/// Normalised representation of the current working directory
-const BuildCwd = struct {
-    path: []const u8,
-    dir: std.Io.Dir,
-
-    pub fn init(io: std.Io, buff: *[std.fs.max_path_bytes]u8) BuildCwd {
-        const size = std.process.currentPath(io, buff) catch unreachable;
-        return .{
-            .dir = std.Io.Dir.cwd(),
-            .path = buff[0..size],
-        };
-    }
-
-    /// Returns a path relative to the current working directory or null if the
-    /// path is not relative to the current working directory.
-    ///
-    /// If the path is a relative path, we check whether it exists with the
-    /// current working directory.
-    ///
-    /// If the path is absolute, we check whether it resolves to a readable
-    /// file within the current working directory.
-    pub fn relativePath(
-        self: *const BuildCwd,
-        b: *std.Build,
-        to: []const u8,
-    ) ?std.Build.LazyPath {
-        if (std.fs.path.isAbsolute(to)) {
-            const relative = std.fs.path.relative(
-                b.allocator,
-                b.graph.cache.cwd,
-                &b.graph.environ_map,
-                self.path,
-                to,
-            ) catch |e|
-                switch (e) {
-                    error.OutOfMemory => @panic("OOM"),
-                };
-            errdefer b.allocator.free(relative);
-
-            if (relative.len != 0 and isReadable(b, &self.dir, relative)) {
-                return b.path(relative);
-            } else {
-                b.allocator.free(relative);
-                return null;
-            }
-        } else {
-            if (isReadable(b, &self.dir, to)) {
-                return b.path(b.dupe(to));
-            }
-        }
-        return null;
-    }
-
-    fn isReadable(b: *std.Build, from: *const std.Io.Dir, sub_path: []const u8) bool {
-        _ = from.access(
-            b.graph.io,
-            sub_path,
-            .{ .read = true },
-        ) catch return false;
-        return true;
-    }
-};
-
 const BuildInfo = @import("src/lib/BuildInfo.zig");
 const std = @import("std");
 const isLintableFilePath = @import("src/lib/files.zig").isLintableFilePath;
