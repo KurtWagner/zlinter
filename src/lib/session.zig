@@ -144,6 +144,7 @@ fn isTestOnlyCondition(tree: Ast, if_statement: Ast.full.If) bool {
 
 /// The context of all document and rule executions.
 pub const LintContext = struct {
+    build_config_store: BuildConfigStore,
     environ_map: *const std.process.Environ.Map,
     diagnostics_collection: zls.DiagnosticsCollection,
     intern_pool: zls.analyser.InternPool,
@@ -171,6 +172,7 @@ pub const LintContext = struct {
             .analyser = undefined, // zlinter-disable-current-line no_undefined - set below
             .io = io,
             .environ_map = environ_map,
+            .build_config_store = .empty,
         };
         errdefer self.intern_pool.deinit(gpa);
 
@@ -240,6 +242,7 @@ pub const LintContext = struct {
         self.intern_pool.deinit(self.gpa);
         self.document_store.deinit();
         self.analyser.deinit();
+        self.build_config_store.deinit(self.gpa);
     }
 
     /// Loads and parses zig file into the document store.
@@ -247,10 +250,19 @@ pub const LintContext = struct {
     /// Caller is responsible for calling deinit once done.
     pub fn initDocument(
         self: *LintContext,
+        zig_exe: []const u8,
         path: []const u8,
         gpa: std.mem.Allocator,
         doc: *LintDocument,
     ) !void {
+        const config = try self.build_config_store.lookup(
+            self.io,
+            self.gpa,
+            zig_exe,
+            path,
+        );
+        _ = config;
+
         var buffer: [std.fs.max_path_bytes]u8 = undefined;
         const size = try std.Io.Dir.cwd().realPathFile(
             self.io,
@@ -1436,6 +1448,7 @@ const testing = @import("testing.zig");
 const zls = @import("zls");
 const LintProblem = @import("results.zig").LintProblem;
 const Ast = std.zig.Ast;
+const BuildConfigStore = @import("session/BuildConfigStore.zig");
 
 test {
     std.testing.refAllDecls(@This());
