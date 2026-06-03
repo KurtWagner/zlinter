@@ -69,6 +69,7 @@ pub const BuilderOptions = struct {
 pub fn builder(b: *std.Build, options: BuilderOptions) StepBuilder {
     return .{
         .rules = .empty,
+        .compiled = .empty,
         .exclude = .empty,
         .include = .empty,
         .options = .{
@@ -93,6 +94,7 @@ const LintExcludeSource = union(enum) {
 
 const StepBuilder = struct {
     rules: std.ArrayList(BuiltRule),
+    compiled: std.ArrayList(*std.Build.Step.Compile),
     include: std.ArrayList(LintIncludeSource),
     exclude: std.ArrayList(LintExcludeSource),
     options: BuildOptions,
@@ -117,6 +119,23 @@ const StepBuilder = struct {
                 config,
             ),
         ) catch @panic("OOM");
+    }
+
+    /// Adds a Zig compile step to lint.
+    ///
+    /// The compile step provides the root module, import table, target, and
+    /// builtin context needed to resolve imports the same way Zig does. Path
+    /// includes and excludes are applied as filters over files discovered from
+    /// the compile step.
+    ///
+    /// Multiple compile steps may be added; each is treated as its own lint
+    /// context.
+    ///
+    /// If no compile steps are added, zlinter falls back to path-based file
+    /// resolution.
+    pub fn addCompile(self: *StepBuilder, compile: *std.Build.Step.Compile) void {
+        const arena = self.b.allocator;
+        self.compiled.append(arena, compile) catch @panic("OOM");
     }
 
     /// Adds a source path to be linted.
@@ -171,6 +190,7 @@ const StepBuilder = struct {
                     .{},
                 ),
             },
+            self.compiled.items,
             self.include.items,
             self.exclude.items,
             self.options,
@@ -428,6 +448,7 @@ pub fn build(b: *std.Build) void {
                 ),
             },
             .{ .module = zlinter_lib_module },
+            &.{},
             include.items,
             exclude.items,
             .{
@@ -496,6 +517,7 @@ fn buildStep(
         dependency: *std.Build.Dependency,
         module: *std.Build.Module,
     },
+    compiled: []const *std.Build.Step.Compile,
     include: []const LintIncludeSource,
     exclude: []const LintExcludeSource,
     options: BuildOptions,
@@ -572,9 +594,19 @@ fn buildStep(
         }
     }
 
+    var compile_info = std.ArrayList(BuildInfo.Compile).empty;
+    defer compile_info.deinit(b.allocator);
+
+    for (compiled) |compile|
+        compile_info.append(
+            b.allocator,
+            resolveBuildInfo(b, compile),
+        ) catch @panic("OOM");
+
     const build_info_zon_bytes: []const u8 = toZonString(BuildInfo{
         .include_paths = if (include_paths.items.len > 0) include_paths.items else null,
         .exclude_paths = if (exclude_paths.items.len > 0) exclude_paths.items else null,
+        .compiles = if (compile_info.items.len > 0) compile_info.items else null,
     }, b.allocator);
 
     run.addArg("--stdin");
@@ -785,6 +817,87 @@ fn readHtmlTemplate(b: *std.Build, path: []const u8) ![]const u8 {
     }
 
     return try out.toOwnedSlice();
+}
+
+fn resolveBuildInfo(b: *std.Build, compile: *std.Build.Step.Compile) BuildInfo.Compile {
+    const arena = b.allocator;
+    const graph = compile.root_module.getGraph();
+
+    const modules = arena.alloc(
+        BuildInfo.Module,
+        graph.modules.len,
+    ) catch @panic("OOM");
+
+    for (graph.modules, graph.names, modules) |
+        module,
+        module_name,
+        *build_info_module,
+    | {
+        const imports = arena.alloc(
+            BuildInfo.Import,
+            module.import_table.count(),
+        ) catch @panic("OOM");
+
+        for (module.import_table.keys(), module.import_table.values(), imports) |
+            import_name,
+            imported_module,
+            *build_info_import,
+        | {
+            build_info_import.* = .{
+                .name = b.dupe(import_name),
+                .module = resolveModuleIndex(graph.modules, imported_module),
+            };
+        }
+
+        build_info_module.* = .{
+            .name = b.dupe(module_name),
+            .root_source_file = if (module.root_source_file) |root_source_file|
+                resolvePath(b, root_source_file)
+            else
+                null,
+            .imports = imports,
+        };
+    }
+
+    return .{
+        .name = b.dupe(compile.name),
+        .step_name = b.dupe(compile.step.name),
+        .kind = compile.kind,
+        .root_module = 0,
+        .modules = modules,
+    };
+}
+
+fn resolvePath(b: *std.Build, lazy_path: std.Build.LazyPath) ?[]const u8 {
+    const arena = b.allocator;
+
+    return switch (lazy_path) {
+        .src_path => |src_path| src_path.owner.root.joinString(
+            arena,
+            src_path.sub_path,
+        ) catch @panic("OOM"),
+        .dependency => |dependency| dependency.dependency.builder.root.joinString(
+            arena,
+            dependency.sub_path,
+        ) catch @panic("OOM"),
+        .cwd_relative => |path| b.dupe(path),
+        .relative => |relative| switch (relative.base) {
+            .cwd => b.dupe(relative.sub_path),
+            .build_root => b.root.joinString(
+                arena,
+                relative.sub_path,
+            ) catch @panic("OOM"),
+            else => null,
+        },
+        .generated => null,
+    };
+}
+
+fn resolveModuleIndex(modules: []const *std.Build.Module, module: *std.Build.Module) BuildInfo.ModuleIndex {
+    for (modules, 0..) |candidate, index| {
+        if (candidate == module) return @intCast(index);
+    }
+    @panic("module import target was not found in compile module graph");
 }
 
 const BuildInfo = @import("src/lib/BuildInfo.zig");
