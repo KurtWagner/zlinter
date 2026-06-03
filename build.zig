@@ -81,12 +81,14 @@ pub fn builder(b: *std.Build, options: BuilderOptions) StepBuilder {
 
 /// Represents something that should be linted.
 const LintIncludeSource = union(enum) {
-    path: std.Build.LazyPath,
+    /// A source file path relative to build root.
+    src_path: []const u8,
 };
 
 /// Represents something that should be excluded from linting.
 const LintExcludeSource = union(enum) {
-    path: std.Build.LazyPath,
+    /// A source file path relative to build root.
+    src_path: []const u8,
 };
 
 const StepBuilder = struct {
@@ -139,16 +141,22 @@ const StepBuilder = struct {
     pub fn addPaths(
         self: *StepBuilder,
         paths: struct {
-            include: ?[]const std.Build.LazyPath = null,
-            exclude: ?[]const std.Build.LazyPath = null,
+            include: ?[]const []const u8 = null,
+            exclude: ?[]const []const u8 = null,
         },
     ) void {
         const arena = self.b.allocator;
 
         if (paths.include) |includes|
-            for (includes) |path| self.include.append(arena, .{ .path = path }) catch @panic("OOM");
+            for (includes) |path| self.include.append(
+                arena,
+                .{ .src_path = self.b.dupe(path) },
+            ) catch @panic("OOM");
         if (paths.exclude) |excludes|
-            for (excludes) |path| self.exclude.append(arena, .{ .path = path }) catch @panic("OOM");
+            for (excludes) |path| self.exclude.append(
+                arena,
+                .{ .src_path = self.b.dupe(path) },
+            ) catch @panic("OOM");
     }
 
     pub fn build(self: *StepBuilder) *std.Build.Step {
@@ -360,9 +368,9 @@ pub fn build(b: *std.Build) void {
         var include = std.ArrayList(LintIncludeSource).empty;
         var exclude = std.ArrayList(LintExcludeSource).empty;
 
-        include.append(b.allocator, .{ .path = b.path("./") }) catch @panic("OOM");
-        exclude.append(b.allocator, .{ .path = b.path("integration_tests/test_cases") }) catch @panic("OOM");
-        exclude.append(b.allocator, .{ .path = b.path("integration_tests/src/test_case_references.zig") }) catch @panic("OOM");
+        include.append(b.allocator, .{ .src_path = "./" }) catch @panic("OOM");
+        exclude.append(b.allocator, .{ .src_path = "integration_tests/test_cases" }) catch @panic("OOM");
+        exclude.append(b.allocator, .{ .src_path = "integration_tests/src/test_case_references.zig" }) catch @panic("OOM");
 
         break :step buildStep(
             b,
@@ -554,33 +562,13 @@ fn buildStep(
 
     for (include) |source| {
         switch (source) {
-            .path => |path| {
-                switch (path) {
-                    .src_path => |source_path| {
-                        include_paths.append(b.allocator, source_path.sub_path) catch @panic("OOM");
-                    },
-                    .cwd_relative => |relative_path| {
-                        include_paths.append(b.allocator, relative_path) catch @panic("OOM");
-                    },
-                    else => @panic("Unsupported lazy path"),
-                }
-            },
+            .src_path => |path| include_paths.append(b.allocator, path) catch @panic("OOM"),
         }
     }
 
     for (exclude) |source| {
         switch (source) {
-            .path => |path| {
-                switch (path) {
-                    .src_path => |source_path| {
-                        exclude_paths.append(b.allocator, source_path.sub_path) catch @panic("OOM");
-                    },
-                    .cwd_relative => |relative_path| {
-                        exclude_paths.append(b.allocator, relative_path) catch @panic("OOM");
-                    },
-                    else => @panic("Unsupported lazy path"),
-                }
-            },
+            .src_path => |path| exclude_paths.append(b.allocator, path) catch @panic("OOM"),
         }
     }
 
