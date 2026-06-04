@@ -98,6 +98,8 @@ pub fn lookup(
     std.debug.assert(bcs.configs.items.len == bcs.arenas.items.len);
     try bcs.dirs.putNoClobber(gpa, build_root_key, @intCast(bcs.configs.items.len - 1));
 
+    try bcs.walkBuildConfig(&config, build_root_path, gpa);
+
     return &bcs.configs.items[bcs.configs.items.len - 1];
 }
 
@@ -153,6 +155,85 @@ fn resolveConfigurationPath(
 ) ![]const u8 {
     if (std.fs.path.isAbsolute(config_path)) return gpa.dupe(u8, config_path);
     return std.fs.path.join(gpa, &.{ build_root, config_path });
+}
+
+fn walkBuildConfig(
+    bcs: *BuildConfigStore,
+    config: *const std.Build.Configuration,
+    build_root_path: []const u8,
+    gpa: std.mem.Allocator,
+) !void {
+    // TODO: #149 - Create a useful graph to link paths to compiled units
+    _ = bcs;
+    for (config.steps, 0..) |step, step_index| {
+        const compile = step.extended.cast(
+            config,
+            std.Build.Configuration.Step.Compile,
+        ) orelse continue;
+
+        const compile_step_index: std.Build.Configuration.Step.Index = @enumFromInt(step_index);
+        const compile_name = step.name.slice(config);
+
+        std.debug.print("'{s}' '{s}' {d}\n", .{
+            compile_name,
+            compile.root_name.slice(config),
+            compile_step_index,
+        });
+
+        const root_module = compile.root_module.get(config);
+        if (root_module.root_source_file.unwrap()) |root_source_file_index| {
+            const root_source_file = root_source_file_index.get(config);
+
+            if (try resolveLazyPath(
+                root_source_file,
+                config,
+                gpa,
+                build_root_path,
+            )) |path| {
+                defer gpa.free(path);
+                std.debug.print(" - '{s}'\n", .{path});
+            }
+        }
+    }
+}
+
+fn resolveLazyPath(
+    path: std.Build.Configuration.LazyPath,
+    config: *const std.Build.Configuration,
+    gpa: std.mem.Allocator,
+    build_root_path: []const u8,
+) !?[]const u8 {
+    switch (path) {
+        .source_path => |source_path| {
+            const root = if (source_path.owner.get(config)) |pkg|
+                pkg.root_path.slice(config)
+            else
+                build_root_path;
+
+            return try std.fs.path.resolve(gpa, &.{
+                root,
+                source_path.sub_path.slice(config),
+            });
+        },
+        .relative => |rel| {
+            const sub_path = rel.sub_path.slice(config);
+
+            const root = switch (rel.flags.base) {
+                .cwd, .build_root => build_root_path,
+                .local_cache,
+                .global_cache,
+                .zig_exe,
+                .zig_lib,
+                .install_prefix,
+                .install_lib,
+                .install_bin,
+                .install_include,
+                => return null,
+            };
+            return try std.fs.path.resolve(gpa, &.{ root, sub_path });
+        },
+        .generated => return null,
+    }
 }
 
 const std = @import("std");
