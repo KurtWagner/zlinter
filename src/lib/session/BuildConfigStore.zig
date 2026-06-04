@@ -1,23 +1,26 @@
 const BuildConfigStore = @This();
 
-cache: std.StringHashMapUnmanaged(CacheEntry),
-
-const CacheEntry = struct {
-    config: std.Build.Configuration,
-    arena: std.heap.ArenaAllocator,
-};
+configs: std.ArrayList(std.Build.Configuration),
+arenas: std.ArrayList(std.heap.ArenaAllocator),
+dirs: std.StringHashMapUnmanaged(u32),
 
 pub const empty: BuildConfigStore = .{
-    .cache = .empty,
+    .configs = .empty,
+    .arenas = .empty,
+    .dirs = .empty,
 };
 
 pub fn deinit(bcs: *BuildConfigStore, gpa: std.mem.Allocator) void {
-    var it = bcs.cache.iterator();
-    while (it.next()) |entry| {
-        gpa.free(entry.key_ptr.*);
-        entry.value_ptr.arena.deinit();
-    }
-    bcs.cache.deinit(gpa);
+    var it = bcs.dirs.keyIterator();
+    while (it.next()) |key|
+        gpa.free(key.*);
+    bcs.dirs.deinit(gpa);
+
+    for (bcs.arenas.items) |arena|
+        arena.deinit();
+
+    bcs.configs.deinit(gpa);
+    bcs.arenas.deinit(gpa);
 }
 
 pub fn lookup(
@@ -34,8 +37,8 @@ pub fn lookup(
     const source_dir = std.fs.path.dirname(normal_path) orelse ".";
     const build_root = try findNearestBuildRoot(io, source_dir);
 
-    if (bcs.cache.getPtr(build_root)) |cache_entry|
-        return &cache_entry.config;
+    if (bcs.dirs.get(build_root)) |index|
+        return &bcs.configs.items[index];
 
     const config_path_result = try std.process.run(gpa, io, .{
         .argv = &.{
@@ -88,11 +91,12 @@ pub fn lookup(
     const build_root_key = try gpa.dupe(u8, build_root);
     errdefer gpa.free(build_root_key);
 
-    try bcs.cache.putNoClobber(gpa, build_root_key, .{
-        .config = config,
-        .arena = arena,
-    });
-    return &bcs.cache.getPtr(build_root_key).?.config;
+    try bcs.configs.append(gpa, config);
+    try bcs.arenas.append(gpa, arena);
+    std.debug.assert(bcs.configs.items.len == bcs.arenas.items.len);
+    try bcs.dirs.putNoClobber(gpa, build_root_key, @intCast(bcs.configs.items.len - 1));
+
+    return &bcs.configs.items[bcs.configs.items.len - 1];
 }
 
 fn hasBuildZig(io: std.Io, dir_path: []const u8) !bool {
