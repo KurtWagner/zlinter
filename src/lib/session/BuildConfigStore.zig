@@ -35,10 +35,12 @@ pub fn lookup(
 
     const normal_path = try std.fs.path.resolve(fba.allocator(), &.{src_path});
     const source_dir = std.fs.path.dirname(normal_path) orelse ".";
-    const build_root = try findNearestBuildRoot(io, source_dir);
+    const build_root = try bcs.findNearestBuildRoot(io, source_dir);
 
-    if (bcs.dirs.get(build_root)) |index|
-        return &bcs.configs.items[index];
+    const build_root_path = switch (build_root) {
+        .index => |index| return &bcs.configs.items[index],
+        .path => |path| path,
+    };
 
     const config_path_result = try std.process.run(gpa, io, .{
         .argv = &.{
@@ -46,7 +48,7 @@ pub fn lookup(
             "build",
             "--print-configuration-path",
         },
-        .cwd = .{ .path = build_root },
+        .cwd = .{ .path = build_root_path },
         .stdout_limit = .limited(std.fs.max_path_bytes + 1),
         .stderr_limit = .limited(128 * 1024),
     });
@@ -68,7 +70,7 @@ pub fn lookup(
 
     const config_path = try resolveConfigurationPath(
         gpa,
-        build_root,
+        build_root_path,
         std.mem.trim(u8, config_path_result.stdout, " \t\r\n"),
     );
     defer gpa.free(config_path);
@@ -88,7 +90,7 @@ pub fn lookup(
     );
     errdefer arena.deinit();
 
-    const build_root_key = try gpa.dupe(u8, build_root);
+    const build_root_key = try gpa.dupe(u8, build_root_path);
     errdefer gpa.free(build_root_key);
 
     try bcs.configs.append(gpa, config);
@@ -117,15 +119,26 @@ fn hasBuildZig(io: std.Io, dir_path: []const u8) !bool {
     return true;
 }
 
-fn findNearestBuildRoot(io: std.Io, src_dir: []const u8) ![]const u8 {
+const BuildRoot = union(enum) {
+    index: u32,
+    path: []const u8,
+};
+
+fn findNearestBuildRoot(
+    bcs: *const BuildConfigStore,
+    io: std.Io,
+    src_dir: []const u8,
+) !BuildRoot {
     var dir = src_dir;
 
     while (true) {
+        if (bcs.dirs.get(dir)) |index|
+            return .{ .index = index };
+
         if (try hasBuildZig(io, dir))
-            return dir;
+            return .{ .path = dir };
 
         const parent = std.fs.path.dirname(dir) orelse ".";
-
         if (std.mem.eql(u8, parent, dir))
             return error.FileNotFound;
 
