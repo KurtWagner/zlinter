@@ -20,35 +20,14 @@ arenas: std.ArrayList(std.heap.ArenaAllocator),
 /// never be used externally.
 build_root_path_to_config: std.StringHashMapUnmanaged(ConfigIndex),
 
-/// Compiled steps discovered while evaluating build configurations
-root_compiled_steps: std.ArrayList(*const std.Build.Configuration.Step.Compile),
-
-/// Contains all paths found in compiled steps mapping to an index that can
-/// be used to find parent compiled steps in `root_path_index`.
-root_compiled_paths: std.StringArrayHashMapUnmanaged(ConfigIndex),
-
-/// Contains a bitset indicating the compiled steps that this path is in.
-root_path_index: std.ArrayList(std.StaticBitSet(32)),
-
 pub const empty: BuildConfigStore = .{
     .build_configs = .empty,
     .build_root_paths = .empty,
     .arenas = .empty,
     .build_root_path_to_config = .empty,
-    .root_compiled_steps = .empty,
-    .root_compiled_paths = .empty,
-    .root_path_index = .empty,
 };
 
 pub fn deinit(bcs: *BuildConfigStore, gpa: std.mem.Allocator) void {
-    var path_it = bcs.root_compiled_paths.iterator();
-    while (path_it.next()) |kv| {
-        gpa.free(kv.key_ptr.*);
-    }
-    bcs.root_compiled_steps.deinit(gpa);
-    bcs.root_compiled_paths.deinit(gpa);
-    bcs.root_path_index.deinit(gpa);
-
     for (bcs.arenas.items) |arena|
         arena.deinit();
 
@@ -113,8 +92,6 @@ pub fn resolve(
     const config_index: ConfigIndex = @intCast(bcs.build_configs.items.len - 1);
     try bcs.build_root_path_to_config.putNoClobber(gpa, build_root_key, config_index);
 
-    try bcs.walkBuildConfig(&config, build_root_path, gpa);
-
     return config_index;
 }
 
@@ -154,46 +131,6 @@ fn findNearestBuildRoot(
             return error.FileNotFound;
 
         dir = parent;
-    }
-}
-
-fn walkBuildConfig(
-    bcs: *BuildConfigStore,
-    config: *const std.Build.Configuration,
-    build_root_path: []const u8,
-    gpa: std.mem.Allocator,
-) !void {
-    // TODO: #149 - Create a useful graph to link paths to compiled units
-    _ = bcs;
-    for (config.steps, 0..) |step, step_index| {
-        const compile = step.extended.cast(
-            config,
-            std.Build.Configuration.Step.Compile,
-        ) orelse continue;
-
-        const compile_step_index: std.Build.Configuration.Step.Index = @enumFromInt(step_index);
-        const compile_name = step.name.slice(config);
-
-        std.debug.print("'{s}' '{s}' {d}\n", .{
-            compile_name,
-            compile.root_name.slice(config),
-            compile_step_index,
-        });
-
-        const root_module = compile.root_module.get(config);
-        if (root_module.root_source_file.unwrap()) |root_source_file_index| {
-            const root_source_file = root_source_file_index.get(config);
-
-            if (try files.resolveLazyPath(
-                root_source_file,
-                config,
-                gpa,
-                build_root_path,
-            )) |path| {
-                defer gpa.free(path);
-                std.debug.print(" - '{s}'\n", .{path});
-            }
-        }
     }
 }
 
