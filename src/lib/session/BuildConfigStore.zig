@@ -2,17 +2,23 @@ const BuildConfigStore = @This();
 
 pub const ConfigIndex = u32;
 
-/// All evaluated build configurations. You can look these up from `dirs`
+/// All evaluated build configurations. Use `buildConfig(...)` to look these
+/// up using a resolved configuration index.
 build_configs: std.ArrayList(std.Build.Configuration),
 
-/// All evlauated build root paths used to load configs
+/// All evaluated build root paths used to load configs. Use `buildRootPath(...)`
+/// to look these up using a resolve configuration path.
 build_root_paths: std.ArrayList([]const u8),
 
-/// Arenas associated with the allocated configurations in `configs`.
+/// Arenas associated with the allocated configurations in `configs`. These
+/// are used to cleanup data (configs and paths) associated with a given a
+/// given configuration.
 arenas: std.ArrayList(std.heap.ArenaAllocator),
 
-/// Maps a resolved build directory path to `configs` and `arenas`.
-dirs: std.StringHashMapUnmanaged(ConfigIndex),
+/// An index for efficiently looking up what configuration is associated with
+/// a given build root path. This is used internally by `resolve` and should
+/// never be used externally.
+build_root_path_to_config: std.StringHashMapUnmanaged(ConfigIndex),
 
 /// Compiled steps discovered while evaluating build configurations
 root_compiled_steps: std.ArrayList(*const std.Build.Configuration.Step.Compile),
@@ -28,7 +34,7 @@ pub const empty: BuildConfigStore = .{
     .build_configs = .empty,
     .build_root_paths = .empty,
     .arenas = .empty,
-    .dirs = .empty,
+    .build_root_path_to_config = .empty,
     .root_compiled_steps = .empty,
     .root_compiled_paths = .empty,
     .root_path_index = .empty,
@@ -48,7 +54,7 @@ pub fn deinit(bcs: *BuildConfigStore, gpa: std.mem.Allocator) void {
 
     bcs.build_configs.deinit(gpa);
     bcs.arenas.deinit(gpa);
-    bcs.dirs.deinit(gpa);
+    bcs.build_root_path_to_config.deinit(gpa);
     bcs.build_root_paths.deinit(gpa);
 }
 
@@ -105,7 +111,7 @@ pub fn resolve(
         bcs.arenas.items.len == bcs.build_root_paths.items.len);
 
     const config_index: ConfigIndex = @intCast(bcs.build_configs.items.len - 1);
-    try bcs.dirs.putNoClobber(gpa, build_root_key, config_index);
+    try bcs.build_root_path_to_config.putNoClobber(gpa, build_root_key, config_index);
 
     try bcs.walkBuildConfig(&config, build_root_path, gpa);
 
@@ -137,7 +143,7 @@ fn findNearestBuildRoot(
     var dir = src_dir;
 
     while (true) {
-        if (bcs.dirs.get(dir)) |index|
+        if (bcs.build_root_path_to_config.get(dir)) |index|
             return .{ .config_index = index };
 
         if (try files.hasBuildZig(io, dir))
