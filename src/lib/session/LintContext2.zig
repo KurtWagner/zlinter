@@ -5,6 +5,7 @@ gpa: std.mem.Allocator,
 arena: std.mem.Allocator,
 io: std.Io,
 zig_exe: []const u8,
+cwd: []const u8,
 
 bcs: BuildConfigStore = .empty,
 
@@ -12,11 +13,15 @@ root_build_config: std.Build.Configuration = undefined, // Set in init().
 include_steps: std.ArrayList(std.Build.Configuration.Step.Index) = .empty,
 include_root_source_files: std.ArrayList([]const u8) = .empty,
 
+pub const LintContextOptions = struct {};
+
 // TODO: #149 - Add optional arg for compiled units from args
-pub fn init(ctx: *LintContext2) !void {
+pub fn init(ctx: *LintContext2, options: LintContextOptions) !void {
+    _ = options;
+
     const build_root_path = try findNearestBuildRootPath(
         ctx.io,
-        ".",
+        ctx.cwd,
     );
 
     ctx.root_build_config = try ctx.resolveBuildConfig(
@@ -67,6 +72,10 @@ pub fn deinit(ctx: *LintContext2) void {
     ctx.bcs.deinit(ctx.gpa);
 }
 
+/// Resolve the project that has the lint integrations build configuration.
+///
+/// This is used to explore the steps and compiled units in the project to
+/// work out what files to lint.
 fn resolveBuildConfig(
     ctx: *const LintContext2,
     arena: std.mem.Allocator,

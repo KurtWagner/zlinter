@@ -198,6 +198,7 @@ fn run(
         &timer,
         &file_lint_problems,
         args,
+        cwd,
     );
 
     printer.printBanner(.verbose);
@@ -243,6 +244,7 @@ fn runLinterRules(
     timer: *Timer,
     file_lint_problems: *std.array_hash_map.Auto(u32, []zlinter.results.LintResult),
     args: zlinter.Args,
+    cwd: []const u8,
 ) !void {
     var maybe_slowest_files = if (args.verbose) SlowestItemQueue.init(gpa) else null;
     defer if (maybe_slowest_files) |*slowest_files| {
@@ -277,8 +279,9 @@ fn runLinterRules(
         .environ_map = environ_map,
         // TODO: #149: Make zig exe required
         .zig_exe = args.zig_exe.?,
+        .cwd = cwd,
     };
-    try context2.init();
+    try context2.init(.{});
     defer context2.deinit();
 
     var context: zlinter.session.LintContext = undefined;
