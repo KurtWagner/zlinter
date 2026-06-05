@@ -50,9 +50,16 @@ pub fn resolve(
     zig_exe: []const u8,
     src_path: []const u8,
 ) !ConfigIndex {
+    if (bcs.build_root_path_to_config.get(src_path)) |index|
+        return index;
+
     var fba_buffer: [std.fs.max_path_bytes]u8 = undefined;
     var fba: std.heap.FixedBufferAllocator = .init(&fba_buffer);
 
+    // TODO: #149 - between tjhis and file store we need to decide on what resolved paths are
+    // e.g., relative to cwd, a mix of relative to cwd and absolute and then we need to
+    // correctly resolve them here and in file store with little unit tests to test
+    // the different edges...
     const normal_path = try std.fs.path.resolve(fba.allocator(), &.{src_path});
     const source_dir = std.fs.path.dirname(normal_path) orelse ".";
     const build_root = try bcs.findNearestBuildRoot(io, source_dir);
@@ -62,7 +69,12 @@ pub fn resolve(
         .path => |path| path,
     };
 
-    const config_path = try files.resolveBuildConfigurationPath(io, gpa, zig_exe, build_root_path);
+    const config_path = try files.resolveBuildConfigurationPath(
+        io,
+        gpa,
+        zig_exe,
+        build_root_path,
+    );
     defer gpa.free(config_path);
 
     var file = try std.Io.Dir.cwd().openFile(
@@ -83,27 +95,35 @@ pub fn resolve(
     const build_root_key = try arena.allocator().dupe(u8, build_root_path);
     errdefer arena.allocator().free(build_root_key);
 
-    try bcs.build_configs.append(gpa, config);
-    try bcs.arenas.append(gpa, arena);
-    try bcs.build_root_paths.append(gpa, build_root_key);
     std.debug.assert(bcs.build_configs.items.len == bcs.arenas.items.len and
         bcs.arenas.items.len == bcs.build_root_paths.items.len);
 
-    const config_index: ConfigIndex = @intCast(bcs.build_configs.items.len - 1);
+    const config_index: ConfigIndex = @intCast(bcs.build_configs.items.len);
+
+    try bcs.build_configs.append(gpa, config);
+    errdefer _ = bcs.build_configs.swapRemove(config_index);
+
+    try bcs.arenas.append(gpa, arena);
+    errdefer _ = bcs.arenas.swapRemove(config_index);
+
+    try bcs.build_root_paths.append(gpa, build_root_key);
+    errdefer _ = bcs.build_root_paths.swapRemove(config_index);
+
     try bcs.build_root_path_to_config.putNoClobber(gpa, build_root_key, config_index);
+    errdefer _ = bcs.build_root_path_to_config.remove(build_root_key);
 
     return config_index;
 }
 
 /// Returns build root path (where build.zig is) for a given index, use
 /// `resolve` to get a config index for a given file or directory.
-pub fn buildRootPath(bcs: *const BuildConfigStore, config_index: ConfigIndex) ?[]const u8 {
+pub fn buildRootPath(bcs: *const BuildConfigStore, config_index: ConfigIndex) []const u8 {
     return bcs.build_root_paths.items[config_index];
 }
 
 /// Returns build configuration for a given index, use `resolve` to get
 /// a config index for a given file or directory.
-pub fn buildConfig(bcs: *const BuildConfigStore, config_index: ConfigIndex) ?*const std.Build.Configuration {
+pub fn buildConfig(bcs: *const BuildConfigStore, config_index: ConfigIndex) *const std.Build.Configuration {
     return &bcs.build_configs.items[config_index];
 }
 

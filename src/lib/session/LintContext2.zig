@@ -7,7 +7,8 @@ io: std.Io,
 zig_exe: []const u8,
 cwd: []const u8,
 
-bcs: BuildConfigStore = .empty,
+build_config_store: BuildConfigStore = .empty,
+file_store: FileStore = .empty,
 
 include_steps: std.ArrayList(std.Build.Configuration.Step.Index) = .empty,
 include_root_source_files: std.ArrayList([]const u8) = .empty,
@@ -18,14 +19,14 @@ pub const LintContextOptions = struct {};
 pub fn init(ctx: *LintContext2, options: LintContextOptions) !void {
     _ = options;
 
-    const config_index = try ctx.bcs.resolve(
+    const config_index = try ctx.build_config_store.resolve(
         ctx.io,
         ctx.gpa,
         ctx.zig_exe,
         ctx.cwd,
     );
-    const build_root_path = ctx.bcs.buildRootPath(config_index).?;
-    const root_build_config = ctx.bcs.buildConfig(config_index).?;
+    const build_root_path = ctx.build_config_store.buildRootPath(config_index);
+    const root_build_config = ctx.build_config_store.buildConfig(config_index);
 
     for (root_build_config.steps, 0..) |step, step_index| {
         const compile = step.extended.cast(
@@ -68,9 +69,11 @@ pub fn deinit(ctx: *LintContext2) void {
 
     ctx.include_root_source_files.deinit(ctx.gpa);
     ctx.include_steps.deinit(ctx.gpa);
-    ctx.bcs.deinit(ctx.gpa);
+    ctx.build_config_store.deinit(ctx.gpa);
+    ctx.file_store.deinit(ctx.gpa);
 }
 
 const std = @import("std");
 const files = @import("../files.zig");
 const BuildConfigStore = @import("BuildConfigStore.zig");
+const FileStore = @import("FileStore.zig");

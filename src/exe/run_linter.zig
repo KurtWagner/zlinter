@@ -284,6 +284,16 @@ fn runLinterRules(
     try context2.init(.{});
     defer context2.deinit();
 
+    // TODO: #149 - remove this, just adding noise while developing
+    for (context2.include_root_source_files.items) |src_file| {
+        _ = try context2.file_store.resolve(
+            src_file,
+            io,
+            gpa,
+            cwd,
+        );
+    }
+
     var context: zlinter.session.LintContext = undefined;
     try context.init(
         .{
