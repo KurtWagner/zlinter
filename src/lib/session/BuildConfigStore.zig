@@ -5,6 +5,9 @@ root_config: u32,
 /// All evaluated build configurations. You can look these up from `dirs`
 configs: std.ArrayList(std.Build.Configuration),
 
+/// All evlauated build root paths used to load configs
+build_roots: std.ArrayList([]const u8),
+
 /// Arenas associated with the allocated configurations in `configs`.
 arenas: std.ArrayList(std.heap.ArenaAllocator),
 
@@ -23,6 +26,7 @@ root_path_index: std.ArrayList(std.StaticBitSet(32)),
 
 pub const empty: BuildConfigStore = .{
     .configs = .empty,
+    .build_roots = .empty,
     .arenas = .empty,
     .dirs = .empty,
     .root_compiled_steps = .empty,
@@ -42,16 +46,13 @@ pub fn deinit(bcs: *BuildConfigStore, gpa: std.mem.Allocator) void {
     bcs.root_compiled_paths.deinit(gpa);
     bcs.root_path_index.deinit(gpa);
 
-    var it = bcs.dirs.keyIterator();
-    while (it.next()) |key|
-        gpa.free(key.*);
-    bcs.dirs.deinit(gpa);
-
     for (bcs.arenas.items) |arena|
         arena.deinit();
 
     bcs.configs.deinit(gpa);
     bcs.arenas.deinit(gpa);
+    bcs.dirs.deinit(gpa);
+    bcs.build_roots.deinit(gpa);
 }
 
 pub fn lookup(
@@ -60,7 +61,7 @@ pub fn lookup(
     gpa: std.mem.Allocator,
     zig_exe: []const u8,
     src_path: []const u8,
-) !*const std.Build.Configuration {
+) !struct { []const u8, *const std.Build.Configuration } {
     var fba_buffer: [std.fs.max_path_bytes]u8 = undefined;
     var fba: std.heap.FixedBufferAllocator = .init(&fba_buffer);
 
@@ -69,7 +70,10 @@ pub fn lookup(
     const build_root = try bcs.findNearestBuildRoot(io, source_dir);
 
     const build_root_path = switch (build_root) {
-        .index => |index| return &bcs.configs.items[index],
+        .index => |index| return .{
+            bcs.build_roots.items[index],
+            &bcs.configs.items[index],
+        },
         .path => |path| path,
     };
 
@@ -91,17 +95,20 @@ pub fn lookup(
     );
     errdefer arena.deinit();
 
-    const build_root_key = try gpa.dupe(u8, build_root_path);
-    errdefer gpa.free(build_root_key);
+    const build_root_key = try arena.allocator().dupe(u8, build_root_path);
+    errdefer arena.allocator().free(build_root_key);
 
     try bcs.configs.append(gpa, config);
     try bcs.arenas.append(gpa, arena);
-    std.debug.assert(bcs.configs.items.len == bcs.arenas.items.len);
+    try bcs.build_roots.append(gpa, build_root_key);
+    std.debug.assert(bcs.configs.items.len == bcs.arenas.items.len and
+        bcs.arenas.items.len == bcs.build_roots.items.len);
+
     try bcs.dirs.putNoClobber(gpa, build_root_key, @intCast(bcs.configs.items.len - 1));
 
     try bcs.walkBuildConfig(&config, build_root_path, gpa);
 
-    return &bcs.configs.items[bcs.configs.items.len - 1];
+    return .{ build_root_key, &bcs.configs.items[bcs.configs.items.len - 1] };
 }
 
 const BuildRoot = union(enum) {
