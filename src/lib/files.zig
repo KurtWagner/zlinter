@@ -236,6 +236,112 @@ test "allocLintFiles - with arg files" {
     }, &.{ lint_files[0].pathname, lint_files[1].pathname });
 }
 
+// TODO: #149 - write tests for this
+pub fn hasBuildZig(io: std.Io, dir_path: []const u8) !bool {
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{}) catch |err|
+        switch (err) {
+            error.FileNotFound => return false,
+            else => |e| return e,
+        };
+    defer dir.close(io);
+
+    var file = dir.openFile(io, "build.zig", .{}) catch |err|
+        switch (err) {
+            error.FileNotFound => return false,
+            else => |e| return e,
+        };
+    file.close(io);
+
+    return true;
+}
+
+pub fn resolveBuildConfigurationPath(
+    io: std.Io,
+    gpa: std.mem.Allocator,
+    zig_exe: []const u8,
+    build_root_path: []const u8,
+) ![]const u8 {
+    const config_path_result = try std.process.run(gpa, io, .{
+        .argv = &.{
+            zig_exe,
+            "build",
+            "--print-configuration-path",
+        },
+        .cwd = .{ .path = build_root_path },
+        .stdout_limit = .limited(std.fs.max_path_bytes + 1),
+        .stderr_limit = .limited(128 * 1024),
+    });
+
+    defer {
+        gpa.free(config_path_result.stderr);
+        gpa.free(config_path_result.stdout);
+    }
+    switch (config_path_result.term) {
+        .exited => |code| if (code != 0) {
+            std.debug.print("{s}", .{config_path_result.stderr});
+            return error.ConfigurationLookupFailed;
+        },
+        else => {
+            std.debug.print("{s}", .{config_path_result.stderr});
+            return error.ConfigurationLookupFailed;
+        },
+    }
+
+    return try resolveConfigurationPath(
+        gpa,
+        build_root_path,
+        std.mem.trim(u8, config_path_result.stdout, " \t\r\n"),
+    );
+}
+
+fn resolveConfigurationPath(
+    gpa: std.mem.Allocator,
+    build_root: []const u8,
+    config_path: []const u8,
+) ![]const u8 {
+    if (std.fs.path.isAbsolute(config_path)) return gpa.dupe(u8, config_path);
+    return std.fs.path.join(gpa, &.{ build_root, config_path });
+}
+
+pub fn resolveLazyPath(
+    path: std.Build.Configuration.LazyPath,
+    config: *const std.Build.Configuration,
+    gpa: std.mem.Allocator,
+    build_root_path: []const u8,
+) !?[]const u8 {
+    switch (path) {
+        .source_path => |source_path| {
+            const root = if (source_path.owner.get(config)) |pkg|
+                pkg.root_path.slice(config)
+            else
+                build_root_path;
+
+            return try std.fs.path.resolve(gpa, &.{
+                root,
+                source_path.sub_path.slice(config),
+            });
+        },
+        .relative => |rel| {
+            const sub_path = rel.sub_path.slice(config);
+
+            const root = switch (rel.flags.base) {
+                .cwd, .build_root => build_root_path,
+                .local_cache,
+                .global_cache,
+                .zig_exe,
+                .zig_lib,
+                .install_prefix,
+                .install_lib,
+                .install_bin,
+                .install_include,
+                => return null,
+            };
+            return try std.fs.path.resolve(gpa, &.{ root, sub_path });
+        },
+        .generated => return null,
+    }
+}
+
 const std = @import("std");
 const testing = @import("testing.zig");
 const zlinter = @import("./zlinter.zig");

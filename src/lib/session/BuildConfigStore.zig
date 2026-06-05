@@ -1,16 +1,47 @@
 const BuildConfigStore = @This();
 
+root_config: u32,
+
+/// All evaluated build configurations. You can look these up from `dirs`
 configs: std.ArrayList(std.Build.Configuration),
+
+/// Arenas associated with the allocated configurations in `configs`.
 arenas: std.ArrayList(std.heap.ArenaAllocator),
+
+/// Maps a resolved build directory path to `configs` and `arenas`.
 dirs: std.StringHashMapUnmanaged(u32),
+
+/// Compiled steps discovered while evaluating build configurations
+root_compiled_steps: std.ArrayList(*const std.Build.Configuration.Step.Compile),
+
+/// Contains all paths found in compiled steps mapping to an index that can
+/// be used to find parent compiled steps in `root_path_index`.
+root_compiled_paths: std.StringArrayHashMapUnmanaged(u32),
+
+/// Contains a bitset indicating the compiled steps that this path is in.
+root_path_index: std.ArrayList(std.StaticBitSet(32)),
 
 pub const empty: BuildConfigStore = .{
     .configs = .empty,
     .arenas = .empty,
     .dirs = .empty,
+    .root_compiled_steps = .empty,
+    .root_compiled_paths = .empty,
+    .root_path_index = .empty,
+
+    // TODO: #149 - Can't assume 0?
+    .root_config = 0,
 };
 
 pub fn deinit(bcs: *BuildConfigStore, gpa: std.mem.Allocator) void {
+    var path_it = bcs.root_compiled_paths.iterator();
+    while (path_it.next()) |kv| {
+        gpa.free(kv.key_ptr.*);
+    }
+    bcs.root_compiled_steps.deinit(gpa);
+    bcs.root_compiled_paths.deinit(gpa);
+    bcs.root_path_index.deinit(gpa);
+
     var it = bcs.dirs.keyIterator();
     while (it.next()) |key|
         gpa.free(key.*);
@@ -42,37 +73,7 @@ pub fn lookup(
         .path => |path| path,
     };
 
-    const config_path_result = try std.process.run(gpa, io, .{
-        .argv = &.{
-            zig_exe,
-            "build",
-            "--print-configuration-path",
-        },
-        .cwd = .{ .path = build_root_path },
-        .stdout_limit = .limited(std.fs.max_path_bytes + 1),
-        .stderr_limit = .limited(128 * 1024),
-    });
-
-    defer {
-        gpa.free(config_path_result.stderr);
-        gpa.free(config_path_result.stdout);
-    }
-    switch (config_path_result.term) {
-        .exited => |code| if (code != 0) {
-            std.debug.print("{s}", .{config_path_result.stderr});
-            return error.ConfigurationLookupFailed;
-        },
-        else => {
-            std.debug.print("{s}", .{config_path_result.stderr});
-            return error.ConfigurationLookupFailed;
-        },
-    }
-
-    const config_path = try resolveConfigurationPath(
-        gpa,
-        build_root_path,
-        std.mem.trim(u8, config_path_result.stdout, " \t\r\n"),
-    );
+    const config_path = try files.resolveBuildConfigurationPath(io, gpa, zig_exe, build_root_path);
     defer gpa.free(config_path);
 
     var file = try std.Io.Dir.cwd().openFile(
@@ -103,24 +104,6 @@ pub fn lookup(
     return &bcs.configs.items[bcs.configs.items.len - 1];
 }
 
-fn hasBuildZig(io: std.Io, dir_path: []const u8) !bool {
-    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{}) catch |err|
-        switch (err) {
-            error.FileNotFound => return false,
-            else => |e| return e,
-        };
-    defer dir.close(io);
-
-    var file = dir.openFile(io, "build.zig", .{}) catch |err|
-        switch (err) {
-            error.FileNotFound => return false,
-            else => |e| return e,
-        };
-    file.close(io);
-
-    return true;
-}
-
 const BuildRoot = union(enum) {
     index: u32,
     path: []const u8,
@@ -137,7 +120,7 @@ fn findNearestBuildRoot(
         if (bcs.dirs.get(dir)) |index|
             return .{ .index = index };
 
-        if (try hasBuildZig(io, dir))
+        if (try files.hasBuildZig(io, dir))
             return .{ .path = dir };
 
         const parent = std.fs.path.dirname(dir) orelse ".";
@@ -146,15 +129,6 @@ fn findNearestBuildRoot(
 
         dir = parent;
     }
-}
-
-fn resolveConfigurationPath(
-    gpa: std.mem.Allocator,
-    build_root: []const u8,
-    config_path: []const u8,
-) ![]const u8 {
-    if (std.fs.path.isAbsolute(config_path)) return gpa.dupe(u8, config_path);
-    return std.fs.path.join(gpa, &.{ build_root, config_path });
 }
 
 fn walkBuildConfig(
@@ -184,7 +158,7 @@ fn walkBuildConfig(
         if (root_module.root_source_file.unwrap()) |root_source_file_index| {
             const root_source_file = root_source_file_index.get(config);
 
-            if (try resolveLazyPath(
+            if (try files.resolveLazyPath(
                 root_source_file,
                 config,
                 gpa,
@@ -197,43 +171,30 @@ fn walkBuildConfig(
     }
 }
 
-fn resolveLazyPath(
-    path: std.Build.Configuration.LazyPath,
-    config: *const std.Build.Configuration,
+/// Walks imports but only relative paths not modules
+/// NOT IMPLEMENTED YET OR USED
+const RelativeImportIterator = struct {
+    queue: std.ArrayList([]const u8),
+    root: []const u8,
     gpa: std.mem.Allocator,
-    build_root_path: []const u8,
-) !?[]const u8 {
-    switch (path) {
-        .source_path => |source_path| {
-            const root = if (source_path.owner.get(config)) |pkg|
-                pkg.root_path.slice(config)
-            else
-                build_root_path;
 
-            return try std.fs.path.resolve(gpa, &.{
-                root,
-                source_path.sub_path.slice(config),
-            });
-        },
-        .relative => |rel| {
-            const sub_path = rel.sub_path.slice(config);
-
-            const root = switch (rel.flags.base) {
-                .cwd, .build_root => build_root_path,
-                .local_cache,
-                .global_cache,
-                .zig_exe,
-                .zig_lib,
-                .install_prefix,
-                .install_lib,
-                .install_bin,
-                .install_include,
-                => return null,
-            };
-            return try std.fs.path.resolve(gpa, &.{ root, sub_path });
-        },
-        .generated => return null,
+    fn init(root: []const u8, gpa: std.mem.Allocator) RelativeImportIterator {
+        return .{
+            .root = root,
+            .queue = .empty,
+            .gpa = gpa,
+        };
     }
-}
 
+    fn next(walker: *RelativeImportIterator) !?[]const u8 {
+        if (walker.queue.pop()) |path| {
+            defer walker.gpa.free(path);
+            try walker.visit(path);
+            return path;
+        }
+        return null;
+    }
+};
+
+const files = @import("../files.zig");
 const std = @import("std");

@@ -270,6 +270,17 @@ fn runLinterRules(
         item_timers.unloadAndPrint("Rules", printer);
     };
 
+    var context2: zlinter.session.LintContext2 = .{
+        .gpa = gpa,
+        .arena = arena.allocator(),
+        .io = io,
+        .environ_map = environ_map,
+        // TODO: #149: Make zig exe required
+        .zig_exe = args.zig_exe.?,
+    };
+    try context2.init();
+    defer context2.deinit();
+
     var context: zlinter.session.LintContext = undefined;
     try context.init(
         .{

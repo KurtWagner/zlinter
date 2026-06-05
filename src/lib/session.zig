@@ -1,6 +1,9 @@
 //! Linting module for items relating to the linting session (e.g., overall context
 //! and document store).
 
+pub const BuildConfigStore = @import("session/BuildConfigStore.zig");
+pub const LintContext2 = @import("session/LintContext2.zig");
+
 pub const max_zig_file_size_bytes = bytes: {
     const bytes_in_mb = 1024 * 1024;
     break :bytes 32 * bytes_in_mb;
@@ -1448,7 +1451,6 @@ const testing = @import("testing.zig");
 const zls = @import("zls");
 const LintProblem = @import("results.zig").LintProblem;
 const Ast = std.zig.Ast;
-const BuildConfigStore = @import("session/BuildConfigStore.zig");
 
 test {
     std.testing.refAllDecls(@This());
