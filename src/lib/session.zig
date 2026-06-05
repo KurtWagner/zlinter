@@ -258,13 +258,13 @@ pub const LintContext = struct {
         gpa: std.mem.Allocator,
         doc: *LintDocument,
     ) !void {
-        const config = try self.build_config_store.lookup(
+        const config_index = try self.build_config_store.resolve(
             self.io,
             self.gpa,
             zig_exe,
             path,
         );
-        _ = config;
+        _ = config_index;
 
         var buffer: [std.fs.max_path_bytes]u8 = undefined;
         const size = try std.Io.Dir.cwd().realPathFile(

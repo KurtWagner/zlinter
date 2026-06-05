@@ -9,7 +9,6 @@ cwd: []const u8,
 
 bcs: BuildConfigStore = .empty,
 
-root_build_config: *const std.Build.Configuration = undefined, // Set in init().
 include_steps: std.ArrayList(std.Build.Configuration.Step.Index) = .empty,
 include_root_source_files: std.ArrayList([]const u8) = .empty,
 
@@ -19,35 +18,37 @@ pub const LintContextOptions = struct {};
 pub fn init(ctx: *LintContext2, options: LintContextOptions) !void {
     _ = options;
 
-    const build_root_path, ctx.root_build_config = try ctx.bcs.lookup(
+    const config_index = try ctx.bcs.resolve(
         ctx.io,
         ctx.gpa,
         ctx.zig_exe,
         ctx.cwd,
     );
+    const build_root_path = ctx.bcs.buildRootPath(config_index).?;
+    const root_build_config = ctx.bcs.buildConfig(config_index).?;
 
-    for (ctx.root_build_config.steps, 0..) |step, step_index| {
+    for (root_build_config.steps, 0..) |step, step_index| {
         const compile = step.extended.cast(
-            ctx.root_build_config,
+            root_build_config,
             std.Build.Configuration.Step.Compile,
         ) orelse continue;
 
         const compile_step_index: std.Build.Configuration.Step.Index = @enumFromInt(step_index);
-        const compile_name = step.name.slice(ctx.root_build_config);
+        const compile_name = step.name.slice(root_build_config);
 
         std.debug.print("'{s}' '{s}' {d}\n", .{
             compile_name,
-            compile.root_name.slice(ctx.root_build_config),
+            compile.root_name.slice(root_build_config),
             compile_step_index,
         });
 
-        const root_module = compile.root_module.get(ctx.root_build_config);
+        const root_module = compile.root_module.get(root_build_config);
         if (root_module.root_source_file.unwrap()) |root_source_file_index| {
-            const root_source_file = root_source_file_index.get(ctx.root_build_config);
+            const root_source_file = root_source_file_index.get(root_build_config);
 
             if (try files.resolveLazyPath(
                 root_source_file,
-                ctx.root_build_config,
+                root_build_config,
                 ctx.gpa,
                 build_root_path,
             )) |path| {
