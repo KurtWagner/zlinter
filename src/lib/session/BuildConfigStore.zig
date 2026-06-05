@@ -52,6 +52,12 @@ pub fn deinit(bcs: *BuildConfigStore, gpa: std.mem.Allocator) void {
     bcs.build_root_paths.deinit(gpa);
 }
 
+/// Resolves a given directory or source path to the current or ancestor
+/// directory that contains `build.zig` and generate a build configuration
+/// for said path if it doesn't already exist.
+///
+/// Returns an index that can be used in `buildRootPath` and `buildConfig`
+/// to lookup resolved information.
 pub fn resolve(
     bcs: *BuildConfigStore,
     io: std.Io,
