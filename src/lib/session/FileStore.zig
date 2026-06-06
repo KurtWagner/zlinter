@@ -47,8 +47,6 @@ pub fn resolve(
     gpa: std.mem.Allocator,
     cwd: []const u8,
 ) !FileIndex {
-    if (fs.path_to_index.get(src_path)) |index| return index;
-
     var fba_buffer: [std.fs.max_path_bytes]u8 = undefined;
     var fba: std.heap.FixedBufferAllocator = .init(&fba_buffer);
 

@@ -344,19 +344,21 @@ pub fn resolveLazyPath(
 
 /// Walks imports with no visited or path type checks (module and relative).
 pub const ImportIterator = struct {
-    /// The file to start iterating imports from.
-    root: FileStore.FileIndex,
-
     /// File store that's NOT owned by the iterator. Iterator will modify it
     /// as part of resolving files but will NOT free it on deinit.
     file_store: *FileStore,
 
     io: std.Io,
     gpa: std.mem.Allocator,
+    zig_lib_directory: []const u8,
     cwd: []const u8,
     seen: std.bit_set.StaticBitSet(10240) = .empty,
 
     queue: std.ArrayList(FileStore.FileIndex) = .empty,
+
+    pub fn init(it: *ImportIterator, root: FileStore.FileIndex) !void {
+        try it.queue.append(it.gpa, root);
+    }
 
     pub fn deinit(it: *ImportIterator) void {
         it.queue.deinit(it.gpa);
@@ -428,13 +430,25 @@ pub const ImportIterator = struct {
             },
         };
 
-        if (isRelativeZigImport(import_path)) {
-            const file_id = try it.file_store.resolve(
-                import_path,
-                it.io,
-                it.gpa,
-                it.cwd,
-            );
+        const maybe_file_id: ?FileStore.FileIndex =
+            if (isRelativeZigImport(import_path))
+                try it.file_store.resolve(
+                    import_path,
+                    it.io,
+                    it.gpa,
+                    it.cwd,
+                )
+            else if (std.mem.eql(u8, import_path, "std"))
+                try it.file_store.resolve(
+                    "std/std.zig",
+                    it.io,
+                    it.gpa,
+                    it.zig_lib_directory,
+                )
+            else
+                null;
+
+        if (maybe_file_id) |file_id| {
             if (!it.seen.isSet(file_id)) {
                 it.seen.set(file_id);
                 try it.queue.append(gpa, file_id);

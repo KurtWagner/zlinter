@@ -294,13 +294,16 @@ fn runLinterRules(
         );
 
         var it: zlinter.files.ImportIterator = .{
-            .root = root_file_index,
             .file_store = &context2.file_store,
             .io = io,
             .cwd = cwd,
             .gpa = gpa,
+            // TODO: #149 - make zig lib required
+            .zig_lib_directory = args.zig_lib_directory.?,
         };
         defer it.deinit();
+
+        try it.init(root_file_index);
         while (try it.next()) |file_index| {
             std.debug.print(" Visited: '{s}'\n", .{context2.file_store.filePath(file_index)});
         }
