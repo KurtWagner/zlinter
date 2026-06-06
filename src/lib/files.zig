@@ -342,9 +342,116 @@ pub fn resolveLazyPath(
     }
 }
 
+/// Walks imports with no visited or path type checks (module and relative).
+pub const ImportIterator = struct {
+    /// The file to start iterating imports from.
+    root: FileStore.FileIndex,
+
+    /// File store that's NOT owned by the iterator. Iterator will modify it
+    /// as part of resolving files but will NOT free it on deinit.
+    file_store: *FileStore,
+
+    io: std.Io,
+    gpa: std.mem.Allocator,
+    cwd: []const u8,
+    seen: std.bit_set.StaticBitSet(10240) = .empty,
+
+    queue: std.ArrayList(FileStore.FileIndex) = .empty,
+
+    pub fn deinit(it: *ImportIterator) void {
+        it.queue.deinit(it.gpa);
+    }
+
+    pub fn next(it: *ImportIterator) !?FileStore.FileIndex {
+        if (it.queue.pop()) |file_index| {
+            try it.visit(file_index);
+            return file_index;
+        }
+        return null;
+    }
+
+    fn visit(
+        it: *ImportIterator,
+        file_index: FileStore.FileIndex,
+    ) !void {
+        const tree = it.file_store.fileAst(file_index);
+
+        for (0..tree.nodes.len) |node_index| {
+            const node: std.zig.Ast.Node.Index = @enumFromInt(node_index);
+            switch (tree.nodeTag(node)) {
+                .builtin_call,
+                .builtin_call_comma,
+                .builtin_call_two,
+                .builtin_call_two_comma,
+                => try it.handleBuiltinCall(
+                    tree,
+                    it.gpa,
+                    node,
+                ),
+                else => {},
+            }
+        }
+    }
+
+    fn handleBuiltinCall(
+        it: *ImportIterator,
+        tree: *const std.zig.Ast,
+        gpa: std.mem.Allocator,
+        node: std.zig.Ast.Node.Index,
+    ) !void {
+        if (!std.mem.eql(u8, tree.tokenSlice(tree.nodeMainToken(node)), "@import")) return;
+
+        var params_buffer: [2]std.zig.Ast.Node.Index = undefined;
+        const params = tree.builtinCallParams(&params_buffer, node) orelse return;
+        std.debug.assert(params.len == 1);
+
+        const import_arg = params[0];
+        std.debug.assert(tree.nodeTag(import_arg) == .string_literal);
+
+        const import_token = tree.nodeMainToken(import_arg);
+        const raw_import = tree.tokenSlice(import_token);
+
+        var buffer: [std.fs.max_path_bytes]u8 = undefined;
+        var writer: std.Io.Writer = .fixed(&buffer);
+
+        const import_path = switch (try std.zig.string_literal.parseWrite(
+            &writer,
+            raw_import,
+        )) {
+            .success => import_path: {
+                try writer.flush();
+                break :import_path writer.buffer[0..writer.end];
+            },
+            .failure => |e| {
+                std.log.warn("Skipping invalid import {s} due to {f}\n", .{ raw_import, e });
+                return;
+            },
+        };
+
+        if (isRelativeZigImport(import_path)) {
+            const file_id = try it.file_store.resolve(
+                import_path,
+                it.io,
+                it.gpa,
+                it.cwd,
+            );
+            if (!it.seen.isSet(file_id)) {
+                it.seen.set(file_id);
+                try it.queue.append(gpa, file_id);
+            }
+        }
+        // TODO: #149 - support std lib and module imports.
+    }
+
+    fn isRelativeZigImport(import_path: []const u8) bool {
+        return std.mem.endsWith(u8, import_path, ".zig") and !std.fs.path.isAbsolute(import_path);
+    }
+};
+
 const std = @import("std");
 const testing = @import("testing.zig");
 const zlinter = @import("./zlinter.zig");
+const FileStore = @import("session/FileStore.zig");
 
 test {
     std.testing.refAllDecls(@This());

@@ -286,12 +286,24 @@ fn runLinterRules(
 
     // TODO: #149 - remove this, just adding noise while developing
     for (context2.include_root_source_files.items) |src_file| {
-        _ = try context2.file_store.resolve(
+        const root_file_index = try context2.file_store.resolve(
             src_file,
             io,
             gpa,
             cwd,
         );
+
+        var it: zlinter.files.ImportIterator = .{
+            .root = root_file_index,
+            .file_store = &context2.file_store,
+            .io = io,
+            .cwd = cwd,
+            .gpa = gpa,
+        };
+        defer it.deinit();
+        while (try it.next()) |file_index| {
+            std.debug.print(" Visited: '{s}'\n", .{context2.file_store.filePath(file_index)});
+        }
     }
 
     var context: zlinter.session.LintContext = undefined;

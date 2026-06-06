@@ -157,30 +157,5 @@ fn findNearestBuildRoot(
     }
 }
 
-/// Walks imports but only relative paths not modules
-/// NOT IMPLEMENTED YET OR USED
-const RelativeImportIterator = struct {
-    queue: std.ArrayList([]const u8),
-    root: []const u8,
-    gpa: std.mem.Allocator,
-
-    fn init(root: []const u8, gpa: std.mem.Allocator) RelativeImportIterator {
-        return .{
-            .root = root,
-            .queue = .empty,
-            .gpa = gpa,
-        };
-    }
-
-    fn next(walker: *RelativeImportIterator) !?[]const u8 {
-        if (walker.queue.pop()) |path| {
-            defer walker.gpa.free(path);
-            try walker.visit(path);
-            return path;
-        }
-        return null;
-    }
-};
-
 const files = @import("../files.zig");
 const std = @import("std");

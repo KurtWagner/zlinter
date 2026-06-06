@@ -1,6 +1,6 @@
 const FileStore = @This();
 
-const FileIndex = u32;
+pub const FileIndex = u32;
 
 /// Access using `ast(index)`.
 asts: std.ArrayList(std.zig.Ast),
@@ -100,6 +100,10 @@ pub fn fileAst(fs: *const FileStore, index: FileIndex) *const std.zig.Ast {
 
 pub fn fileSource(fs: *const FileStore, index: FileIndex) []const u8 {
     return fs.sources.items[index];
+}
+
+pub fn filePath(fs: *const FileStore, index: FileIndex) []const u8 {
+    return fs.paths.items[index];
 }
 
 const std = @import("std");
