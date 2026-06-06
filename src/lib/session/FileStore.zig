@@ -47,13 +47,15 @@ pub fn resolve(
     gpa: std.mem.Allocator,
     cwd: []const u8,
 ) !FileIndex {
+    std.log.info("Resolving '{s}' to '{s}'", .{ cwd, src_path });
+
     var fba_buffer: [std.fs.max_path_bytes]u8 = undefined;
     var fba: std.heap.FixedBufferAllocator = .init(&fba_buffer);
 
-    const normal_path = try std.fs.path.resolve(
+    const normal_path = std.fs.path.resolve(
         fba.allocator(),
         &.{ cwd, src_path },
-    );
+    ) catch unreachable;
     if (fs.path_to_index.get(normal_path)) |index| return index;
 
     std.debug.assert(fs.asts.items.len == fs.sources.items.len);
@@ -93,14 +95,17 @@ pub fn resolve(
 }
 
 pub fn fileAst(fs: *const FileStore, index: FileIndex) *const std.zig.Ast {
+    std.debug.assert(index < fs.asts.items.len);
     return &fs.asts.items[index];
 }
 
 pub fn fileSource(fs: *const FileStore, index: FileIndex) []const u8 {
+    std.debug.assert(index < fs.asts.items.len);
     return fs.sources.items[index];
 }
 
 pub fn filePath(fs: *const FileStore, index: FileIndex) []const u8 {
+    std.debug.assert(index < fs.asts.items.len);
     return fs.paths.items[index];
 }
 

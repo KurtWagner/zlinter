@@ -389,6 +389,7 @@ pub const ImportIterator = struct {
                     tree,
                     it.gpa,
                     node,
+                    file_index,
                 ),
                 else => {},
             }
@@ -400,6 +401,7 @@ pub const ImportIterator = struct {
         tree: *const std.zig.Ast,
         gpa: std.mem.Allocator,
         node: std.zig.Ast.Node.Index,
+        file_index: FileStore.FileIndex,
     ) !void {
         if (!std.mem.eql(u8, tree.tokenSlice(tree.nodeMainToken(node)), "@import")) return;
 
@@ -424,11 +426,15 @@ pub const ImportIterator = struct {
                 try writer.flush();
                 break :import_path writer.buffer[0..writer.end];
             },
-            .failure => |e| {
-                std.log.warn("Skipping invalid import {s} due to {f}\n", .{ raw_import, e });
+            .failure => {
+                std.log.warn("Skipping invalid import {s}", .{raw_import});
                 return;
             },
         };
+
+        const parent_file_path = it.file_store.filePath(file_index);
+        const parent_file_dir = std.fs.path.dirname(parent_file_path) orelse
+            @panic("TODO: Should this be unreachable or cwd");
 
         const maybe_file_id: ?FileStore.FileIndex =
             if (isRelativeZigImport(import_path))
@@ -436,7 +442,7 @@ pub const ImportIterator = struct {
                     import_path,
                     it.io,
                     it.gpa,
-                    it.cwd,
+                    parent_file_dir,
                 )
             else if (std.mem.eql(u8, import_path, "std"))
                 try it.file_store.resolve(

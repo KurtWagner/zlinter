@@ -54,7 +54,10 @@ pub fn resolve(
     var fba_buffer: [std.fs.max_path_bytes]u8 = undefined;
     var fba: std.heap.FixedBufferAllocator = .init(&fba_buffer);
 
-    const normal_path = try std.fs.path.resolve(fba.allocator(), &.{ cwd, src_path });
+    const normal_path = std.fs.path.resolve(
+        fba.allocator(),
+        &.{ cwd, src_path },
+    ) catch unreachable;
 
     // TODO: #147 - log based on verbosity
     std.debug.print("Resolving '{s}'\n", .{normal_path});
@@ -79,11 +82,19 @@ pub fn resolve(
     );
     defer gpa.free(config_path);
 
-    var file = try std.Io.Dir.cwd().openFile(
+    var file = std.Io.Dir.cwd().openFile(
         io,
         config_path,
         .{},
-    );
+    ) catch |e| {
+        switch (e) {
+            error.FileNotFound => {
+                std.log.err("Could not find config file '{s}'", .{config_path});
+                return e;
+            },
+            else => return e,
+        }
+    };
     defer file.close(io);
 
     var arena: std.heap.ArenaAllocator = .init(gpa);
@@ -119,14 +130,16 @@ pub fn resolve(
 
 /// Returns build root path (where build.zig is) for a given index, use
 /// `resolve` to get a config index for a given file or directory.
-pub fn buildRootPath(bcs: *const BuildConfigStore, config_index: ConfigIndex) []const u8 {
-    return bcs.build_root_paths.items[config_index];
+pub fn buildRootPath(bcs: *const BuildConfigStore, index: ConfigIndex) []const u8 {
+    std.debug.assert(index < bcs.build_root_paths.items.len);
+    return bcs.build_root_paths.items[index];
 }
 
 /// Returns build configuration for a given index, use `resolve` to get
 /// a config index for a given file or directory.
-pub fn buildConfig(bcs: *const BuildConfigStore, config_index: ConfigIndex) *const std.Build.Configuration {
-    return &bcs.build_configs.items[config_index];
+pub fn buildConfig(bcs: *const BuildConfigStore, index: ConfigIndex) *const std.Build.Configuration {
+    std.debug.assert(index < bcs.build_configs.items.len);
+    return &bcs.build_configs.items[index];
 }
 
 const BuildRoot = union(enum) {
@@ -150,8 +163,10 @@ fn findNearestBuildRoot(
             return .{ .path = dir };
 
         const parent = std.fs.path.dirname(dir) orelse ".";
-        if (std.mem.eql(u8, parent, dir))
+        if (std.mem.eql(u8, parent, dir)) {
+            std.log.err("Could not find build.zig for '{s}'", .{src_path});
             return error.FileNotFound;
+        }
 
         dir = parent;
     }

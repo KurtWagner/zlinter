@@ -1,7 +1,9 @@
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 const default_formatter = zlinter.formatters.DefaultFormatter{};
 
-pub const std_options: std.Options = .{ .log_level = .err };
+// TODO: #149 - use verbose at build time for build options to control this.
+// then use std.log.info instead of the custom printer.
+pub const std_options: std.Options = .{ .log_level = .info };
 
 pub fn main(init: std.process.Init.Minimal) !u8 {
     // TODO: Work out whether this should swap to the "juicy" main allocators
@@ -285,6 +287,7 @@ fn runLinterRules(
     defer context2.deinit();
 
     // TODO: #149 - remove this, just adding noise while developing
+    std.log.info("Walking root source files", .{});
     for (context2.include_root_source_files.items) |src_file| {
         const root_file_index = try context2.file_store.resolve(
             src_file,
@@ -296,7 +299,10 @@ fn runLinterRules(
         var it: zlinter.files.ImportIterator = .{
             .file_store = &context2.file_store,
             .io = io,
-            .cwd = cwd,
+            // TODO: #149 - needs some brain thinky thoughts about this orelse
+            // is it even reachable and if yes is cwd appropriate?
+            .cwd = std.fs.path.dirname(context2.file_store.filePath(root_file_index)) orelse
+                @panic("TODO: Should this be unreachable or cwd"),
             .gpa = gpa,
             // TODO: #149 - make zig lib required
             .zig_lib_directory = args.zig_lib_directory.?,
