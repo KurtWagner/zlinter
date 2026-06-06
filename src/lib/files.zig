@@ -357,6 +357,7 @@ pub const ImportIterator = struct {
     queue: std.ArrayList(FileStore.FileIndex) = .empty,
 
     pub fn init(it: *ImportIterator, root: FileStore.FileIndex) !void {
+        it.seen.set(root);
         try it.queue.append(it.gpa, root);
     }
 
@@ -376,10 +377,10 @@ pub const ImportIterator = struct {
         it: *ImportIterator,
         file_index: FileStore.FileIndex,
     ) !void {
-        const tree = it.file_store.fileAst(file_index);
-
-        for (0..tree.nodes.len) |node_index| {
+        const node_count = it.file_store.fileAst(file_index).nodes.len;
+        for (0..node_count) |node_index| {
             const node: std.zig.Ast.Node.Index = @enumFromInt(node_index);
+            const tree = it.file_store.fileAst(file_index);
             switch (tree.nodeTag(node)) {
                 .builtin_call,
                 .builtin_call_comma,
