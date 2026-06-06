@@ -70,13 +70,12 @@ pub fn build(b: *std.Build) !void {
     const lint_cmd = b.step("lint", "Lint source code.");
     lint_cmd.dependOn(step: {
         var builder = zlinter.builder(b, .{ .target = target });
-        inline for (@typeInfo(zlinter.BuiltinLintRule).@"enum".fields) |field| {
-            builder.addRule(.{ .builtin = @enumFromInt(field.value) }, .{});
+        inline for (@typeInfo(zlinter.BuiltinLintRule).@"enum".field_values) |field_value| {
+            builder.addRule(.{ .builtin = @enumFromInt(field_value) }, .{});
         }
         builder.addRule(.{ .custom = .{ .name = "no_cats", .path = "src/no_cats.zig" } }, .{});
         break :step builder.build();
     });
-
 }
 
 fn addFileArgIfExists(b: *std.Build, step: *std.Build.Step.Run, raw_path: []const u8) void {

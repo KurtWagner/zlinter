@@ -55,6 +55,8 @@ pub fn resolve(
     var fba: std.heap.FixedBufferAllocator = .init(&fba_buffer);
 
     const normal_path = try std.fs.path.resolve(fba.allocator(), &.{ cwd, src_path });
+    std.debug.print("Resolving '{s}'\n", .{normal_path});
+
     if (bcs.build_root_path_to_config.get(normal_path)) |index|
         return index;
 
@@ -64,6 +66,7 @@ pub fn resolve(
         .config_index => |index| return index,
         .path => |path| path,
     };
+    std.debug.print(" = Root: {s}\n", .{build_root_path});
 
     const config_path = try files.resolveBuildConfigurationPath(
         io,
@@ -136,6 +139,7 @@ fn findNearestBuildRoot(
     var dir = src_path;
 
     while (true) {
+        std.debug.print(" -- checking '{s}'\n", .{dir});
         if (bcs.build_root_path_to_config.get(dir)) |index|
             return .{ .config_index = index };
 
