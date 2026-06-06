@@ -381,6 +381,7 @@ fn runLinterRules(
             lint_file.pathname,
             context.gpa,
             &doc,
+            cwd,
         ) catch |e| {
             printer.println(.err, "Unable to open file: {s} ({s})", .{ lint_file.pathname, @errorName(e) });
             continue :files;

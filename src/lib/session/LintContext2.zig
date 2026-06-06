@@ -24,6 +24,7 @@ pub fn init(ctx: *LintContext2, options: LintContextOptions) !void {
         ctx.gpa,
         ctx.zig_exe,
         ctx.cwd,
+        ".",
     );
     const build_root_path = ctx.build_config_store.buildRootPath(config_index);
     const root_build_config = ctx.build_config_store.buildConfig(config_index);

@@ -257,11 +257,13 @@ pub const LintContext = struct {
         path: []const u8,
         gpa: std.mem.Allocator,
         doc: *LintDocument,
+        cwd: []const u8,
     ) !void {
         const config_index = try self.build_config_store.resolve(
             self.io,
             self.gpa,
             zig_exe,
+            cwd,
             path,
         );
         _ = config_index;

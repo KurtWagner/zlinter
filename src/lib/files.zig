@@ -240,7 +240,7 @@ test "allocLintFiles - with arg files" {
 pub fn hasBuildZig(io: std.Io, dir_path: []const u8) !bool {
     var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{}) catch |err|
         switch (err) {
-            error.FileNotFound => return false,
+            error.FileNotFound, error.NotDir => return false,
             else => |e| return e,
         };
     defer dir.close(io);

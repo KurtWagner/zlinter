@@ -48,21 +48,17 @@ pub fn resolve(
     io: std.Io,
     gpa: std.mem.Allocator,
     zig_exe: []const u8,
+    cwd: []const u8,
     src_path: []const u8,
 ) !ConfigIndex {
-    if (bcs.build_root_path_to_config.get(src_path)) |index|
-        return index;
-
     var fba_buffer: [std.fs.max_path_bytes]u8 = undefined;
     var fba: std.heap.FixedBufferAllocator = .init(&fba_buffer);
 
-    // TODO: #149 - between tjhis and file store we need to decide on what resolved paths are
-    // e.g., relative to cwd, a mix of relative to cwd and absolute and then we need to
-    // correctly resolve them here and in file store with little unit tests to test
-    // the different edges...
-    const normal_path = try std.fs.path.resolve(fba.allocator(), &.{src_path});
-    const source_dir = std.fs.path.dirname(normal_path) orelse ".";
-    const build_root = try bcs.findNearestBuildRoot(io, source_dir);
+    const normal_path = try std.fs.path.resolve(fba.allocator(), &.{ cwd, src_path });
+    if (bcs.build_root_path_to_config.get(normal_path)) |index|
+        return index;
+
+    const build_root = try bcs.findNearestBuildRoot(io, normal_path);
 
     const build_root_path = switch (build_root) {
         .config_index => |index| return index,
@@ -135,9 +131,9 @@ const BuildRoot = union(enum) {
 fn findNearestBuildRoot(
     bcs: *const BuildConfigStore,
     io: std.Io,
-    src_dir: []const u8,
+    src_path: []const u8,
 ) !BuildRoot {
-    var dir = src_dir;
+    var dir = src_path;
 
     while (true) {
         if (bcs.build_root_path_to_config.get(dir)) |index|
