@@ -55,6 +55,8 @@ pub fn resolve(
     var fba: std.heap.FixedBufferAllocator = .init(&fba_buffer);
 
     const normal_path = try std.fs.path.resolve(fba.allocator(), &.{ cwd, src_path });
+
+    // TODO: #147 - log based on verbosity
     std.debug.print("Resolving '{s}'\n", .{normal_path});
 
     if (bcs.build_root_path_to_config.get(normal_path)) |index|
@@ -68,6 +70,7 @@ pub fn resolve(
     };
     std.debug.print(" = Root: {s}\n", .{build_root_path});
 
+    // TODO: #147 - catch and report build errors appropriately otherwise it appears as missing build config...
     const config_path = try files.resolveBuildConfigurationPath(
         io,
         gpa,
