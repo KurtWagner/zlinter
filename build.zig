@@ -50,6 +50,10 @@ const BuiltRule = struct {
 const BuildOptions = struct {
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
+    tracy: bool = false,
+    tracy_callstack: bool = false,
+    tracy_allocation: bool = false,
+    tracy_callstack_depth: u32 = 10,
 };
 
 pub const BuilderOptions = struct {
@@ -63,6 +67,12 @@ pub const BuilderOptions = struct {
     ///
     /// For enormous projects consider using `.ReleaseFast`.
     optimize: std.builtin.OptimizeMode = .ReleaseSafe,
+
+    /// Enable Tracy integration using the pinned Tracy 0.11.1 dependency.
+    tracy: bool = false,
+    tracy_callstack: bool = false,
+    tracy_allocation: bool = false,
+    tracy_callstack_depth: u32 = 10,
 };
 
 /// Create a step builder for zlinter
@@ -75,6 +85,10 @@ pub fn builder(b: *std.Build, options: BuilderOptions) StepBuilder {
         .options = .{
             .optimize = options.optimize,
             .target = options.target orelse b.graph.host,
+            .tracy = options.tracy,
+            .tracy_callstack = options.tracy_callstack,
+            .tracy_allocation = options.tracy_allocation,
+            .tracy_callstack_depth = options.tracy_callstack_depth,
         },
         .b = b,
     };
@@ -204,7 +218,20 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const test_coverage = b.option(bool, "coverage", "Generate a coverage report with kcov");
     const test_focus_on_rule = b.option([]const u8, "test_focus_on_rule", "Only run integration tests for this rule");
+    const tracy = b.option(bool, "tracy", "Enable Tracy integration using the pinned Tracy 0.11.1 dependency") orelse false;
+    const tracy_callstack = b.option(bool, "tracy-callstack", "Include callstack information with Tracy data. Does nothing if -Dtracy is not provided. Default: false") orelse false;
+    const tracy_allocation = b.option(bool, "tracy-allocation", "Include allocation information with Tracy data. Does nothing if -Dtracy is not provided. Default: false") orelse false;
+    const tracy_callstack_depth = b.option(u32, "tracy-callstack-depth", "Declare callstack depth for Tracy data. Does nothing if -Dtracy-callstack is not provided. Default: 10") orelse 10;
     const io = b.graph.io;
+
+    const tracy_module = createTracyModule(b, .{
+        .target = target,
+        .optimize = optimize,
+        .tracy = tracy,
+        .tracy_callstack = tracy_callstack,
+        .tracy_allocation = tracy_allocation,
+        .tracy_callstack_depth = tracy_callstack_depth,
+    });
 
     const zls_stub_module = b.createModule(.{
         .root_source_file = b.path("src/lib/zls_stub.zig"),
@@ -220,6 +247,10 @@ pub fn build(b: *std.Build) void {
             .{
                 .name = "zls",
                 .module = zls_stub_module,
+            },
+            .{
+                .name = "tracy",
+                .module = tracy_module,
             },
         },
     });
@@ -453,7 +484,11 @@ pub fn build(b: *std.Build) void {
             exclude.items,
             .{
                 .target = target,
-                .optimize = .Debug,
+                .optimize = if (tracy) .ReleaseSafe else .Debug,
+                .tracy = tracy,
+                .tracy_callstack = tracy_callstack,
+                .tracy_allocation = tracy_allocation,
+                .tracy_callstack_depth = tracy_callstack_depth,
             },
         );
     });
@@ -620,6 +655,59 @@ fn buildStep(
     run.setStdIn(.{ .bytes = buff.written() });
 
     return &run.step;
+}
+
+fn createTracyModule(
+    b: *std.Build,
+    options: struct {
+        target: std.Build.ResolvedTarget,
+        optimize: std.builtin.OptimizeMode,
+        tracy: bool,
+        tracy_callstack: bool,
+        tracy_allocation: bool,
+        tracy_callstack_depth: u32,
+    },
+) *std.Build.Module {
+    const tracy_options = b.addOptions();
+    tracy_options.addOption(bool, "enable_tracy", options.tracy);
+    tracy_options.addOption(bool, "enable_tracy_callstack", options.tracy and options.tracy_callstack);
+    tracy_options.addOption(bool, "enable_tracy_allocation", options.tracy and options.tracy_allocation);
+    tracy_options.addOption(u32, "tracy_callstack_depth", options.tracy_callstack_depth);
+
+    const tracy_module = b.createModule(.{
+        .root_source_file = b.path("src/lib/tracy.zig"),
+        .target = options.target,
+        .optimize = options.optimize,
+        .imports = &.{
+            .{ .name = "build_options", .module = tracy_options.createModule() },
+        },
+        .link_libc = options.tracy,
+        .link_libcpp = options.tracy,
+        .sanitize_c = .off,
+    });
+
+    if (!options.tracy) return tracy_module;
+
+    const tracy_dependency = b.lazyDependency("tracy", .{
+        .target = options.target,
+        .optimize = .ReleaseFast,
+    }) orelse return tracy_module;
+
+    tracy_module.addCMacro("TRACY_ENABLE", "1");
+    if (!options.tracy_callstack) {
+        tracy_module.addCMacro("TRACY_NO_CALLSTACK", "1");
+    }
+    tracy_module.addIncludePath(tracy_dependency.path(""));
+    tracy_module.addCSourceFile(.{
+        .file = tracy_dependency.path("public/TracyClient.cpp"),
+    });
+
+    if (options.target.result.os.tag == .windows) {
+        tracy_module.linkSystemLibrary("dbghelp", .{});
+        tracy_module.linkSystemLibrary("ws2_32", .{});
+    }
+
+    return tracy_module;
 }
 
 fn checkNoNameCollision(comptime name: []const u8) []const u8 {

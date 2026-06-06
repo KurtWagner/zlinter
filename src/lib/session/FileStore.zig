@@ -47,6 +47,9 @@ pub fn resolve(
     gpa: std.mem.Allocator,
     cwd: []const u8,
 ) !FileIndex {
+    const zone = tracy.traceNamed(@src(), "FileStore.resolve");
+    defer zone.end();
+
     std.log.info("Resolving '{s}' to '{s}'", .{ cwd, src_path });
 
     var fba_buffer: [std.fs.max_path_bytes]u8 = undefined;
@@ -110,3 +113,4 @@ pub fn filePath(fs: *const FileStore, index: FileIndex) []const u8 {
 }
 
 const std = @import("std");
+const tracy = @import("tracy");

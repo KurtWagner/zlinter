@@ -3,7 +3,13 @@
     .fingerprint = 0x10e04548f134343a,
     .version = "0.0.1",
     .minimum_zig_version = "0.15.1",
-    .dependencies = .{},
+    .dependencies = .{
+        .tracy = .{
+            .url = "https://github.com/wolfpld/tracy/archive/refs/tags/v0.11.1.tar.gz",
+            .hash = "N-V-__8AAMeOlQEipHjcyu0TCftdAi9AQe7EXUDJOoVe0k-t",
+            .lazy = true,
+        },
+    },
     .paths = .{
         "build.zig",
         "build_rules.zig",

@@ -51,6 +51,9 @@ pub fn resolve(
     cwd: []const u8,
     src_path: []const u8,
 ) !ConfigIndex {
+    const zone = tracy.traceNamed(@src(), "BuildConfigStore.resolve");
+    defer zone.end();
+
     var fba_buffer: [std.fs.max_path_bytes]u8 = undefined;
     var fba: std.heap.FixedBufferAllocator = .init(&fba_buffer);
 
@@ -152,6 +155,9 @@ fn findNearestBuildRoot(
     io: std.Io,
     src_path: []const u8,
 ) !BuildRoot {
+    const zone = tracy.traceNamed(@src(), "BuildConfigStore.findNearestBuildRoot");
+    defer zone.end();
+
     var dir = src_path;
 
     while (true) {
@@ -174,3 +180,4 @@ fn findNearestBuildRoot(
 
 const files = @import("../files.zig");
 const std = @import("std");
+const tracy = @import("tracy");

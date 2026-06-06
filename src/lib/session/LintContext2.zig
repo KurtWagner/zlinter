@@ -17,6 +17,9 @@ pub const LintContextOptions = struct {};
 
 // TODO: #149 - Add optional arg for compiled units from args
 pub fn init(ctx: *LintContext2, options: LintContextOptions) !void {
+    const zone = tracy.traceNamed(@src(), "LintContext2.init");
+    defer zone.end();
+
     _ = options;
 
     const config_index = try ctx.build_config_store.resolve(
@@ -78,3 +81,4 @@ const std = @import("std");
 const files = @import("../files.zig");
 const BuildConfigStore = @import("BuildConfigStore.zig");
 const FileStore = @import("FileStore.zig");
+const tracy = @import("tracy");
