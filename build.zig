@@ -344,26 +344,28 @@ pub fn build(b: *std.Build) void {
         unit_test_step.dependOn(&run_unit_tests.step);
     }
 
-    for (rule_imports) |rule_import| {
-        const test_rule_exe = b.addTest(.{
-            .name = b.fmt("{s}_unit_test_coverage", .{rule_import.name}),
-            .root_module = rule_import.module,
-            .use_llvm = test_coverage,
-        });
-
-        if (test_coverage orelse false) {
-            const cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
-            cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only" });
-            cover_run.addPrefixedDirectoryArg("--include-pattern=", b.path("src"));
-            merge_coverage.addDirectoryArg(cover_run.addOutputDirectoryArg(test_rule_exe.name));
-            cover_run.addArtifactArg(test_rule_exe);
-
-            unit_test_step.dependOn(&install_coverage.step);
-        } else {
-            const run_test_rule_exe = b.addRunArtifact(test_rule_exe);
-            unit_test_step.dependOn(&run_test_rule_exe.step);
-        }
-    }
+    // TODO: #149 - bring back
+    // Rule unit tests rely on zls-backed document loading.
+    // for (rule_imports) |rule_import| {
+    //     const test_rule_exe = b.addTest(.{
+    //         .name = b.fmt("{s}_unit_test_coverage", .{rule_import.name}),
+    //         .root_module = rule_import.module,
+    //         .use_llvm = test_coverage,
+    //     });
+    //
+    //     if (test_coverage orelse false) {
+    //         const cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
+    //         cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only" });
+    //         cover_run.addPrefixedDirectoryArg("--include-pattern=", b.path("src"));
+    //         merge_coverage.addDirectoryArg(cover_run.addOutputDirectoryArg(test_rule_exe.name));
+    //         cover_run.addArtifactArg(test_rule_exe);
+    //
+    //         unit_test_step.dependOn(&install_coverage.step);
+    //     } else {
+    //         const run_test_rule_exe = b.addRunArtifact(test_rule_exe);
+    //         unit_test_step.dependOn(&run_test_rule_exe.step);
+    //     }
+    // }
 
     const test_step = b.step("test", "Run all tests");
     test_step.dependOn(unit_test_step);

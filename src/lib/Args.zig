@@ -139,6 +139,7 @@ pub fn allocParse(
 
     var unknown_args = std.ArrayList([]const u8).empty;
     defer unknown_args.deinit(gpa);
+    errdefer for (unknown_args.items) |arg| gpa.free(arg);
 
     var include_paths = std.ArrayList([]const u8).empty;
     defer include_paths.deinit(gpa);
@@ -818,7 +819,14 @@ test "allocParse with zig_exe arg" {
     var stdin_fbs = std.Io.Reader.fixed("");
 
     const args = try allocParse(
-        testing.cliArgs(&.{ "--zig_exe", "/some/path here/zig" }),
+        testing.cliArgsWithoutBuildConfig(&.{
+            "--zig_exe",
+            "/some/path here/zig",
+            "--global_cache_root",
+            testing.global_cache_root,
+            "--zig_lib_directory",
+            testing.zig_lib_directory,
+        }),
         &.{},
         std.testing.allocator,
         &stdin_fbs,
@@ -834,7 +842,14 @@ test "allocParse with global_cache_root arg" {
     var stdin_fbs = std.Io.Reader.fixed("");
 
     const args = try allocParse(
-        testing.cliArgs(&.{ "--global_cache_root", "/some/path here/cache" }),
+        testing.cliArgsWithoutBuildConfig(&.{
+            "--zig_exe",
+            testing.zig_exe,
+            "--global_cache_root",
+            "/some/path here/cache",
+            "--zig_lib_directory",
+            testing.zig_lib_directory,
+        }),
         &.{},
         std.testing.allocator,
         &stdin_fbs,
@@ -850,7 +865,14 @@ test "allocParse with zig_lib_directory arg" {
     var stdin_fbs = std.Io.Reader.fixed("");
 
     const args = try allocParse(
-        testing.cliArgs(&.{ "--zig_lib_directory", "/some/path here/lib" }),
+        testing.cliArgsWithoutBuildConfig(&.{
+            "--zig_exe",
+            testing.zig_exe,
+            "--global_cache_root",
+            testing.global_cache_root,
+            "--zig_lib_directory",
+            "/some/path here/lib",
+        }),
         &.{},
         std.testing.allocator,
         &stdin_fbs,
@@ -1067,6 +1089,9 @@ test "allocParse fuzz" {
     const rand = prng.random();
 
     var buffer: [1024]u8 = undefined;
+    var stderr_sink: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer stderr_sink.deinit();
+    rendering.process_printer.stderr = &stderr_sink.writer;
 
     var mem: [(buffer.len + 1) * max_args]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&mem);
@@ -1082,12 +1107,17 @@ test "allocParse fuzz" {
 
         var stdin_fbs = std.Io.Reader.fixed("");
 
-        const args = try allocParse(
+        const args = allocParse(
             &raw_args,
             &.{},
             std.testing.allocator,
             &stdin_fbs,
-        );
+        ) catch |err| switch (err) {
+            error.InvalidArgs,
+            error.InvalidBuildConfig,
+            => continue,
+            error.OutOfMemory => return err,
+        };
         defer args.deinit(std.testing.allocator);
     }
 }

@@ -392,7 +392,6 @@ test "hasNonFreeingAllocatorParam" {
         },
     }) |tuple| {
         const source, const expected = tuple;
-        errdefer std.debug.print("Failed source: '{s}' expected {}\n", .{ source, expected });
 
         defer _ = arena.reset(.retain_capacity);
 
@@ -412,6 +411,7 @@ test "hasNonFreeingAllocatorParam" {
             "fn main() void {\n" ++ source ++ "\n}",
             arena.allocator(),
         );
+        errdefer std.debug.print("Failed source: '{s}' expected {}\n", .{ source, expected });
 
         const tree = doc.handle.tree;
         const actual = hasNonFreeingAllocatorParam(

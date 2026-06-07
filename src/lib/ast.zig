@@ -721,7 +721,6 @@ test "deferBlock - has expected children" {
         },
     }) |tuple| {
         const source, const expected = tuple;
-        errdefer std.debug.print("Failed source: '{s}' expected {}\n", .{ source, expected });
 
         defer _ = arena.reset(.retain_capacity);
 
@@ -741,6 +740,7 @@ test "deferBlock - has expected children" {
             "fn main() void {\n" ++ source ++ "\n}",
             arena.allocator(),
         );
+        errdefer std.debug.print("Failed source: '{s}' expected {}\n", .{ source, expected });
 
         const decl_ref = try deferBlock(
             doc,
@@ -1427,8 +1427,6 @@ test "findFnCall" {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
 
-        errdefer std.debug.print("Failed source: '{s}'\n", .{source});
-
         const environ_map: std.process.Environ.Map = .init(arena.allocator());
 
         var context: session.LintContext = undefined;
@@ -1445,6 +1443,7 @@ test "findFnCall" {
             source,
             arena.allocator(),
         );
+        errdefer std.debug.print("Failed source: '{s}'\n", .{source});
 
         var buffer: [1]Ast.Node.Index = undefined;
 
