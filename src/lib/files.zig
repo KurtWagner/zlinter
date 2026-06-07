@@ -467,8 +467,13 @@ pub const ImportIterator = struct {
                     it.gpa,
                     it.zig_lib_directory,
                 )
+                // TODO: #149 - handle "root" and "builtin" imports.
+            else if (std.mem.eql(u8, import_path, "root"))
+                null
+            else if (std.mem.eql(u8, import_path, "builtin"))
+                null
             else
-                null;
+                try it.resolveModuleImport(import_path);
 
         if (maybe_file_id) |file_id| {
             if (!it.seen.isSet(file_id)) {
@@ -481,6 +486,13 @@ pub const ImportIterator = struct {
 
     fn isRelativeZigImport(import_path: []const u8) bool {
         return std.mem.endsWith(u8, import_path, ".zig") and !std.fs.path.isAbsolute(import_path);
+    }
+
+    fn resolveModuleImport(it: *ImportIterator, import_path: []const u8) !?FileStore.FileIndex {
+        _ = it;
+
+        std.debug.print("----- {s} --------\n", .{import_path});
+        return null;
     }
 };
 

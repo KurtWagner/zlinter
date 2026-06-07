@@ -291,7 +291,7 @@ fn runLinterRules(
 
     // TODO: #149 - remove this, just adding noise while developing
     std.log.info("Walking root source files", .{});
-    for (context2.include_root_source_files.items) |src_file| {
+    for (context2.include_root_source_file.items) |src_file| {
         const root_file_index = try context2.file_store.resolve(
             src_file,
             io,
