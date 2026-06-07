@@ -6,7 +6,7 @@
     .dependencies = .{
         .tracy = .{
             .url = "https://github.com/wolfpld/tracy/archive/refs/tags/v0.11.1.tar.gz",
-            .hash = "N-V-__8AAMeOlQEipHjcyu0TCftdAi9AQe7EXUDJOoVe0k-t",
+            .hash = "N-V-__8AAMeOlQGzzfV9DEF4hvxQ5l7GPN8fFeHTBidl3UOo",
             .lazy = true,
         },
     },
