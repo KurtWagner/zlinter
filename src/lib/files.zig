@@ -236,23 +236,38 @@ test "allocLintFiles - with arg files" {
     }, &.{ lint_files[0].pathname, lint_files[1].pathname });
 }
 
-// TODO: #149 - write tests for this
-pub fn hasBuildZig(io: std.Io, dir_path: []const u8) !bool {
-    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{}) catch |err|
-        switch (err) {
-            error.FileNotFound, error.NotDir => return false,
-            else => |e| return e,
-        };
-    defer dir.close(io);
-
-    var file = dir.openFile(io, "build.zig", .{}) catch |err|
+/// Returns true if the directory contains a "build.zig" file.
+pub fn hasBuildZig(io: std.Io, dir: std.Io.Dir) !bool {
+    const stat = dir.statFile(io, "build.zig", .{}) catch |err|
         switch (err) {
             error.FileNotFound => return false,
             else => |e| return e,
         };
-    file.close(io);
+    return stat.kind == .file;
+}
 
-    return true;
+test "hasBuildZig - with build.zig" {
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    (try tmp_dir.dir.createFile(std.testing.io, "build.zig", .{})).close(std.testing.io);
+    try std.testing.expect(try hasBuildZig(std.testing.io, tmp_dir.dir));
+}
+
+test "hasBuildZig - without build.zig" {
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    try std.testing.expect(!try hasBuildZig(std.testing.io, tmp_dir.dir));
+}
+
+test "hasBuildZig - build.zig is not a file" {
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    try tmp_dir.dir.createDirPath(std.testing.io, "build.zig");
+
+    try std.testing.expect(!try hasBuildZig(std.testing.io, tmp_dir.dir));
 }
 
 pub fn resolveBuildConfigurationPath(

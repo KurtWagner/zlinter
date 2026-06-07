@@ -183,8 +183,16 @@ fn findNearestBuildRoot(
                 .path = dir,
             } };
 
-        if (try files.hasBuildZig(io, dir))
-            return .{ .path = dir };
+        const maybe_open_dir: ?std.Io.Dir = std.Io.Dir.cwd().openDir(io, dir, .{}) catch |err|
+            switch (err) {
+                error.FileNotFound, error.NotDir => null,
+                else => |e| return e,
+            };
+        if (maybe_open_dir) |open_dir| {
+            defer open_dir.close(io);
+            if (try files.hasBuildZig(io, open_dir))
+                return .{ .path = dir };
+        }
 
         const parent = std.fs.path.dirname(dir) orelse ".";
         if (std.mem.eql(u8, parent, dir)) {
