@@ -3,85 +3,82 @@ const Args = @This();
 
 /// Path to the zig executable used to build and run linter - needed for
 /// analysing zig standard library.
-zig_exe: ?[]const u8 = null,
+zig_exe: []const u8,
 
 /// Zig global cache path used to build and run linter - needed for
 /// analysing zig standard library.
-global_cache_root: ?[]const u8 = null,
+global_cache_root: []const u8,
 
 /// Zig lib path used to build and run linter - needed for analysing zig
 /// standard library.
-zig_lib_directory: ?[]const u8 = null,
+zig_lib_directory: []const u8,
 
 /// Indicates whether to run the linter in fix mode, where it'll attempt to
 /// fix any discovered issues instead of reporting them.
-fix: bool = false,
+fix: bool,
 
 /// If set to true only errors will be reported. Warnings are silently ignored.
 ///
 /// By default, zlinter reports both warnings and errors. In some workflows,
 /// you may only want to report errors and ignore warnings — for example, in
 /// continuous Integration (CI) pipelines where only correctness issues.
-quiet: bool = false,
+quiet: bool,
 
 /// If set, zlinter will fail (non-zero exit code) if more than the given number
 /// of warnings are reported.
-max_warnings: ?u32 = null,
+max_warnings: ?u32,
 
 /// Only lint or fix (if using the fix argument) the given files. These
 /// are owned by the struct and should be freed by calling deinit. This will
 /// replace any file resolution provided by the build file.
 /// /// This is populated with the `--include <path>` flag.
-include_paths: ?[][]const u8 = null,
+include_paths: ?[][]const u8,
 
 /// Similar to `files` but will be used to filter out files after resolution.
 /// This is populated with the `--filter <path>` flag.
-filter_paths: ?[][]const u8 = null,
+filter_paths: ?[][]const u8,
 
 /// Exclude these from linting irrespective of how the files were resolved.
 /// This is populated with the `--exclude <path>` flag.
-exclude_paths: ?[][]const u8 = null,
+exclude_paths: ?[][]const u8,
 
 /// The format to print the lint result output in.
-format: enum { default } = .default,
+format: enum { default },
 
 /// Contains any arguments that were found that unknown. When this happens
 /// an error with the help does should be presented to the user as this
 /// usually a user error that can be rectified. These are owned by the
 /// struct and should be freed by calling deinit.
-unknown_args: ?[][]const u8 = null,
+unknown_args: ?[][]const u8,
 
 /// Will contain rules that should be run. If unset, assume all rules
 /// should be run. This can be used to focus a run on a single rule
-rules: ?[][]const u8 = null,
+rules: ?[][]const u8,
 
 /// Whether to write additional information out to stdout.
-verbose: bool = false,
+verbose: bool,
 
 /// Contains rule id to path names for overriding the build time config for
 /// a rule. This is typically just useful for internal testing.
-rule_config_overrides: ?*std.BufMap = null,
+rule_config_overrides: ?*std.BufMap,
 
-build_info: BuildInfo = .default,
+build_info: BuildInfo,
 
 /// Whether user has passed in the `--help` flag.
-help: bool = false,
+help: bool,
 
 /// When using `--fix` repeat the this many passes of the code until there's
 /// no more fixes being applied.
-fix_passes: u8 = default_fix_passes,
+fix_passes: u8,
 
 const default_fix_passes = 20;
 
 pub fn deinit(self: Args, allocator: std.mem.Allocator) void {
-    if (self.zig_exe) |zig_exe|
-        allocator.free(zig_exe);
+    allocator.free(self.zig_exe);
 
-    if (self.global_cache_root) |global_cache_root|
-        allocator.free(global_cache_root);
+    allocator.free(self.global_cache_root);
 
-    if (self.zig_lib_directory) |zig_lib_directory|
-        allocator.free(zig_lib_directory);
+    allocator.free(self.zig_lib_directory);
 
     if (self.rule_config_overrides) |rule_config_overrides| {
         rule_config_overrides.deinit();
@@ -104,41 +101,66 @@ pub fn deinit(self: Args, allocator: std.mem.Allocator) void {
     self.build_info.deinit(allocator);
 }
 
+/// Parses linter command-line arguments.
+///
+/// The Zig executable, Zig lib directory, and global cache root are required
+/// build configuration values. They are normally injected by the build step
+/// that runs zlinter, not typed by end users. Missing values indicate a broken
+/// zlinter build integration and return `error.InvalidBuildConfig`. Duplicate
+/// build configuration values also return `error.InvalidBuildConfig`.
+///
+/// User-facing argument mistakes, such as missing flag values or unknown rule
+/// ids, return `error.InvalidArgs`. Unknown flags are collected in
+/// `unknown_args` so callers can print all of them with the help text.
 pub fn allocParse(
     args: []const [:0]const u8,
     available_rules: []const LintRule,
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     stdin_reader: *std.Io.Reader,
-) error{ OutOfMemory, InvalidArgs }!Args {
+) error{ OutOfMemory, InvalidArgs, InvalidBuildConfig }!Args {
     var index: usize = 0;
 
-    var lint_args = Args{};
-    errdefer lint_args.deinit(allocator);
+    var zig_exe: ?[]const u8 = null;
+    errdefer if (zig_exe) |path| gpa.free(path);
+
+    var zig_lib_directory: ?[]const u8 = null;
+    errdefer if (zig_lib_directory) |path| gpa.free(path);
+
+    var global_cache_root: ?[]const u8 = null;
+    errdefer if (global_cache_root) |path| gpa.free(path);
+
+    var fix: bool = false;
+    var quiet: bool = false;
+    var max_warnings: ?u32 = null;
+    var format: @FieldType(Args, "format") = .default;
+    var verbose: bool = false;
+    var help: bool = false;
+    var fix_passes: u8 = default_fix_passes;
 
     var unknown_args = std.ArrayList([]const u8).empty;
-    defer unknown_args.deinit(allocator);
+    defer unknown_args.deinit(gpa);
 
     var include_paths = std.ArrayList([]const u8).empty;
-    defer include_paths.deinit(allocator);
-    errdefer for (include_paths.items) |p| allocator.free(p);
+    defer include_paths.deinit(gpa);
+    errdefer for (include_paths.items) |p| gpa.free(p);
 
     var exclude_paths = std.ArrayList([]const u8).empty;
-    defer exclude_paths.deinit(allocator);
-    errdefer for (exclude_paths.items) |p| allocator.free(p);
+    defer exclude_paths.deinit(gpa);
+    errdefer for (exclude_paths.items) |p| gpa.free(p);
 
     var filter_paths = std.ArrayList([]const u8).empty;
-    defer filter_paths.deinit(allocator);
-    errdefer for (filter_paths.items) |p| allocator.free(p);
+    defer filter_paths.deinit(gpa);
+    errdefer for (filter_paths.items) |p| gpa.free(p);
 
     var rules = std.ArrayList([]const u8).empty;
-    defer rules.deinit(allocator);
-    errdefer for (rules.items) |r| allocator.free(r);
+    defer rules.deinit(gpa);
+    errdefer for (rules.items) |r| gpa.free(r);
 
-    const rule_config_overrides = try allocator.create(std.BufMap);
-    rule_config_overrides.* = std.BufMap.init(allocator);
+    const rule_config_overrides = try gpa.create(std.BufMap);
+    rule_config_overrides.* = std.BufMap.init(gpa);
     errdefer {
         rule_config_overrides.deinit();
-        allocator.destroy(rule_config_overrides);
+        gpa.destroy(rule_config_overrides);
     }
 
     var build_info: ?BuildInfo = null;
@@ -197,7 +219,11 @@ pub fn allocParse(
                 rendering.process_printer.println(.err, "--zig_exe missing path", .{});
                 return error.InvalidArgs;
             }
-            lint_args.zig_exe = try allocator.dupe(u8, args[index]);
+            if (zig_exe != null) {
+                rendering.process_printer.println(.err, "zlinter build config duplicate --zig_exe", .{});
+                return error.InvalidBuildConfig;
+            }
+            zig_exe = try gpa.dupe(u8, args[index]);
             continue :state State.parsing;
         },
         .zig_lib_directory_arg => {
@@ -206,7 +232,11 @@ pub fn allocParse(
                 rendering.process_printer.println(.err, "--zig_lib_directory missing path", .{});
                 return error.InvalidArgs;
             }
-            lint_args.zig_lib_directory = try allocator.dupe(u8, args[index]);
+            if (zig_lib_directory != null) {
+                rendering.process_printer.println(.err, "zlinter build config duplicate --zig_lib_directory", .{});
+                return error.InvalidBuildConfig;
+            }
+            zig_lib_directory = try gpa.dupe(u8, args[index]);
             continue :state State.parsing;
         },
         .global_cache_root_arg => {
@@ -215,7 +245,11 @@ pub fn allocParse(
                 rendering.process_printer.println(.err, "--global_cache_root missing path", .{});
                 return error.InvalidArgs;
             }
-            lint_args.global_cache_root = try allocator.dupe(u8, args[index]);
+            if (global_cache_root != null) {
+                rendering.process_printer.println(.err, "zlinter build config duplicate --global_cache_root", .{});
+                return error.InvalidBuildConfig;
+            }
+            global_cache_root = try gpa.dupe(u8, args[index]);
             continue :state State.parsing;
         },
         .rule_arg => {
@@ -236,7 +270,7 @@ pub fn allocParse(
                 return error.InvalidArgs;
             }
 
-            try rules.append(allocator, try allocator.dupe(u8, args[index]));
+            try rules.append(gpa, try gpa.dupe(u8, args[index]));
             continue :state if (index + 1 < args.len and notArgKey(args[index + 1])) State.rule_arg else State.parsing;
         },
         .include_path_arg => {
@@ -245,7 +279,7 @@ pub fn allocParse(
                 rendering.process_printer.println(.err, "--include arg missing paths", .{});
                 return error.InvalidArgs;
             }
-            try include_paths.append(allocator, try allocator.dupe(u8, args[index]));
+            try include_paths.append(gpa, try gpa.dupe(u8, args[index]));
             continue :state if (index + 1 < args.len and notArgKey(args[index + 1])) State.include_path_arg else State.parsing;
         },
         .exclude_path_arg => {
@@ -254,7 +288,7 @@ pub fn allocParse(
                 rendering.process_printer.println(.err, "--exclude arg missing paths", .{});
                 return error.InvalidArgs;
             }
-            try exclude_paths.append(allocator, try allocator.dupe(u8, args[index]));
+            try exclude_paths.append(gpa, try gpa.dupe(u8, args[index]));
             continue :state if (index + 1 < args.len and notArgKey(args[index + 1])) State.exclude_path_arg else State.parsing;
         },
         .filter_path_arg => {
@@ -263,7 +297,7 @@ pub fn allocParse(
                 rendering.process_printer.println(.err, "--filter arg missing paths", .{});
                 return error.InvalidArgs;
             }
-            try filter_paths.append(allocator, try allocator.dupe(u8, args[index]));
+            try filter_paths.append(gpa, try gpa.dupe(u8, args[index]));
             continue :state if (index + 1 < args.len and notArgKey(args[index + 1])) State.filter_path_arg else State.parsing;
         },
         .format_arg => {
@@ -276,7 +310,7 @@ pub fn allocParse(
             const field_names = comptime std.meta.fieldNames(@FieldType(Args, "format"));
             inline for (field_names, 0..) |field_name, i| {
                 if (std.mem.eql(u8, args[index], field_name)) {
-                    lint_args.format = @enumFromInt(i);
+                    format = @enumFromInt(i);
                     continue :state State.parsing;
                 }
             }
@@ -298,7 +332,7 @@ pub fn allocParse(
             }
 
             const error_message = "--max-warnings expects a u32";
-            lint_args.max_warnings = std.fmt.parseInt(u32, args[index], 10) catch {
+            max_warnings = std.fmt.parseInt(u32, args[index], 10) catch {
                 rendering.process_printer.println(.err, error_message, .{});
                 return error.InvalidArgs;
             };
@@ -313,11 +347,11 @@ pub fn allocParse(
             }
 
             const error_message = "--fix-passes expects an int between 1 and 255";
-            lint_args.fix_passes = std.fmt.parseInt(u8, args[index], 10) catch {
+            fix_passes = std.fmt.parseInt(u8, args[index], 10) catch {
                 rendering.process_printer.println(.err, error_message, .{});
                 return error.InvalidArgs;
             };
-            if (lint_args.fix_passes == 0) {
+            if (fix_passes == 0) {
                 rendering.process_printer.println(.err, error_message, .{});
                 return error.InvalidArgs;
             }
@@ -325,25 +359,25 @@ pub fn allocParse(
             continue :state State.parsing;
         },
         .fix_arg => {
-            lint_args.fix = true;
+            fix = true;
             continue :state State.parsing;
         },
         .quiet_arg => {
-            lint_args.quiet = true;
+            quiet = true;
             continue :state State.parsing;
         },
         .verbose_arg => {
-            lint_args.verbose = true;
+            verbose = true;
             continue :state State.parsing;
         },
         .help_arg => {
-            lint_args.help = true;
+            help = true;
             continue :state State.parsing;
         },
         .stdin_arg => {
             build_info = try BuildInfo.consumeStdinAlloc(
                 stdin_reader,
-                allocator,
+                gpa,
                 rendering.process_printer,
             ) orelse {
                 rendering.process_printer.println(.err, "--stdin but no stdin found", .{});
@@ -352,7 +386,7 @@ pub fn allocParse(
             continue :state State.parsing;
         },
         .unknown_arg => {
-            try unknown_args.append(allocator, try allocator.dupe(u8, args[index]));
+            try unknown_args.append(gpa, try gpa.dupe(u8, args[index]));
             continue :state State.parsing;
         },
         .rule_config_arg => {
@@ -390,31 +424,40 @@ pub fn allocParse(
         },
     }
 
-    if (unknown_args.items.len > 0) {
-        lint_args.unknown_args = try unknown_args.toOwnedSlice(allocator);
-    }
-    if (filter_paths.items.len > 0) {
-        lint_args.filter_paths = try filter_paths.toOwnedSlice(allocator);
-    }
-    if (include_paths.items.len > 0) {
-        lint_args.include_paths = try include_paths.toOwnedSlice(allocator);
-    }
-    if (exclude_paths.items.len > 0) {
-        lint_args.exclude_paths = try exclude_paths.toOwnedSlice(allocator);
-    }
-    if (rules.items.len > 0) {
-        lint_args.rules = try rules.toOwnedSlice(allocator);
-    }
-    if (rule_config_overrides.count() > 0) {
-        lint_args.rule_config_overrides = rule_config_overrides;
-    } else {
-        rule_config_overrides.deinit();
-        allocator.destroy(rule_config_overrides);
+    if (zig_exe == null or global_cache_root == null or zig_lib_directory == null) {
+        if (zig_exe == null)
+            rendering.process_printer.println(.err, "zlinter build config missing --zig_exe", .{});
+        if (global_cache_root == null)
+            rendering.process_printer.println(.err, "zlinter build config missing --global_cache_root", .{});
+        if (zig_lib_directory == null)
+            rendering.process_printer.println(.err, "zlinter build config missing --zig_lib_directory", .{});
+        return error.InvalidBuildConfig;
     }
 
-    if (build_info) |i| lint_args.build_info = i;
-
-    return lint_args;
+    return Args{
+        .zig_exe = zig_exe.?,
+        .global_cache_root = global_cache_root.?,
+        .zig_lib_directory = zig_lib_directory.?,
+        .fix = fix,
+        .quiet = quiet,
+        .max_warnings = max_warnings,
+        .include_paths = if (include_paths.items.len > 0) try include_paths.toOwnedSlice(gpa) else null,
+        .filter_paths = if (filter_paths.items.len > 0) try filter_paths.toOwnedSlice(gpa) else null,
+        .exclude_paths = if (exclude_paths.items.len > 0) try exclude_paths.toOwnedSlice(gpa) else null,
+        .format = format,
+        .unknown_args = if (unknown_args.items.len > 0) try unknown_args.toOwnedSlice(gpa) else null,
+        .rules = if (rules.items.len > 0) try rules.toOwnedSlice(gpa) else null,
+        .verbose = verbose,
+        .rule_config_overrides = rule_config_overrides: {
+            if (rule_config_overrides.count() > 0) break :rule_config_overrides rule_config_overrides;
+            rule_config_overrides.deinit();
+            gpa.destroy(rule_config_overrides);
+            break :rule_config_overrides null;
+        },
+        .build_info = build_info orelse .default,
+        .help = help,
+        .fix_passes = fix_passes,
+    };
 }
 
 pub fn printHelp(printer: *rendering.Printer) void {
@@ -467,10 +510,9 @@ test "allocParse with unknown args" {
     );
     defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
-        .fix = false,
+    try std.testing.expectEqualDeep(testing.expected(.{
         .unknown_args = @constCast(&[_][]const u8{ "-", "-fix", "--a" }),
-    }, args);
+    }), args);
 }
 
 test "allocParse with fix arg" {
@@ -484,9 +526,9 @@ test "allocParse with fix arg" {
     );
     defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
+    try std.testing.expectEqualDeep(testing.expected(.{
         .fix = true,
-    }, args);
+    }), args);
 }
 
 test "allocParse with quiet arg" {
@@ -500,9 +542,9 @@ test "allocParse with quiet arg" {
     );
     defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
+    try std.testing.expectEqualDeep(testing.expected(.{
         .quiet = true,
-    }, args);
+    }), args);
 }
 
 test "allocParse with verbose arg" {
@@ -516,9 +558,9 @@ test "allocParse with verbose arg" {
     );
     defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
+    try std.testing.expectEqualDeep(testing.expected(.{
         .verbose = true,
-    }, args);
+    }), args);
 }
 
 test "allocParse with help arg" {
@@ -532,9 +574,9 @@ test "allocParse with help arg" {
     );
     defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
+    try std.testing.expectEqualDeep(testing.expected(.{
         .help = true,
-    }, args);
+    }), args);
 }
 
 test "allocParse with fix arg and files" {
@@ -548,10 +590,10 @@ test "allocParse with fix arg and files" {
     );
     defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
+    try std.testing.expectEqualDeep(testing.expected(.{
         .fix = true,
         .include_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig" }),
-    }, args);
+    }), args);
 }
 
 test "allocParse with duplicate files files" {
@@ -571,10 +613,9 @@ test "allocParse with duplicate files files" {
         );
         defer args.deinit(std.testing.allocator);
 
-        try std.testing.expectEqualDeep(Args{
-            .fix = false,
+        try std.testing.expectEqualDeep(testing.expected(.{
             .include_paths = @constCast(&[_][]const u8{ "a/b.zig", "a/b.zig", "another.zig" }),
-        }, args);
+        }), args);
     }
 }
 
@@ -595,10 +636,9 @@ test "allocParse with files" {
         );
         defer args.deinit(std.testing.allocator);
 
-        try std.testing.expectEqualDeep(Args{
-            .fix = false,
+        try std.testing.expectEqualDeep(testing.expected(.{
             .include_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig", "another.zig" }),
-        }, args);
+        }), args);
     }
 }
 
@@ -619,10 +659,9 @@ test "allocParse with exclude files" {
         );
         defer args.deinit(std.testing.allocator);
 
-        try std.testing.expectEqualDeep(Args{
-            .fix = false,
+        try std.testing.expectEqualDeep(testing.expected(.{
             .exclude_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig", "another.zig" }),
-        }, args);
+        }), args);
     }
 }
 
@@ -643,10 +682,9 @@ test "allocParse with filter files" {
         );
         defer args.deinit(std.testing.allocator);
 
-        try std.testing.expectEqualDeep(Args{
-            .fix = false,
+        try std.testing.expectEqualDeep(testing.expected(.{
             .filter_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig", "d.zig" }),
-        }, args);
+        }), args);
     }
 }
 
@@ -672,12 +710,11 @@ test "allocParse with only exclude_paths" {
     );
     defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
-        .fix = false,
-        .build_info = .{
+    try std.testing.expectEqualDeep(testing.expected(.{
+        .build_info = BuildInfo{
             .exclude_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig", "d.zig" }),
         },
-    }, args);
+    }), args);
 }
 
 test "allocParse with only include_paths" {
@@ -702,12 +739,11 @@ test "allocParse with only include_paths" {
     );
     defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
-        .fix = false,
-        .build_info = .{
+    try std.testing.expectEqualDeep(testing.expected(.{
+        .build_info = BuildInfo{
             .include_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig", "d.zig" }),
         },
-    }, args);
+    }), args);
 }
 
 test "allocParse with include_paths and exclude_paths" {
@@ -733,13 +769,12 @@ test "allocParse with include_paths and exclude_paths" {
     );
     defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
-        .fix = false,
-        .build_info = .{
+    try std.testing.expectEqualDeep(testing.expected(.{
+        .build_info = BuildInfo{
             .include_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig" }),
             .exclude_paths = @constCast(&[_][]const u8{"d.zig"}),
         },
-    }, args);
+    }), args);
 }
 
 test "allocParse with exclude and include files" {
@@ -753,11 +788,10 @@ test "allocParse with exclude and include files" {
     );
     defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
-        .fix = false,
+    try std.testing.expectEqualDeep(testing.expected(.{
         .exclude_paths = @constCast(&[_][]const u8{ "a/b.zig", "d.zig" }),
         .include_paths = @constCast(&[_][]const u8{"./c.zig"}),
-    }, args);
+    }), args);
 }
 
 test "allocParse with all combinations" {
@@ -771,13 +805,13 @@ test "allocParse with all combinations" {
     );
     defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
+    try std.testing.expectEqualDeep(testing.expected(.{
         .fix = true,
         .include_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig" }),
         .unknown_args = @constCast(&[_][]const u8{
             "--unknown",
         }),
-    }, args);
+    }), args);
 }
 
 test "allocParse with zig_exe arg" {
@@ -791,9 +825,9 @@ test "allocParse with zig_exe arg" {
     );
     defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
+    try std.testing.expectEqualDeep(testing.expected(.{
         .zig_exe = "/some/path here/zig",
-    }, args);
+    }), args);
 }
 
 test "allocParse with global_cache_root arg" {
@@ -807,9 +841,9 @@ test "allocParse with global_cache_root arg" {
     );
     defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
+    try std.testing.expectEqualDeep(testing.expected(.{
         .global_cache_root = "/some/path here/cache",
-    }, args);
+    }), args);
 }
 
 test "allocParse with zig_lib_directory arg" {
@@ -823,9 +857,9 @@ test "allocParse with zig_lib_directory arg" {
     );
     defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
+    try std.testing.expectEqualDeep(testing.expected(.{
         .zig_lib_directory = "/some/path here/lib",
-    }, args);
+    }), args);
 }
 
 test "allocParse with format arg" {
@@ -839,9 +873,7 @@ test "allocParse with format arg" {
     );
     defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
-        .format = .default,
-    }, args);
+    try std.testing.expectEqualDeep(testing.expected(.{}), args);
 }
 
 test "allocParse with min fix passes arg" {
@@ -855,9 +887,9 @@ test "allocParse with min fix passes arg" {
     );
     defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
+    try std.testing.expectEqualDeep(testing.expected(.{
         .fix_passes = 1,
-    }, args);
+    }), args);
 }
 
 test "allocParse with max fix passes arg" {
@@ -871,9 +903,9 @@ test "allocParse with max fix passes arg" {
     );
     defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
+    try std.testing.expectEqualDeep(testing.expected(.{
         .fix_passes = 255,
-    }, args);
+    }), args);
 }
 
 test "allocParse with fix passes missing arg" {
@@ -933,9 +965,9 @@ test "allocParse with rule arg" {
         );
         defer args.deinit(std.testing.allocator);
 
-        try std.testing.expectEqualDeep(Args{
+        try std.testing.expectEqualDeep(testing.expected(.{
             .rules = @constCast(&[_][]const u8{ "my_rule_a", "my_rule_b" }),
-        }, args);
+        }), args);
     }
 }
 
@@ -970,7 +1002,59 @@ test "allocParse without args" {
     );
     defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{}, args);
+    try std.testing.expectEqualDeep(testing.expected(.{}), args);
+}
+
+test "allocParse without build config" {
+    var stdin_fbs = std.Io.Reader.fixed("");
+
+    var stderr_sink: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer stderr_sink.deinit();
+    rendering.process_printer.stderr = &stderr_sink.writer;
+
+    try std.testing.expectError(error.InvalidBuildConfig, allocParse(
+        testing.cliArgsWithoutBuildConfig(&.{}),
+        &.{},
+        std.testing.allocator,
+        &stdin_fbs,
+    ));
+
+    try std.testing.expectEqualStrings(
+        "zlinter build config missing --zig_exe\nzlinter build config missing --global_cache_root\nzlinter build config missing --zig_lib_directory\n",
+        stderr_sink.written(),
+    );
+}
+
+test "allocParse with duplicate build config" {
+    inline for (&.{
+        .{
+            .args = &.{ "--zig_exe", "/other/zig" },
+            .message = "zlinter build config duplicate --zig_exe\n",
+        },
+        .{
+            .args = &.{ "--global_cache_root", "/other/cache" },
+            .message = "zlinter build config duplicate --global_cache_root\n",
+        },
+        .{
+            .args = &.{ "--zig_lib_directory", "/other/lib" },
+            .message = "zlinter build config duplicate --zig_lib_directory\n",
+        },
+    }) |case| {
+        var stdin_fbs = std.Io.Reader.fixed("");
+
+        var stderr_sink: std.Io.Writer.Allocating = .init(std.testing.allocator);
+        defer stderr_sink.deinit();
+        rendering.process_printer.stderr = &stderr_sink.writer;
+
+        try std.testing.expectError(error.InvalidBuildConfig, allocParse(
+            testing.cliArgs(case.args),
+            &.{},
+            std.testing.allocator,
+            &stdin_fbs,
+        ));
+
+        try std.testing.expectEqualStrings(case.message, stderr_sink.written());
+    }
 }
 
 test "allocParse fuzz" {
@@ -1094,9 +1178,9 @@ test "allocParse with min --max-warnings arg" {
     );
     defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
+    try std.testing.expectEqualDeep(testing.expected(.{
         .max_warnings = 0,
-    }, args);
+    }), args);
 }
 
 test "allocParse with max --max-warnings arg" {
@@ -1110,9 +1194,9 @@ test "allocParse with max --max-warnings arg" {
     );
     defer args.deinit(std.testing.allocator);
 
-    try std.testing.expectEqualDeep(Args{
+    try std.testing.expectEqualDeep(testing.expected(.{
         .max_warnings = 4294967295,
-    }, args);
+    }), args);
 }
 
 test "allocParse with fix --max-warnings arg" {
@@ -1152,14 +1236,60 @@ test "allocParse with invalid --max-warnings arg" {
 }
 
 const testing = struct {
-    var buffer: [32][:0]u8 = undefined;
+    const zig_exe = "/test/zig";
+    const global_cache_root = "/test/zig-cache";
+    const zig_lib_directory = "/test/zig/lib";
+
+    var buffer: [64][:0]u8 = undefined;
 
     inline fn cliArgs(comptime args: []const [:0]const u8) [][:0]u8 {
         assertTestOnly();
 
         buffer[0] = @constCast("lint-exe");
+        buffer[1] = @constCast("--zig_exe");
+        buffer[2] = @constCast(zig_exe);
+        buffer[3] = @constCast("--global_cache_root");
+        buffer[4] = @constCast(global_cache_root);
+        buffer[5] = @constCast("--zig_lib_directory");
+        buffer[6] = @constCast(zig_lib_directory);
+        inline for (0..args.len) |i| buffer[i + 7] = @constCast(args[i]);
+        return buffer[0 .. args.len + 7];
+    }
+
+    inline fn cliArgsWithoutBuildConfig(comptime args: []const [:0]const u8) [][:0]u8 {
+        assertTestOnly();
+
+        buffer[0] = @constCast("lint-exe");
         inline for (0..args.len) |i| buffer[i + 1] = @constCast(args[i]);
         return buffer[0 .. args.len + 1];
+    }
+
+    inline fn expected(comptime overrides: anytype) Args {
+        assertTestOnly();
+
+        var result = Args{
+            .zig_exe = zig_exe,
+            .global_cache_root = global_cache_root,
+            .zig_lib_directory = zig_lib_directory,
+            .fix = false,
+            .quiet = false,
+            .max_warnings = null,
+            .include_paths = null,
+            .filter_paths = null,
+            .exclude_paths = null,
+            .format = .default,
+            .unknown_args = null,
+            .rules = null,
+            .verbose = false,
+            .rule_config_overrides = null,
+            .build_info = .default,
+            .help = false,
+            .fix_passes = default_fix_passes,
+        };
+        inline for (comptime std.meta.fieldNames(@TypeOf(overrides))) |field_name| {
+            @field(result, field_name) = @field(overrides, field_name);
+        }
+        return result;
     }
 
     inline fn assertTestOnly() void {

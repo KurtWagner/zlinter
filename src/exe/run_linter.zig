@@ -64,6 +64,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
                 zlinter.Args.printHelp(printer);
                 return ExitCode.usage_error.int();
             },
+            error.InvalidBuildConfig => return ExitCode.tool_error.int(),
             error.OutOfMemory => return e,
         };
     };
@@ -248,6 +249,9 @@ fn runLinterRules(
     args: zlinter.Args,
     cwd: []const u8,
 ) !void {
+    const zig_exe = args.zig_exe;
+    const zig_lib_directory = args.zig_lib_directory;
+
     var maybe_slowest_files = if (args.verbose) SlowestItemQueue.init(gpa) else null;
     defer if (maybe_slowest_files) |*slowest_files| {
         defer slowest_files.deinit();
@@ -279,8 +283,7 @@ fn runLinterRules(
         .arena = arena.allocator(),
         .io = io,
         .environ_map = environ_map,
-        // TODO: #149: Make zig exe required
-        .zig_exe = args.zig_exe.?,
+        .zig_exe = zig_exe,
         .cwd = cwd,
     };
     try context2.init(.{});
@@ -304,8 +307,7 @@ fn runLinterRules(
             .cwd = std.fs.path.dirname(context2.file_store.filePath(root_file_index)) orelse
                 @panic("TODO: Should this be unreachable or cwd"),
             .gpa = gpa,
-            // TODO: #149 - make zig lib required
-            .zig_lib_directory = args.zig_lib_directory.?,
+            .zig_lib_directory = zig_lib_directory,
         };
         defer it.deinit();
 
@@ -397,8 +399,7 @@ fn runLinterRules(
 
         var doc: zlinter.session.LintDocument = undefined;
         context.initDocument(
-            // TODO: #149 - Make it so zig exe is required in args.
-            args.zig_exe.?,
+            zig_exe,
             lint_file.pathname,
             context.gpa,
             &doc,
