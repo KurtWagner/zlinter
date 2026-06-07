@@ -89,7 +89,7 @@ pub fn consumeStdinAlloc(
     gpa: std.mem.Allocator,
     printer: *rendering.Printer,
 ) error{ OutOfMemory, InvalidArgs }!?BuildInfo {
-    const size = stdin_reader.takeInt(usize, .little) catch |e| {
+    const size = stdin_reader.takeInt(u32, .little) catch |e| {
         if (e == error.EndOfStream) return null else {
             printer.println(.err, "Failed to read stdin length: {s}", .{@errorName(e)});
             return error.InvalidArgs;

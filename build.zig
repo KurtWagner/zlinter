@@ -638,21 +638,22 @@ fn buildStep(
             resolveBuildInfo(b, compile),
         ) catch @panic("OOM");
 
-    const build_info_zon_bytes: []const u8 = toZonString(BuildInfo{
-        .include_paths = if (include_paths.items.len > 0) include_paths.items else null,
-        .exclude_paths = if (exclude_paths.items.len > 0) exclude_paths.items else null,
-        .compiles = if (compile_info.items.len > 0) compile_info.items else null,
-    }, b.allocator);
-
     run.addArg("--stdin");
 
     var buff = std.Io.Writer.Allocating.init(b.allocator);
 
-    // TODO: #149 - Use u32 instead of usize and try and avoid build_info_zon_bytes written twice
-    buff.writer.writeInt(usize, build_info_zon_bytes.len, .little) catch @panic("stdin write failed");
-    buff.writer.writeAll(build_info_zon_bytes) catch @panic("stdin write failed");
+    buff.writer.writeInt(u32, 0, .little) catch @panic("stdin write failed");
+    std.zon.stringify.serialize(BuildInfo{
+        .include_paths = if (include_paths.items.len > 0) include_paths.items else null,
+        .exclude_paths = if (exclude_paths.items.len > 0) exclude_paths.items else null,
+        .compiles = if (compile_info.items.len > 0) compile_info.items else null,
+    }, .{}, &buff.writer) catch @panic("Invalid build info");
 
-    run.setStdIn(.{ .bytes = buff.written() });
+    const stdin_bytes = buff.written();
+    const zon_len = stdin_bytes.len - @sizeOf(u32);
+    std.mem.writeInt(u32, stdin_bytes[0..@sizeOf(u32)], @intCast(zon_len), .little);
+
+    run.setStdIn(.{ .bytes = stdin_bytes });
 
     return &run.step;
 }

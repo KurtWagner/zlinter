@@ -660,7 +660,7 @@ test "allocParse with only exclude_paths" {
     var backing: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer backing.deinit();
 
-    try backing.writer.writeInt(usize, bytes.len, .little);
+    try backing.writer.writeInt(u32, @intCast(bytes.len), .little);
     try backing.writer.writeAll(bytes);
 
     var stdin_fbs = std.Io.Reader.fixed(backing.written());
@@ -690,7 +690,7 @@ test "allocParse with only include_paths" {
     var backing: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer backing.deinit();
 
-    try backing.writer.writeInt(usize, bytes.len, .little);
+    try backing.writer.writeInt(u32, @intCast(bytes.len), .little);
     try backing.writer.writeAll(bytes);
 
     var stdin_fbs = std.Io.Reader.fixed(backing.written());
@@ -721,7 +721,7 @@ test "allocParse with include_paths and exclude_paths" {
     var backing: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer backing.deinit();
 
-    try backing.writer.writeInt(usize, bytes.len, .little);
+    try backing.writer.writeInt(u32, @intCast(bytes.len), .little);
     try backing.writer.writeAll(bytes);
 
     var stdin_fbs = std.Io.Reader.fixed(backing.written());
