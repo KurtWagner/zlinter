@@ -34,6 +34,7 @@ pub const BuiltinLintRule = enum {
     require_braces,
     require_doc_comment,
     require_errdefer_dealloc,
+    require_fmt,
 };
 
 const BuildRuleSource = union(enum) {
