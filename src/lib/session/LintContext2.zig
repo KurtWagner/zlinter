@@ -1,18 +1,23 @@
 const LintContext2 = @This();
 
+const StepIndex = u32;
+
 environ_map: *const std.process.Environ.Map,
 gpa: std.mem.Allocator,
 arena: std.mem.Allocator,
 io: std.Io,
 zig_exe: []const u8,
+zig_lib_directory: []const u8,
 cwd: []const u8,
 
 build_config_store: BuildConfigStore = .empty,
 file_store: FileStore = .empty,
 
+// TODO: #149 - should really be multi array type instead of sep arrays
 include_steps: std.ArrayList(std.Build.Configuration.Step.Index) = .empty,
 include_root_source_abs_path: std.ArrayList([]const u8) = .empty,
 include_root_import_map: std.ArrayList(std.StringHashMapUnmanaged(FileStore.FileIndex)) = .empty,
+include_descendents: std.ArrayList(std.AutoHashMapUnmanaged(FileStore.FileIndex, void)) = .empty,
 
 pub const LintContextOptions = struct {};
 
@@ -59,18 +64,51 @@ pub fn init(ctx: *LintContext2, options: LintContextOptions) !void {
                 root_build_config,
                 ctx.gpa,
                 build_root_path,
-            )) |path| {
+            )) |abs_path| {
+                const file_index = try ctx.file_store.resolve(
+                    abs_path,
+                    ctx.io,
+                    ctx.gpa,
+                    ctx.cwd,
+                );
                 std.log.info(
                     "Step {d} root source path: '{s}'",
-                    .{ step_index, path },
+                    .{ step_index, abs_path },
                 );
 
                 std.debug.assert(ctx.include_steps.items.len == ctx.include_root_source_abs_path.items.len);
                 std.debug.assert(ctx.include_steps.items.len == ctx.include_root_import_map.items.len);
+                std.debug.assert(ctx.include_steps.items.len == ctx.include_descendents.items.len);
 
                 try ctx.include_steps.append(ctx.gpa, compile_step_index);
-                try ctx.include_root_source_abs_path.append(ctx.gpa, path);
+                try ctx.include_root_source_abs_path.append(ctx.gpa, abs_path);
                 try ctx.appendImportMap(compile_step_index, config_index);
+
+                // Populate map:
+                // ------ Start ------
+                {
+                    var map: std.AutoHashMapUnmanaged(FileStore.FileIndex, void) = .empty;
+                    errdefer map.deinit(ctx.gpa);
+
+                    var it: files.ImportIterator = .{
+                        .file_store = &ctx.file_store,
+                        .io = ctx.io,
+                        .cwd = std.fs.path.dirname(ctx.file_store.filePath(file_index)) orelse
+                            @panic("TODO: Should this be unreachable or cwd"),
+                        .gpa = ctx.gpa,
+                        .zig_lib_directory = ctx.zig_lib_directory,
+                    };
+                    defer it.deinit();
+
+                    try it.init(file_index);
+                    while (try it.next()) |descendent_file_index| {
+                        try map.put(ctx.gpa, descendent_file_index, {});
+                        std.debug.print(" Visited Descendent: '{s}'\n", .{ctx.file_store.filePath(descendent_file_index)});
+                    }
+
+                    try ctx.include_descendents.append(ctx.gpa, map);
+                }
+                // ------ End ------
             } else {
                 std.log.info("Step {d} has no root source path", .{step_index});
             }
@@ -90,7 +128,11 @@ pub fn deinit(ctx: *LintContext2) void {
         while (it.next()) |key| ctx.gpa.free(key.*);
         map.deinit(ctx.gpa);
     }
+    for (ctx.include_descendents.items) |*map| {
+        map.deinit(ctx.gpa);
+    }
 
+    ctx.include_descendents.deinit(ctx.gpa);
     ctx.include_root_import_map.deinit(ctx.gpa);
     ctx.include_root_source_abs_path.deinit(ctx.gpa);
     ctx.include_steps.deinit(ctx.gpa);
@@ -98,35 +140,36 @@ pub fn deinit(ctx: *LintContext2) void {
     ctx.file_store.deinit(ctx.gpa);
 }
 
+pub fn resolveFile(ctx: *LintContext2, input_path: []const u8) !FileStore.FileIndex {
+    return ctx.file_store.resolve(input_path, ctx.io, ctx.gpa, ctx.cwd);
+}
+
 pub const CompiledUnitIterator = struct {
     ctx: *const LintContext2,
-    abs_path: []const u8,
-    index: usize = 0,
+    file_index: FileStore.FileIndex,
 
-    pub fn next(it: *CompiledUnitIterator) ?std.Build.Configuration.Step.Index {
-        while (it.index < it.ctx.include_root_import_map.items.len) {
-            const index = it.index;
-            it.index += 1;
+    step_index: StepIndex = 0,
 
-            if (std.mem.eql(u8, it.ctx.include_root_source_abs_path.items[index], it.abs_path)) {
-                return it.ctx.include_steps.items[index];
-            }
+    pub fn next(it: *CompiledUnitIterator) ?StepIndex {
+        while (it.step_index < it.ctx.include_descendents.items.len) {
+            const step_index = it.step_index;
+            it.step_index += 1;
 
-            var value_it = it.ctx.include_root_import_map.items[index].valueIterator();
-            while (value_it.next()) |file_index| {
-                if (std.mem.eql(u8, it.ctx.file_store.filePath(file_index.*), it.abs_path)) {
-                    return it.ctx.include_steps.items[index];
-                }
+            if (it.ctx.include_descendents.items[step_index].contains(it.file_index)) {
+                return @intCast(step_index);
             }
         }
         return null;
     }
 };
 
-pub fn resolveCompiledUnits(ctx: *const LintContext2, abs_path: []const u8) CompiledUnitIterator {
+pub fn resolveCompiledUnits(
+    ctx: *const LintContext2,
+    file_index: FileStore.FileIndex,
+) CompiledUnitIterator {
     return .{
         .ctx = ctx,
-        .abs_path = abs_path,
+        .file_index = file_index,
     };
 }
 

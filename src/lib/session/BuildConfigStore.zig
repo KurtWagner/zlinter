@@ -2,6 +2,8 @@ const BuildConfigStore = @This();
 
 pub const ConfigIndex = u32;
 
+// TODO: #149 - should really use multi array here instead of sep arrays..
+
 /// All evaluated build configurations. Use `buildConfig(...)` to look these
 /// up using a resolved configuration index.
 build_configs: std.ArrayList(std.Build.Configuration),

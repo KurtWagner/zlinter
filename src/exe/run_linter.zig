@@ -284,47 +284,19 @@ fn runLinterRules(
         .io = io,
         .environ_map = environ_map,
         .zig_exe = zig_exe,
+        .zig_lib_directory = zig_lib_directory,
         .cwd = cwd,
     };
     try context2.init(.{});
     defer context2.deinit();
 
-    // TODO: #149 - remove this, just adding noise while developing
-    std.log.info("Walking root source files", .{});
-    for (context2.include_root_source_abs_path.items) |src_file| {
-        const root_file_index = try context2.file_store.resolve(
-            src_file,
-            io,
-            gpa,
-            cwd,
-        );
-
-        var it: zlinter.files.ImportIterator = .{
-            .file_store = &context2.file_store,
-            .io = io,
-            // TODO: #149 - needs some brain thinky thoughts about this orelse
-            // is it even reachable and if yes is cwd appropriate?
-            .cwd = std.fs.path.dirname(context2.file_store.filePath(root_file_index)) orelse
-                @panic("TODO: Should this be unreachable or cwd"),
-            .gpa = gpa,
-            .zig_lib_directory = zig_lib_directory,
-        };
-        defer it.deinit();
-
-        try it.init(root_file_index);
-        while (try it.next()) |file_index| {
-            std.debug.print(" Visited: '{s}'\n", .{context2.file_store.filePath(file_index)});
-        }
-    }
-
     // TODO: #149 - Remove this just poking around.
     for (lint_files) |file| {
-        const cwd_rel_path = try allocCwdRelPath(gpa, cwd, file.abs_path);
-        defer gpa.free(cwd_rel_path);
+        std.debug.print("Linting: '{s}'\n", .{file.abs_path});
 
-        std.debug.print("Linting: '{s}'\n", .{cwd_rel_path});
+        const file_id = try context2.resolveFile(file.abs_path);
 
-        var compiled_unit_it = context2.resolveCompiledUnits(file.abs_path);
+        var compiled_unit_it = context2.resolveCompiledUnits(file_id);
         var resolved_any = false;
         while (compiled_unit_it.next()) |index| {
             resolved_any = true;
