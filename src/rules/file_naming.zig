@@ -37,7 +37,7 @@ fn run(
     const config = options.getConfig(Config);
 
     const message, const severity = msg: {
-        const basename = std.fs.path.basename(doc.path);
+        const basename = std.fs.path.basename(doc.abs_path);
         if (ast.isRootImplicitStruct(doc.handle.tree)) {
             if (config.file_struct.severity != .off and !config.file_struct.style.check(basename)) {
                 break :msg .{
@@ -64,7 +64,7 @@ fn run(
     };
     return try zlinter.results.LintResult.init(
         gpa,
-        doc.path,
+        doc.abs_path,
         lint_problems,
     );
 }

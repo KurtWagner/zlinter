@@ -49,7 +49,7 @@ pub fn resolve(
     gpa: std.mem.Allocator,
     zig_exe: []const u8,
     cwd: []const u8,
-    src_path: []const u8,
+    input_path: []const u8,
 ) !ConfigIndex {
     const zone = tracy.traceNamed(@src(), "BuildConfigStore.resolve");
     defer zone.end();
@@ -59,7 +59,7 @@ pub fn resolve(
 
     const normal_path = std.fs.path.resolve(
         fba.allocator(),
-        &.{ cwd, src_path },
+        &.{ cwd, input_path },
     ) catch unreachable;
 
     // TODO: #147 - log based on verbosity

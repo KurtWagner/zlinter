@@ -971,9 +971,9 @@ fn resolvePath(b: *std.Build, lazy_path: std.Build.LazyPath) ?[]const u8 {
             arena,
             dependency.sub_path,
         ) catch @panic("OOM"),
-        .cwd_relative => |path| b.dupe(path),
+        .cwd_relative => |path| std.fs.path.resolve(arena, &.{path}) catch @panic("OOM"),
         .relative => |relative| switch (relative.base) {
-            .cwd => b.dupe(relative.sub_path),
+            .cwd => std.fs.path.resolve(arena, &.{relative.sub_path}) catch @panic("OOM"),
             .build_root => b.root.joinString(
                 arena,
                 relative.sub_path,

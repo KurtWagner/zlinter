@@ -180,14 +180,14 @@ fn run(
         defer @constCast(index).deinit();
 
         for (lint_files) |*file|
-            file.excluded = index.contains(file.pathname);
+            file.excluded = index.contains(file.abs_path);
     }
 
     if (try buildFilterIndex(io, cwd, gpa, dir, args)) |*index| {
         defer @constCast(index).deinit();
 
         for (lint_files) |*file|
-            file.excluded = !index.contains(file.pathname);
+            file.excluded = !index.contains(file.abs_path);
     }
 
     printer.println(.verbose, "Resolving {d} files took: {d}ms", .{ lint_files.len, timer.lapMilliseconds() });
@@ -217,7 +217,7 @@ fn run(
         try runFixes(
             io,
             gpa,
-            dir,
+            cwd,
             lint_files,
             file_lint_problems,
             printer,
@@ -226,7 +226,7 @@ fn run(
         try runFormatter(
             io,
             gpa,
-            dir,
+            cwd,
             file_lint_problems,
             printer.stdout.?,
             printer.tty,
@@ -291,7 +291,7 @@ fn runLinterRules(
 
     // TODO: #149 - remove this, just adding noise while developing
     std.log.info("Walking root source files", .{});
-    for (context2.include_root_source_file.items) |src_file| {
+    for (context2.include_root_source_abs_path.items) |src_file| {
         const root_file_index = try context2.file_store.resolve(
             src_file,
             io,
@@ -314,6 +314,24 @@ fn runLinterRules(
         try it.init(root_file_index);
         while (try it.next()) |file_index| {
             std.debug.print(" Visited: '{s}'\n", .{context2.file_store.filePath(file_index)});
+        }
+    }
+
+    // TODO: #149 - Remove this just poking around.
+    for (lint_files) |file| {
+        const cwd_rel_path = try allocCwdRelPath(gpa, cwd, file.abs_path);
+        defer gpa.free(cwd_rel_path);
+
+        std.debug.print("Linting: '{s}'\n", .{cwd_rel_path});
+
+        var compiled_unit_it = context2.resolveCompiledUnits(file.abs_path);
+        var resolved_any = false;
+        while (compiled_unit_it.next()) |index| {
+            resolved_any = true;
+            std.debug.print(" - {d}\n", .{index});
+        }
+        if (!resolved_any) {
+            std.debug.print(" - none\n", .{});
         }
     }
 
@@ -379,11 +397,14 @@ fn runLinterRules(
     }
 
     files: for (lint_files, 0..) |lint_file, i| {
+        const cwd_rel_path = try allocCwdRelPath(gpa, cwd, lint_file.abs_path);
+        defer gpa.free(cwd_rel_path);
+
         if (lint_file.excluded) {
-            printer.println(.verbose, "[{d}/{d}] Excluding: {s}", .{ i + 1, lint_files.len, lint_file.pathname });
+            printer.println(.verbose, "[{d}/{d}] Excluding: {s}", .{ i + 1, lint_files.len, cwd_rel_path });
             continue :files;
         }
-        printer.println(.verbose, "[{d}/{d}] Linting: {s}", .{ i + 1, lint_files.len, lint_file.pathname });
+        printer.println(.verbose, "[{d}/{d}] Linting: {s}", .{ i + 1, lint_files.len, cwd_rel_path });
 
         var rule_timer = Timer.createStarted(io);
         defer {
@@ -391,7 +412,7 @@ fn runLinterRules(
             printer.println(.verbose, "  - Total elapsed {d}ms", .{ns / std.time.ns_per_ms});
             if (maybe_slowest_files) |*slowest_files| {
                 slowest_files.add(.{
-                    .name = lint_file.pathname,
+                    .name = cwd_rel_path,
                     .elapsed_ns = ns,
                 });
             }
@@ -400,12 +421,12 @@ fn runLinterRules(
         var doc: zlinter.session.LintDocument = undefined;
         context.initDocument(
             zig_exe,
-            lint_file.pathname,
+            lint_file.abs_path,
             context.gpa,
             &doc,
             cwd,
         ) catch |e| {
-            printer.println(.err, "Unable to open file: {s} ({s})", .{ lint_file.pathname, @errorName(e) });
+            printer.println(.err, "Unable to open file: {s} ({s})", .{ cwd_rel_path, @errorName(e) });
             continue :files;
         };
         defer doc.deinit(context.gpa);
@@ -425,23 +446,39 @@ fn runLinterRules(
                 err.token,
             );
 
-            try results.append(
-                gpa,
-                zlinter.results.LintResult{
-                    .file_path = try gpa.dupe(u8, lint_file.pathname),
-                    .problems = try gpa.dupe(zlinter.results.LintProblem, &[1]zlinter.results.LintProblem{.{
-                        .rule_id = "syntax_error",
-                        .severity = .@"error",
-                        .start = .{
-                            .byte_offset = position.line_start + position.column,
-                        },
-                        .end = .{
-                            .byte_offset = position.line_start + position.column + tree.tokenSlice(err.token).len - 1,
-                        },
-                        .message = try allocAstErrorMsg(tree, err, gpa),
-                    }}),
+            var problem = zlinter.results.LintProblem{
+                .rule_id = "syntax_error",
+                .severity = .@"error",
+                .start = .{
+                    .byte_offset = position.line_start + position.column,
                 },
-            );
+                .end = .{
+                    .byte_offset = position.line_start + position.column + tree.tokenSlice(err.token).len - 1,
+                },
+                .message = try allocAstErrorMsg(tree, err, gpa),
+            };
+
+            const problems = gpa.alloc(zlinter.results.LintProblem, 1) catch |e| {
+                problem.deinit(gpa);
+                return e;
+            };
+            problems[0] = problem;
+
+            const result = zlinter.results.LintResult.init(
+                gpa,
+                lint_file.abs_path,
+                problems,
+            ) catch |e| {
+                for (problems) |*p| p.deinit(gpa);
+                gpa.free(problems);
+                return e;
+            };
+
+            results.append(gpa, result) catch |e| {
+                var owned_result = result;
+                owned_result.deinit(gpa);
+                return e;
+            };
         }
         printer.println(.verbose, "  - Process syntax errors: {d}ms", .{timer.lapMilliseconds()});
 
@@ -483,7 +520,7 @@ fn runLinterRules(
 fn runFormatter(
     io: std.Io,
     gpa: std.mem.Allocator,
-    dir: std.Io.Dir,
+    cwd: []const u8,
     file_lint_problems: std.array_hash_map.Auto(u32, []zlinter.results.LintResult),
     output_writer: *std.Io.Writer,
     output_tty: zlinter.ansi.Tty,
@@ -527,7 +564,7 @@ fn runFormatter(
 
     try formatter.format(.{
         .results = try flattened.toOwnedSlice(arena_allocator),
-        .dir = dir,
+        .cwd = cwd,
         .arena = arena_allocator,
         .tty = output_tty,
         .min_severity = if (quiet) .@"error" else .warning,
@@ -537,6 +574,10 @@ fn runFormatter(
     return run_result;
 }
 
+fn allocCwdRelPath(gpa: std.mem.Allocator, cwd: []const u8, abs_path: []const u8) ![]const u8 {
+    return std.fs.path.relative(gpa, cwd, null, cwd, abs_path);
+}
+
 fn cmpFix(context: void, a: zlinter.results.LintProblemFix, b: zlinter.results.LintProblemFix) bool {
     return std.sort.asc(@TypeOf(a.start))(context, a.start, b.start);
 }
@@ -544,7 +585,7 @@ fn cmpFix(context: void, a: zlinter.results.LintProblemFix, b: zlinter.results.L
 fn runFixes(
     io: std.Io,
     gpa: std.mem.Allocator,
-    dir: std.Io.Dir,
+    cwd: []const u8,
     lint_files: []zlinter.files.LintFile,
     file_lint_problems: std.array_hash_map.Auto(u32, []zlinter.results.LintResult),
     printer: *zlinter.rendering.Printer,
@@ -580,8 +621,11 @@ fn runFixes(
             cmpFix,
         );
 
-        const file_path = lint_files[entry.key_ptr.*].pathname;
-        const file = try dir.openFile(io, file_path, .{
+        const abs_path = lint_files[entry.key_ptr.*].abs_path;
+        const cwd_rel_path = try allocCwdRelPath(gpa, cwd, abs_path);
+        defer gpa.free(cwd_rel_path);
+
+        const file = try std.Io.Dir.openFileAbsolute(io, abs_path, .{
             .mode = .read_only,
         });
         defer file.close(io);
@@ -637,11 +681,11 @@ fn runFixes(
             printer.tty.ansiOrEmpty(&.{.bold}),
             file_fixes,
             printer.tty.ansiOrEmpty(&.{.reset}),
-            file_path,
+            cwd_rel_path,
         });
 
         if (output_slices.items.len > 0) {
-            const new_file = try dir.createFile(io, file_path, .{
+            const new_file = try std.Io.Dir.createFileAbsolute(io, abs_path, .{
                 .truncate = true,
             });
             defer new_file.close(io);
@@ -724,11 +768,11 @@ fn buildExcludesIndex(io: std.Io, cwd: []const u8, gpa: std.mem.Allocator, dir: 
     errdefer index.deinit();
 
     if (exclude_lint_paths) |files| {
-        for (files) |file| try index.insert(file.pathname);
+        for (files) |file| try index.insert(file.abs_path);
     }
 
     if (build_exclude_lint_paths) |files| {
-        for (files) |file| try index.insert(file.pathname);
+        for (files) |file| try index.insert(file.abs_path);
     }
 
     return index;
@@ -750,7 +794,7 @@ fn buildFilterIndex(io: std.Io, cwd: []const u8, gpa: std.mem.Allocator, dir: st
     var index = std.BufSet.init(gpa);
     errdefer index.deinit();
 
-    for (filter_paths) |file| try index.insert(file.pathname);
+    for (filter_paths) |file| try index.insert(file.abs_path);
     return index;
 }
 
@@ -851,18 +895,27 @@ const SlowestItemQueue = struct {
     }
 
     fn deinit(self: *SlowestItemQueue) void {
+        for (self.queue.items) |item| {
+            self.gpa.free(item.name);
+        }
         self.queue.deinit(self.gpa);
         self.* = undefined;
     }
 
     fn add(self: *SlowestItemQueue, item: Item) void {
-        if (self.queue.push(self.gpa, item)) {
+        const owned_name = self.gpa.dupe(u8, item.name) catch return;
+        const owned_item: Item = .{
+            .name = owned_name,
+            .elapsed_ns = item.elapsed_ns,
+        };
+
+        if (self.queue.push(self.gpa, owned_item)) {
             if (self.queue.count() > self.max) {
-                _ = self.queue.popMin();
+                if (self.queue.popMin()) |removed| {
+                    self.gpa.free(removed.name);
+                }
             }
-        } else |_| {
-            // Ignore.
-        }
+        } else |_| self.gpa.free(owned_name);
     }
 
     fn unloadAndPrint(self: *SlowestItemQueue, name: []const u8, printer: *zlinter.rendering.Printer) void {
@@ -877,6 +930,8 @@ const SlowestItemQueue = struct {
 
         var i: usize = 0;
         while (self.queue.popMax()) |item| {
+            defer self.gpa.free(item.name);
+
             printer.println(.verbose, "  {d:02} -  {s}[{d}ms]{s} {s}", .{
                 i,
                 printer.tty.ansiOrEmpty(&.{.bold}),

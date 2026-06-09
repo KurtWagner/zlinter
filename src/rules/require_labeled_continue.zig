@@ -70,7 +70,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.path,
+            doc.abs_path,
             try lint_problems.toOwnedSlice(gpa),
         )
     else

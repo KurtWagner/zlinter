@@ -11,7 +11,7 @@ pub const max_zig_file_size_bytes = bytes: {
 
 /// A loaded and parsed zig file that is given to zig lint rules.
 pub const LintDocument = struct {
-    path: []const u8,
+    abs_path: []const u8,
     handle: *zls.DocumentStore.Handle,
     lineage: ast.NodeLineage,
     comments: comments.CommentsDocument,
@@ -24,7 +24,7 @@ pub const LintDocument = struct {
 
         self.lineage.deinit(gpa);
 
-        gpa.free(self.path);
+        gpa.free(self.abs_path);
 
         self.comments.deinit(gpa);
 
@@ -254,7 +254,7 @@ pub const LintContext = struct {
     pub fn initDocument(
         self: *LintContext,
         zig_exe: []const u8,
-        path: []const u8,
+        abs_path: []const u8,
         gpa: std.mem.Allocator,
         doc: *LintDocument,
         cwd: []const u8,
@@ -264,14 +264,14 @@ pub const LintContext = struct {
             self.gpa,
             zig_exe,
             cwd,
-            path,
+            abs_path,
         );
         _ = config_index;
 
         var buffer: [std.fs.max_path_bytes]u8 = undefined;
         const size = try std.Io.Dir.cwd().realPathFile(
             self.io,
-            path,
+            abs_path,
             &buffer,
         );
 
@@ -288,14 +288,16 @@ pub const LintContext = struct {
         var src_comments = try comments.allocParse(handle.tree.source, gpa);
         errdefer src_comments.deinit(gpa);
 
+        const owned_abs_path = try gpa.dupe(u8, abs_path);
+        errdefer gpa.free(owned_abs_path);
+
         doc.* = .{
-            .path = try gpa.dupe(u8, path),
+            .abs_path = owned_abs_path,
             .handle = handle,
             .lineage = .empty,
             .comments = src_comments,
             .skipper = undefined, // zlinter-disable-current-line no_undefined - set below
         };
-        errdefer gpa.free(doc.path);
         errdefer doc.lineage.deinit(gpa);
 
         doc.skipper = .init(doc.comments, doc.handle.tree.source, gpa);
