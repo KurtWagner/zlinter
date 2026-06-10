@@ -1,11 +1,13 @@
 const BuildConfigStore = @This();
 
-pub const ConfigIndex = u32;
+pub const ConfigId = enum(u32) {
+    _,
+};
 
 // TODO: #149 - should really use multi array here instead of sep arrays..
 
 /// All evaluated build configurations. Use `buildConfig(...)` to look these
-/// up using a resolved configuration index.
+/// up using a resolved configuration id.
 build_configs: std.ArrayList(std.Build.Configuration),
 
 /// All evaluated build root paths used to load configs. Use `buildRootPath(...)`
@@ -20,7 +22,7 @@ arenas: std.ArrayList(std.heap.ArenaAllocator),
 /// An index for efficiently looking up what configuration is associated with
 /// a given source path or build root path. This is used internally by `resolve`
 /// and should never be used externally.
-path_to_config: std.StringHashMapUnmanaged(ConfigIndex),
+path_to_config: std.StringHashMapUnmanaged(ConfigId),
 
 pub const empty: BuildConfigStore = .{
     .build_configs = .empty,
@@ -43,7 +45,7 @@ pub fn deinit(bcs: *BuildConfigStore, gpa: std.mem.Allocator) void {
 /// directory that contains `build.zig` and generate a build configuration
 /// for said path if it doesn't already exist.
 ///
-/// Returns an index that can be used in `buildRootPath` and `buildConfig`
+/// Returns an id that can be used in `buildRootPath` and `buildConfig`
 /// to lookup resolved information.
 pub fn resolve(
     bcs: *BuildConfigStore,
@@ -52,7 +54,7 @@ pub fn resolve(
     zig_exe: []const u8,
     cwd: []const u8,
     input_path: []const u8,
-) !ConfigIndex {
+) !ConfigId {
     const zone = tracy.traceNamed(@src(), "BuildConfigStore.resolve");
     defer zone.end();
 
@@ -119,42 +121,44 @@ pub fn resolve(
     std.debug.assert(bcs.build_configs.items.len == bcs.arenas.items.len and
         bcs.arenas.items.len == bcs.build_root_paths.items.len);
 
-    const config_index: ConfigIndex = @intCast(bcs.build_configs.items.len);
+    const config_id: ConfigId = @enumFromInt(@as(u32, @intCast(bcs.build_configs.items.len)));
 
     try bcs.build_configs.append(gpa, config);
-    errdefer _ = bcs.build_configs.swapRemove(config_index);
+    errdefer _ = bcs.build_configs.swapRemove(@intFromEnum(config_id));
 
     try bcs.arenas.append(gpa, arena);
-    errdefer _ = bcs.arenas.swapRemove(config_index);
+    errdefer _ = bcs.arenas.swapRemove(@intFromEnum(config_id));
 
     try bcs.build_root_paths.append(gpa, build_root_key);
-    errdefer _ = bcs.build_root_paths.swapRemove(config_index);
+    errdefer _ = bcs.build_root_paths.swapRemove(@intFromEnum(config_id));
 
-    try bcs.path_to_config.putNoClobber(gpa, build_root_key, config_index);
+    try bcs.path_to_config.putNoClobber(gpa, build_root_key, config_id);
     errdefer _ = bcs.path_to_config.remove(build_root_key);
 
-    try bcs.cacheResolvedPaths(gpa, normal_path, build_root_key, config_index);
+    try bcs.cacheResolvedPaths(gpa, normal_path, build_root_key, config_id);
 
-    return config_index;
+    return config_id;
 }
 
-/// Returns build root path (where build.zig is) for a given index, use
-/// `resolve` to get a config index for a given file or directory.
-pub fn buildRootPath(bcs: *const BuildConfigStore, index: ConfigIndex) []const u8 {
+/// Returns build root path (where build.zig is) for a given id, use
+/// `resolve` to get a config id for a given file or directory.
+pub fn buildRootPath(bcs: *const BuildConfigStore, id: ConfigId) []const u8 {
+    const index = @intFromEnum(id);
     std.debug.assert(index < bcs.build_root_paths.items.len);
     return bcs.build_root_paths.items[index];
 }
 
-/// Returns build configuration for a given index, use `resolve` to get
-/// a config index for a given file or directory.
-pub fn buildConfig(bcs: *const BuildConfigStore, index: ConfigIndex) *const std.Build.Configuration {
+/// Returns build configuration for a given id, use `resolve` to get
+/// a config id for a given file or directory.
+pub fn buildConfig(bcs: *const BuildConfigStore, id: ConfigId) *const std.Build.Configuration {
+    const index = @intFromEnum(id);
     std.debug.assert(index < bcs.build_configs.items.len);
     return &bcs.build_configs.items[index];
 }
 
 const BuildRoot = union(enum) {
     config_index: struct {
-        index: ConfigIndex,
+        index: ConfigId,
         path: []const u8,
     },
     path: []const u8,
@@ -207,9 +211,9 @@ fn findNearestBuildRoot(
 }
 
 /// Caches `src_path` and any uncached ancestors up to `cached_ancestor_path` as
-/// aliases for `config_index`.
+/// aliases for `config_id`.
 ///
-/// `cached_ancestor_path` must already be known to resolve to `config_index`.
+/// `cached_ancestor_path` must already be known to resolve to `config_id`.
 /// This lets future resolves for nearby descendants stop at the closest cached
 /// ancestor instead of probing every parent directory for `build.zig`.
 fn cacheResolvedPaths(
@@ -217,11 +221,12 @@ fn cacheResolvedPaths(
     gpa: std.mem.Allocator,
     src_path: []const u8,
     cached_ancestor_path: []const u8,
-    config_index: ConfigIndex,
+    config_id: ConfigId,
 ) !void {
     const zone = tracy.traceNamed(@src(), "BuildConfigStore.cacheResolvedPaths");
     defer zone.end();
 
+    const config_index = @intFromEnum(config_id);
     std.debug.assert(config_index < bcs.arenas.items.len);
 
     var path = src_path;
@@ -232,7 +237,7 @@ fn cacheResolvedPaths(
             const key = try arena.dupe(u8, path);
             errdefer arena.free(key);
 
-            try bcs.path_to_config.putNoClobber(gpa, key, config_index);
+            try bcs.path_to_config.putNoClobber(gpa, key, config_id);
         }
 
         const parent = std.fs.path.dirname(path) orelse cached_ancestor_path;

@@ -1,6 +1,8 @@
 const FileStore = @This();
 
-pub const FileIndex = u32;
+pub const FileId = enum(u32) {
+    _,
+};
 
 /// Access using `ast(index)`.
 asts: std.ArrayList(std.zig.Ast),
@@ -11,10 +13,10 @@ sources: std.ArrayList([:0]const u8),
 /// Access using `path(index)` (memory of string owned by `path_to_index`).
 paths: std.ArrayList([]const u8),
 
-/// Normalized absolute path strings to file index. Don't access this
+/// Normalized absolute path strings to file id. Don't access this
 /// directly, instead use `resolve(...)` and use the returned index with
 /// `ast(index)` and `source(index)`.
-path_to_index: std.StringHashMapUnmanaged(FileIndex),
+path_to_index: std.StringHashMapUnmanaged(FileId),
 
 pub const empty: FileStore = .{
     .asts = .empty,
@@ -46,7 +48,7 @@ pub fn resolve(
     io: std.Io,
     gpa: std.mem.Allocator,
     cwd: []const u8,
-) !FileIndex {
+) !FileId {
     const zone = tracy.traceNamed(@src(), "FileStore.resolve");
     defer zone.end();
 
@@ -79,35 +81,38 @@ pub fn resolve(
     const path_key = try gpa.dupe(u8, normal_path);
     errdefer gpa.free(path_key);
 
-    const index: FileIndex = @intCast(fs.asts.items.len);
+    const id: FileId = @enumFromInt(@as(u32, @intCast(fs.asts.items.len)));
     try fs.asts.append(gpa, tree);
-    errdefer _ = fs.asts.swapRemove(index);
+    errdefer _ = fs.asts.swapRemove(@intFromEnum(id));
 
     try fs.sources.append(gpa, source);
-    errdefer _ = fs.sources.swapRemove(index);
+    errdefer _ = fs.sources.swapRemove(@intFromEnum(id));
 
     try fs.paths.append(gpa, path_key);
-    errdefer _ = fs.paths.swapRemove(index);
+    errdefer _ = fs.paths.swapRemove(@intFromEnum(id));
 
-    try fs.path_to_index.putNoClobber(gpa, path_key, index);
+    try fs.path_to_index.putNoClobber(gpa, path_key, id);
     errdefer _ = fs.path_to_index.remove(path_key);
 
     std.debug.print("File store: adding '{s}\n", .{path_key});
 
-    return index;
+    return id;
 }
 
-pub fn fileAst(fs: *const FileStore, index: FileIndex) *const std.zig.Ast {
+pub fn fileAst(fs: *const FileStore, id: FileId) *const std.zig.Ast {
+    const index = @intFromEnum(id);
     std.debug.assert(index < fs.asts.items.len);
     return &fs.asts.items[index];
 }
 
-pub fn fileSource(fs: *const FileStore, index: FileIndex) []const u8 {
+pub fn fileSource(fs: *const FileStore, id: FileId) []const u8 {
+    const index = @intFromEnum(id);
     std.debug.assert(index < fs.asts.items.len);
     return fs.sources.items[index];
 }
 
-pub fn filePath(fs: *const FileStore, index: FileIndex) []const u8 {
+pub fn filePath(fs: *const FileStore, id: FileId) []const u8 {
+    const index = @intFromEnum(id);
     std.debug.assert(index < fs.asts.items.len);
     return fs.paths.items[index];
 }

@@ -16,8 +16,8 @@ file_store: FileStore = .empty,
 // TODO: #149 - should really be multi array type instead of sep arrays
 include_steps: std.ArrayList(std.Build.Configuration.Step.Index) = .empty,
 include_root_source_abs_path: std.ArrayList([]const u8) = .empty,
-include_root_import_map: std.ArrayList(std.StringHashMapUnmanaged(FileStore.FileIndex)) = .empty,
-include_descendents: std.ArrayList(std.AutoHashMapUnmanaged(FileStore.FileIndex, void)) = .empty,
+include_root_import_map: std.ArrayList(std.StringHashMapUnmanaged(FileStore.FileId)) = .empty,
+include_descendents: std.ArrayList(std.AutoHashMapUnmanaged(FileStore.FileId, void)) = .empty,
 
 pub const LintContextOptions = struct {};
 
@@ -87,7 +87,7 @@ pub fn init(ctx: *LintContext2, options: LintContextOptions) !void {
                 // Populate map:
                 // ------ Start ------
                 {
-                    var map: std.AutoHashMapUnmanaged(FileStore.FileIndex, void) = .empty;
+                    var map: std.AutoHashMapUnmanaged(FileStore.FileId, void) = .empty;
                     errdefer map.deinit(ctx.gpa);
 
                     var it: files.ImportIterator = .{
@@ -140,13 +140,13 @@ pub fn deinit(ctx: *LintContext2) void {
     ctx.file_store.deinit(ctx.gpa);
 }
 
-pub fn resolveFile(ctx: *LintContext2, input_path: []const u8) !FileStore.FileIndex {
+pub fn resolveFile(ctx: *LintContext2, input_path: []const u8) !FileStore.FileId {
     return ctx.file_store.resolve(input_path, ctx.io, ctx.gpa, ctx.cwd);
 }
 
 pub const CompiledUnitIterator = struct {
     ctx: *const LintContext2,
-    file_index: FileStore.FileIndex,
+    file_index: FileStore.FileId,
 
     step_index: StepIndex = 0,
 
@@ -165,7 +165,7 @@ pub const CompiledUnitIterator = struct {
 
 pub fn resolveCompiledUnits(
     ctx: *const LintContext2,
-    file_index: FileStore.FileIndex,
+    file_index: FileStore.FileId,
 ) CompiledUnitIterator {
     return .{
         .ctx = ctx,
@@ -176,7 +176,7 @@ pub fn resolveCompiledUnits(
 fn appendImportMap(
     ctx: *LintContext2,
     step_index: std.Build.Configuration.Step.Index,
-    config_index: BuildConfigStore.ConfigIndex,
+    config_index: BuildConfigStore.ConfigId,
 ) !void {
     const root_build_config = ctx.build_config_store.buildConfig(config_index);
     const build_root_path = ctx.build_config_store.buildRootPath(config_index);
@@ -190,7 +190,7 @@ fn appendImportMap(
     const root_module = compile.root_module.get(root_build_config);
     const imports = root_module.import_table.get(root_build_config).imports.mal;
 
-    var import_map: std.StringHashMapUnmanaged(FileStore.FileIndex) = .empty;
+    var import_map: std.StringHashMapUnmanaged(FileStore.FileId) = .empty;
     errdefer import_map.deinit(ctx.gpa);
 
     for (imports.items(.name), imports.items(.module)) |import_name, import_module_index| {

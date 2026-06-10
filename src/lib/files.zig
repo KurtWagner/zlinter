@@ -407,10 +407,10 @@ pub const ImportIterator = struct {
     cwd: []const u8,
     seen: std.bit_set.StaticBitSet(10240) = .empty,
 
-    queue: std.ArrayList(FileStore.FileIndex) = .empty,
+    queue: std.ArrayList(FileStore.FileId) = .empty,
 
-    pub fn init(it: *ImportIterator, root: FileStore.FileIndex) !void {
-        it.seen.set(root);
+    pub fn init(it: *ImportIterator, root: FileStore.FileId) !void {
+        it.seen.set(@intFromEnum(root));
         try it.queue.append(it.gpa, root);
     }
 
@@ -418,7 +418,7 @@ pub const ImportIterator = struct {
         it.queue.deinit(it.gpa);
     }
 
-    pub fn next(it: *ImportIterator) !?FileStore.FileIndex {
+    pub fn next(it: *ImportIterator) !?FileStore.FileId {
         if (it.queue.pop()) |file_index| {
             try it.visit(file_index);
             return file_index;
@@ -428,7 +428,7 @@ pub const ImportIterator = struct {
 
     fn visit(
         it: *ImportIterator,
-        file_index: FileStore.FileIndex,
+        file_index: FileStore.FileId,
     ) !void {
         const node_count = it.file_store.fileAst(file_index).nodes.len;
         for (0..node_count) |node_index| {
@@ -455,7 +455,7 @@ pub const ImportIterator = struct {
         tree: *const std.zig.Ast,
         gpa: std.mem.Allocator,
         node: std.zig.Ast.Node.Index,
-        file_index: FileStore.FileIndex,
+        file_index: FileStore.FileId,
     ) !void {
         if (!std.mem.eql(u8, tree.tokenSlice(tree.nodeMainToken(node)), "@import")) return;
 
@@ -490,7 +490,7 @@ pub const ImportIterator = struct {
         const parent_file_dir = std.fs.path.dirname(parent_file_path) orelse
             @panic("TODO: Should this be unreachable or cwd");
 
-        const maybe_file_id: ?FileStore.FileIndex =
+        const maybe_file_id: ?FileStore.FileId =
             if (isRelativeZigImport(import_path))
                 try it.file_store.resolve(
                     import_path,
@@ -514,8 +514,9 @@ pub const ImportIterator = struct {
                 try it.resolveModuleImport(import_path);
 
         if (maybe_file_id) |file_id| {
-            if (!it.seen.isSet(file_id)) {
-                it.seen.set(file_id);
+            const seen_index = @intFromEnum(file_id);
+            if (!it.seen.isSet(seen_index)) {
+                it.seen.set(seen_index);
                 try it.queue.append(gpa, file_id);
             }
         }
@@ -526,7 +527,7 @@ pub const ImportIterator = struct {
         return std.mem.endsWith(u8, import_path, ".zig") and !std.fs.path.isAbsolute(import_path);
     }
 
-    fn resolveModuleImport(it: *ImportIterator, import_path: []const u8) !?FileStore.FileIndex {
+    fn resolveModuleImport(it: *ImportIterator, import_path: []const u8) !?FileStore.FileId {
         _ = it;
 
         std.debug.print("----- {s} --------\n", .{import_path});
