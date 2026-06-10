@@ -4,20 +4,21 @@ pub const ConfigId = enum(u32) {
     _,
 };
 
-// TODO: #149 - should really use multi array here instead of sep arrays..
+pub const Config = struct {
+    /// Evaluated build configuration.
+    build_config: std.Build.Configuration,
 
-/// All evaluated build configurations. Use `buildConfig(...)` to look these
-/// up using a resolved configuration id.
-build_configs: std.ArrayList(std.Build.Configuration),
+    /// Build root path used to load this config.
+    build_root_path: []const u8,
 
-/// All evaluated build root paths used to load configs. Use `buildRootPath(...)`
-/// to look these up using a resolve configuration path.
-build_root_paths: std.ArrayList([]const u8),
+    /// Arena associated with the allocated configuration. Used to clean up data
+    /// associated with this configuration.
+    arena: std.heap.ArenaAllocator,
+};
 
-/// Arenas associated with the allocated configurations in `configs`. These
-/// are used to cleanup data (configs and paths) associated with a given a
-/// given configuration.
-arenas: std.ArrayList(std.heap.ArenaAllocator),
+/// All evaluated build configurations. Use `buildConfig(...)` and
+/// `buildRootPath(...)` to look these up using a resolved configuration id.
+configs: std.MultiArrayList(Config),
 
 /// An index for efficiently looking up what configuration is associated with
 /// a given source path or build root path. This is used internally by `resolve`
@@ -25,20 +26,16 @@ arenas: std.ArrayList(std.heap.ArenaAllocator),
 path_to_config: std.StringHashMapUnmanaged(ConfigId),
 
 pub const empty: BuildConfigStore = .{
-    .build_configs = .empty,
-    .build_root_paths = .empty,
-    .arenas = .empty,
+    .configs = .empty,
     .path_to_config = .empty,
 };
 
 pub fn deinit(bcs: *BuildConfigStore, gpa: std.mem.Allocator) void {
-    for (bcs.arenas.items) |arena|
+    for (bcs.configs.items(.arena)) |arena|
         arena.deinit();
 
-    bcs.build_configs.deinit(gpa);
-    bcs.arenas.deinit(gpa);
+    bcs.configs.deinit(gpa);
     bcs.path_to_config.deinit(gpa);
-    bcs.build_root_paths.deinit(gpa);
 }
 
 /// Resolves a given directory or source path to the current or ancestor
@@ -118,19 +115,14 @@ pub fn resolve(
     const build_root_key = try arena.allocator().dupe(u8, build_root_path);
     errdefer arena.allocator().free(build_root_key);
 
-    std.debug.assert(bcs.build_configs.items.len == bcs.arenas.items.len and
-        bcs.arenas.items.len == bcs.build_root_paths.items.len);
+    const config_id: ConfigId = @enumFromInt(@as(u32, @intCast(bcs.configs.len)));
 
-    const config_id: ConfigId = @enumFromInt(@as(u32, @intCast(bcs.build_configs.items.len)));
-
-    try bcs.build_configs.append(gpa, config);
-    errdefer _ = bcs.build_configs.swapRemove(@intFromEnum(config_id));
-
-    try bcs.arenas.append(gpa, arena);
-    errdefer _ = bcs.arenas.swapRemove(@intFromEnum(config_id));
-
-    try bcs.build_root_paths.append(gpa, build_root_key);
-    errdefer _ = bcs.build_root_paths.swapRemove(@intFromEnum(config_id));
+    try bcs.configs.append(gpa, .{
+        .build_config = config,
+        .build_root_path = build_root_key,
+        .arena = arena,
+    });
+    errdefer _ = bcs.configs.swapRemove(@intFromEnum(config_id));
 
     try bcs.path_to_config.putNoClobber(gpa, build_root_key, config_id);
     errdefer _ = bcs.path_to_config.remove(build_root_key);
@@ -144,16 +136,16 @@ pub fn resolve(
 /// `resolve` to get a config id for a given file or directory.
 pub fn buildRootPath(bcs: *const BuildConfigStore, id: ConfigId) []const u8 {
     const index = @intFromEnum(id);
-    std.debug.assert(index < bcs.build_root_paths.items.len);
-    return bcs.build_root_paths.items[index];
+    std.debug.assert(index < bcs.configs.len);
+    return bcs.configs.items(.build_root_path)[index];
 }
 
 /// Returns build configuration for a given id, use `resolve` to get
 /// a config id for a given file or directory.
 pub fn buildConfig(bcs: *const BuildConfigStore, id: ConfigId) *const std.Build.Configuration {
     const index = @intFromEnum(id);
-    std.debug.assert(index < bcs.build_configs.items.len);
-    return &bcs.build_configs.items[index];
+    std.debug.assert(index < bcs.configs.len);
+    return &bcs.configs.items(.build_config)[index];
 }
 
 const BuildRoot = union(enum) {
@@ -227,10 +219,10 @@ fn cacheResolvedPaths(
     defer zone.end();
 
     const config_index = @intFromEnum(config_id);
-    std.debug.assert(config_index < bcs.arenas.items.len);
+    std.debug.assert(config_index < bcs.configs.len);
 
     var path = src_path;
-    const arena = bcs.arenas.items[config_index].allocator();
+    const arena = bcs.configs.items(.arena)[config_index].allocator();
 
     while (!std.mem.eql(u8, path, cached_ancestor_path)) {
         if (!bcs.path_to_config.contains(path)) {
