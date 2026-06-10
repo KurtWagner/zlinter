@@ -430,10 +430,10 @@ pub const ImportIterator = struct {
         it: *ImportIterator,
         file_index: FileStore.FileId,
     ) !void {
-        const node_count = it.file_store.fileAst(file_index).nodes.len;
+        const node_count = it.file_store.fileTree(file_index).nodes.len;
         for (0..node_count) |node_index| {
             const node: std.zig.Ast.Node.Index = @enumFromInt(node_index);
-            const tree = it.file_store.fileAst(file_index);
+            const tree = it.file_store.fileTree(file_index);
             switch (tree.nodeTag(node)) {
                 .builtin_call,
                 .builtin_call_comma,
@@ -486,7 +486,7 @@ pub const ImportIterator = struct {
             },
         };
 
-        const parent_file_path = it.file_store.filePath(file_index);
+        const parent_file_path = it.file_store.fileAbsPath(file_index);
         const parent_file_dir = std.fs.path.dirname(parent_file_path) orelse
             @panic("TODO: Should this be unreachable or cwd");
 

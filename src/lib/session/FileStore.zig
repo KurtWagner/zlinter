@@ -97,7 +97,7 @@ pub fn resolve(
     return id;
 }
 
-pub fn fileAst(fs: *const FileStore, id: FileId) *const std.zig.Ast {
+pub fn fileTree(fs: *const FileStore, id: FileId) *const std.zig.Ast {
     const index = @intFromEnum(id);
     std.debug.assert(index < fs.files.len);
     return &fs.files.items(.tree)[index];
@@ -109,7 +109,7 @@ pub fn fileSource(fs: *const FileStore, id: FileId) []const u8 {
     return fs.files.items(.source)[index];
 }
 
-pub fn filePath(fs: *const FileStore, id: FileId) []const u8 {
+pub fn fileAbsPath(fs: *const FileStore, id: FileId) []const u8 {
     const index = @intFromEnum(id);
     std.debug.assert(index < fs.files.len);
     return fs.files.items(.abs_path)[index];

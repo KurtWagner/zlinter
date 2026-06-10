@@ -93,7 +93,7 @@ pub fn init(ctx: *LintContext2, options: LintContextOptions) !void {
                     var it: files.ImportIterator = .{
                         .file_store = &ctx.file_store,
                         .io = ctx.io,
-                        .cwd = std.fs.path.dirname(ctx.file_store.filePath(file_index)) orelse
+                        .cwd = std.fs.path.dirname(ctx.file_store.fileAbsPath(file_index)) orelse
                             @panic("TODO: Should this be unreachable or cwd"),
                         .gpa = ctx.gpa,
                         .zig_lib_directory = ctx.zig_lib_directory,
@@ -103,7 +103,7 @@ pub fn init(ctx: *LintContext2, options: LintContextOptions) !void {
                     try it.init(file_index);
                     while (try it.next()) |descendent_file_index| {
                         try map.put(ctx.gpa, descendent_file_index, {});
-                        std.debug.print(" Visited Descendent: '{s}'\n", .{ctx.file_store.filePath(descendent_file_index)});
+                        std.debug.print(" Visited Descendent: '{s}'\n", .{ctx.file_store.fileAbsPath(descendent_file_index)});
                     }
 
                     try ctx.include_descendents.append(ctx.gpa, map);
