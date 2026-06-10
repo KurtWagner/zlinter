@@ -1063,6 +1063,18 @@ fn handle(state: State) void {
 
   * **Default:** `.warning`
 
+## `require_fmt`
+
+Require the source code to be formatted with zig fmt
+
+**Config options:**
+
+* `severity`
+
+  * The severity of deprecations (off, warning, error).
+
+  * **Default:** `.warning`
+
 ## `require_labeled_continue`
 
 Enforces explicit loop labels for `continue` statements in nested loops.
