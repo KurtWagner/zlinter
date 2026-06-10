@@ -15,6 +15,9 @@ pub const File = struct {
     abs_path: []const u8,
 };
 
+/// Use `fileTree(...)`, `fileSource(...)` and `fileAbsPath(...)` to
+/// access the underlying data associated with a file resolved using
+/// `resolve(...)`.
 files: std.MultiArrayList(File),
 
 /// Normalized absolute path strings to file id. Don't access this
