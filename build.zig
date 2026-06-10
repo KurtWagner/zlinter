@@ -441,6 +441,7 @@ pub fn build(b: *std.Build) void {
                 buildBuiltinRule(b, .no_literal_only_bool_expression, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .require_labeled_continue, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{ .severity = .warning }),
                 buildBuiltinRule(b, .require_errdefer_dealloc, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+                buildBuiltinRule(b, .require_fmt, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .require_braces, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .require_doc_comment, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .require_exhaustive_enum_switch, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{ .severity = .warning }),
