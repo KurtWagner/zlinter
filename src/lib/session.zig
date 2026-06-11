@@ -259,14 +259,14 @@ pub const LintContext = struct {
         doc: *LintDocument,
         cwd: []const u8,
     ) !void {
-        const config_index = try self.build_config_store.resolve(
+        const config_id = try self.build_config_store.resolve(
             self.io,
             self.gpa,
             zig_exe,
             cwd,
             abs_path,
         );
-        _ = config_index;
+        _ = config_id;
 
         var buffer: [std.fs.max_path_bytes]u8 = undefined;
         const size = try std.Io.Dir.cwd().realPathFile(

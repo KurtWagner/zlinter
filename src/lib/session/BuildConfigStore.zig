@@ -2,6 +2,14 @@ const BuildConfigStore = @This();
 
 pub const ConfigId = enum(u32) {
     _,
+
+    pub fn fromIndex(index: usize) ConfigId {
+        return @enumFromInt(@as(u32, @intCast(index)));
+    }
+
+    pub fn toIndex(self: ConfigId) usize {
+        return @intFromEnum(self);
+    }
 };
 
 pub const Config = struct {
@@ -30,12 +38,12 @@ pub const empty: BuildConfigStore = .{
     .path_to_config = .empty,
 };
 
-pub fn deinit(bcs: *BuildConfigStore, gpa: std.mem.Allocator) void {
-    for (bcs.configs.items(.arena)) |arena|
+pub fn deinit(self: *BuildConfigStore, gpa: std.mem.Allocator) void {
+    for (self.configs.items(.arena)) |arena|
         arena.deinit();
 
-    bcs.configs.deinit(gpa);
-    bcs.path_to_config.deinit(gpa);
+    self.configs.deinit(gpa);
+    self.path_to_config.deinit(gpa);
 }
 
 /// Resolves a given directory or source path to the current or ancestor
@@ -45,7 +53,7 @@ pub fn deinit(bcs: *BuildConfigStore, gpa: std.mem.Allocator) void {
 /// Returns an id that can be used in `buildRootPath` and `buildConfig`
 /// to lookup resolved information.
 pub fn resolve(
-    bcs: *BuildConfigStore,
+    self: *BuildConfigStore,
     io: std.Io,
     gpa: std.mem.Allocator,
     zig_exe: []const u8,
@@ -66,14 +74,14 @@ pub fn resolve(
     // TODO: #147 - log based on verbosity
     std.debug.print("Resolving '{s}'\n", .{normal_path});
 
-    if (bcs.path_to_config.get(normal_path)) |index|
+    if (self.path_to_config.get(normal_path)) |index|
         return index;
 
-    const build_root = try bcs.findNearestBuildRoot(io, normal_path);
+    const build_root = try self.findNearestBuildRoot(io, normal_path);
 
     const build_root_path = switch (build_root) {
-        .config_index => |cached| {
-            try bcs.cacheResolvedPaths(gpa, normal_path, cached.path, cached.index);
+        .config_id => |cached| {
+            try self.cacheResolvedPaths(gpa, normal_path, cached.path, cached.index);
             return cached.index;
         },
         .path => |path| path,
@@ -115,41 +123,41 @@ pub fn resolve(
     const build_root_key = try arena.allocator().dupe(u8, build_root_path);
     errdefer arena.allocator().free(build_root_key);
 
-    const config_id: ConfigId = @enumFromInt(@as(u32, @intCast(bcs.configs.len)));
+    const config_id: ConfigId = .fromIndex(self.configs.len);
 
-    try bcs.configs.append(gpa, .{
+    try self.configs.append(gpa, .{
         .build_config = config,
         .build_root_path = build_root_key,
         .arena = arena,
     });
-    errdefer _ = bcs.configs.swapRemove(@intFromEnum(config_id));
+    errdefer _ = self.configs.swapRemove(config_id.toIndex());
 
-    try bcs.path_to_config.putNoClobber(gpa, build_root_key, config_id);
-    errdefer _ = bcs.path_to_config.remove(build_root_key);
+    try self.path_to_config.putNoClobber(gpa, build_root_key, config_id);
+    errdefer _ = self.path_to_config.remove(build_root_key);
 
-    try bcs.cacheResolvedPaths(gpa, normal_path, build_root_key, config_id);
+    try self.cacheResolvedPaths(gpa, normal_path, build_root_key, config_id);
 
     return config_id;
 }
 
 /// Returns build root path (where build.zig is) for a given id, use
 /// `resolve` to get a config id for a given file or directory.
-pub fn buildRootPath(bcs: *const BuildConfigStore, id: ConfigId) []const u8 {
-    const index = @intFromEnum(id);
-    std.debug.assert(index < bcs.configs.len);
-    return bcs.configs.items(.build_root_path)[index];
+pub fn buildRootPath(self: *const BuildConfigStore, id: ConfigId) []const u8 {
+    const index = id.toIndex();
+    std.debug.assert(index < self.configs.len);
+    return self.configs.items(.build_root_path)[index];
 }
 
 /// Returns build configuration for a given id, use `resolve` to get
 /// a config id for a given file or directory.
-pub fn buildConfig(bcs: *const BuildConfigStore, id: ConfigId) *const std.Build.Configuration {
-    const index = @intFromEnum(id);
-    std.debug.assert(index < bcs.configs.len);
-    return &bcs.configs.items(.build_config)[index];
+pub fn buildConfig(self: *const BuildConfigStore, id: ConfigId) *const std.Build.Configuration {
+    const index = id.toIndex();
+    std.debug.assert(index < self.configs.len);
+    return &self.configs.items(.build_config)[index];
 }
 
 const BuildRoot = union(enum) {
-    config_index: struct {
+    config_id: struct {
         index: ConfigId,
         path: []const u8,
     },
@@ -164,7 +172,7 @@ const BuildRoot = union(enum) {
 /// path lets `resolve` backfill any missing descendant cache entries between the
 /// original source path and that ancestor.
 fn findNearestBuildRoot(
-    bcs: *const BuildConfigStore,
+    self: *const BuildConfigStore,
     io: std.Io,
     src_path: []const u8,
 ) !BuildRoot {
@@ -175,8 +183,8 @@ fn findNearestBuildRoot(
 
     while (true) {
         std.debug.print(" -- checking '{s}'\n", .{dir});
-        if (bcs.path_to_config.get(dir)) |index|
-            return .{ .config_index = .{
+        if (self.path_to_config.get(dir)) |index|
+            return .{ .config_id = .{
                 .index = index,
                 .path = dir,
             } };
@@ -209,7 +217,7 @@ fn findNearestBuildRoot(
 /// This lets future resolves for nearby descendants stop at the closest cached
 /// ancestor instead of probing every parent directory for `build.zig`.
 fn cacheResolvedPaths(
-    bcs: *BuildConfigStore,
+    self: *BuildConfigStore,
     gpa: std.mem.Allocator,
     src_path: []const u8,
     cached_ancestor_path: []const u8,
@@ -218,18 +226,18 @@ fn cacheResolvedPaths(
     const zone = tracy.traceNamed(@src(), "BuildConfigStore.cacheResolvedPaths");
     defer zone.end();
 
-    const config_index = @intFromEnum(config_id);
-    std.debug.assert(config_index < bcs.configs.len);
+    const config_index = config_id.toIndex();
+    std.debug.assert(config_index < self.configs.len);
 
     var path = src_path;
-    const arena = bcs.configs.items(.arena)[config_index].allocator();
+    const arena = self.configs.items(.arena)[config_index].allocator();
 
     while (!std.mem.eql(u8, path, cached_ancestor_path)) {
-        if (!bcs.path_to_config.contains(path)) {
+        if (!self.path_to_config.contains(path)) {
             const key = try arena.dupe(u8, path);
             errdefer arena.free(key);
 
-            try bcs.path_to_config.putNoClobber(gpa, key, config_id);
+            try self.path_to_config.putNoClobber(gpa, key, config_id);
         }
 
         const parent = std.fs.path.dirname(path) orelse cached_ancestor_path;

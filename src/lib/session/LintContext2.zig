@@ -1,5 +1,7 @@
 const LintContext2 = @This();
 
+pub const CompileContextId = enum(u32) { _ };
+
 const StepIndex = u32;
 
 environ_map: *const std.process.Environ.Map,
@@ -10,8 +12,10 @@ zig_exe: []const u8,
 zig_lib_directory: []const u8,
 cwd: []const u8,
 
+compile_contexts: std.MultiArrayList(CompileContext) = .empty,
 build_config_store: BuildConfigStore = .empty,
 file_store: FileStore = .empty,
+module_store: ModuleStore = .empty,
 
 // TODO: #149 - should really be multi array type instead of sep arrays
 include_steps: std.ArrayList(std.Build.Configuration.Step.Index) = .empty,
@@ -22,21 +26,21 @@ include_descendents: std.ArrayList(std.AutoHashMapUnmanaged(FileStore.FileId, vo
 pub const LintContextOptions = struct {};
 
 // TODO: #149 - Add optional arg for compiled units from args
-pub fn init(ctx: *LintContext2, options: LintContextOptions) !void {
+pub fn init(self: *LintContext2, options: LintContextOptions) !void {
     const zone = tracy.traceNamed(@src(), "LintContext2.init");
     defer zone.end();
 
     _ = options;
 
-    const config_index = try ctx.build_config_store.resolve(
-        ctx.io,
-        ctx.gpa,
-        ctx.zig_exe,
-        ctx.cwd,
+    const config_id = try self.build_config_store.resolve(
+        self.io,
+        self.gpa,
+        self.zig_exe,
+        self.cwd,
         ".",
     );
-    const build_root_path = ctx.build_config_store.buildRootPath(config_index);
-    const root_build_config = ctx.build_config_store.buildConfig(config_index);
+    const build_root_path = self.build_config_store.buildRootPath(config_id);
+    const root_build_config = self.build_config_store.buildConfig(config_id);
 
     std.log.info("Init context with {d} steps", .{root_build_config.steps.len});
     for (root_build_config.steps, 0..) |step, step_index| {
@@ -46,7 +50,9 @@ pub fn init(ctx: *LintContext2, options: LintContextOptions) !void {
         ) orelse continue;
 
         const compile_step_index: std.Build.Configuration.Step.Index = @enumFromInt(step_index);
-        const compile_name = step.name.slice(root_build_config);
+
+        const compile_name = try self.gpa.dupe(u8, step.name.slice(root_build_config));
+        errdefer self.gpa.free(compile_name);
 
         std.log.info("Step {d} - '{s}' (root name:'{s}')", .{
             step_index,
@@ -54,59 +60,121 @@ pub fn init(ctx: *LintContext2, options: LintContextOptions) !void {
             compile.root_name.slice(root_build_config),
         });
 
+        // TODO: Print the import table ""
+
         const root_module = compile.root_module.get(root_build_config);
 
-        if (root_module.root_source_file.unwrap()) |root_source_file_index| {
-            const root_source_file = root_source_file_index.get(root_build_config);
+        if (root_module.root_source_file.unwrap()) |root_source_file_id| {
+            const root_source_file = root_source_file_id.get(root_build_config);
 
             if (try files.resolveLazyPath(
                 root_source_file,
                 root_build_config,
-                ctx.gpa,
+                self.gpa,
                 build_root_path,
             )) |abs_path| {
-                const file_index = try ctx.file_store.resolve(
+                const file_id = try self.file_store.resolve(
                     abs_path,
-                    ctx.io,
-                    ctx.gpa,
-                    ctx.cwd,
+                    self.io,
+                    self.gpa,
+                    self.cwd,
                 );
                 std.log.info(
                     "Step {d} root source path: '{s}'",
                     .{ step_index, abs_path },
                 );
 
-                std.debug.assert(ctx.include_steps.items.len == ctx.include_root_source_abs_path.items.len);
-                std.debug.assert(ctx.include_steps.items.len == ctx.include_root_import_map.items.len);
-                std.debug.assert(ctx.include_steps.items.len == ctx.include_descendents.items.len);
+                var named_imports: std.StringHashMapUnmanaged(ModuleStore.ModuleId) = .empty;
+                errdefer named_imports.deinit(self.gpa);
 
-                try ctx.include_steps.append(ctx.gpa, compile_step_index);
-                try ctx.include_root_source_abs_path.append(ctx.gpa, abs_path);
-                try ctx.appendImportMap(compile_step_index, config_index);
+                const imports = root_module.import_table.get(root_build_config).imports.mal;
+                try named_imports.ensureTotalCapacity(self.gpa, @intCast(imports.len));
+                for (imports.items(.name), imports.items(.module)) |
+                    import_name,
+                    import_module_index,
+                | {
+                    const import_module = import_module_index.get(root_build_config);
+                    const import_source_file_id = import_module.root_source_file.unwrap() orelse continue;
+                    const import_source_file = import_source_file_id.get(root_build_config);
+                    const import_path = (try files.resolveLazyPath(
+                        import_source_file,
+                        root_build_config,
+                        self.gpa,
+                        build_root_path,
+                    )) orelse continue;
+                    defer self.gpa.free(import_path);
+
+                    const import_module_id = try self.module_store.resolve(
+                        self.gpa,
+                        .{
+                            .root_file = try self.file_store.resolve(
+                                import_path,
+                                self.io,
+                                self.gpa,
+                                self.cwd,
+                            ),
+                            // TODO: #149 - do we want to go deeper?
+                            .named_imports = .empty,
+                        },
+                    );
+                    named_imports.putAssumeCapacity(
+                        import_name.slice(root_build_config),
+                        import_module_id,
+                    );
+                }
+
+                const compile_context_id: CompileContext.Id = .fromIndex(self.compile_contexts.len);
+                const target = compile.rootModuleTarget(root_build_config);
+                const root_module_id = try self.module_store.resolve(
+                    self.gpa,
+                    .{
+                        .root_file = file_id,
+                        .named_imports = named_imports,
+                    },
+                );
+                try self.compile_contexts.append(self.gpa, .{
+                    .name = compile_name,
+                    .kind = compile.flags3.kind,
+                    .root_module = root_module_id,
+                    .target = .{
+                        .cpu_arch = target.flags.cpu_arch.unwrap().?,
+                        .os_tag = target.flags.os_tag.unwrap().?,
+                        .abi = target.flags.abi.unwrap().?,
+                    },
+                });
+                errdefer _ = self.compile_contexts.swapRemove(compile_context_id.toIndex());
+
+                std.debug.assert(self.include_steps.items.len == self.include_root_source_abs_path.items.len);
+                std.debug.assert(self.include_steps.items.len == self.include_root_import_map.items.len);
+                std.debug.assert(self.include_steps.items.len == self.include_descendents.items.len);
+
+                try self.include_steps.append(self.gpa, compile_step_index);
+                try self.include_root_source_abs_path.append(self.gpa, abs_path);
+                try self.appendImportMap(compile_step_index, config_id);
 
                 // Populate map:
                 // ------ Start ------
                 {
                     var map: std.AutoHashMapUnmanaged(FileStore.FileId, void) = .empty;
-                    errdefer map.deinit(ctx.gpa);
+                    errdefer map.deinit(self.gpa);
 
                     var it: files.ImportIterator = .{
-                        .file_store = &ctx.file_store,
-                        .io = ctx.io,
-                        .cwd = std.fs.path.dirname(ctx.file_store.fileAbsPath(file_index)) orelse
+                        .file_store = &self.file_store,
+                        .io = self.io,
+                        .cwd = std.fs.path.dirname(self.file_store.fileAbsPath(file_id)) orelse
                             @panic("TODO: Should this be unreachable or cwd"),
-                        .gpa = ctx.gpa,
-                        .zig_lib_directory = ctx.zig_lib_directory,
+                        .gpa = self.gpa,
+                        .zig_lib_directory = self.zig_lib_directory,
                     };
                     defer it.deinit();
 
-                    try it.init(file_index);
-                    while (try it.next()) |descendent_file_index| {
-                        try map.put(ctx.gpa, descendent_file_index, {});
-                        std.debug.print(" Visited Descendent: '{s}'\n", .{ctx.file_store.fileAbsPath(descendent_file_index)});
+                    try it.init(file_id);
+                    while (try it.next()) |descendent_file_id| {
+                        try map.put(self.gpa, descendent_file_id, {});
+                        std.debug.print(" Visited Descendent: '{s}'\n", .{self.file_store.fileAbsPath(descendent_file_id)});
                     }
 
-                    try ctx.include_descendents.append(ctx.gpa, map);
+                    try self.include_descendents.append(self.gpa, map);
                 }
                 // ------ End ------
             } else {
@@ -118,44 +186,50 @@ pub fn init(ctx: *LintContext2, options: LintContextOptions) !void {
     }
 }
 
-pub fn deinit(ctx: *LintContext2) void {
-    for (ctx.include_root_source_abs_path.items) |path| {
-        ctx.gpa.free(path);
+pub fn deinit(self: *LintContext2) void {
+    for (self.compile_contexts.items(.name)) |name| {
+        self.gpa.free(name);
     }
 
-    for (ctx.include_root_import_map.items) |*map| {
+    for (self.include_root_source_abs_path.items) |path| {
+        self.gpa.free(path);
+    }
+
+    for (self.include_root_import_map.items) |*map| {
         var it = map.keyIterator();
-        while (it.next()) |key| ctx.gpa.free(key.*);
-        map.deinit(ctx.gpa);
+        while (it.next()) |key| self.gpa.free(key.*);
+        map.deinit(self.gpa);
     }
-    for (ctx.include_descendents.items) |*map| {
-        map.deinit(ctx.gpa);
+    for (self.include_descendents.items) |*map| {
+        map.deinit(self.gpa);
     }
 
-    ctx.include_descendents.deinit(ctx.gpa);
-    ctx.include_root_import_map.deinit(ctx.gpa);
-    ctx.include_root_source_abs_path.deinit(ctx.gpa);
-    ctx.include_steps.deinit(ctx.gpa);
-    ctx.build_config_store.deinit(ctx.gpa);
-    ctx.file_store.deinit(ctx.gpa);
+    self.include_descendents.deinit(self.gpa);
+    self.include_root_import_map.deinit(self.gpa);
+    self.include_root_source_abs_path.deinit(self.gpa);
+    self.include_steps.deinit(self.gpa);
+    self.build_config_store.deinit(self.gpa);
+    self.file_store.deinit(self.gpa);
+    self.compile_contexts.deinit(self.gpa);
+    self.module_store.deinit(self.gpa);
 }
 
-pub fn resolveFile(ctx: *LintContext2, input_path: []const u8) !FileStore.FileId {
-    return ctx.file_store.resolve(input_path, ctx.io, ctx.gpa, ctx.cwd);
+pub fn resolveFile(self: *LintContext2, input_path: []const u8) !FileStore.FileId {
+    return self.file_store.resolve(input_path, self.io, self.gpa, self.cwd);
 }
 
 pub const CompiledUnitIterator = struct {
     ctx: *const LintContext2,
-    file_index: FileStore.FileId,
+    file_id: FileStore.FileId,
 
     step_index: StepIndex = 0,
 
-    pub fn next(it: *CompiledUnitIterator) ?StepIndex {
-        while (it.step_index < it.ctx.include_descendents.items.len) {
-            const step_index = it.step_index;
-            it.step_index += 1;
+    pub fn next(self: *CompiledUnitIterator) ?StepIndex {
+        while (self.step_index < self.ctx.include_descendents.items.len) {
+            const step_index = self.step_index;
+            self.step_index += 1;
 
-            if (it.ctx.include_descendents.items[step_index].contains(it.file_index)) {
+            if (self.ctx.include_descendents.items[step_index].contains(self.file_id)) {
                 return @intCast(step_index);
             }
         }
@@ -164,22 +238,22 @@ pub const CompiledUnitIterator = struct {
 };
 
 pub fn resolveCompiledUnits(
-    ctx: *const LintContext2,
-    file_index: FileStore.FileId,
+    self: *const LintContext2,
+    file_id: FileStore.FileId,
 ) CompiledUnitIterator {
     return .{
-        .ctx = ctx,
-        .file_index = file_index,
+        .ctx = self,
+        .file_id = file_id,
     };
 }
 
 fn appendImportMap(
-    ctx: *LintContext2,
+    self: *LintContext2,
     step_index: std.Build.Configuration.Step.Index,
-    config_index: BuildConfigStore.ConfigId,
+    config_id: BuildConfigStore.ConfigId,
 ) !void {
-    const root_build_config = ctx.build_config_store.buildConfig(config_index);
-    const build_root_path = ctx.build_config_store.buildRootPath(config_index);
+    const root_build_config = self.build_config_store.buildConfig(config_id);
+    const build_root_path = self.build_config_store.buildRootPath(config_id);
 
     const step = root_build_config.steps[@intFromEnum(step_index)];
     const compile = step.extended.cast(
@@ -191,34 +265,34 @@ fn appendImportMap(
     const imports = root_module.import_table.get(root_build_config).imports.mal;
 
     var import_map: std.StringHashMapUnmanaged(FileStore.FileId) = .empty;
-    errdefer import_map.deinit(ctx.gpa);
+    errdefer import_map.deinit(self.gpa);
 
     for (imports.items(.name), imports.items(.module)) |import_name, import_module_index| {
         const import_module = import_module_index.get(root_build_config);
-        if (import_module.root_source_file.unwrap()) |import_source_file_index| {
-            const import_source_file = import_source_file_index.get(root_build_config);
+        if (import_module.root_source_file.unwrap()) |import_source_file_id| {
+            const import_source_file = import_source_file_id.get(root_build_config);
             if (try files.resolveLazyPath(
                 import_source_file,
                 root_build_config,
-                ctx.gpa,
+                self.gpa,
                 build_root_path,
             )) |import_path| {
-                defer ctx.gpa.free(import_path);
+                defer self.gpa.free(import_path);
 
-                const file_index = try ctx.file_store.resolve(
+                const file_id = try self.file_store.resolve(
                     import_path,
-                    ctx.io,
-                    ctx.gpa,
-                    ctx.cwd,
+                    self.io,
+                    self.gpa,
+                    self.cwd,
                 );
 
-                const name = try ctx.gpa.dupe(
+                const name = try self.gpa.dupe(
                     u8,
                     import_name.slice(root_build_config),
                 );
-                errdefer ctx.gpa.free(name);
+                errdefer self.gpa.free(name);
 
-                try import_map.put(ctx.gpa, name, file_index);
+                try import_map.put(self.gpa, name, file_id);
 
                 std.log.info(
                     "Step {d} import '{s}' root source '{s}' resolved",
@@ -245,11 +319,13 @@ fn appendImportMap(
         }
     }
 
-    try ctx.include_root_import_map.append(ctx.gpa, import_map);
+    try self.include_root_import_map.append(self.gpa, import_map);
 }
 
 const std = @import("std");
 const files = @import("../files.zig");
 const BuildConfigStore = @import("BuildConfigStore.zig");
 const FileStore = @import("FileStore.zig");
+const ModuleStore = @import("ModuleStore.zig");
+const CompileContext = @import("CompileContext.zig");
 const tracy = @import("tracy");

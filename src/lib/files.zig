@@ -410,7 +410,7 @@ pub const ImportIterator = struct {
     queue: std.ArrayList(FileStore.FileId) = .empty,
 
     pub fn init(it: *ImportIterator, root: FileStore.FileId) !void {
-        it.seen.set(@intFromEnum(root));
+        it.seen.set(root.toIndex());
         try it.queue.append(it.gpa, root);
     }
 
@@ -419,21 +419,21 @@ pub const ImportIterator = struct {
     }
 
     pub fn next(it: *ImportIterator) !?FileStore.FileId {
-        if (it.queue.pop()) |file_index| {
-            try it.visit(file_index);
-            return file_index;
+        if (it.queue.pop()) |file_id| {
+            try it.visit(file_id);
+            return file_id;
         }
         return null;
     }
 
     fn visit(
         it: *ImportIterator,
-        file_index: FileStore.FileId,
+        file_id: FileStore.FileId,
     ) !void {
-        const node_count = it.file_store.fileTree(file_index).nodes.len;
+        const node_count = it.file_store.fileTree(file_id).nodes.len;
         for (0..node_count) |node_index| {
             const node: std.zig.Ast.Node.Index = @enumFromInt(node_index);
-            const tree = it.file_store.fileTree(file_index);
+            const tree = it.file_store.fileTree(file_id);
             switch (tree.nodeTag(node)) {
                 .builtin_call,
                 .builtin_call_comma,
@@ -443,7 +443,7 @@ pub const ImportIterator = struct {
                     tree,
                     it.gpa,
                     node,
-                    file_index,
+                    file_id,
                 ),
                 else => {},
             }
@@ -455,7 +455,7 @@ pub const ImportIterator = struct {
         tree: *const std.zig.Ast,
         gpa: std.mem.Allocator,
         node: std.zig.Ast.Node.Index,
-        file_index: FileStore.FileId,
+        file_id: FileStore.FileId,
     ) !void {
         if (!std.mem.eql(u8, tree.tokenSlice(tree.nodeMainToken(node)), "@import")) return;
 
@@ -486,7 +486,7 @@ pub const ImportIterator = struct {
             },
         };
 
-        const parent_file_path = it.file_store.fileAbsPath(file_index);
+        const parent_file_path = it.file_store.fileAbsPath(file_id);
         const parent_file_dir = std.fs.path.dirname(parent_file_path) orelse
             @panic("TODO: Should this be unreachable or cwd");
 
@@ -513,11 +513,11 @@ pub const ImportIterator = struct {
             else
                 try it.resolveModuleImport(import_path);
 
-        if (maybe_file_id) |file_id| {
-            const seen_index = @intFromEnum(file_id);
+        if (maybe_file_id) |fid| {
+            const seen_index = fid.toIndex();
             if (!it.seen.isSet(seen_index)) {
                 it.seen.set(seen_index);
-                try it.queue.append(gpa, file_id);
+                try it.queue.append(gpa, fid);
             }
         }
         // TODO: #149 - support std lib and module imports.

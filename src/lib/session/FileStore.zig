@@ -2,6 +2,14 @@ const FileStore = @This();
 
 pub const FileId = enum(u32) {
     _,
+
+    pub fn fromIndex(index: usize) FileId {
+        return @enumFromInt(@as(u32, @intCast(index)));
+    }
+
+    pub fn toIndex(self: FileId) usize {
+        return @intFromEnum(self);
+    }
 };
 
 pub const File = struct {
@@ -30,8 +38,8 @@ pub const empty: FileStore = .{
     .path_to_index = .empty,
 };
 
-pub fn deinit(fs: *FileStore, gpa: std.mem.Allocator) void {
-    var slice = fs.files.slice();
+pub fn deinit(self: *FileStore, gpa: std.mem.Allocator) void {
+    var slice = self.files.slice();
     for (
         slice.items(.abs_path),
         slice.items(.source),
@@ -42,12 +50,12 @@ pub fn deinit(fs: *FileStore, gpa: std.mem.Allocator) void {
         tree.deinit(gpa);
     }
 
-    fs.files.deinit(gpa);
-    fs.path_to_index.deinit(gpa); // Paths owned by File.
+    self.files.deinit(gpa);
+    self.path_to_index.deinit(gpa); // Paths owned by File.
 }
 
 pub fn resolve(
-    fs: *FileStore,
+    self: *FileStore,
     input_path: []const u8,
     io: std.Io,
     gpa: std.mem.Allocator,
@@ -65,7 +73,7 @@ pub fn resolve(
         fba.allocator(),
         &.{ cwd, input_path },
     ) catch unreachable;
-    if (fs.path_to_index.get(normal_path)) |index| return index;
+    if (self.path_to_index.get(normal_path)) |index| return index;
 
     const source = try std.Io.Dir.cwd().readFileAllocOptions(
         io,
@@ -83,39 +91,39 @@ pub fn resolve(
     const abs_path = try gpa.dupe(u8, normal_path);
     errdefer gpa.free(abs_path);
 
-    const id: FileId = @enumFromInt(@as(u32, @intCast(fs.files.len)));
+    const id: FileId = .fromIndex(self.files.len);
 
-    try fs.files.append(gpa, .{
+    try self.files.append(gpa, .{
         .tree = tree,
         .abs_path = abs_path,
         .source = source,
     });
-    errdefer _ = fs.files.swapRemove(@intFromEnum(id));
+    errdefer _ = self.files.swapRemove(id.toIndex());
 
-    try fs.path_to_index.putNoClobber(gpa, abs_path, id);
-    errdefer _ = fs.path_to_index.remove(abs_path);
+    try self.path_to_index.putNoClobber(gpa, abs_path, id);
+    errdefer _ = self.path_to_index.remove(abs_path);
 
     std.debug.print("File store: adding '{s}\n", .{abs_path});
 
     return id;
 }
 
-pub fn fileTree(fs: *const FileStore, id: FileId) *const std.zig.Ast {
-    const index = @intFromEnum(id);
-    std.debug.assert(index < fs.files.len);
-    return &fs.files.items(.tree)[index];
+pub fn fileTree(self: *const FileStore, id: FileId) *const std.zig.Ast {
+    const index = id.toIndex();
+    std.debug.assert(index < self.files.len);
+    return &self.files.items(.tree)[index];
 }
 
-pub fn fileSource(fs: *const FileStore, id: FileId) []const u8 {
-    const index = @intFromEnum(id);
-    std.debug.assert(index < fs.files.len);
-    return fs.files.items(.source)[index];
+pub fn fileSource(self: *const FileStore, id: FileId) []const u8 {
+    const index = id.toIndex();
+    std.debug.assert(index < self.files.len);
+    return self.files.items(.source)[index];
 }
 
-pub fn fileAbsPath(fs: *const FileStore, id: FileId) []const u8 {
-    const index = @intFromEnum(id);
-    std.debug.assert(index < fs.files.len);
-    return fs.files.items(.abs_path)[index];
+pub fn fileAbsPath(self: *const FileStore, id: FileId) []const u8 {
+    const index = id.toIndex();
+    std.debug.assert(index < self.files.len);
+    return self.files.items(.abs_path)[index];
 }
 
 const std = @import("std");
