@@ -85,6 +85,8 @@ pub const empty: ModuleStore = .{
 
 pub fn deinit(self: *ModuleStore, gpa: std.mem.Allocator) void {
     for (self.modules.items) |*module| {
+        var it = module.named_imports.keyIterator();
+        while (it.next()) |key| gpa.free(key.*);
         module.named_imports.deinit(gpa);
     }
     self.modules.deinit(gpa);
