@@ -13,6 +13,8 @@ pub const LintResult = struct {
         abs_path: []const u8,
         problems: []LintProblem,
     ) error{OutOfMemory}!Self {
+        std.debug.assert(std.fs.path.isAbsolute(abs_path));
+
         const owned_abs_path = try allocator.dupe(u8, abs_path);
 
         return .{

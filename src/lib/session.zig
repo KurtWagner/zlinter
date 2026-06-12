@@ -259,6 +259,8 @@ pub const LintContext = struct {
         doc: *LintDocument,
         cwd: []const u8,
     ) !void {
+        std.debug.assert(std.fs.path.isAbsolute(abs_path));
+
         _ = zig_exe;
         _ = cwd;
         // const config_id = try self.build_config_store.resolve(

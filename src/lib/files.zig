@@ -96,6 +96,8 @@ fn walkDirectory(
     file_paths: *std.StringHashMap(void),
     parent_abs_path: []const u8,
 ) !void {
+    std.debug.assert(std.fs.path.isAbsolute(parent_abs_path));
+
     var walker = try dir.walk(allocator);
     defer walker.deinit();
 
@@ -121,6 +123,8 @@ fn putLintFilePath(
     file_paths: *std.StringHashMap(void),
     abs_path: []const u8,
 ) !void {
+    std.debug.assert(std.fs.path.isAbsolute(abs_path));
+
     errdefer allocator.free(abs_path);
 
     if (file_paths.contains(abs_path)) {
