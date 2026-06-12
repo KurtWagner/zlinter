@@ -282,7 +282,6 @@ fn runLinterRules(
         .gpa = gpa,
         .arena = arena.allocator(),
         .io = io,
-        .environ_map = environ_map,
         .zig_exe = zig_exe,
         .zig_lib_directory = zig_lib_directory,
         .cwd = cwd,

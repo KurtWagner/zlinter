@@ -1,10 +1,9 @@
 //! One configured compilation entry point whose root module gives meaning to
 //! source files and imports. e.g., `addLibrary` and `addExecutable`.
+const CompileContext = @This();
 
-name: []const u8,
-kind: std.Build.Configuration.Step.Compile.Kind,
 root_module: ModuleId,
-target: Target,
+step_index: std.Build.Configuration.Step.Index,
 
 pub const Id = enum(u32) {
     _,
@@ -18,11 +17,18 @@ pub const Id = enum(u32) {
     }
 };
 
-pub const Target = struct {
-    cpu_arch: std.Target.Cpu.Arch,
-    os_tag: std.Target.Os.Tag,
-    abi: std.Target.Abi,
-};
+pub fn kind(self: CompileContext, config: *const std.Build.Configuration) std.Build.Configuration.Step.Compile.Kind {
+    const step = config.steps[self.step_index];
+    const compile = step.extended.cast(
+        config,
+        std.Build.Configuration.Step.Compile,
+    ).?;
+    return compile.flags3.kind;
+}
+
+pub fn name(self: CompileContext, config: *const std.Build.Configuration) []const u8 {
+    return config.steps[self.step_index].name.slice(config);
+}
 
 const std = @import("std");
 const ModuleId = @import("./ModuleStore.zig").ModuleId;

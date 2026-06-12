@@ -16,10 +16,10 @@ pub const File = struct {
     /// AST of file.
     tree: std.zig.Ast,
 
-    /// Source of file contents.
+    /// Owned source of file contents
     source: [:0]const u8,
 
-    /// Absolute path to file.
+    /// Owned absolute path to file
     abs_path: []const u8,
 };
 
@@ -109,21 +109,15 @@ pub fn resolve(
 }
 
 pub fn fileTree(self: *const FileStore, id: FileId) *const std.zig.Ast {
-    const index = id.toIndex();
-    std.debug.assert(index < self.files.len);
-    return &self.files.items(.tree)[index];
+    return &self.files.items(.tree)[id.toIndex()];
 }
 
 pub fn fileSource(self: *const FileStore, id: FileId) []const u8 {
-    const index = id.toIndex();
-    std.debug.assert(index < self.files.len);
-    return self.files.items(.source)[index];
+    return self.files.items(.source)[id.toIndex()];
 }
 
 pub fn fileAbsPath(self: *const FileStore, id: FileId) []const u8 {
-    const index = id.toIndex();
-    std.debug.assert(index < self.files.len);
-    return self.files.items(.abs_path)[index];
+    return self.files.items(.abs_path)[id.toIndex()];
 }
 
 const std = @import("std");

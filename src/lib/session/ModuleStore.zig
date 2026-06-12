@@ -1,6 +1,6 @@
 const ModuleStore = @This();
 
-modules: std.ArrayList(ModuleEntry),
+modules: std.MultiArrayList(ModuleEntry),
 module_key_to_module_id: std.HashMapUnmanaged(
     ModuleKey,
     ModuleId,
@@ -9,52 +9,48 @@ module_key_to_module_id: std.HashMapUnmanaged(
 ),
 
 pub const ModuleEntry = struct {
-    id: ModuleId,
     root_file: FileId,
 
-    /// Imports configured by the build/module system.
-    ///
-    /// These:
-    ///   @import("foo")
-    ///   @import("zlinter")
-    ///
-    /// Not these:
-    ///   @import("./relative.zig")
-    ///   @import("../x.zig")
+    /// Key owned imports configured by the build/module system (e.g., `@import("foo")`)
     named_imports: std.StringHashMapUnmanaged(ModuleId),
 };
 
 const ModuleKeyContext = struct {
     pub fn eql(self: ModuleKeyContext, a: ModuleKey, b: ModuleKey) bool {
         _ = self;
-        return a.root_file == b.root_file;
+        return a.eql(b);
     }
 
     pub fn hash(self: ModuleKeyContext, key: ModuleKey) u64 {
         _ = self;
-        var wy = std.hash.Wyhash.init(0);
-        std.hash.autoHash(&wy, key.root_file.toIndex());
-        return wy.final();
+        return key.hash();
     }
 };
 
 pub const ModuleKey = struct {
     root_file: FileId,
-    // TODO: #149 - THis needs more stuff, file id isn't a good key alone
+    build_config: BuildConfigStore.ConfigId,
+    build_config_module: std.Build.Configuration.Module.Index,
 
     fn init(seed: ModuleSeed) ModuleKey {
         return .{
             .root_file = seed.root_file,
+            .build_config = seed.build_config,
+            .build_config_module = seed.build_config_module,
         };
     }
 
     pub fn eql(self: ModuleKey, other: ModuleKey) bool {
-        return self.root_file == other.root_file;
+        return self.root_file == other.root_file and
+            self.build_config == other.build_config and
+            self.build_config_module == other.build_config_module;
     }
 
     pub fn hash(self: ModuleKey) u64 {
         var wy = std.hash.Wyhash.init(0);
         std.hash.autoHash(&wy, self.root_file.toIndex());
+        std.hash.autoHash(&wy, self.build_config.toIndex());
+        std.hash.autoHash(&wy, @intFromEnum(self.build_config_module));
         return wy.final();
     }
 };
@@ -73,8 +69,10 @@ pub const ModuleId = enum(u32) {
 
 pub const ModuleSeed = struct {
     root_file: FileId,
+    build_config: BuildConfigStore.ConfigId,
+    build_config_module: std.Build.Configuration.Module.Index,
 
-    /// Imports configured by the build/module system (e.g., `@import("foo")`)
+    /// Key owned imports configured by the build/module system (e.g., `@import("foo")`)
     named_imports: std.StringHashMapUnmanaged(ModuleId),
 };
 
@@ -84,10 +82,10 @@ pub const empty: ModuleStore = .{
 };
 
 pub fn deinit(self: *ModuleStore, gpa: std.mem.Allocator) void {
-    for (self.modules.items) |*module| {
-        var it = module.named_imports.keyIterator();
+    for (self.modules.items(.named_imports)) |*named_imports| {
+        var it = named_imports.keyIterator();
         while (it.next()) |key| gpa.free(key.*);
-        module.named_imports.deinit(gpa);
+        named_imports.deinit(gpa);
     }
     self.modules.deinit(gpa);
     self.module_key_to_module_id.deinit(gpa);
@@ -95,23 +93,13 @@ pub fn deinit(self: *ModuleStore, gpa: std.mem.Allocator) void {
 
 pub fn resolve(self: *ModuleStore, gpa: std.mem.Allocator, seed: ModuleSeed) !ModuleId {
     const key: ModuleKey = .init(seed);
-    var seed_named_imports = seed.named_imports;
-    if (self.module_key_to_module_id.get(key)) |id| {
-        const existing = &self.modules.items[id.toIndex()];
-        if (existing.named_imports.count() == 0 and seed_named_imports.count() != 0) {
-            existing.named_imports.deinit(gpa);
-            existing.named_imports = seed_named_imports;
-        } else {
-            seed_named_imports.deinit(gpa);
-        }
+    if (self.module_key_to_module_id.get(key)) |id|
         return id;
-    }
 
-    const id: ModuleId = .fromIndex(self.modules.items.len);
+    const id: ModuleId = .fromIndex(self.modules.len);
     try self.modules.append(gpa, .{
-        .id = id,
         .root_file = seed.root_file,
-        .named_imports = seed_named_imports,
+        .named_imports = seed.named_imports,
     });
     errdefer _ = self.modules.swapRemove(id.toIndex());
 
@@ -121,5 +109,14 @@ pub fn resolve(self: *ModuleStore, gpa: std.mem.Allocator, seed: ModuleSeed) !Mo
     return id;
 }
 
+pub fn rootFile(self: *const ModuleStore, module_id: ModuleId) FileId {
+    return self.modules.items(.root_file)[module_id.toIndex()];
+}
+
+pub fn namedImports(self: *const ModuleStore, module_id: ModuleId) *const std.StringHashMapUnmanaged(ModuleId) {
+    return &self.modules.items(.named_imports)[module_id.toIndex()];
+}
+
 const FileId = @import("FileStore.zig").FileId;
+const BuildConfigStore = @import("BuildConfigStore.zig");
 const std = @import("std");

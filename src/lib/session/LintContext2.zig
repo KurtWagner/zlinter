@@ -2,18 +2,25 @@ const LintContext2 = @This();
 
 pub const CompileContextId = enum(u32) { _ };
 
-environ_map: *const std.process.Environ.Map,
 gpa: std.mem.Allocator,
 arena: std.mem.Allocator,
 io: std.Io,
+
+/// Externally owned slice to zig executable path
 zig_exe: []const u8,
+
+/// Externally owned slice to zig lib directory path
 zig_lib_directory: []const u8,
+
+/// Externally owned slice to current working directory
 cwd: []const u8,
 
 compile_contexts: std.MultiArrayList(CompileContext) = .empty,
-build_config_store: BuildConfigStore = .empty,
 file_store: FileStore = .empty,
 module_store: ModuleStore = .empty,
+
+// TODO: #149 - Probably doesnt need to own this because we only ever expect 1 config
+build_config_store: BuildConfigStore = .empty,
 
 pub const LintContextOptions = struct {};
 
@@ -31,157 +38,181 @@ pub fn init(self: *LintContext2, options: LintContextOptions) !void {
         self.cwd,
         ".",
     );
-    try self.consumeRootBuildConfig(config_id);
-}
 
-fn consumeRootBuildConfig(self: *LintContext2, config_id: BuildConfigStore.ConfigId) !void {
-    const build_root_path = self.build_config_store.buildRootPath(config_id);
-    const root_build_config = self.build_config_store.buildConfig(config_id);
-
-    std.log.info("Init context with {d} steps", .{root_build_config.steps.len});
-    for (root_build_config.steps, 0..) |_, step_index|
-        try self.consumeRootBuildConfigStep(
-            root_build_config,
-            build_root_path,
-            step_index,
+    const build_config = self.build_config_store.buildConfig(config_id);
+    for (0..build_config.steps.len) |step_index|
+        try self.consumeBuildConfigStep(
+            config_id,
+            @enumFromInt(step_index),
         );
 }
 
-fn consumeRootBuildConfigStep(
+fn consumeBuildConfigStep(
     self: *LintContext2,
-    root_build_config: *const std.Build.Configuration,
-    build_root_path: []const u8,
-    step_index: usize,
+    config_id: BuildConfigStore.ConfigId,
+    step_index: std.Build.Configuration.Step.Index,
 ) !void {
-    const step = root_build_config.steps[step_index];
+    const build_config = self.build_config_store.buildConfig(config_id);
+    const step = build_config.steps[@intFromEnum(step_index)];
+
     const compile = step.extended.cast(
-        root_build_config,
+        build_config,
         std.Build.Configuration.Step.Compile,
     ) orelse return;
 
-    const compile_name = try self.gpa.dupe(u8, step.name.slice(root_build_config));
-    errdefer self.gpa.free(compile_name);
-
-    const root_module = compile.root_module.get(root_build_config);
-    const root_module_root_source_file: ?FileStore.FileId = path: {
-        const id = root_module.root_source_file.unwrap() orelse break :path null;
-
-        const abs_path = try files.resolveLazyPath(
-            id.get(root_build_config),
-            root_build_config,
-            self.gpa,
-            build_root_path,
-        ) orelse break :path null;
-        defer self.gpa.free(abs_path);
-
-        break :path try self.file_store.resolve(
-            abs_path,
-            self.io,
-            self.gpa,
-            self.cwd,
+    const root_module_id = try self.resolveBuildModule(
+        config_id,
+        compile.root_module,
+    ) orelse {
+        std.log.info(
+            "Step '{s}' has no root module with a root source path",
+            .{step.name.slice(build_config)},
         );
+        return;
     };
 
-    if (root_module_root_source_file) |root_file_id| {
-        var named_imports: std.StringHashMapUnmanaged(ModuleStore.ModuleId) = .empty;
-        errdefer named_imports.deinit(self.gpa);
+    const root_file_id = self.module_store.rootFile(root_module_id);
 
-        const imports = root_module.import_table.get(root_build_config).imports.mal;
+    const compile_context_id: CompileContext.Id = .fromIndex(self.compile_contexts.len);
+    try self.compile_contexts.append(self.gpa, .{
+        .step_index = step_index,
+        .root_module = root_module_id,
+    });
+    errdefer _ = self.compile_contexts.swapRemove(compile_context_id.toIndex());
+
+    // Populate map:
+    // ------ Start ------
+    {
+        var map: std.AutoHashMapUnmanaged(FileStore.FileId, void) = .empty;
+        defer map.deinit(self.gpa);
+
+        var it: files.ImportIterator = .{
+            .file_store = &self.file_store,
+            .io = self.io,
+            .cwd = std.fs.path.dirname(self.file_store.fileAbsPath(root_file_id)) orelse
+                @panic("TODO: Should this be unreachable or cwd"),
+            .gpa = self.gpa,
+            .zig_lib_directory = self.zig_lib_directory,
+        };
+        defer it.deinit();
+
+        try it.init(root_file_id);
+        while (try it.next()) |descendent_file_id| {
+            try map.put(self.gpa, descendent_file_id, {});
+            std.debug.print(" Visited Descendent: '{s}'\n", .{self.file_store.fileAbsPath(descendent_file_id)});
+        }
+    }
+    // ------ End ------
+}
+
+fn resolveBuildModule(
+    self: *LintContext2,
+    config_id: BuildConfigStore.ConfigId,
+    build_module_index: std.Build.Configuration.Module.Index,
+) !?ModuleStore.ModuleId {
+    const build_config = self.build_config_store.buildConfig(config_id);
+
+    var seen: std.AutoHashMapUnmanaged(
+        std.Build.Configuration.Module.Index,
+        ModuleStore.ModuleId,
+    ) = .empty;
+    defer seen.deinit(self.gpa);
+
+    var queue: std.ArrayList(std.Build.Configuration.Module.Index) = .empty;
+    defer queue.deinit(self.gpa);
+
+    const root_module_id = try self.resolveBuildModuleShallow(
+        config_id,
+        build_module_index,
+    ) orelse return null;
+
+    try seen.put(self.gpa, build_module_index, root_module_id);
+    try queue.append(self.gpa, build_module_index);
+
+    while (queue.pop()) |current_build_module_index| {
+        const current_module_id = seen.get(current_build_module_index).?;
+
+        // This exact build module may already have been populated by an earlier compile step.
+        if (self.module_store.namedImports(current_module_id).count() != 0) {
+            continue;
+        }
+
+        const build_module = current_build_module_index.get(build_config);
+
+        const imports = build_module.import_table.get(build_config).imports.mal;
+        var named_imports: std.StringHashMapUnmanaged(ModuleStore.ModuleId) = .empty;
+        errdefer {
+            var it = named_imports.keyIterator();
+            while (it.next()) |key| self.gpa.free(key.*);
+            named_imports.deinit(self.gpa);
+        }
 
         try named_imports.ensureTotalCapacity(self.gpa, @intCast(imports.len));
         for (imports.items(.name), imports.items(.module)) |
             build_import_name_id,
-            build_import_module_id,
+            build_import_module_index,
         | {
-            const import_module = build_import_module_id.get(root_build_config);
+            const import_name_slice = build_import_name_id.slice(build_config);
 
-            const import_file_id = import_module.root_source_file.unwrap() orelse continue;
-            const import_file = import_file_id.get(root_build_config);
-            const import_path = try files.resolveLazyPath(
-                import_file,
-                root_build_config,
-                self.gpa,
-                build_root_path,
-            ) orelse continue;
-            defer self.gpa.free(import_path);
+            const import_module_id = seen.get(build_import_module_index) orelse child: {
+                const resolved = (try self.resolveBuildModuleShallow(
+                    config_id,
+                    build_import_module_index,
+                )) orelse continue;
 
-            const import_module_id = try self.module_store.resolve(
-                self.gpa,
-                .{
-                    .root_file = try self.file_store.resolve(
-                        import_path,
-                        self.io,
-                        self.gpa,
-                        self.cwd,
-                    ),
-                    // TODO: #149 - do we want to go deeper?
-                    .named_imports = .empty,
-                },
-            );
+                try seen.put(self.gpa, build_import_module_index, resolved);
+                try queue.append(self.gpa, build_import_module_index);
 
-            const import_name = try self.gpa.dupe(u8, build_import_name_id.slice(root_build_config));
-            errdefer self.gpa.free(import_name);
+                break :child resolved;
+            };
 
             named_imports.putAssumeCapacity(
-                import_name,
+                try self.gpa.dupe(u8, import_name_slice),
                 import_module_id,
             );
         }
 
-        const compile_context_id: CompileContext.Id = .fromIndex(self.compile_contexts.len);
-        const target = compile.rootModuleTarget(root_build_config);
-        const root_module_id = try self.module_store.resolve(
-            self.gpa,
-            .{
-                .root_file = root_file_id,
-                .named_imports = named_imports,
-            },
-        );
-        try self.compile_contexts.append(self.gpa, .{
-            .name = compile_name,
-            .kind = compile.flags3.kind,
-            .root_module = root_module_id,
-            .target = .{
-                .cpu_arch = target.flags.cpu_arch.unwrap().?,
-                .os_tag = target.flags.os_tag.unwrap().?,
-                .abi = target.flags.abi.unwrap().?,
-            },
-        });
-        errdefer _ = self.compile_contexts.swapRemove(compile_context_id.toIndex());
-
-        // Populate map:
-        // ------ Start ------
-        {
-            var map: std.AutoHashMapUnmanaged(FileStore.FileId, void) = .empty;
-            defer map.deinit(self.gpa);
-
-            var it: files.ImportIterator = .{
-                .file_store = &self.file_store,
-                .io = self.io,
-                .cwd = std.fs.path.dirname(self.file_store.fileAbsPath(root_file_id)) orelse
-                    @panic("TODO: Should this be unreachable or cwd"),
-                .gpa = self.gpa,
-                .zig_lib_directory = self.zig_lib_directory,
-            };
-            defer it.deinit();
-
-            try it.init(root_file_id);
-            while (try it.next()) |descendent_file_id| {
-                try map.put(self.gpa, descendent_file_id, {});
-                std.debug.print(" Visited Descendent: '{s}'\n", .{self.file_store.fileAbsPath(descendent_file_id)});
-            }
-        }
-        // ------ End ------
-    } else {
-        std.log.info("Step {d} has no root source path", .{step_index});
+        self.module_store.modules.items(.named_imports)[current_module_id.toIndex()] = named_imports;
+        named_imports = .empty;
     }
+
+    return root_module_id;
+}
+
+/// Resolves everything except its descendents (e.g., named imports)
+fn resolveBuildModuleShallow(
+    self: *LintContext2,
+    config_id: BuildConfigStore.ConfigId,
+    build_module_index: std.Build.Configuration.Module.Index,
+) !?ModuleStore.ModuleId {
+    const build_root_path = self.build_config_store.buildRootPath(config_id);
+    const build_config = self.build_config_store.buildConfig(config_id);
+
+    const build_module = build_module_index.get(build_config);
+    const root_source_file_id = build_module.root_source_file.unwrap() orelse return null;
+    const root_source_file = root_source_file_id.get(build_config);
+    const root_path = try files.resolveLazyPath(
+        root_source_file,
+        build_config,
+        self.gpa,
+        build_root_path,
+    ) orelse return null;
+    defer self.gpa.free(root_path);
+
+    return try self.module_store.resolve(self.gpa, .{
+        .root_file = try self.file_store.resolve(
+            root_path,
+            self.io,
+            self.gpa,
+            self.cwd,
+        ),
+        .build_config = config_id,
+        .build_config_module = build_module_index,
+        .named_imports = .empty,
+    });
 }
 
 pub fn deinit(self: *LintContext2) void {
-    for (self.compile_contexts.items(.name)) |name| {
-        self.gpa.free(name);
-    }
-
     self.build_config_store.deinit(self.gpa);
     self.file_store.deinit(self.gpa);
     self.compile_contexts.deinit(self.gpa);
@@ -221,81 +252,6 @@ pub fn resolveCompiledUnits(
         .ctx = self,
         .file_id = file_id,
     };
-}
-
-fn appendImportMap(
-    self: *LintContext2,
-    step_index: std.Build.Configuration.Step.Index,
-    config_id: BuildConfigStore.ConfigId,
-) !void {
-    const root_build_config = self.build_config_store.buildConfig(config_id);
-    const build_root_path = self.build_config_store.buildRootPath(config_id);
-
-    const step = root_build_config.steps[@intFromEnum(step_index)];
-    const compile = step.extended.cast(
-        root_build_config,
-        std.Build.Configuration.Step.Compile,
-    ) orelse unreachable;
-
-    const root_module = compile.root_module.get(root_build_config);
-    const imports = root_module.import_table.get(root_build_config).imports.mal;
-
-    var import_map: std.StringHashMapUnmanaged(FileStore.FileId) = .empty;
-    errdefer import_map.deinit(self.gpa);
-
-    for (imports.items(.name), imports.items(.module)) |import_name, import_module_index| {
-        const import_module = import_module_index.get(root_build_config);
-        if (import_module.root_source_file.unwrap()) |import_source_file_id| {
-            const import_source_file = import_source_file_id.get(root_build_config);
-            if (try files.resolveLazyPath(
-                import_source_file,
-                root_build_config,
-                self.gpa,
-                build_root_path,
-            )) |import_path| {
-                defer self.gpa.free(import_path);
-
-                const file_id = try self.file_store.resolve(
-                    import_path,
-                    self.io,
-                    self.gpa,
-                    self.cwd,
-                );
-
-                const name = try self.gpa.dupe(
-                    u8,
-                    import_name.slice(root_build_config),
-                );
-                errdefer self.gpa.free(name);
-
-                try import_map.put(self.gpa, name, file_id);
-
-                std.log.info(
-                    "Step {d} import '{s}' root source '{s}' resolved",
-                    .{
-                        @intFromEnum(step_index),
-                        import_name.slice(root_build_config),
-                        import_path,
-                    },
-                );
-            } else {
-                std.log.info(
-                    "Step {d} import '{s}' root source could not be resolved",
-                    .{
-                        @intFromEnum(step_index),
-                        import_name.slice(root_build_config),
-                    },
-                );
-            }
-        } else {
-            std.log.info(
-                "Step {d} import '{s}' has no root source file",
-                .{ @intFromEnum(step_index), import_name.slice(root_build_config) },
-            );
-        }
-    }
-
-    try self.include_root_import_map.append(self.gpa, import_map);
 }
 
 const std = @import("std");
