@@ -83,23 +83,25 @@ fn consumeBuildConfigStep(
     // Populate map:
     // ------ Start ------
     {
-        var map: std.AutoHashMapUnmanaged(FileStore.FileId, void) = .empty;
+        var map: std.AutoHashMapUnmanaged(files.ImportIterator.Import, void) = .empty;
         defer map.deinit(self.gpa);
 
         var it: files.ImportIterator = .{
             .file_store = &self.file_store,
             .io = self.io,
-            .cwd = std.fs.path.dirname(self.file_store.fileAbsPath(root_file_id)) orelse
-                @panic("TODO: Should this be unreachable or cwd"),
+            .cwd = std.fs.path.dirname(self.file_store.fileAbsPath(root_file_id)).?,
             .gpa = self.gpa,
             .zig_lib_directory = self.zig_lib_directory,
         };
         defer it.deinit();
 
         try it.init(root_file_id);
-        while (try it.next()) |descendent_file_id| {
-            try map.put(self.gpa, descendent_file_id, {});
-            std.debug.print(" Visited Descendent: '{s}'\n", .{self.file_store.fileAbsPath(descendent_file_id)});
+        while (try it.next()) |child_import| {
+            try map.put(self.gpa, child_import, {});
+            std.debug.print(" Visited Descendent: '{t}' '{s}'\n", .{
+                child_import.kind,
+                self.file_store.fileAbsPath(child_import.file_id),
+            });
         }
     }
     // ------ End ------

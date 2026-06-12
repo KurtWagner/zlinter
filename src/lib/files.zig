@@ -399,6 +399,7 @@ pub fn resolveLazyPath(
     }
 }
 
+// TODO: #149 - needs tests
 /// Walks imports with no visited or path type checks (module and relative).
 pub const ImportIterator = struct {
     /// File store that's NOT owned by the iterator. Iterator will modify it
@@ -410,22 +411,51 @@ pub const ImportIterator = struct {
     zig_lib_directory: []const u8,
     cwd: []const u8,
     seen: std.bit_set.StaticBitSet(10240) = .empty,
+    queue: std.ArrayList(Import) = .empty,
 
-    queue: std.ArrayList(FileStore.FileId) = .empty,
+    // TODO: #149 - probably shouldn't live in here...
+    pub const Import = packed struct {
+        pub const Kind = enum(u5) {
+            relative = 0,
+            stdlib = 1,
+            root = 2,
+            builtin = 3,
+            module = 4,
+
+            pub fn init(import_path: []const u8) Kind {
+                return if (std.mem.endsWith(u8, import_path, ".zig") and !std.fs.path.isAbsolute(import_path))
+                    .relative
+                else if (std.mem.eql(u8, import_path, "std"))
+                    .stdlib
+                else if (std.mem.eql(u8, import_path, "root"))
+                    .root
+                else if (std.mem.eql(u8, import_path, "builtin"))
+                    .builtin
+                else
+                    .module;
+            }
+        };
+        kind: Kind,
+        file_id: FileStore.FileId,
+    };
 
     pub fn init(it: *ImportIterator, root: FileStore.FileId) !void {
         it.seen.set(root.toIndex());
-        try it.queue.append(it.gpa, root);
+        try it.queue.append(it.gpa, .{
+            // TODO: #149 - work out kind (it cant be use absolute path from file store, maybe needs to be passed in)
+            .kind = .relative,
+            .file_id = root,
+        });
     }
 
     pub fn deinit(it: *ImportIterator) void {
         it.queue.deinit(it.gpa);
     }
 
-    pub fn next(it: *ImportIterator) !?FileStore.FileId {
-        if (it.queue.pop()) |file_id| {
-            try it.visit(file_id);
-            return file_id;
+    pub fn next(it: *ImportIterator) !?Import {
+        if (it.queue.pop()) |import| {
+            try it.visit(import.file_id);
+            return import;
         }
         return null;
     }
@@ -494,41 +524,35 @@ pub const ImportIterator = struct {
         const parent_file_dir = std.fs.path.dirname(parent_file_path) orelse
             @panic("TODO: Should this be unreachable or cwd");
 
-        const maybe_file_id: ?FileStore.FileId =
-            if (isRelativeZigImport(import_path))
-                try it.file_store.resolve(
-                    import_path,
-                    it.io,
-                    it.gpa,
-                    parent_file_dir,
-                )
-            else if (std.mem.eql(u8, import_path, "std"))
-                try it.file_store.resolve(
-                    "std/std.zig",
-                    it.io,
-                    it.gpa,
-                    it.zig_lib_directory,
-                )
-                // TODO: #149 - handle "root" and "builtin" imports.
-            else if (std.mem.eql(u8, import_path, "root"))
-                null
-            else if (std.mem.eql(u8, import_path, "builtin"))
-                null
-            else
-                try it.resolveModuleImport(import_path);
+        const kind: Import.Kind = .init(import_path);
+        const maybe_file_id: ?FileStore.FileId = switch (kind) {
+            .relative => try it.file_store.resolve(
+                import_path,
+                it.io,
+                it.gpa,
+                parent_file_dir,
+            ),
+            .stdlib => try it.file_store.resolve(
+                "std/std.zig",
+                it.io,
+                it.gpa,
+                it.zig_lib_directory,
+            ),
+            // TODO: #149 - handle "root" and "builtin" imports.
+            .builtin => null,
+            .root => null,
+            .module => try it.resolveModuleImport(import_path),
+        };
 
-        if (maybe_file_id) |fid| {
-            const seen_index = fid.toIndex();
-            if (!it.seen.isSet(seen_index)) {
-                it.seen.set(seen_index);
-                try it.queue.append(gpa, fid);
+        if (maybe_file_id) |child_file_id| {
+            if (!it.seen.isSet(child_file_id.toIndex())) {
+                it.seen.set(child_file_id.toIndex());
+                try it.queue.append(gpa, .{
+                    .kind = kind,
+                    .file_id = child_file_id,
+                });
             }
         }
-        // TODO: #149 - support std lib and module imports.
-    }
-
-    fn isRelativeZigImport(import_path: []const u8) bool {
-        return std.mem.endsWith(u8, import_path, ".zig") and !std.fs.path.isAbsolute(import_path);
     }
 
     fn resolveModuleImport(it: *ImportIterator, import_path: []const u8) !?FileStore.FileId {
