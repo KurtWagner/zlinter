@@ -21,13 +21,13 @@ pub const Config = struct {
     /// naming convention up to the definition being aliased.
     exclude_aliases: bool = true,
 
-    /// Style and severity for declarations with `const` mutability.
+    /// Style and severity for declarations with `var` mutability.
     var_decl: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .snake_case,
         .severity = .@"error",
     },
 
-    /// Style and severity for declarations with `var` mutability.
+    /// Style and severity for declarations with `const` mutability.
     const_decl: zlinter.rules.LintTextStyleWithSeverity = .{
         .style = .snake_case,
         .severity = .@"error",

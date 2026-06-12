@@ -27,13 +27,13 @@ Enforces that variable declaration names use consistent naming. For example,
 
 * `var_decl`
 
-  * Style and severity for declarations with `const` mutability.
+  * Style and severity for declarations with `var` mutability.
 
   * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
 
 * `const_decl`
 
-  * Style and severity for declarations with `var` mutability.
+  * Style and severity for declarations with `const` mutability.
 
   * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
 
