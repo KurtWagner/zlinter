@@ -2,7 +2,7 @@
 
 /// Config for require_fmt rule.
 pub const Config = struct {
-    /// The severity of deprecations (off, warning, error).
+    /// The severity (off, warning, error).
     severity: zlinter.rules.LintProblemSeverity = .warning,
 };
 
