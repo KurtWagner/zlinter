@@ -149,8 +149,6 @@ fn isTestOnlyCondition(tree: Ast, if_statement: Ast.full.If) bool {
 pub const LintContext = struct {
     build_config_store: BuildConfigStore,
     environ_map: *const std.process.Environ.Map,
-    diagnostics_collection: zls.DiagnosticsCollection,
-    intern_pool: zls.analyser.InternPool,
     document_store: zls.DocumentStore,
     gpa: std.mem.Allocator,
     analyser: zls.Analyser,
@@ -166,23 +164,16 @@ pub const LintContext = struct {
     ) !void {
         self.* = .{
             .gpa = gpa,
-            .diagnostics_collection = .{
-                .allocator = gpa,
-                .io = io,
-            },
-            .intern_pool = try .init(io, gpa),
             .document_store = undefined, // zlinter-disable-current-line no_undefined - set below
             .analyser = undefined, // zlinter-disable-current-line no_undefined - set below
             .io = io,
             .environ_map = environ_map,
             .build_config_store = .empty,
         };
-        errdefer self.intern_pool.deinit(gpa);
 
         self.document_store = zls.DocumentStore{
             .io = io,
             .allocator = gpa,
-            .diagnostics_collection = &self.diagnostics_collection,
             .config = .{
                 .environ_map = environ_map,
                 .zig_exe_path = config.zig_exe_path,
@@ -235,14 +226,11 @@ pub const LintContext = struct {
             gpa,
             arena,
             &self.document_store,
-            &self.intern_pool,
             null,
         );
     }
 
     pub fn deinit(self: *LintContext) void {
-        self.diagnostics_collection.deinit();
-        self.intern_pool.deinit(self.gpa);
         self.document_store.deinit();
         self.analyser.deinit();
         self.build_config_store.deinit(self.gpa);
@@ -263,14 +251,6 @@ pub const LintContext = struct {
 
         _ = zig_exe;
         _ = cwd;
-        // const config_id = try self.build_config_store.resolve(
-        //     self.io,
-        //     self.gpa,
-        //     zig_exe,
-        //     cwd,
-        //     abs_path,
-        // );
-        // _ = config_id;
 
         var buffer: [std.fs.max_path_bytes]u8 = undefined;
         const size = try std.Io.Dir.cwd().realPathFile(

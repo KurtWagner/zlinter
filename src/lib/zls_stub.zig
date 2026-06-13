@@ -8,29 +8,12 @@
 
 const std = @import("std");
 
-pub const analyser = struct {
-    pub const InternPool = struct {
-        pub fn init(_: std.Io, _: std.mem.Allocator) !InternPool {
-            return .{};
-        }
-
-        pub fn deinit(_: *InternPool, _: std.mem.Allocator) void {}
-    };
-};
-
 pub const Config = struct {
     zig_exe_path: ?[]const u8 = null,
     zig_lib_path: ?[]const u8 = null,
     build_runner_path: ?[]const u8 = null,
     builtin_path: ?[]const u8 = null,
     global_cache_path: ?[]const u8 = null,
-};
-
-pub const DiagnosticsCollection = struct {
-    allocator: std.mem.Allocator,
-    io: std.Io,
-
-    pub fn deinit(_: *DiagnosticsCollection) void {}
 };
 
 pub const Uri = struct {
@@ -65,7 +48,6 @@ pub const DocumentStore = struct {
 
     io: std.Io,
     allocator: std.mem.Allocator,
-    diagnostics_collection: *DiagnosticsCollection,
     config: DocumentStore.Config,
     handles: std.ArrayList(*Handle) = .empty,
 
@@ -280,7 +262,6 @@ pub const Analyser = struct {
         allocator: std.mem.Allocator,
         _: std.mem.Allocator,
         document_store: *DocumentStore,
-        _: *analyser.InternPool,
         _: ?*anyopaque,
     ) Analyser {
         return .{
