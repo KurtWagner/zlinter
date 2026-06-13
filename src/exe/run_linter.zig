@@ -283,7 +283,7 @@ fn runLinterRules(
         .zig_lib_directory = zig_lib_directory,
         .cwd = cwd,
     };
-    try context2.init(.{});
+    try context2.init();
     defer context2.deinit();
 
     // TODO: #149 - Remove this just poking around.

@@ -23,14 +23,9 @@ decl_store: DeclStore = .empty,
 // TODO: #149 - Probably doesnt need to own this because we only ever expect 1 config
 build_config_store: BuildConfigStore = .empty,
 
-pub const LintContextOptions = struct {};
-
-// TODO: #149 - Add optional arg for compiled units from args
-pub fn init(self: *LintContext2, options: LintContextOptions) !void {
+pub fn init(self: *LintContext2) !void {
     const zone = tracy.traceNamed(@src(), "LintContext2.init");
     defer zone.end();
-
-    _ = options;
 
     const config_id = try self.build_config_store.resolve(
         self.io,

@@ -92,7 +92,6 @@ pub const LintDocument = struct {
         }
         return false;
     }
-
 };
 
 /// Returns true if the if statement appears to enforce that its block is test only
@@ -848,7 +847,6 @@ pub const LintContext = struct {
             },
         };
     }
-
 };
 
 test "LintDocument.isEnclosedInTestBlock" {
