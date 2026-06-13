@@ -160,8 +160,6 @@ pub const Analyser = struct {
             ip_index: IpIndex,
             container: Container,
             unknown,
-
-            pub const EitherEntry = struct {};
         };
 
         pub const IpIndex = struct {
@@ -254,19 +252,13 @@ pub const Analyser = struct {
         }
     };
 
-    allocator: std.mem.Allocator,
-    document_store: *DocumentStore,
-
     pub fn init(
-        allocator: std.mem.Allocator,
         _: std.mem.Allocator,
-        document_store: *DocumentStore,
+        _: std.mem.Allocator,
+        _: *DocumentStore,
         _: ?*anyopaque,
     ) Analyser {
-        return .{
-            .allocator = allocator,
-            .document_store = document_store,
-        };
+        return .{};
     }
 
     pub fn deinit(_: *Analyser) void {}

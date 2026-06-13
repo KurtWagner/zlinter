@@ -93,46 +93,6 @@ pub const LintDocument = struct {
         return false;
     }
 
-    /// For debugging purposes only, should never be left in
-    pub fn dumpType(self: *const LintDocument, t: zls.Analyser.Type, indent_size: u32) !void {
-        var buffer: [128]u8 = @splat(' ');
-        const indent = buffer[0..indent_size];
-
-        std.debug.print("{s}------------------------------------\n", .{indent});
-        std.debug.print("{s}is_type_val: {}\n", .{ indent, t.is_type_val });
-        std.debug.print("{s}isContainerType: {}\n", .{ indent, t.isContainerType() });
-        std.debug.print("{s}isEnumLiteral: {}\n", .{ indent, t.isEnumLiteral() });
-        std.debug.print("{s}isEnumType: {}\n", .{ indent, t.isEnumType() });
-        std.debug.print("{s}isFunc: {}\n", .{ indent, t.isFunc() });
-        std.debug.print("{s}isGenericFunc: {}\n", .{ indent, t.isGenericFunc() });
-        std.debug.print("{s}isMetaType: {}\n", .{ indent, t.isMetaType() });
-        std.debug.print("{s}isNamespace: {}\n", .{ indent, t.isNamespace() });
-        std.debug.print("{s}isOpaqueType: {}\n", .{ indent, t.isOpaqueType() });
-        std.debug.print("{s}isStructType: {}\n", .{ indent, t.isStructType(&self.analyser) });
-        std.debug.print("{s}isTaggedUnion: {}\n", .{ indent, t.isTaggedUnion() });
-        std.debug.print("{s}isTypeFunc: {}\n", .{ indent, t.isTypeFunc() });
-        std.debug.print("{s}isUnionType: {}\n", .{ indent, t.isUnionType() });
-
-        if (t.data == .ip_index) {
-            std.debug.print("{s}Primitive: {}\n", .{ indent, t.data.ip_index.type });
-            if (t.data.ip_index.index) |tt| {
-                std.debug.print("{s}Value: {}\n", .{ indent, tt });
-            }
-        }
-
-        const decl_literal = ast.resolveDeclLiteralResultTypeSafe(t);
-        if (!decl_literal.eql(t)) {
-            std.debug.print("{s}Decl literal result type:\n", .{indent});
-            try self.dumpType(decl_literal, indent_size + 4);
-        }
-
-        if (t.instanceTypeVal(self.analyser)) |instance| {
-            if (!instance.eql(t)) {
-                std.debug.print("{s}Instance result type:\n", .{indent});
-                try self.dumpType(instance, indent_size + 4);
-            }
-        }
-    }
 };
 
 /// Returns true if the if statement appears to enforce that its block is test only
@@ -889,10 +849,6 @@ pub const LintContext = struct {
         };
     }
 
-    /// Resolves the resulting type of an either expression (e.g., switch statement in an assignment)
-    fn resolveEitherType(_: *LintContext, _: []const zls.Analyser.Type.Data.EitherEntry) zls.Analyser.Type {
-        @panic("Not implemented yet");
-    }
 };
 
 test "LintDocument.isEnclosedInTestBlock" {
