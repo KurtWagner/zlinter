@@ -1,5 +1,10 @@
 const FileStore = @This();
 
+pub const max_zig_file_size_bytes = bytes: {
+    const bytes_in_mb = 1024 * 1024;
+    break :bytes 32 * bytes_in_mb;
+};
+
 pub const FileId = enum(u32) {
     _,
 
@@ -75,12 +80,12 @@ pub fn resolve(
     ) catch unreachable;
     if (self.path_to_index.get(normal_path)) |index| return index;
 
-    const source = try std.Io.Dir.cwd().readFileAllocOptions(
+    const source: [:0]const u8 = try std.Io.Dir.cwd().readFileAllocOptions(
         io,
         normal_path,
         gpa,
-        .limited(std.math.maxInt(u32)),
-        .@"1",
+        .limited(max_zig_file_size_bytes),
+        .of(u8),
         0,
     );
     errdefer gpa.free(source);
