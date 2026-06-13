@@ -18,6 +18,7 @@ cwd: []const u8,
 compile_contexts: std.MultiArrayList(CompileContext) = .empty,
 file_store: FileStore = .empty,
 module_store: ModuleStore = .empty,
+decl_store: DeclStore = .empty,
 
 // TODO: #149 - Probably doesnt need to own this because we only ever expect 1 config
 build_config_store: BuildConfigStore = .empty,
@@ -73,6 +74,12 @@ fn consumeBuildConfigStep(
 
     const root_file_id = self.module_store.rootFile(root_module_id);
 
+    _ = self.decl_store.store(
+        root_file_id,
+        &self.file_store,
+        self.gpa,
+    );
+
     const compile_context_id: CompileContext.Id = .fromIndex(self.compile_contexts.len);
     try self.compile_contexts.append(self.gpa, .{
         .step_index = step_index,
@@ -102,6 +109,13 @@ fn consumeBuildConfigStep(
                 child_import.kind,
                 self.file_store.fileAbsPath(child_import.file_id),
             });
+
+            // TODO: #149 - just doing this here to test it
+            _ = self.decl_store.store(
+                child_import.file_id,
+                &self.file_store,
+                self.gpa,
+            );
         }
     }
     // ------ End ------
@@ -219,6 +233,7 @@ pub fn deinit(self: *LintContext2) void {
     self.file_store.deinit(self.gpa);
     self.compile_contexts.deinit(self.gpa);
     self.module_store.deinit(self.gpa);
+    self.decl_store.deinit(self.gpa);
 }
 
 pub fn resolveFile(self: *LintContext2, input_path: []const u8) !FileStore.FileId {
@@ -262,4 +277,5 @@ const BuildConfigStore = @import("BuildConfigStore.zig");
 const FileStore = @import("FileStore.zig");
 const ModuleStore = @import("ModuleStore.zig");
 const CompileContext = @import("CompileContext.zig");
+const DeclStore = @import("DeclStore.zig");
 const tracy = @import("tracy");
