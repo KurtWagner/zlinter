@@ -19,6 +19,8 @@ const DeclKind = enum {
     label,
 };
 
+const DeclType = enum {};
+
 const Decl = struct {
     /// If unset, it's the root declaration.
     name_token: ?std.zig.Ast.TokenIndex,
@@ -27,6 +29,9 @@ const Decl = struct {
     ast_node: ?std.zig.Ast.Node.Index,
     file_id: FileStore.FileId,
     kind: DeclKind,
+
+    /// Lazily evaluated when calling `declType()`
+    resolved_type: ?Type = null,
 
     // TODO: #149 - just example of pattern to lookup things without duplicating, prob wont live here, places can call ast.* itself
     /// Returns the declaration visibility when it can be derived from the AST node.
@@ -45,12 +50,77 @@ const Decl = struct {
 
         return .private;
     }
+
+    /// Lazily evaluates the type of a declaration
+    pub fn declType(self: Decl) Type {
+        if (self.resolved_type) |ty| return ty;
+
+        // const ty = try resolveDeclType(decl_id);
+        const ty: Type = .unknown;
+        self.resolved_type = ty;
+        return ty;
+    }
 };
 
 const Scope = struct {
     parent_scope_id: ?ScopeId,
     owner_decl_id: ?DeclId,
     decl_by_name: std.StringHashMapUnmanaged(DeclId),
+};
+
+pub const Type = enum {
+    /// Fallback when it's not a type or any of the identifiable `*_instance`
+    /// kinds - usually this means its a primitive. e.g., `var age: u32 = 24;`
+    other,
+    /// e.g., has type `fn () void`
+    @"fn",
+    /// e.g., has type `fn () type`
+    fn_returns_type,
+    opaque_instance,
+    /// e.g., has type `enum { ... }`
+    enum_instance,
+    /// e.g., has type `struct { field: u32 }`
+    struct_instance,
+    /// e.g., has type `union { a: u32, b: u32 }`
+    union_instance,
+    /// e.g., `const MyError = error { NotFound, Invalid };`
+    error_type,
+    /// e.g., `const Callback = *const fn () void;`
+    fn_type,
+    /// e.g., `const Callback = *const fn () void;`
+    fn_type_returns_type,
+    /// Is type `type` and not categorized as any other `*_type`
+    type,
+    /// e.g., `const Result = enum { good, bad };`
+    enum_type,
+    /// e.g., `const Person = struct { name: [] const u8 };`
+    struct_type,
+    /// e.g., `const colors = struct { const color = "red"; };`
+    namespace_type,
+    /// e.g., `const Color = union { rgba: Rgba, rgb: Rgb };`
+    union_type,
+    opaque_type,
+
+    pub fn name(self: Type) []const u8 {
+        return switch (self) {
+            .other => "Other",
+            .@"fn" => "Function",
+            .fn_returns_type => "Type function",
+            .opaque_instance => "Opaque instance",
+            .enum_instance => "Enum instance",
+            .struct_instance => "Struct instance",
+            .union_instance => "Union instance",
+            .error_type => "Error",
+            .fn_type => "Function type",
+            .fn_type_returns_type => "Type function type",
+            .type => "Type",
+            .enum_type => "Enum",
+            .struct_type => "Struct",
+            .namespace_type => "Namespace",
+            .union_type => "Union",
+            .opaque_type => "Opaque",
+        };
+    }
 };
 
 const ScopeId = enum(u32) {
