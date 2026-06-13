@@ -435,6 +435,7 @@ pub fn build(b: *std.Build) void {
                 buildBuiltinRule(b, .no_unused, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .switch_case_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .no_deprecated, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+                buildBuiltinRule(b, .no_global_vars, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{ .severity = .warning }),
                 buildBuiltinRule(b, .no_empty_block, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .no_inferred_error_unions, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .no_orelse_unreachable, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),

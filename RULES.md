@@ -518,6 +518,33 @@ if (something) {
 
   * **Default:** `.@"error"`
 
+## `no_global_vars`
+
+Disallows the use of global vars
+All use of global vars is required to be explicitly enabled with a comment
+
+It is also recommended to encapsulate global state into a struct and giving it a instance var:
+
+```
+const SomeState = struct {
+   foo: u32,
+   bar: u64,
+
+   // zlinter-disable-next-line no_global_vars - Unfortunately the underlying API relies on global state
+   var instance: @This() = .{ ... };
+};
+```
+
+This keeps the global state still testable, and allows easier migration to local state if possible.
+
+**Config options:**
+
+* `severity`
+
+  * The severity (off, warning, error).
+
+  * **Default:** `.@"error"`
+
 ## `no_hidden_allocations`
 
 Avoid encapsulating hidden heap allocations inside functions without
@@ -1100,7 +1127,7 @@ Require the source code to be formatted with zig fmt
 
 * `severity`
 
-  * The severity of deprecations (off, warning, error).
+  * The severity (off, warning, error).
 
   * **Default:** `.warning`
 
