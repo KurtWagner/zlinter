@@ -724,10 +724,8 @@ test "deferBlock - has expected children" {
 
         defer _ = arena.reset(.retain_capacity);
 
-        const environ_map: std.process.Environ.Map = .init(arena.allocator());
-
         var context: session.LintContext = undefined;
-        try context.init(.{}, std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
+        try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
         defer context.deinit();
 
         var tmp = std.testing.tmpDir(.{});
@@ -1311,10 +1309,8 @@ test "fnCall - direct call without params" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    const environ_map: std.process.Environ.Map = .init(arena.allocator());
-
     var context: session.LintContext = undefined;
-    try context.init(.{}, std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
+    try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
     defer context.deinit();
 
     var tmp = std.testing.tmpDir(.{});
@@ -1355,10 +1351,8 @@ test "fnCall - single field call with params" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    const environ_map: std.process.Environ.Map = .init(arena.allocator());
-
     var context: session.LintContext = undefined;
-    try context.init(.{}, std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
+    try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
     defer context.deinit();
 
     var tmp = std.testing.tmpDir(.{});
@@ -1427,10 +1421,8 @@ test "findFnCall" {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
 
-        const environ_map: std.process.Environ.Map = .init(arena.allocator());
-
         var context: session.LintContext = undefined;
-        try context.init(.{}, std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
+        try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
         defer context.deinit();
 
         var tmp = std.testing.tmpDir(.{});
@@ -1473,10 +1465,8 @@ test "getEnumInfoFromType" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    const environ_map: std.process.Environ.Map = .init(arena.allocator());
-
     var context: session.LintContext = undefined;
-    try context.init(.{}, std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
+    try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
     defer context.deinit();
 
     var tmp = std.testing.tmpDir(.{});

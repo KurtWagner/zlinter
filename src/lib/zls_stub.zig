@@ -26,7 +26,6 @@ pub const Uri = struct {
 
 pub const DocumentStore = struct {
     pub const Config = struct {
-        environ_map: *const std.process.Environ.Map,
         zig_exe_path: ?[]const u8 = null,
         zig_lib_dir: ?OpenedDir = null,
         build_runner_path: ?[]const u8 = null,

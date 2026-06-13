@@ -148,7 +148,6 @@ fn isTestOnlyCondition(tree: Ast, if_statement: Ast.full.If) bool {
 /// The context of all document and rule executions.
 pub const LintContext = struct {
     build_config_store: BuildConfigStore,
-    environ_map: *const std.process.Environ.Map,
     document_store: zls.DocumentStore,
     gpa: std.mem.Allocator,
     analyser: zls.Analyser,
@@ -158,7 +157,6 @@ pub const LintContext = struct {
         self: *LintContext,
         config: zls.Config,
         io: std.Io,
-        environ_map: *const std.process.Environ.Map,
         gpa: std.mem.Allocator,
         arena: std.mem.Allocator,
     ) !void {
@@ -167,7 +165,6 @@ pub const LintContext = struct {
             .document_store = undefined, // zlinter-disable-current-line no_undefined - set below
             .analyser = undefined, // zlinter-disable-current-line no_undefined - set below
             .io = io,
-            .environ_map = environ_map,
             .build_config_store = .empty,
         };
 
@@ -175,7 +172,6 @@ pub const LintContext = struct {
             .io = io,
             .allocator = gpa,
             .config = .{
-                .environ_map = environ_map,
                 .zig_exe_path = config.zig_exe_path,
                 .zig_lib_dir = dir: {
                     if (config.zig_lib_path) |zig_lib_path| {
@@ -908,10 +904,8 @@ test "LintDocument.isEnclosedInTestBlock" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    const environ_map: std.process.Environ.Map = .init(arena.allocator());
-
     var context: LintContext = undefined;
-    try context.init(.{}, std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
+    try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
     defer context.deinit();
 
     var tmp = std.testing.tmpDir(.{});
@@ -1330,10 +1324,8 @@ test "LintContext.resolveTypeKind" {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
 
-        const environ_map: std.process.Environ.Map = .init(arena.allocator());
-
         var context: LintContext = undefined;
-        try context.init(.{}, std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
+        try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
         defer context.deinit();
 
         var tmp = std.testing.tmpDir(.{});

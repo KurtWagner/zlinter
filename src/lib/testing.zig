@@ -226,13 +226,10 @@ fn runRule(
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    const environ_map: std.process.Environ.Map = .init(arena.allocator());
-
     var context: LintContext = undefined;
     try context.init(
         .{},
         std.testing.io,
-        &environ_map,
         std.testing.allocator,
         arena.allocator(),
     );

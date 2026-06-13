@@ -91,7 +91,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     const result = result: {
         var remaining_fix_passes = @max(1, args.fix_passes);
         while (remaining_fix_passes > 0) {
-            if (run(io, &environ_map, gpa, args, printer)) |r| {
+            if (run(io, gpa, args, printer)) |r| {
                 total_fixes += r.fixes_applied;
                 if (r.fixes_applied == 0 or remaining_fix_passes == 1) {
                     break :result r;
@@ -132,7 +132,6 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
 
 fn run(
     io: std.Io,
-    environ_map: *const std.process.Environ.Map,
     gpa: std.mem.Allocator,
     args: zlinter.Args,
     printer: *zlinter.rendering.Printer,
@@ -194,7 +193,6 @@ fn run(
 
     try runLinterRules(
         io,
-        environ_map,
         gpa,
         lint_files,
         printer,
@@ -240,7 +238,6 @@ fn run(
 
 fn runLinterRules(
     io: std.Io,
-    environ_map: *const std.process.Environ.Map,
     gpa: std.mem.Allocator,
     lint_files: []zlinter.files.LintFile,
     printer: *zlinter.rendering.Printer,
@@ -314,7 +311,6 @@ fn runLinterRules(
             .global_cache_path = args.global_cache_root,
         },
         io,
-        environ_map,
         gpa,
         arena.allocator(),
     );
