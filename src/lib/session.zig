@@ -237,16 +237,11 @@ pub const LintContext = struct {
     /// Caller is responsible for calling deinit once done.
     pub fn initDocument(
         self: *LintContext,
-        zig_exe: []const u8,
         abs_path: []const u8,
         gpa: std.mem.Allocator,
         doc: *LintDocument,
-        cwd: []const u8,
     ) !void {
         std.debug.assert(std.fs.path.isAbsolute(abs_path));
-
-        _ = zig_exe;
-        _ = cwd;
 
         var buffer: [std.fs.max_path_bytes]u8 = undefined;
         const size = try std.Io.Dir.cwd().realPathFile(

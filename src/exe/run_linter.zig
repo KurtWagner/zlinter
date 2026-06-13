@@ -386,13 +386,7 @@ fn runLinterRules(
         }
 
         var doc: zlinter.session.LintDocument = undefined;
-        context.initDocument(
-            zig_exe,
-            lint_file.abs_path,
-            context.gpa,
-            &doc,
-            cwd,
-        ) catch |e| {
+        context.initDocument(lint_file.abs_path, context.gpa, &doc) catch |e| {
             printer.println(.err, "Unable to open file: {s} ({s})", .{ cwd_rel_path, @errorName(e) });
             continue :files;
         };

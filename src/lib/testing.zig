@@ -31,8 +31,7 @@ pub fn loadFakeDocument(
     try file_writer.interface.flush();
 
     const doc = try arena.create(LintDocument);
-    const cwd = std.fs.path.dirname(real_path) orelse ".";
-    try context.initDocument("zig", real_path, arena, doc, cwd);
+    try context.initDocument(real_path, arena, doc);
     return doc;
 }
 
