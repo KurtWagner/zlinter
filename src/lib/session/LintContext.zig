@@ -15,9 +15,6 @@ zig_lib_directory: []const u8,
 /// Externally owned slice to current working directory
 cwd: []const u8,
 
-/// Externally owned slice to global cache root
-global_cache_root: []const u8,
-
 compile_contexts: std.MultiArrayList(CompileContext) = .empty,
 file_store: FileStore = .empty,
 module_store: ModuleStore = .empty,
@@ -33,7 +30,6 @@ pub fn init(self: *LintContext) !void {
     const config: zls.Config = .{
         .zig_exe_path = self.zig_exe,
         .zig_lib_path = self.zig_lib_directory,
-        .global_cache_path = self.global_cache_root,
     };
 
     self.deprecated.document_store = zls.DocumentStore{
@@ -59,22 +55,6 @@ pub fn init(self: *LintContext) !void {
             },
             .build_runner_path = config.build_runner_path,
             .builtin_path = config.builtin_path,
-            .global_cache_dir = dir: {
-                const absolute_global_cache_path = std.Io.Dir.cwd().realPathFileAlloc(
-                    self.io,
-                    self.global_cache_root,
-                    self.arena,
-                ) catch unreachable;
-
-                break :dir .{
-                    .handle = std.Io.Dir.openDirAbsolute(
-                        self.io,
-                        absolute_global_cache_path,
-                        .{},
-                    ) catch unreachable,
-                    .path = absolute_global_cache_path,
-                };
-            },
             .wasi_preopens = switch (builtin.os.tag) {
                 .wasi => try std.fs.wasi.preopensAlloc(self.arena),
                 else => {},

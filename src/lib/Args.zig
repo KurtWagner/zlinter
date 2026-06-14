@@ -5,10 +5,6 @@ const Args = @This();
 /// analysing zig standard library.
 zig_exe: []const u8,
 
-/// Zig global cache path used to build and run linter - needed for
-/// analysing zig standard library.
-global_cache_root: []const u8,
-
 /// Zig lib path used to build and run linter - needed for analysing zig
 /// standard library.
 zig_lib_directory: []const u8,
@@ -76,8 +72,6 @@ const default_fix_passes = 20;
 pub fn deinit(self: Args, allocator: std.mem.Allocator) void {
     allocator.free(self.zig_exe);
 
-    allocator.free(self.global_cache_root);
-
     allocator.free(self.zig_lib_directory);
 
     if (self.rule_config_overrides) |rule_config_overrides| {
@@ -103,11 +97,11 @@ pub fn deinit(self: Args, allocator: std.mem.Allocator) void {
 
 /// Parses linter command-line arguments.
 ///
-/// The Zig executable, Zig lib directory, and global cache root are required
-/// build configuration values. They are normally injected by the build step
-/// that runs zlinter, not typed by end users. Missing values indicate a broken
-/// zlinter build integration and return `error.InvalidBuildConfig`. Duplicate
-/// build configuration values also return `error.InvalidBuildConfig`.
+/// The Zig executable and Zig lib directory are required build configuration
+/// values. They are normally injected by the build step that runs zlinter, not
+/// typed by end users. Missing values indicate a broken zlinter build
+/// integration and return `error.InvalidBuildConfig`. Duplicate build
+/// configuration values also return `error.InvalidBuildConfig`.
 ///
 /// User-facing argument mistakes, such as missing flag values or unknown rule
 /// ids, return `error.InvalidArgs`. Unknown flags are collected in
@@ -125,9 +119,6 @@ pub fn allocParse(
 
     var zig_lib_directory: ?[]const u8 = null;
     errdefer if (zig_lib_directory) |path| gpa.free(path);
-
-    var global_cache_root: ?[]const u8 = null;
-    errdefer if (global_cache_root) |path| gpa.free(path);
 
     var fix: bool = false;
     var quiet: bool = false;
@@ -174,7 +165,6 @@ pub fn allocParse(
         help_arg,
         zig_exe_arg,
         zig_lib_directory_arg,
-        global_cache_root_arg,
         unknown_arg,
         format_arg,
         rule_arg,
@@ -198,7 +188,6 @@ pub fn allocParse(
         .{ "--filter", .filter_path_arg },
         .{ "--zig_exe", .zig_exe_arg },
         .{ "--zig_lib_directory", .zig_lib_directory_arg },
-        .{ "--global_cache_root", .global_cache_root_arg },
         .{ "--format", .format_arg },
         .{ "--rule-config", .rule_config_arg },
         .{ "--stdin", .stdin_arg },
@@ -238,19 +227,6 @@ pub fn allocParse(
                 return error.InvalidBuildConfig;
             }
             zig_lib_directory = try gpa.dupe(u8, args[index]);
-            continue :state State.parsing;
-        },
-        .global_cache_root_arg => {
-            index += 1;
-            if (index == args.len) {
-                rendering.process_printer.println(.err, "--global_cache_root missing path", .{});
-                return error.InvalidArgs;
-            }
-            if (global_cache_root != null) {
-                rendering.process_printer.println(.err, "zlinter build config duplicate --global_cache_root", .{});
-                return error.InvalidBuildConfig;
-            }
-            global_cache_root = try gpa.dupe(u8, args[index]);
             continue :state State.parsing;
         },
         .rule_arg => {
@@ -425,11 +401,9 @@ pub fn allocParse(
         },
     }
 
-    if (zig_exe == null or global_cache_root == null or zig_lib_directory == null) {
+    if (zig_exe == null or zig_lib_directory == null) {
         if (zig_exe == null)
             rendering.process_printer.println(.err, "zlinter build config missing --zig_exe", .{});
-        if (global_cache_root == null)
-            rendering.process_printer.println(.err, "zlinter build config missing --global_cache_root", .{});
         if (zig_lib_directory == null)
             rendering.process_printer.println(.err, "zlinter build config missing --zig_lib_directory", .{});
         return error.InvalidBuildConfig;
@@ -437,7 +411,6 @@ pub fn allocParse(
 
     return Args{
         .zig_exe = zig_exe.?,
-        .global_cache_root = global_cache_root.?,
         .zig_lib_directory = zig_lib_directory.?,
         .fix = fix,
         .quiet = quiet,
@@ -822,8 +795,6 @@ test "allocParse with zig_exe arg" {
         testing.cliArgsWithoutBuildConfig(&.{
             "--zig_exe",
             "/some/path here/zig",
-            "--global_cache_root",
-            testing.global_cache_root,
             "--zig_lib_directory",
             testing.zig_lib_directory,
         }),
@@ -838,29 +809,6 @@ test "allocParse with zig_exe arg" {
     }), args);
 }
 
-test "allocParse with global_cache_root arg" {
-    var stdin_fbs = std.Io.Reader.fixed("");
-
-    const args = try allocParse(
-        testing.cliArgsWithoutBuildConfig(&.{
-            "--zig_exe",
-            testing.zig_exe,
-            "--global_cache_root",
-            "/some/path here/cache",
-            "--zig_lib_directory",
-            testing.zig_lib_directory,
-        }),
-        &.{},
-        std.testing.allocator,
-        &stdin_fbs,
-    );
-    defer args.deinit(std.testing.allocator);
-
-    try std.testing.expectEqualDeep(testing.expected(.{
-        .global_cache_root = "/some/path here/cache",
-    }), args);
-}
-
 test "allocParse with zig_lib_directory arg" {
     var stdin_fbs = std.Io.Reader.fixed("");
 
@@ -868,8 +816,6 @@ test "allocParse with zig_lib_directory arg" {
         testing.cliArgsWithoutBuildConfig(&.{
             "--zig_exe",
             testing.zig_exe,
-            "--global_cache_root",
-            testing.global_cache_root,
             "--zig_lib_directory",
             "/some/path here/lib",
         }),
@@ -1042,7 +988,7 @@ test "allocParse without build config" {
     ));
 
     try std.testing.expectEqualStrings(
-        "zlinter build config missing --zig_exe\nzlinter build config missing --global_cache_root\nzlinter build config missing --zig_lib_directory\n",
+        "zlinter build config missing --zig_exe\nzlinter build config missing --zig_lib_directory\n",
         stderr_sink.written(),
     );
 }
@@ -1052,10 +998,6 @@ test "allocParse with duplicate build config" {
         .{
             .args = &.{ "--zig_exe", "/other/zig" },
             .message = "zlinter build config duplicate --zig_exe\n",
-        },
-        .{
-            .args = &.{ "--global_cache_root", "/other/cache" },
-            .message = "zlinter build config duplicate --global_cache_root\n",
         },
         .{
             .args = &.{ "--zig_lib_directory", "/other/lib" },
@@ -1267,7 +1209,6 @@ test "allocParse with invalid --max-warnings arg" {
 
 const testing = struct {
     const zig_exe = "/test/zig";
-    const global_cache_root = "/test/zig-cache";
     const zig_lib_directory = "/test/zig/lib";
 
     var buffer: [64][:0]u8 = undefined;
@@ -1278,12 +1219,10 @@ const testing = struct {
         buffer[0] = @constCast("lint-exe");
         buffer[1] = @constCast("--zig_exe");
         buffer[2] = @constCast(zig_exe);
-        buffer[3] = @constCast("--global_cache_root");
-        buffer[4] = @constCast(global_cache_root);
-        buffer[5] = @constCast("--zig_lib_directory");
-        buffer[6] = @constCast(zig_lib_directory);
-        inline for (0..args.len) |i| buffer[i + 7] = @constCast(args[i]);
-        return buffer[0 .. args.len + 7];
+        buffer[3] = @constCast("--zig_lib_directory");
+        buffer[4] = @constCast(zig_lib_directory);
+        inline for (0..args.len) |i| buffer[i + 5] = @constCast(args[i]);
+        return buffer[0 .. args.len + 5];
     }
 
     inline fn cliArgsWithoutBuildConfig(comptime args: []const [:0]const u8) [][:0]u8 {
@@ -1299,7 +1238,6 @@ const testing = struct {
 
         var result = Args{
             .zig_exe = zig_exe,
-            .global_cache_root = global_cache_root,
             .zig_lib_directory = zig_lib_directory,
             .fix = false,
             .quiet = false,

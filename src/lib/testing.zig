@@ -66,7 +66,6 @@ pub fn initFakeContext(
         // TODO: #149 - pass these through build module
         .zig_exe = "zig",
         .zig_lib_directory = ".",
-        .global_cache_root = "./.zig-cache",
         .cwd = ".",
     };
     context.init() catch @panic("failed to initialize fake lint context");

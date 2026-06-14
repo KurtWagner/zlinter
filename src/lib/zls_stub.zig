@@ -13,7 +13,6 @@ pub const Config = struct {
     zig_lib_path: ?[]const u8 = null,
     build_runner_path: ?[]const u8 = null,
     builtin_path: ?[]const u8 = null,
-    global_cache_path: ?[]const u8 = null,
 };
 
 pub const Uri = struct {
@@ -30,7 +29,6 @@ pub const DocumentStore = struct {
         zig_lib_dir: ?OpenedDir = null,
         build_runner_path: ?[]const u8 = null,
         builtin_path: ?[]const u8 = null,
-        global_cache_dir: ?OpenedDir = null,
         wasi_preopens: void = {},
     };
 
@@ -60,10 +58,6 @@ pub const DocumentStore = struct {
         self.handles.deinit(self.allocator);
 
         if (self.config.zig_lib_dir) |dir| {
-            var handle = dir.handle;
-            handle.close(self.io);
-        }
-        if (self.config.global_cache_dir) |dir| {
             var handle = dir.handle;
             handle.close(self.io);
         }

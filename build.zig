@@ -607,9 +607,6 @@ fn buildStep(
     run.addArg("--zig_exe");
     run.addFileArg(.zig_exe);
 
-    run.addArg("--global_cache_root");
-    run.addFileArg(.cache_root);
-
     run.addArg("--zig_lib_directory");
     run.addFileArg(.zig_lib);
 

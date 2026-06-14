@@ -276,7 +276,6 @@ fn runLinterRules(
     };
 
     var context: zlinter.session.LintContext = .{
-        .global_cache_root = args.global_cache_root,
         .io = io,
         .gpa = gpa,
         .arena = arena.allocator(),
