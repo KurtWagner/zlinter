@@ -217,7 +217,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const test_coverage = b.option(bool, "coverage", "Generate a coverage report with kcov");
-    const test_focus_on_rule = b.option([]const u8, "test_focus_on_rule", "Only run integration tests for this rule");
+    const test_focus_on_rule = b.option([]const u8, "test_focus_on_rule", "Only run tests for this rule");
     const tracy = b.option(bool, "tracy", "Enable Tracy integration using the pinned Tracy 0.11.1 dependency") orelse false;
     const tracy_callstack = b.option(bool, "tracy-callstack", "Include callstack information with Tracy data. Does nothing if -Dtracy is not provided. Default: false") orelse false;
     const tracy_allocation = b.option(bool, "tracy-allocation", "Include allocation information with Tracy data. Does nothing if -Dtracy is not provided. Default: false") orelse false;
@@ -344,28 +344,30 @@ pub fn build(b: *std.Build) void {
         unit_test_step.dependOn(&run_unit_tests.step);
     }
 
-    // TODO: #149 - bring back
-    // Rule unit tests rely on zls-backed document loading.
-    // for (rule_imports) |rule_import| {
-    //     const test_rule_exe = b.addTest(.{
-    //         .name = b.fmt("{s}_unit_test_coverage", .{rule_import.name}),
-    //         .root_module = rule_import.module,
-    //         .use_llvm = test_coverage,
-    //     });
-    //
-    //     if (test_coverage orelse false) {
-    //         const cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
-    //         cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only" });
-    //         cover_run.addPrefixedDirectoryArg("--include-pattern=", b.path("src"));
-    //         merge_coverage.addDirectoryArg(cover_run.addOutputDirectoryArg(test_rule_exe.name));
-    //         cover_run.addArtifactArg(test_rule_exe);
-    //
-    //         unit_test_step.dependOn(&install_coverage.step);
-    //     } else {
-    //         const run_test_rule_exe = b.addRunArtifact(test_rule_exe);
-    //         unit_test_step.dependOn(&run_test_rule_exe.step);
-    //     }
-    // }
+    for (rule_imports) |rule_import| {
+        if (test_focus_on_rule) |r| {
+            if (!std.mem.eql(u8, rule_import.name, r)) continue;
+        }
+
+        const test_rule_exe = b.addTest(.{
+            .name = b.fmt("{s}_unit_test_coverage", .{rule_import.name}),
+            .root_module = rule_import.module,
+            .use_llvm = test_coverage,
+        });
+
+        if (test_coverage orelse false) {
+            const cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
+            cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only" });
+            cover_run.addPrefixedDirectoryArg("--include-pattern=", b.path("src"));
+            merge_coverage.addDirectoryArg(cover_run.addOutputDirectoryArg(test_rule_exe.name));
+            cover_run.addArtifactArg(test_rule_exe);
+
+            unit_test_step.dependOn(&install_coverage.step);
+        } else {
+            const run_test_rule_exe = b.addRunArtifact(test_rule_exe);
+            unit_test_step.dependOn(&run_test_rule_exe.step);
+        }
+    }
 
     const test_step = b.step("test", "Run all tests");
     test_step.dependOn(unit_test_step);
