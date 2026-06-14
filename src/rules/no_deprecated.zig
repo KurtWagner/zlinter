@@ -120,7 +120,7 @@ fn handleIdentifierAccess(
 
     const source_index = tree.tokens.items(.start)[identifier_token];
 
-    const decl_with_handle = (try context.analyser.lookupSymbolGlobal(
+    const decl_with_handle = (try context.deprecated.analyser.lookupSymbolGlobal(
         handle,
         tree.tokenSlice(identifier_token),
         source_index,
@@ -217,7 +217,7 @@ fn getSymbolEnumLiteralDocComment(
         }
     }
 
-    const decl_with_type = try context.analyser.lookupSymbolFieldInit(
+    const decl_with_type = try context.deprecated.analyser.lookupSymbolFieldInit(
         doc.handle,
         name,
         ancestors.items[0],
@@ -254,7 +254,7 @@ fn handleFieldAccess(
         };
     };
 
-    if (try context.analyser.getSymbolFieldAccesses(
+    if (try context.deprecated.analyser.getSymbolFieldAccesses(
         arena,
         handle,
         token_starts[identifier_token],

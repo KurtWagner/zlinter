@@ -258,7 +258,7 @@ fn classifyParamTypeKind(
 
     const type_name_token = tree.firstToken(param_type_node);
     const source_index = tree.tokens.items(.start)[type_name_token];
-    if (try context.analyser.lookupSymbolGlobal(
+    if (try context.deprecated.analyser.lookupSymbolGlobal(
         doc.handle,
         type_name,
         source_index,

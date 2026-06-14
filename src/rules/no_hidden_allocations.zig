@@ -96,7 +96,7 @@ fn run(
         if (!is_allocator_method) continue :nodes;
 
         const decl_name, const uri = decl_name_and_uri: {
-            if (try context.analyser.resolveVarDeclAlias(
+            if (try context.deprecated.analyser.resolveVarDeclAlias(
                 .{
                     .decl = .{ .ast_node = lhs },
                     .handle = doc.handle,

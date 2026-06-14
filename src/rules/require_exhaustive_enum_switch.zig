@@ -202,7 +202,7 @@ fn tagNameForIdentifier(
     std.debug.assert(tree.tokenTag(token) == .identifier);
 
     const tag_name = tree.tokenSlice(token);
-    const decl = try context.analyser.lookupSymbolGlobal(
+    const decl = try context.deprecated.analyser.lookupSymbolGlobal(
         doc.handle,
         tag_name,
         tree.tokenStart(token),
@@ -210,7 +210,7 @@ fn tagNameForIdentifier(
 
     if (decl) |decl_node| {
         const token_with_handle = decl_node.definitionToken(
-            &context.analyser,
+            &context.deprecated.analyser,
             true,
         ) catch |e| switch (e) {
             error.OutOfMemory => return error.OutOfMemory,

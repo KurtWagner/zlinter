@@ -2,10 +2,13 @@
 const LintContext = @This();
 
 build_config_store: BuildConfigStore,
-document_store: zls.DocumentStore,
 gpa: std.mem.Allocator,
-analyser: zls.Analyser,
 io: std.Io,
+
+deprecated: struct {
+    document_store: zls.DocumentStore,
+    analyser: zls.Analyser,
+},
 
 pub fn init(
     self: *LintContext,
@@ -16,13 +19,15 @@ pub fn init(
 ) !void {
     self.* = .{
         .gpa = gpa,
-        .document_store = undefined, // zlinter-disable-current-line no_undefined - set below
-        .analyser = undefined, // zlinter-disable-current-line no_undefined - set below
+        .deprecated = .{
+            .document_store = undefined, // zlinter-disable-current-line no_undefined - set below
+            .analyser = undefined, // zlinter-disable-current-line no_undefined - set below
+        },
         .io = io,
         .build_config_store = .empty,
     };
 
-    self.document_store = zls.DocumentStore{
+    self.deprecated.document_store = zls.DocumentStore{
         .io = io,
         .allocator = gpa,
         .config = .{
@@ -72,17 +77,17 @@ pub fn init(
         },
     };
 
-    self.analyser = zls.Analyser.init(
+    self.deprecated.analyser = zls.Analyser.init(
         gpa,
         arena,
-        &self.document_store,
+        &self.deprecated.document_store,
         null,
     );
 }
 
 pub fn deinit(self: *LintContext) void {
-    self.document_store.deinit();
-    self.analyser.deinit();
+    self.deprecated.document_store.deinit();
+    self.deprecated.analyser.deinit();
     self.build_config_store.deinit(self.gpa);
 }
 
@@ -114,7 +119,7 @@ pub fn initDocument(
         buffer[0..size],
     );
 
-    const handle = (try self.document_store.getOrLoadHandle(uri)) orelse return error.HandleError;
+    const handle = (try self.deprecated.document_store.getOrLoadHandle(uri)) orelse return error.HandleError;
 
     const source = context2.file_store.fileSource(file_id);
     const tree = context2.file_store.fileTree(file_id);
@@ -182,14 +187,14 @@ pub fn initDocument(
 
 /// Resolves the type of node or null if it can't be resolved.
 pub fn resolveTypeOfNode(self: *LintContext, doc: *const LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
-    return self.analyser.resolveTypeOfNode(.of(node, doc.handle));
+    return self.deprecated.analyser.resolveTypeOfNode(.of(node, doc.handle));
 }
 
 /// Resolves the type of a node that points to a type (e.g., return type) or
 /// null if it cannot be resolved.
 pub fn resolveTypeOfTypeNode(self: *LintContext, doc: *const LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
     const resolved_type = try self.resolveTypeOfNode(doc, node) orelse return null;
-    const instance_type = if (resolved_type.isMetaType()) resolved_type else try resolved_type.instanceTypeVal(&self.analyser) orelse resolved_type;
+    const instance_type = if (resolved_type.isMetaType()) resolved_type else try resolved_type.instanceTypeVal(&self.deprecated.analyser) orelse resolved_type;
 
     return ast.resolveDeclLiteralResultTypeSafe(instance_type);
 }
@@ -263,7 +268,7 @@ pub fn resolveTypeKind(self: *LintContext, doc: *const LintDocument, input: unio
         } else if (is_direct_type_node and tree.nodeTag(node) == .identifier) {
             const identifier_token = tree.firstToken(node);
             const source_index = tree.tokens.items(.start)[identifier_token];
-            if (try self.analyser.lookupSymbolGlobal(
+            if (try self.deprecated.analyser.lookupSymbolGlobal(
                 doc.handle,
                 tree.tokenSlice(identifier_token),
                 source_index,
@@ -305,7 +310,7 @@ pub fn resolveTypeKind(self: *LintContext, doc: *const LintDocument, input: unio
                 .union_instance
             else if (decl.isEnumType())
                 .enum_instance
-            else if (decl.isStructType(&self.analyser))
+            else if (decl.isStructType(&self.deprecated.analyser))
                 .struct_instance
             else if (decl.isTypeFunc())
                 .fn_returns_type
@@ -336,7 +341,7 @@ pub fn resolveTypeKind(self: *LintContext, doc: *const LintDocument, input: unio
         if (tree.nodeTag(node) == .identifier) {
             const identifier_token = tree.firstToken(node);
             const source_index = tree.tokens.items(.start)[identifier_token];
-            if (try self.analyser.lookupSymbolGlobal(
+            if (try self.deprecated.analyser.lookupSymbolGlobal(
                 doc.handle,
                 tree.tokenSlice(identifier_token),
                 source_index,
@@ -357,7 +362,7 @@ pub fn resolveTypeKind(self: *LintContext, doc: *const LintDocument, input: unio
                 lhs_lookup: {
                     const lhs_token = tree.firstToken(lhs);
                     const lhs_source_index = tree.tokens.items(.start)[lhs_token];
-                    const decl_with_handle = (try self.analyser.lookupSymbolGlobal(
+                    const decl_with_handle = (try self.deprecated.analyser.lookupSymbolGlobal(
                         doc.handle,
                         tree.tokenSlice(lhs_token),
                         lhs_source_index,
@@ -406,7 +411,7 @@ pub fn resolveTypeKind(self: *LintContext, doc: *const LintDocument, input: unio
                 if (tree.nodeTag(init_type) == .identifier) {
                     const type_name_token = tree.firstToken(init_type);
                     const source_index = tree.tokens.items(.start)[type_name_token];
-                    if (try self.analyser.lookupSymbolGlobal(
+                    if (try self.deprecated.analyser.lookupSymbolGlobal(
                         doc.handle,
                         tree.tokenSlice(type_name_token),
                         source_index,
@@ -517,7 +522,7 @@ pub fn resolveTypeKind(self: *LintContext, doc: *const LintDocument, input: unio
 
             const is_error_container =
                 if (std.meta.hasMethod(@TypeOf(decl), "isErrorSetType"))
-                    decl.isErrorSetType(&self.analyser)
+                    decl.isErrorSetType(&self.deprecated.analyser)
                 else switch (decl.data) {
                     .container => |container| result: {
                         const container_node, const container_tree = .{ container.scope_handle.toNode(), container.scope_handle.handle.tree };
@@ -565,7 +570,7 @@ pub fn resolveTypeKind(self: *LintContext, doc: *const LintDocument, input: unio
                 if (is_type_val) .enum_type else .enum_instance
             else if (decl.isOpaqueType())
                 if (is_type_val) .opaque_type else null
-            else if (decl.isStructType(&self.analyser))
+            else if (decl.isStructType(&self.deprecated.analyser))
                 if (is_type_val) .struct_type else .struct_instance
             else if (decl.isTypeFunc())
                 if (is_type_val) .fn_type_returns_type else .fn_returns_type
@@ -574,7 +579,7 @@ pub fn resolveTypeKind(self: *LintContext, doc: *const LintDocument, input: unio
             else if (decl.isMetaType())
                 .type
             else if (is_type_val)
-                if (init_node_type.isErrorSetType(&self.analyser))
+                if (init_node_type.isErrorSetType(&self.deprecated.analyser))
                     .error_type
                 else switch (init_node_type.data) {
                     // TODO: Maybe this can be merged with what isErrorSet
@@ -709,7 +714,7 @@ fn resolveDecl(
     const tree = handle.tree;
 
     return switch (tree.nodeTag(node)) {
-        .identifier => try self.analyser.lookupSymbolGlobal(
+        .identifier => try self.deprecated.analyser.lookupSymbolGlobal(
             handle,
             tree.getNodeSource(node),
             tree.tokenStart(tree.firstToken(node)),
@@ -727,7 +732,7 @@ fn resolveDecl(
             if (tree.tokenTag(identifier_token) != .identifier)
                 break :field_access null;
 
-            if (try self.analyser.getSymbolFieldAccesses(
+            if (try self.deprecated.analyser.getSymbolFieldAccesses(
                 arena,
                 handle,
                 tree.tokenStart(identifier_token),
