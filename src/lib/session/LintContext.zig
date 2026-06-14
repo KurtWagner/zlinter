@@ -3,43 +3,70 @@ const LintContext = @This();
 
 build_config_store: BuildConfigStore,
 gpa: std.mem.Allocator,
+arena: std.mem.Allocator,
 io: std.Io,
+
+/// Externally owned slice to zig executable path
+zig_exe: []const u8,
+
+/// Externally owned slice to zig lib directory path
+zig_lib_directory: []const u8,
+
+/// Externally owned slice to current working directory
+cwd: []const u8,
+
+compile_contexts: std.MultiArrayList(CompileContext),
+file_store: FileStore,
+module_store: ModuleStore,
+decl_store: DeclStore,
 
 deprecated: struct {
     document_store: zls.DocumentStore,
     analyser: zls.Analyser,
 },
 
-pub fn init(
-    self: *LintContext,
-    config: zls.Config,
+pub const InitOptions = struct {
+    config: zls.Config = .{},
     io: std.Io,
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
-) !void {
+    zig_exe: []const u8,
+    zig_lib_directory: []const u8,
+    cwd: []const u8,
+};
+
+pub fn init(self: *LintContext, options: InitOptions) !void {
     self.* = .{
-        .gpa = gpa,
+        .gpa = options.gpa,
+        .arena = options.arena,
         .deprecated = .{
             .document_store = undefined, // zlinter-disable-current-line no_undefined - set below
             .analyser = undefined, // zlinter-disable-current-line no_undefined - set below
         },
-        .io = io,
+        .io = options.io,
+        .zig_exe = options.zig_exe,
+        .zig_lib_directory = options.zig_lib_directory,
+        .cwd = options.cwd,
+        .compile_contexts = .empty,
+        .file_store = .empty,
+        .module_store = .empty,
+        .decl_store = .empty,
         .build_config_store = .empty,
     };
 
     self.deprecated.document_store = zls.DocumentStore{
-        .io = io,
-        .allocator = gpa,
+        .io = options.io,
+        .allocator = options.gpa,
         .config = .{
-            .zig_exe_path = config.zig_exe_path,
+            .zig_exe_path = options.config.zig_exe_path,
             .zig_lib_dir = dir: {
-                if (config.zig_lib_path) |zig_lib_path| {
-                    const absolute_zig_lib_path = std.Io.Dir.cwd().realPathFileAlloc(io, zig_lib_path, arena) catch |err| {
+                if (options.config.zig_lib_path) |zig_lib_path| {
+                    const absolute_zig_lib_path = std.Io.Dir.cwd().realPathFileAlloc(options.io, zig_lib_path, options.arena) catch |err| {
                         std.log.err("failed to resolve zig library directory '{s}': {s}", .{ zig_lib_path, @errorName(err) });
                         break :dir null;
                     };
 
-                    if (std.Io.Dir.openDirAbsolute(io, absolute_zig_lib_path, .{})) |zig_lib_dir| {
+                    if (std.Io.Dir.openDirAbsolute(options.io, absolute_zig_lib_path, .{})) |zig_lib_dir| {
                         break :dir .{
                             .handle = zig_lib_dir,
                             .path = absolute_zig_lib_path,
@@ -50,16 +77,16 @@ pub fn init(
                 }
                 break :dir null;
             },
-            .build_runner_path = config.build_runner_path,
-            .builtin_path = config.builtin_path,
+            .build_runner_path = options.config.build_runner_path,
+            .builtin_path = options.config.builtin_path,
             .global_cache_dir = dir: {
-                if (config.global_cache_path) |global_cache_path| {
-                    const absolute_global_cache_path = std.Io.Dir.cwd().realPathFileAlloc(io, global_cache_path, arena) catch |err| {
+                if (options.config.global_cache_path) |global_cache_path| {
+                    const absolute_global_cache_path = std.Io.Dir.cwd().realPathFileAlloc(options.io, global_cache_path, options.arena) catch |err| {
                         std.log.err("failed to resolve global cache directory '{s}': {s}", .{ global_cache_path, @errorName(err) });
                         break :dir null;
                     };
 
-                    if (std.Io.Dir.openDirAbsolute(io, absolute_global_cache_path, .{})) |global_cache_dir| {
+                    if (std.Io.Dir.openDirAbsolute(options.io, absolute_global_cache_path, .{})) |global_cache_dir| {
                         break :dir .{
                             .handle = global_cache_dir,
                             .path = absolute_global_cache_path,
@@ -71,24 +98,263 @@ pub fn init(
                 break :dir null;
             },
             .wasi_preopens = switch (builtin.os.tag) {
-                .wasi => try std.fs.wasi.preopensAlloc(arena),
+                .wasi => try std.fs.wasi.preopensAlloc(options.arena),
                 else => {},
             },
         },
     };
 
     self.deprecated.analyser = zls.Analyser.init(
-        gpa,
-        arena,
+        options.gpa,
+        options.arena,
         &self.deprecated.document_store,
         null,
     );
+
+    // TODO: #149 - investigate using fake BuildConfigStore
+    if (!builtin.is_test) try self.initBuildConfig();
 }
 
 pub fn deinit(self: *LintContext) void {
     self.deprecated.document_store.deinit();
     self.deprecated.analyser.deinit();
     self.build_config_store.deinit(self.gpa);
+    self.file_store.deinit(self.gpa);
+    self.compile_contexts.deinit(self.gpa);
+    self.module_store.deinit(self.gpa);
+    self.decl_store.deinit(self.gpa);
+}
+
+fn initBuildConfig(self: *LintContext) !void {
+    const zone = tracy.traceNamed(@src(), "LintContext.initBuildConfig");
+    defer zone.end();
+
+    const config_id = try self.build_config_store.resolve(
+        self.io,
+        self.gpa,
+        self.zig_exe,
+        self.cwd,
+        ".",
+    );
+
+    const build_config = self.build_config_store.buildConfig(config_id);
+    for (0..build_config.steps.len) |step_index|
+        try self.consumeBuildConfigStep(
+            config_id,
+            @enumFromInt(step_index),
+        );
+}
+
+fn consumeBuildConfigStep(
+    self: *LintContext,
+    config_id: BuildConfigStore.ConfigId,
+    step_index: std.Build.Configuration.Step.Index,
+) !void {
+    const build_config = self.build_config_store.buildConfig(config_id);
+    const step = build_config.steps[@intFromEnum(step_index)];
+
+    const compile = step.extended.cast(
+        build_config,
+        std.Build.Configuration.Step.Compile,
+    ) orelse return;
+
+    const root_module_id = try self.resolveBuildModule(
+        config_id,
+        compile.root_module,
+    ) orelse {
+        std.log.info(
+            "Step '{s}' has no root module with a root source path",
+            .{step.name.slice(build_config)},
+        );
+        return;
+    };
+
+    const root_file_id = self.module_store.rootFile(root_module_id);
+
+    _ = self.decl_store.store(
+        root_file_id,
+        &self.file_store,
+        self.gpa,
+    );
+
+    const compile_context_id: CompileContext.Id = .fromIndex(self.compile_contexts.len);
+    try self.compile_contexts.append(self.gpa, .{
+        .step_index = step_index,
+        .root_module = root_module_id,
+    });
+    errdefer _ = self.compile_contexts.swapRemove(compile_context_id.toIndex());
+
+    // TODO: #149 - this is still experimental descendents population.
+    {
+        var map: std.AutoHashMapUnmanaged(files.ImportIterator.Import, void) = .empty;
+        defer map.deinit(self.gpa);
+
+        var it: files.ImportIterator = .{
+            .file_store = &self.file_store,
+            .io = self.io,
+            .cwd = std.fs.path.dirname(self.file_store.fileAbsPath(root_file_id)) orelse self.cwd,
+            .gpa = self.gpa,
+            .zig_lib_directory = self.zig_lib_directory,
+        };
+        defer it.deinit();
+
+        try it.init(root_file_id);
+        while (try it.next()) |child_import| {
+            try map.put(self.gpa, child_import, {});
+            std.debug.print(" Visited Descendent: '{t}' '{s}'\n", .{
+                child_import.kind,
+                self.file_store.fileAbsPath(child_import.file_id),
+            });
+
+            _ = self.decl_store.store(
+                child_import.file_id,
+                &self.file_store,
+                self.gpa,
+            );
+        }
+    }
+}
+
+fn resolveBuildModule(
+    self: *LintContext,
+    config_id: BuildConfigStore.ConfigId,
+    build_module_index: std.Build.Configuration.Module.Index,
+) !?ModuleStore.ModuleId {
+    const build_config = self.build_config_store.buildConfig(config_id);
+
+    var seen: std.AutoHashMapUnmanaged(
+        std.Build.Configuration.Module.Index,
+        ModuleStore.ModuleId,
+    ) = .empty;
+    defer seen.deinit(self.gpa);
+
+    var queue: std.ArrayList(std.Build.Configuration.Module.Index) = .empty;
+    defer queue.deinit(self.gpa);
+
+    const root_module_id = try self.resolveBuildModuleShallow(
+        config_id,
+        build_module_index,
+    ) orelse return null;
+
+    try seen.put(self.gpa, build_module_index, root_module_id);
+    try queue.append(self.gpa, build_module_index);
+
+    while (queue.pop()) |current_build_module_index| {
+        const current_module_id = seen.get(current_build_module_index).?;
+
+        // This exact build module may already have been populated by an earlier compile step.
+        if (self.module_store.namedImports(current_module_id).count() != 0) {
+            continue;
+        }
+
+        const build_module = current_build_module_index.get(build_config);
+
+        const imports = build_module.import_table.get(build_config).imports.mal;
+        var named_imports: std.StringHashMapUnmanaged(ModuleStore.ModuleId) = .empty;
+        errdefer {
+            var it = named_imports.keyIterator();
+            while (it.next()) |key| self.gpa.free(key.*);
+            named_imports.deinit(self.gpa);
+        }
+
+        try named_imports.ensureTotalCapacity(self.gpa, @intCast(imports.len));
+        for (imports.items(.name), imports.items(.module)) |
+            build_import_name_id,
+            build_import_module_index,
+        | {
+            const import_name_slice = build_import_name_id.slice(build_config);
+
+            const import_module_id = seen.get(build_import_module_index) orelse child: {
+                const resolved = (try self.resolveBuildModuleShallow(
+                    config_id,
+                    build_import_module_index,
+                )) orelse continue;
+
+                try seen.put(self.gpa, build_import_module_index, resolved);
+                try queue.append(self.gpa, build_import_module_index);
+
+                break :child resolved;
+            };
+
+            named_imports.putAssumeCapacity(
+                try self.gpa.dupe(u8, import_name_slice),
+                import_module_id,
+            );
+        }
+
+        self.module_store.modules.items(.named_imports)[current_module_id.toIndex()] = named_imports;
+        named_imports = .empty;
+    }
+
+    return root_module_id;
+}
+
+/// Resolves everything except its descendents (e.g., named imports)
+fn resolveBuildModuleShallow(
+    self: *LintContext,
+    config_id: BuildConfigStore.ConfigId,
+    build_module_index: std.Build.Configuration.Module.Index,
+) !?ModuleStore.ModuleId {
+    const build_root_path = self.build_config_store.buildRootPath(config_id);
+    const build_config = self.build_config_store.buildConfig(config_id);
+
+    const build_module = build_module_index.get(build_config);
+    const root_source_file_id = build_module.root_source_file.unwrap() orelse return null;
+    const root_source_file = root_source_file_id.get(build_config);
+    const root_path = try files.resolveLazyPath(
+        root_source_file,
+        build_config,
+        self.gpa,
+        build_root_path,
+    ) orelse return null;
+    defer self.gpa.free(root_path);
+
+    return try self.module_store.resolve(self.gpa, .{
+        .root_file = try self.file_store.resolve(
+            root_path,
+            self.io,
+            self.gpa,
+            self.cwd,
+        ),
+        .build_config = config_id,
+        .build_config_module = build_module_index,
+        .named_imports = .empty,
+    });
+}
+
+pub fn resolveFile(self: *LintContext, input_path: []const u8) !FileStore.FileId {
+    return self.file_store.resolve(input_path, self.io, self.gpa, self.cwd);
+}
+
+pub const CompiledContextIterator = struct {
+    ctx: *const LintContext,
+    file_id: FileStore.FileId,
+
+    index: usize = 0,
+
+    pub fn next(self: *CompiledContextIterator) ?CompileContext.Id {
+        while (self.index < self.ctx.compile_contexts.len) {
+            const index = self.index;
+            self.index += 1;
+
+            _ = index;
+            // TODO: #149 - bring back
+            // if (self.ctx.include_descendents.items[index].contains(self.file_id)) {
+            //     return @intCast(index);
+            // }
+        }
+        return null;
+    }
+};
+
+pub fn resolveCompiledUnits(
+    self: *const LintContext,
+    file_id: FileStore.FileId,
+) CompiledContextIterator {
+    return .{
+        .ctx = self,
+        .file_id = file_id,
+    };
 }
 
 /// Loads and parses zig file into the document store.
@@ -96,12 +362,11 @@ pub fn deinit(self: *LintContext) void {
 /// Caller is responsible for calling deinit once done.
 pub fn initDocument(
     self: *LintContext,
-    context2: *const LintContext2,
     file_id: FileStore.FileId,
     gpa: std.mem.Allocator,
     doc: *LintDocument,
 ) !void {
-    const abs_path = context2.file_store.fileAbsPath(file_id);
+    const abs_path = self.file_store.fileAbsPath(file_id);
     std.debug.assert(std.fs.path.isAbsolute(abs_path));
 
     var buffer: [std.fs.max_path_bytes]u8 = undefined;
@@ -121,8 +386,8 @@ pub fn initDocument(
 
     const handle = (try self.deprecated.document_store.getOrLoadHandle(uri)) orelse return error.HandleError;
 
-    const source = context2.file_store.fileSource(file_id);
-    const tree = context2.file_store.fileTree(file_id);
+    const source = self.file_store.fileSource(file_id);
+    const tree = self.file_store.fileTree(file_id);
 
     var src_comments = try comments.allocParse(source, gpa);
     errdefer src_comments.deinit(gpa);
@@ -1045,23 +1310,13 @@ test "LintContext.resolveTypeKind" {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
 
-        var context: LintContext = undefined;
-        try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
+        var context = testing.initFakeContext(std.testing.allocator, arena.allocator(), std.testing.io);
         defer context.deinit();
-
-        var context2 = testing.initFakeContext2(
-            std.testing.allocator,
-            arena.allocator(),
-            std.testing.io,
-        );
-        defer context2.deinit();
-
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
 
         const doc = try testing.loadFakeDocument(
             &context,
-            &context2,
             tmp.dir,
             "test.zig",
             test_case.contents,
@@ -1102,13 +1357,17 @@ test "LintContext.resolveTypeKind" {
 const ast = @import("../ast.zig");
 const builtin = @import("builtin");
 const comments = @import("../comments.zig");
+const files = @import("../files.zig");
 const std = @import("std");
 const testing = @import("../testing.zig");
+const tracy = @import("tracy");
 const zls = @import("zls");
 const BuildConfigStore = @import("BuildConfigStore.zig");
+const CompileContext = @import("CompileContext.zig");
+const DeclStore = @import("DeclStore.zig");
 const FileStore = @import("FileStore.zig");
-const LintContext2 = @import("LintContext2.zig");
 const LintDocument = @import("LintDocument.zig");
+const ModuleStore = @import("ModuleStore.zig");
 const Ast = std.zig.Ast;
 
 test {

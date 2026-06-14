@@ -25,7 +25,6 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 fn run(
     rule: zlinter.rules.LintRule,
     context: *zlinter.session.LintContext,
-    context2: *const zlinter.session.LintContext2,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
@@ -36,7 +35,7 @@ fn run(
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
-    const tree = doc.tree(context2);
+    const tree = doc.tree(context);
 
     var arena_allocator = std.heap.ArenaAllocator.init(gpa);
     defer arena_allocator.deinit();
@@ -54,7 +53,6 @@ fn run(
                 gpa,
                 arena,
                 context,
-                context2,
                 doc,
                 node,
                 tree.nodeMainToken(node),
@@ -66,7 +64,6 @@ fn run(
                 gpa,
                 arena,
                 context,
-                context2,
                 doc,
                 node,
                 tree.nodeData(node).node_and_token.@"1",
@@ -78,7 +75,6 @@ fn run(
                 gpa,
                 arena,
                 context,
-                context2,
                 doc,
                 node,
                 tree.nodeMainToken(node),
@@ -96,7 +92,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.absPath(context2),
+            doc.absPath(context),
             try lint_problems.toOwnedSlice(gpa),
         )
     else
@@ -108,7 +104,6 @@ fn handleIdentifierAccess(
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
     context: *zlinter.session.LintContext,
-    context2: *const zlinter.session.LintContext2,
     doc: *const zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     identifier_token: Ast.TokenIndex,
@@ -116,7 +111,7 @@ fn handleIdentifierAccess(
     config: Config,
 ) !void {
     const handle = doc.handle;
-    const tree = doc.tree(context2);
+    const tree = doc.tree(context);
 
     const source_index = tree.tokens.items(.start)[identifier_token];
 
@@ -162,17 +157,15 @@ fn handleEnumLiteral(
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
     context: *zlinter.session.LintContext,
-    context2: *const zlinter.session.LintContext2,
     doc: *const zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     identifier_token: Ast.TokenIndex,
     lint_problems: *std.ArrayList(zlinter.results.LintProblem),
     config: Config,
 ) !void {
-    const tree = doc.tree(context2);
+    const tree = doc.tree(context);
     const doc_comment = try getSymbolEnumLiteralDocComment(
         context,
-        context2,
         doc,
         node_index,
         tree.tokenSlice(identifier_token),
@@ -191,13 +184,12 @@ fn handleEnumLiteral(
 
 fn getSymbolEnumLiteralDocComment(
     context: *zlinter.session.LintContext,
-    context2: *const zlinter.session.LintContext2,
     doc: *const zlinter.session.LintDocument,
     node: Ast.Node.Index,
     name: []const u8,
     arena: std.mem.Allocator,
 ) !?[]const u8 {
-    const tree = doc.tree(context2);
+    const tree = doc.tree(context);
     std.debug.assert(tree.nodeTag(node) == .enum_literal);
 
     var ancestors = std.ArrayList(Ast.Node.Index).empty;
@@ -233,7 +225,6 @@ fn handleFieldAccess(
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
     context: *zlinter.session.LintContext,
-    context2: *const zlinter.session.LintContext2,
     doc: *const zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     identifier_token: Ast.TokenIndex,
@@ -241,7 +232,7 @@ fn handleFieldAccess(
     config: Config,
 ) !void {
     const handle = doc.handle;
-    const tree = doc.tree(context2);
+    const tree = doc.tree(context);
     const token_starts = tree.tokens.items(.start);
 
     const held_loc: std.zig.Token.Loc = loc: {

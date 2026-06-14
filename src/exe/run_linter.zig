@@ -275,24 +275,29 @@ fn runLinterRules(
         item_timers.unloadAndPrint("Rules", printer);
     };
 
-    var context2: zlinter.session.LintContext2 = .{
+    var context: zlinter.session.LintContext = undefined;
+    try context.init(.{
+        .config = .{
+            .zig_exe_path = args.zig_exe,
+            .zig_lib_path = args.zig_lib_directory,
+            .global_cache_path = args.global_cache_root,
+        },
+        .io = io,
         .gpa = gpa,
         .arena = arena.allocator(),
-        .io = io,
         .zig_exe = zig_exe,
         .zig_lib_directory = zig_lib_directory,
         .cwd = cwd,
-    };
-    try context2.init();
-    defer context2.deinit();
+    });
+    defer context.deinit();
 
     // TODO: #149 - Remove this just poking around.
     for (lint_files) |file| {
         std.debug.print("Linting: '{s}'\n", .{file.abs_path});
 
-        const file_id = try context2.resolveFile(file.abs_path);
+        const file_id = try context.resolveFile(file.abs_path);
 
-        var compiled_unit_it = context2.resolveCompiledUnits(file_id);
+        var compiled_unit_it = context.resolveCompiledUnits(file_id);
         var resolved_any = false;
         while (compiled_unit_it.next()) |index| {
             resolved_any = true;
@@ -302,19 +307,6 @@ fn runLinterRules(
             std.debug.print(" - none\n", .{});
         }
     }
-
-    var context: zlinter.session.LintContext = undefined;
-    try context.init(
-        .{
-            .zig_exe_path = args.zig_exe,
-            .zig_lib_path = args.zig_lib_directory,
-            .global_cache_path = args.global_cache_root,
-        },
-        io,
-        gpa,
-        arena.allocator(),
-    );
-    defer context.deinit();
 
     var enabled_rules = enabledRules(args.rules);
 
@@ -373,11 +365,11 @@ fn runLinterRules(
         }
         printer.println(.verbose, "[{d}/{d}] Linting: {s}", .{ i + 1, lint_files.len, cwd_rel_path });
 
-        const file_id = context2.resolveFile(lint_file.abs_path) catch |e| {
+        const file_id = context.resolveFile(lint_file.abs_path) catch |e| {
             printer.println(.err, "Unable to open file: {s} ({s})", .{ cwd_rel_path, @errorName(e) });
             continue :files;
         };
-        const file_abs_path = context2.file_store.fileAbsPath(file_id);
+        const file_abs_path = context.file_store.fileAbsPath(file_id);
 
         var rule_timer = Timer.createStarted(io);
         defer {
@@ -392,14 +384,14 @@ fn runLinterRules(
         }
 
         var doc: zlinter.session.LintDocument = undefined;
-        context.initDocument(&context2, file_id, context.gpa, &doc) catch |e| {
+        context.initDocument(file_id, context.gpa, &doc) catch |e| {
             printer.println(.err, "Unable to open file: {s} ({s})", .{ cwd_rel_path, @errorName(e) });
             continue :files;
         };
         defer doc.deinit(context.gpa);
 
         printer.println(.verbose, "  - Load document: {d}ms", .{timer.lapMilliseconds()});
-        const tree = doc.tree(&context2);
+        const tree = doc.tree(&context);
         printer.println(.verbose, "    - {d} bytes", .{tree.source.len});
         printer.println(.verbose, "    - {d} nodes", .{tree.nodes.len});
         printer.println(.verbose, "    - {d} tokens", .{tree.tokens.len});
@@ -457,7 +449,6 @@ fn runLinterRules(
             if (try rule.run(
                 rule,
                 &context,
-                &context2,
                 &doc,
                 gpa,
                 .{ .config = rule_configs[rule_index] },

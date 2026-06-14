@@ -3,7 +3,6 @@
 /// See `runRule` for example (test only)
 pub fn loadFakeDocument(
     context: *LintContext,
-    context2: *session.LintContext2,
     dir: std.Io.Dir,
     file_name: []const u8,
     contents: [:0]const u8,
@@ -31,10 +30,10 @@ pub fn loadFakeDocument(
     try file_writer.interface.writeAll(contents);
     try file_writer.interface.flush();
 
-    const file_id = try context2.resolveFile(real_path);
+    const file_id = try context.resolveFile(real_path);
 
     const doc = try arena.create(LintDocument);
-    try context.initDocument(context2, file_id, arena, doc);
+    try context.initDocument(file_id, arena, doc);
     return doc;
 }
 
@@ -53,21 +52,24 @@ pub fn writeFile(dir: std.Io.Dir, file_name: []const u8, contents: []const u8) !
     try file_writer.interface.flush();
 }
 
-pub fn initFakeContext2(
+pub fn initFakeContext(
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
     io: std.Io,
-) session.LintContext2 {
+) LintContext {
     assertTestOnly();
 
-    return .{
+    var context: LintContext = undefined;
+    context.init(.{
         .gpa = gpa,
         .arena = arena,
         .io = io,
-        .zig_exe = "",
-        .zig_lib_directory = "",
+        // TODO: #149 - decide whether unit tests should have real or fakes here.
+        .zig_exe = "/test/zig",
+        .zig_lib_directory = "/test/zig/lib",
         .cwd = ".",
-    };
+    }) catch @panic("failed to initialize fake lint context");
+    return context;
 }
 
 pub const paths = struct {
@@ -247,24 +249,14 @@ fn runRule(
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var context: LintContext = undefined;
-    try context.init(
-        .{},
-        std.testing.io,
-        std.testing.allocator,
-        arena.allocator(),
-    );
+    var context = initFakeContext(std.testing.allocator, arena.allocator(), std.testing.io);
     defer context.deinit();
 
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
-    var context2 = initFakeContext2(std.testing.allocator, arena.allocator(), io);
-    defer context2.deinit();
-
     const doc = try loadFakeDocument(
         &context,
-        &context2,
         tmp.dir,
         file_name,
         contents,
@@ -286,7 +278,6 @@ fn runRule(
     return try rule.run(
         rule,
         &context,
-        &context2,
         doc,
         std.testing.allocator,
         .{ .config = options.config },

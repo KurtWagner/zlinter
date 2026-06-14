@@ -54,8 +54,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the import_ordering rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    _: *zlinter.session.LintContext,
-    context2: *const zlinter.session.LintContext2,
+    context: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
@@ -66,10 +65,10 @@ fn run(
     var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
     defer lint_problems.deinit(gpa);
 
-    var scoped_imports = try resolveScopedImports(doc, context2, gpa);
+    var scoped_imports = try resolveScopedImports(doc, context, gpa);
     defer deinitScopedImports(gpa, &scoped_imports);
 
-    const tree = doc.tree(context2);
+    const tree = doc.tree(context);
     var import_it = scoped_imports.iterator();
     scopes: while (import_it.next()) |e| {
         var imports = e.value_ptr;
@@ -86,7 +85,7 @@ fn run(
                         .start = .startOfNode(tree, import.decl_node),
                         .end = .endOfNode(tree, import.decl_node),
                         .message = try std.fmt.allocPrint(gpa, "Import '{s}' should grouped with other imports", .{import.decl_name}),
-                        .fix = try swapNodesFix(doc, context2, p.decl_node, import.decl_node, gpa),
+                        .fix = try swapNodesFix(doc, context, p.decl_node, import.decl_node, gpa),
                     });
                     continue :scopes;
                 }
@@ -100,7 +99,7 @@ fn run(
                             .start = .startOfNode(tree, import.decl_node),
                             .end = .endOfNode(tree, import.decl_node),
                             .message = try std.fmt.allocPrint(gpa, "Import '{s}' is not in {s} order", .{ import.decl_name, config.order.name() }),
-                            .fix = try swapNodesFix(doc, context2, p.decl_node, import.decl_node, gpa),
+                            .fix = try swapNodesFix(doc, context, p.decl_node, import.decl_node, gpa),
                         });
                         continue :scopes;
                     }
@@ -113,7 +112,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.absPath(context2),
+            doc.absPath(context),
             try lint_problems.toOwnedSlice(gpa),
         )
     else
@@ -149,12 +148,12 @@ fn deinitScopedImports(gpa: std.mem.Allocator, scoped_imports: *std.array_hash_m
 
 fn swapNodesFix(
     doc: *const zlinter.session.LintDocument,
-    context2: *const zlinter.session.LintContext2,
+    context: *const zlinter.session.LintContext,
     first: Ast.Node.Index,
     second: Ast.Node.Index,
     gpa: std.mem.Allocator,
 ) error{OutOfMemory}!zlinter.results.LintProblemFix {
-    const tree = doc.tree(context2);
+    const tree = doc.tree(context);
     const source = tree.source;
 
     const first_line_start = tree.tokenLocation(0, tree.firstToken(first)).line_start;
@@ -183,10 +182,10 @@ fn swapNodesFix(
 /// Returns declarations initialised as imports grouped by their parent (i.e., their scope).
 fn resolveScopedImports(
     doc: *const zlinter.session.LintDocument,
-    context2: *const zlinter.session.LintContext2,
+    context: *const zlinter.session.LintContext,
     gpa: std.mem.Allocator,
 ) !std.array_hash_map.Auto(Ast.Node.Index, ImportsQueueLinesAscending) {
-    const tree = doc.tree(context2);
+    const tree = doc.tree(context);
 
     const root: Ast.Node.Index = .root;
     var node_it = try doc.nodeLineageIterator(root, gpa);

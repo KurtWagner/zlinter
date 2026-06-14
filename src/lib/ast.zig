@@ -724,23 +724,13 @@ test "deferBlock - has expected children" {
 
         defer _ = arena.reset(.retain_capacity);
 
-        var context: session.LintContext = undefined;
-        try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
+        var context = testing.initFakeContext(std.testing.allocator, arena.allocator(), std.testing.io);
         defer context.deinit();
-
-        var context2 = testing.initFakeContext2(
-            std.testing.allocator,
-            arena.allocator(),
-            std.testing.io,
-        );
-        defer context2.deinit();
-
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
 
         const doc = try testing.loadFakeDocument(
             &context,
-            &context2,
             tmp.dir,
             "test.zig",
             "fn main() void {\n" ++ source ++ "\n}",
@@ -1317,23 +1307,13 @@ test "fnCall - direct call without params" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var context: session.LintContext = undefined;
-    try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
+    var context = testing.initFakeContext(std.testing.allocator, arena.allocator(), std.testing.io);
     defer context.deinit();
-
-    var context2 = testing.initFakeContext2(
-        std.testing.allocator,
-        arena.allocator(),
-        std.testing.io,
-    );
-    defer context2.deinit();
-
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
     const doc = try testing.loadFakeDocument(
         &context,
-        &context2,
         tmp.dir,
         "test.zig",
         \\fn main() void {
@@ -1367,23 +1347,13 @@ test "fnCall - single field call with params" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var context: session.LintContext = undefined;
-    try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
+    var context = testing.initFakeContext(std.testing.allocator, arena.allocator(), std.testing.io);
     defer context.deinit();
-
-    var context2 = testing.initFakeContext2(
-        std.testing.allocator,
-        arena.allocator(),
-        std.testing.io,
-    );
-    defer context2.deinit();
-
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
     const doc = try testing.loadFakeDocument(
         &context,
-        &context2,
         tmp.dir,
         "test.zig",
         \\fn main() void {
@@ -1445,23 +1415,13 @@ test "findFnCall" {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
 
-        var context: session.LintContext = undefined;
-        try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
+        var context = testing.initFakeContext(std.testing.allocator, arena.allocator(), std.testing.io);
         defer context.deinit();
-
-        var context2 = testing.initFakeContext2(
-            std.testing.allocator,
-            arena.allocator(),
-            std.testing.io,
-        );
-        defer context2.deinit();
-
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
 
         const doc = try testing.loadFakeDocument(
             &context,
-            &context2,
             tmp.dir,
             "test.zig",
             source,
@@ -1497,17 +1457,8 @@ test "getEnumInfoFromType" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var context: session.LintContext = undefined;
-    try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
+    var context = testing.initFakeContext(std.testing.allocator, arena.allocator(), std.testing.io);
     defer context.deinit();
-
-    var context2 = testing.initFakeContext2(
-        std.testing.allocator,
-        arena.allocator(),
-        std.testing.io,
-    );
-    defer context2.deinit();
-
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
@@ -1519,7 +1470,6 @@ test "getEnumInfoFromType" {
 
     const doc = try testing.loadFakeDocument(
         &context,
-        &context2,
         tmp.dir,
         "test.zig",
         source,

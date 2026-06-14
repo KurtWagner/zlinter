@@ -4,7 +4,6 @@ pub const LintRule = struct {
     run: *const fn (
         self: LintRule,
         context: *session.LintContext,
-        context2: *const session.LintContext2,
         doc: *const session.LintDocument,
         gpa: std.mem.Allocator,
         options: RunOptions,

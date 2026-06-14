@@ -6,7 +6,6 @@ pub const CompileContext = @import("session/CompileContext.zig");
 pub const DeclStore = @import("session/DeclStore.zig");
 pub const FileStore = @import("session/FileStore.zig");
 pub const LintContext = @import("session/LintContext.zig");
-pub const LintContext2 = @import("session/LintContext2.zig");
 pub const LintDocument = @import("session/LintDocument.zig");
 pub const ModuleStore = @import("session/ModuleStore.zig");
 

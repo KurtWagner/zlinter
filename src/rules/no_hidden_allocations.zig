@@ -51,7 +51,6 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 fn run(
     rule: zlinter.rules.LintRule,
     context: *zlinter.session.LintContext,
-    context2: *const zlinter.session.LintContext2,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
@@ -62,7 +61,7 @@ fn run(
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
-    const tree = doc.tree(context2);
+    const tree = doc.tree(context);
 
     const root: Ast.Node.Index = .root;
     var it = try doc.nodeLineageIterator(root, gpa);
@@ -75,7 +74,7 @@ fn run(
         if (tree.nodeTag(node) != .field_access) continue :nodes;
 
         // if configured, skip if a parent is a test block
-        if (config.exclude_tests and doc.isEnclosedInTestBlock(context2, node)) {
+        if (config.exclude_tests and doc.isEnclosedInTestBlock(context, node)) {
             continue :nodes;
         }
 
@@ -150,7 +149,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.absPath(context2),
+            doc.absPath(context),
             try lint_problems.toOwnedSlice(gpa),
         )
     else

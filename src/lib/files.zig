@@ -521,8 +521,7 @@ pub const ImportIterator = struct {
         };
 
         const parent_file_path = it.file_store.fileAbsPath(file_id);
-        const parent_file_dir = std.fs.path.dirname(parent_file_path) orelse
-            @panic("TODO: Should this be unreachable or cwd");
+        const parent_file_dir = std.fs.path.dirname(parent_file_path) orelse it.cwd;
 
         const kind: Import.Kind = .init(import_path);
         const maybe_file_id: ?FileStore.FileId = switch (kind) {

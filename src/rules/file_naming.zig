@@ -29,17 +29,16 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the file_naming rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    _: *zlinter.session.LintContext,
-    context2: *const zlinter.session.LintContext2,
+    context: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
-    const tree = doc.tree(context2);
+    const tree = doc.tree(context);
 
     const message, const severity = msg: {
-        const basename = std.fs.path.basename(doc.absPath(context2));
+        const basename = std.fs.path.basename(doc.absPath(context));
         if (ast.isRootImplicitStruct(tree)) {
             if (config.file_struct.severity != .off and !config.file_struct.style.check(basename)) {
                 break :msg .{
@@ -66,7 +65,7 @@ fn run(
     };
     return try zlinter.results.LintResult.init(
         gpa,
-        doc.absPath(context2),
+        doc.absPath(context),
         lint_problems,
     );
 }
