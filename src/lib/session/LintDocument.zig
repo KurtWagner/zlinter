@@ -1,6 +1,6 @@
-/// The zig source file currently being linted, this typically only lives
-/// for the duration of that single file being linted so it suited for
-/// context only ever relevant to it.
+//! The zig source file currently being linted, this typically only lives
+//! for the duration of that single file being linted so it suited for
+//! context only ever relevant to it.
 const LintDocument = @This();
 
 file_id: FileStore.FileId,

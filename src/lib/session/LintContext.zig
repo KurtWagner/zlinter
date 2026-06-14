@@ -1,7 +1,7 @@
-/// The context of all document and rule executions.
+//! The context of all document and rule executions. It'll live the duration
+//! of linting all zig source files.
 const LintContext = @This();
 
-build_config_store: BuildConfigStore,
 gpa: std.mem.Allocator,
 arena: std.mem.Allocator,
 io: std.Io,
@@ -15,98 +15,76 @@ zig_lib_directory: []const u8,
 /// Externally owned slice to current working directory
 cwd: []const u8,
 
-compile_contexts: std.MultiArrayList(CompileContext),
-file_store: FileStore,
-module_store: ModuleStore,
-decl_store: DeclStore,
+/// Externally owned slice to global cache root
+global_cache_root: []const u8,
+
+compile_contexts: std.MultiArrayList(CompileContext) = .empty,
+file_store: FileStore = .empty,
+module_store: ModuleStore = .empty,
+decl_store: DeclStore = .empty,
+build_config_store: BuildConfigStore = .empty,
 
 deprecated: struct {
     document_store: zls.DocumentStore,
     analyser: zls.Analyser,
-},
+} = undefined, // zlinter-disable-current-line no_undefined - set in init
 
-pub const InitOptions = struct {
-    config: zls.Config = .{},
-    io: std.Io,
-    gpa: std.mem.Allocator,
-    arena: std.mem.Allocator,
-    zig_exe: []const u8,
-    zig_lib_directory: []const u8,
-    cwd: []const u8,
-};
-
-pub fn init(self: *LintContext, options: InitOptions) !void {
-    self.* = .{
-        .gpa = options.gpa,
-        .arena = options.arena,
-        .deprecated = .{
-            .document_store = undefined, // zlinter-disable-current-line no_undefined - set below
-            .analyser = undefined, // zlinter-disable-current-line no_undefined - set below
-        },
-        .io = options.io,
-        .zig_exe = options.zig_exe,
-        .zig_lib_directory = options.zig_lib_directory,
-        .cwd = options.cwd,
-        .compile_contexts = .empty,
-        .file_store = .empty,
-        .module_store = .empty,
-        .decl_store = .empty,
-        .build_config_store = .empty,
+pub fn init(self: *LintContext) !void {
+    const config: zls.Config = .{
+        .zig_exe_path = self.zig_exe,
+        .zig_lib_path = self.zig_lib_directory,
+        .global_cache_path = self.global_cache_root,
     };
 
     self.deprecated.document_store = zls.DocumentStore{
-        .io = options.io,
-        .allocator = options.gpa,
+        .io = self.io,
+        .allocator = self.gpa,
         .config = .{
-            .zig_exe_path = options.config.zig_exe_path,
+            .zig_exe_path = self.zig_exe,
             .zig_lib_dir = dir: {
-                if (options.config.zig_lib_path) |zig_lib_path| {
-                    const absolute_zig_lib_path = std.Io.Dir.cwd().realPathFileAlloc(options.io, zig_lib_path, options.arena) catch |err| {
-                        std.log.err("failed to resolve zig library directory '{s}': {s}", .{ zig_lib_path, @errorName(err) });
-                        break :dir null;
-                    };
+                const absolute_zig_lib_directory = std.Io.Dir.cwd().realPathFileAlloc(
+                    self.io,
+                    self.zig_lib_directory,
+                    self.arena,
+                ) catch unreachable;
 
-                    if (std.Io.Dir.openDirAbsolute(options.io, absolute_zig_lib_path, .{})) |zig_lib_dir| {
-                        break :dir .{
-                            .handle = zig_lib_dir,
-                            .path = absolute_zig_lib_path,
-                        };
-                    } else |err| {
-                        std.log.err("failed to open zig library directory '{s}': {s}", .{ absolute_zig_lib_path, @errorName(err) });
-                    }
-                }
-                break :dir null;
+                break :dir .{
+                    .handle = std.Io.Dir.openDirAbsolute(
+                        self.io,
+                        absolute_zig_lib_directory,
+                        .{},
+                    ) catch unreachable,
+                    .path = absolute_zig_lib_directory,
+                };
             },
-            .build_runner_path = options.config.build_runner_path,
-            .builtin_path = options.config.builtin_path,
+            .build_runner_path = config.build_runner_path,
+            .builtin_path = config.builtin_path,
             .global_cache_dir = dir: {
-                if (options.config.global_cache_path) |global_cache_path| {
-                    const absolute_global_cache_path = std.Io.Dir.cwd().realPathFileAlloc(options.io, global_cache_path, options.arena) catch |err| {
-                        std.log.err("failed to resolve global cache directory '{s}': {s}", .{ global_cache_path, @errorName(err) });
-                        break :dir null;
-                    };
+                const absolute_global_cache_path = std.Io.Dir.cwd().realPathFileAlloc(
+                    self.io,
+                    self.global_cache_root,
+                    self.arena,
+                ) catch unreachable;
 
-                    if (std.Io.Dir.openDirAbsolute(options.io, absolute_global_cache_path, .{})) |global_cache_dir| {
-                        break :dir .{
-                            .handle = global_cache_dir,
-                            .path = absolute_global_cache_path,
-                        };
-                    } else |err| {
-                        std.log.err("failed to open global cache directory '{s}': {s}", .{ absolute_global_cache_path, @errorName(err) });
-                    }
-                }
-                break :dir null;
+                break :dir .{
+                    .handle = std.Io.Dir.openDirAbsolute(
+                        self.io,
+                        absolute_global_cache_path,
+                        .{},
+                    ) catch unreachable,
+                    .path = absolute_global_cache_path,
+                };
             },
             .wasi_preopens = switch (builtin.os.tag) {
-                .wasi => try std.fs.wasi.preopensAlloc(options.arena),
+                .wasi => try std.fs.wasi.preopensAlloc(self.arena),
                 else => {},
             },
         },
     };
 
     self.deprecated.analyser = zls.Analyser.init(
-        options.gpa,
-        options.arena,
+        self.gpa,
+        self.arena,
         &self.deprecated.document_store,
         null,
     );

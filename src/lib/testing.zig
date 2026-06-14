@@ -59,16 +59,17 @@ pub fn initFakeContext(
 ) LintContext {
     assertTestOnly();
 
-    var context: LintContext = undefined;
-    context.init(.{
+    var context: LintContext = .{
         .gpa = gpa,
         .arena = arena,
         .io = io,
-        // TODO: #149 - decide whether unit tests should have real or fakes here.
-        .zig_exe = "/test/zig",
-        .zig_lib_directory = "/test/zig/lib",
+        // TODO: #149 - pass these through build module
+        .zig_exe = "zig",
+        .zig_lib_directory = ".",
+        .global_cache_root = "./.zig-cache",
         .cwd = ".",
-    }) catch @panic("failed to initialize fake lint context");
+    };
+    context.init() catch @panic("failed to initialize fake lint context");
     return context;
 }
 

@@ -275,20 +275,16 @@ fn runLinterRules(
         item_timers.unloadAndPrint("Rules", printer);
     };
 
-    var context: zlinter.session.LintContext = undefined;
-    try context.init(.{
-        .config = .{
-            .zig_exe_path = args.zig_exe,
-            .zig_lib_path = args.zig_lib_directory,
-            .global_cache_path = args.global_cache_root,
-        },
+    var context: zlinter.session.LintContext = .{
+        .global_cache_root = args.global_cache_root,
         .io = io,
         .gpa = gpa,
         .arena = arena.allocator(),
         .zig_exe = zig_exe,
         .zig_lib_directory = zig_lib_directory,
         .cwd = cwd,
-    });
+    };
+    try context.init();
     defer context.deinit();
 
     // TODO: #149 - Remove this just poking around.
