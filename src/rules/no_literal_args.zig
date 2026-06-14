@@ -59,6 +59,7 @@ const LiteralKind = enum { bool, string, number, char };
 fn run(
     rule: zlinter.rules.LintRule,
     _: *zlinter.session.LintContext,
+    context2: *const zlinter.session.LintContext2,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
@@ -68,7 +69,7 @@ fn run(
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
-    const tree = doc.handle.tree;
+    const tree = doc.tree(context2);
     var call_buffer: [1]Ast.Node.Index = undefined;
 
     const root: Ast.Node.Index = .root;
@@ -102,7 +103,7 @@ fn run(
             } orelse continue;
 
             // if configured, skip if a parent is a test block
-            if (config.exclude_tests and doc.isEnclosedInTestBlock(node)) {
+            if (config.exclude_tests and doc.isEnclosedInTestBlock(context2, node)) {
                 continue :nodes;
             }
 
@@ -151,7 +152,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.abs_path,
+            doc.absPath(context2),
             try lint_problems.toOwnedSlice(gpa),
         )
     else

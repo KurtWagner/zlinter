@@ -117,7 +117,7 @@ pub fn fileTree(self: *const FileStore, id: FileId) *const std.zig.Ast {
     return &self.files.items(.tree)[id.toIndex()];
 }
 
-pub fn fileSource(self: *const FileStore, id: FileId) []const u8 {
+pub fn fileSource(self: *const FileStore, id: FileId) [:0]const u8 {
     return self.files.items(.source)[id.toIndex()];
 }
 

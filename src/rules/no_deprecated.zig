@@ -25,6 +25,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 fn run(
     rule: zlinter.rules.LintRule,
     context: *zlinter.session.LintContext,
+    context2: *const zlinter.session.LintContext2,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
@@ -35,15 +36,14 @@ fn run(
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
-    const handle = doc.handle;
-    const tree = doc.handle.tree;
+    const tree = doc.tree(context2);
 
     var arena_allocator = std.heap.ArenaAllocator.init(gpa);
     defer arena_allocator.deinit();
     const arena = arena_allocator.allocator();
 
     var index: u32 = @intFromEnum(Ast.Node.Index.root);
-    while (index < handle.tree.nodes.len) : (index += 1) {
+    while (index < tree.nodes.len) : (index += 1) {
         defer _ = arena_allocator.reset(.retain_capacity);
 
         const node: Ast.Node.Index = @enumFromInt(index);
@@ -54,6 +54,7 @@ fn run(
                 gpa,
                 arena,
                 context,
+                context2,
                 doc,
                 node,
                 tree.nodeMainToken(node),
@@ -65,6 +66,7 @@ fn run(
                 gpa,
                 arena,
                 context,
+                context2,
                 doc,
                 node,
                 tree.nodeData(node).node_and_token.@"1",
@@ -76,6 +78,7 @@ fn run(
                 gpa,
                 arena,
                 context,
+                context2,
                 doc,
                 node,
                 tree.nodeMainToken(node),
@@ -93,7 +96,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.abs_path,
+            doc.absPath(context2),
             try lint_problems.toOwnedSlice(gpa),
         )
     else
@@ -105,6 +108,7 @@ fn handleIdentifierAccess(
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
     context: *zlinter.session.LintContext,
+    context2: *const zlinter.session.LintContext2,
     doc: *const zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     identifier_token: Ast.TokenIndex,
@@ -112,9 +116,9 @@ fn handleIdentifierAccess(
     config: Config,
 ) !void {
     const handle = doc.handle;
-    const tree = doc.handle.tree;
+    const tree = doc.tree(context2);
 
-    const source_index = handle.tree.tokens.items(.start)[identifier_token];
+    const source_index = tree.tokens.items(.start)[identifier_token];
 
     const decl_with_handle = (try context.analyser.lookupSymbolGlobal(
         handle,
@@ -143,8 +147,8 @@ fn handleIdentifierAccess(
     if (try decl_with_handle.docComments(arena)) |comment| {
         if (getDeprecationFromDoc(comment)) |message| {
             try lint_problems.append(gpa, .{
-                .start = .startOfNode(doc.handle.tree, node_index),
-                .end = .endOfNode(doc.handle.tree, node_index),
+                .start = .startOfNode(tree, node_index),
+                .end = .endOfNode(tree, node_index),
                 .message = try std.fmt.allocPrint(gpa, "Deprecated - {s}", .{message}),
                 .rule_id = rule.rule_id,
                 .severity = config.severity,
@@ -158,24 +162,27 @@ fn handleEnumLiteral(
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
     context: *zlinter.session.LintContext,
+    context2: *const zlinter.session.LintContext2,
     doc: *const zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     identifier_token: Ast.TokenIndex,
     lint_problems: *std.ArrayList(zlinter.results.LintProblem),
     config: Config,
 ) !void {
+    const tree = doc.tree(context2);
     const doc_comment = try getSymbolEnumLiteralDocComment(
         context,
+        context2,
         doc,
         node_index,
-        doc.handle.tree.tokenSlice(identifier_token),
+        tree.tokenSlice(identifier_token),
         arena,
     ) orelse return;
     const deprecated_message = getDeprecationFromDoc(doc_comment) orelse return;
 
     try lint_problems.append(gpa, .{
-        .start = .startOfNode(doc.handle.tree, node_index),
-        .end = .endOfNode(doc.handle.tree, node_index),
+        .start = .startOfNode(tree, node_index),
+        .end = .endOfNode(tree, node_index),
         .message = try std.fmt.allocPrint(gpa, "Deprecated: {s}", .{deprecated_message}),
         .rule_id = rule.rule_id,
         .severity = config.severity,
@@ -184,12 +191,14 @@ fn handleEnumLiteral(
 
 fn getSymbolEnumLiteralDocComment(
     context: *zlinter.session.LintContext,
+    context2: *const zlinter.session.LintContext2,
     doc: *const zlinter.session.LintDocument,
     node: Ast.Node.Index,
     name: []const u8,
     arena: std.mem.Allocator,
 ) !?[]const u8 {
-    std.debug.assert(doc.handle.tree.nodeTag(node) == .enum_literal);
+    const tree = doc.tree(context2);
+    std.debug.assert(tree.nodeTag(node) == .enum_literal);
 
     var ancestors = std.ArrayList(Ast.Node.Index).empty;
     defer ancestors.deinit(arena);
@@ -200,7 +209,7 @@ fn getSymbolEnumLiteralDocComment(
     var it = doc.nodeAncestorIterator(current);
     while (it.next()) |ancestor| {
         if (ancestor == .root) break;
-        if (ast.isNodeOverlapping(doc.handle.tree, current, ancestor)) {
+        if (ast.isNodeOverlapping(tree, current, ancestor)) {
             try ancestors.append(arena, ancestor);
             current = ancestor;
         } else {
@@ -224,6 +233,7 @@ fn handleFieldAccess(
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
     context: *zlinter.session.LintContext,
+    context2: *const zlinter.session.LintContext2,
     doc: *const zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     identifier_token: Ast.TokenIndex,
@@ -231,8 +241,8 @@ fn handleFieldAccess(
     config: Config,
 ) !void {
     const handle = doc.handle;
-    const tree = doc.handle.tree;
-    const token_starts = handle.tree.tokens.items(.start);
+    const tree = doc.tree(context2);
+    const token_starts = tree.tokens.items(.start);
 
     const held_loc: std.zig.Token.Loc = loc: {
         const first_token = tree.firstToken(node_index);
@@ -256,8 +266,8 @@ fn handleFieldAccess(
             const deprecated_message = getDeprecationFromDoc(doc_comment) orelse continue;
 
             try lint_problems.append(gpa, .{
-                .start = .startOfNode(doc.handle.tree, node_index),
-                .end = .endOfNode(doc.handle.tree, node_index),
+                .start = .startOfNode(tree, node_index),
+                .end = .endOfNode(tree, node_index),
                 .message = try std.fmt.allocPrint(gpa, "Deprecated: {s}", .{deprecated_message}),
                 .rule_id = rule.rule_id,
                 .severity = config.severity,

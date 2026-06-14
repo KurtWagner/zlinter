@@ -91,10 +91,12 @@ pub fn deinit(self: *LintContext) void {
 /// Caller is responsible for calling deinit once done.
 pub fn initDocument(
     self: *LintContext,
-    abs_path: []const u8,
+    context2: *const LintContext2,
+    file_id: FileStore.FileId,
     gpa: std.mem.Allocator,
     doc: *LintDocument,
 ) !void {
+    const abs_path = context2.file_store.fileAbsPath(file_id);
     std.debug.assert(std.fs.path.isAbsolute(abs_path));
 
     var buffer: [std.fs.max_path_bytes]u8 = undefined;
@@ -114,14 +116,14 @@ pub fn initDocument(
 
     const handle = (try self.document_store.getOrLoadHandle(uri)) orelse return error.HandleError;
 
-    var src_comments = try comments.allocParse(handle.tree.source, gpa);
+    const source = context2.file_store.fileSource(file_id);
+    const tree = context2.file_store.fileTree(file_id);
+
+    var src_comments = try comments.allocParse(source, gpa);
     errdefer src_comments.deinit(gpa);
 
-    const owned_abs_path = try gpa.dupe(u8, abs_path);
-    errdefer gpa.free(owned_abs_path);
-
     doc.* = .{
-        .abs_path = owned_abs_path,
+        .file_id = file_id,
         .handle = handle,
         .lineage = .empty,
         .comments = src_comments,
@@ -129,12 +131,12 @@ pub fn initDocument(
     };
     errdefer doc.lineage.deinit(gpa);
 
-    doc.skipper = .init(doc.comments, doc.handle.tree.source, gpa);
+    doc.skipper = .init(doc.comments, source, gpa);
     errdefer doc.skipper.deinit();
 
     {
-        try doc.lineage.resize(gpa, doc.handle.tree.nodes.len);
-        for (0..doc.handle.tree.nodes.len) |i| {
+        try doc.lineage.resize(gpa, tree.nodes.len);
+        for (0..tree.nodes.len) |i| {
             doc.lineage.set(i, .{});
         }
 
@@ -151,7 +153,7 @@ pub fn initDocument(
         while (queue.pop()) |item| {
             const children = try ast.nodeChildrenAlloc(
                 gpa,
-                &doc.handle.tree,
+                tree,
                 item.node,
             );
 
@@ -1042,11 +1044,19 @@ test "LintContext.resolveTypeKind" {
         try context.init(.{}, std.testing.io, std.testing.allocator, arena.allocator());
         defer context.deinit();
 
+        var context2 = testing.initFakeContext2(
+            std.testing.allocator,
+            arena.allocator(),
+            std.testing.io,
+        );
+        defer context2.deinit();
+
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
 
         const doc = try testing.loadFakeDocument(
             &context,
+            &context2,
             tmp.dir,
             "test.zig",
             test_case.contents,
@@ -1091,6 +1101,8 @@ const std = @import("std");
 const testing = @import("../testing.zig");
 const zls = @import("zls");
 const BuildConfigStore = @import("BuildConfigStore.zig");
+const FileStore = @import("FileStore.zig");
+const LintContext2 = @import("LintContext2.zig");
 const LintDocument = @import("LintDocument.zig");
 const Ast = std.zig.Ast;
 

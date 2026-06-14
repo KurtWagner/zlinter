@@ -373,6 +373,12 @@ fn runLinterRules(
         }
         printer.println(.verbose, "[{d}/{d}] Linting: {s}", .{ i + 1, lint_files.len, cwd_rel_path });
 
+        const file_id = context2.resolveFile(lint_file.abs_path) catch |e| {
+            printer.println(.err, "Unable to open file: {s} ({s})", .{ cwd_rel_path, @errorName(e) });
+            continue :files;
+        };
+        const file_abs_path = context2.file_store.fileAbsPath(file_id);
+
         var rule_timer = Timer.createStarted(io);
         defer {
             const ns = rule_timer.lapNanoseconds();
@@ -386,21 +392,21 @@ fn runLinterRules(
         }
 
         var doc: zlinter.session.LintDocument = undefined;
-        context.initDocument(lint_file.abs_path, context.gpa, &doc) catch |e| {
+        context.initDocument(&context2, file_id, context.gpa, &doc) catch |e| {
             printer.println(.err, "Unable to open file: {s} ({s})", .{ cwd_rel_path, @errorName(e) });
             continue :files;
         };
         defer doc.deinit(context.gpa);
 
         printer.println(.verbose, "  - Load document: {d}ms", .{timer.lapMilliseconds()});
-        printer.println(.verbose, "    - {d} bytes", .{doc.handle.tree.source.len});
-        printer.println(.verbose, "    - {d} nodes", .{doc.handle.tree.nodes.len});
-        printer.println(.verbose, "    - {d} tokens", .{doc.handle.tree.tokens.len});
+        const tree = doc.tree(&context2);
+        printer.println(.verbose, "    - {d} bytes", .{tree.source.len});
+        printer.println(.verbose, "    - {d} nodes", .{tree.nodes.len});
+        printer.println(.verbose, "    - {d} tokens", .{tree.tokens.len});
 
         var results = std.ArrayList(zlinter.results.LintResult).empty;
         defer results.deinit(gpa);
 
-        const tree = doc.handle.tree;
         for (tree.errors) |err| {
             const position = tree.tokenLocation(
                 0,
@@ -427,7 +433,7 @@ fn runLinterRules(
 
             const result = zlinter.results.LintResult.init(
                 gpa,
-                lint_file.abs_path,
+                file_abs_path,
                 problems,
             ) catch |e| {
                 for (problems) |*p| p.deinit(gpa);
@@ -451,6 +457,7 @@ fn runLinterRules(
             if (try rule.run(
                 rule,
                 &context,
+                &context2,
                 &doc,
                 gpa,
                 .{ .config = rule_configs[rule_index] },

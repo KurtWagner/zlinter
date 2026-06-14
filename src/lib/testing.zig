@@ -3,6 +3,7 @@
 /// See `runRule` for example (test only)
 pub fn loadFakeDocument(
     context: *LintContext,
+    context2: *session.LintContext2,
     dir: std.Io.Dir,
     file_name: []const u8,
     contents: [:0]const u8,
@@ -30,8 +31,10 @@ pub fn loadFakeDocument(
     try file_writer.interface.writeAll(contents);
     try file_writer.interface.flush();
 
+    const file_id = try context2.resolveFile(real_path);
+
     const doc = try arena.create(LintDocument);
-    try context.initDocument(real_path, arena, doc);
+    try context.initDocument(context2, file_id, arena, doc);
     return doc;
 }
 
@@ -48,6 +51,23 @@ pub fn writeFile(dir: std.Io.Dir, file_name: []const u8, contents: []const u8) !
 
     try file_writer.interface.writeAll(contents);
     try file_writer.interface.flush();
+}
+
+pub fn initFakeContext2(
+    gpa: std.mem.Allocator,
+    arena: std.mem.Allocator,
+    io: std.Io,
+) session.LintContext2 {
+    assertTestOnly();
+
+    return .{
+        .gpa = gpa,
+        .arena = arena,
+        .io = io,
+        .zig_exe = "",
+        .zig_lib_directory = "",
+        .cwd = ".",
+    };
 }
 
 pub const paths = struct {
@@ -217,7 +237,9 @@ fn runRule(
     rule: LintRule,
     file_name: []const u8,
     contents: [:0]const u8,
-    options: RunOptions,
+    options: struct {
+        config: ?*anyopaque = null,
+    },
 ) !?LintResult {
     assertTestOnly();
     const io = std.testing.io;
@@ -237,8 +259,12 @@ fn runRule(
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
+    var context2 = initFakeContext2(std.testing.allocator, arena.allocator(), io);
+    defer context2.deinit();
+
     const doc = try loadFakeDocument(
         &context,
+        &context2,
         tmp.dir,
         file_name,
         contents,
@@ -260,9 +286,10 @@ fn runRule(
     return try rule.run(
         rule,
         &context,
+        &context2,
         doc,
         std.testing.allocator,
-        options,
+        .{ .config = options.config },
     );
 }
 
@@ -401,7 +428,6 @@ const LintProblemSeverity = @import("rules.zig").LintProblemSeverity;
 const LintProblem = @import("results.zig").LintProblem;
 const LintResult = @import("results.zig").LintResult;
 const LintProblemFix = @import("results.zig").LintProblemFix;
-const RunOptions = @import("rules.zig").RunOptions;
 const strings = @import("strings.zig");
 const Ast = std.zig.Ast;
 

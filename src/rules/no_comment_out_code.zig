@@ -43,12 +43,15 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 fn run(
     rule: zlinter.rules.LintRule,
     _: *zlinter.session.LintContext,
+    context2: *const zlinter.session.LintContext2,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
+
+    const source = doc.source(context2);
 
     var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
     defer lint_problems.deinit(gpa);
@@ -63,7 +66,7 @@ fn run(
 
     for (doc.comments.comments) |comment| {
         if (comment.kind != .line) continue;
-        const contents = doc.comments.getCommentContent(comment, doc.handle.tree.source);
+        const contents = doc.comments.getCommentContent(comment, source);
         const line = doc.comments.tokens[comment.first_token].line;
         defer prev_line = line;
 
@@ -116,7 +119,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.abs_path,
+            doc.absPath(context2),
             try lint_problems.toOwnedSlice(gpa),
         )
     else

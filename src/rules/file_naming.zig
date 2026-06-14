@@ -30,15 +30,17 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 fn run(
     rule: zlinter.rules.LintRule,
     _: *zlinter.session.LintContext,
+    context2: *const zlinter.session.LintContext2,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+    const tree = doc.tree(context2);
 
     const message, const severity = msg: {
-        const basename = std.fs.path.basename(doc.abs_path);
-        if (ast.isRootImplicitStruct(doc.handle.tree)) {
+        const basename = std.fs.path.basename(doc.absPath(context2));
+        if (ast.isRootImplicitStruct(tree)) {
             if (config.file_struct.severity != .off and !config.file_struct.style.check(basename)) {
                 break :msg .{
                     try std.fmt.allocPrint(gpa, "File is struct so name should be {s}", .{config.file_struct.style.name()}),
@@ -64,7 +66,7 @@ fn run(
     };
     return try zlinter.results.LintResult.init(
         gpa,
-        doc.abs_path,
+        doc.absPath(context2),
         lint_problems,
     );
 }

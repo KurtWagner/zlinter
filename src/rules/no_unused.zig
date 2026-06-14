@@ -24,6 +24,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 fn run(
     rule: zlinter.rules.LintRule,
     context: *zlinter.session.LintContext,
+    context2: *const zlinter.session.LintContext2,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
@@ -35,7 +36,7 @@ fn run(
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
-    const tree = doc.handle.tree;
+    const tree = doc.tree(context2);
     const token_tags = tree.tokens.items(.tag);
 
     // Store an index of referenced identifiers and field accesses on the
@@ -49,7 +50,7 @@ fn run(
             const node: Ast.Node.Index = @enumFromInt(index);
             switch (tree.nodeTag(node)) {
                 .identifier => try map.put(gpa, tree.tokenSlice(tree.nodeMainToken(node)), {}),
-                .field_access => if (try isFieldAccessOfRootContainer(context, doc, node)) {
+                .field_access => if (try isFieldAccessOfRootContainer(context, context2, doc, node)) {
                     const node_data = tree.nodeData(node);
                     try map.put(gpa, tree.tokenSlice(
                         node_data.node_and_token.@"1",
@@ -126,7 +127,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.abs_path,
+            doc.absPath(context2),
             try lint_problems.toOwnedSlice(gpa),
         )
     else
@@ -153,12 +154,12 @@ fn namedFnDeclProto(
 
 fn isFieldAccessOfRootContainer(
     context: *zlinter.session.LintContext,
+    context2: *const zlinter.session.LintContext2,
     doc: *const zlinter.session.LintDocument,
     node: Ast.Node.Index,
 ) !bool {
-    std.debug.assert(doc.handle.tree.nodeTag(node) == .field_access);
-
-    const tree = doc.handle.tree;
+    const tree = doc.tree(context2);
+    std.debug.assert(tree.nodeTag(node) == .field_access);
 
     const node_data = tree.nodeData(node);
     const lhs = node_data.node_and_token.@"0";

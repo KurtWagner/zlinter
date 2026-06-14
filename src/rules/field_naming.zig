@@ -142,6 +142,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 fn run(
     rule: zlinter.rules.LintRule,
     context: *zlinter.session.LintContext,
+    context2: *const zlinter.session.LintContext2,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
@@ -151,7 +152,7 @@ fn run(
     var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
     defer lint_problems.deinit(gpa);
 
-    const tree = doc.handle.tree;
+    const tree = doc.tree(context2);
     var buffer: [2]Ast.Node.Index = undefined;
 
     var index: u32 = @intFromEnum(Ast.Node.Index.root);
@@ -296,7 +297,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.abs_path,
+            doc.absPath(context2),
             try lint_problems.toOwnedSlice(gpa),
         )
     else
