@@ -974,6 +974,10 @@ fn resolveDecl(
 }
 
 test "LintContext.resolveTypeKind" {
+    // TODO: #149 - bring this test back
+    if (true)
+        return error.SkipZigTest;
+
     const TestCase = struct {
         contents: [:0]const u8,
         kind: ?LintContext.TypeKind,

@@ -11,7 +11,7 @@ pub fn loadFakeDocument(
     assertTestOnly();
 
     // TODO: #149 - bring back
-    if (true) return error.SkipZigTest;
+    // if (true) return error.SkipZigTest;
 
     const io = std.testing.io;
 
