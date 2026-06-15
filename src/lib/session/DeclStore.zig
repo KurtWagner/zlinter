@@ -223,7 +223,7 @@ fn scopeDecl(self: *const DeclStore, scope_id: ScopeId, name: []const u8) ?DeclI
 }
 
 fn resolveDeclType(
-    self: *const DeclStore,
+    self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
     decl_id: DeclId,
@@ -263,7 +263,7 @@ fn resolveDeclType(
 }
 
 fn resolveVarDeclType(
-    self: *const DeclStore,
+    self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
     decl_id: DeclId,
@@ -285,7 +285,7 @@ fn resolveVarDeclType(
 }
 
 fn resolveContainerFieldType(
-    self: *const DeclStore,
+    self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
     decl_id: DeclId,
@@ -307,7 +307,7 @@ fn resolveContainerFieldType(
 }
 
 fn resolveCallReturnType(
-    self: *const DeclStore,
+    self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
     decl_id: DeclId,
@@ -331,7 +331,7 @@ fn resolveCallReturnType(
 }
 
 fn resolveExprDecl(
-    self: *const DeclStore,
+    self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
     decl_id: DeclId,
@@ -389,7 +389,7 @@ fn resolveFunctionDeclReturnType(
 }
 
 fn resolveMemberDecl(
-    self: *const DeclStore,
+    self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
     parent_decl_id: DeclId,
@@ -409,6 +409,7 @@ fn resolveMemberDecl(
     const parent_file_id = self.declFileId(parent_decl_id);
     const tree = file_store.fileTree(parent_file_id);
     if (node == .root) return self.resolveFileRootMember(
+        file_store,
         parent_file_id,
         member_name,
     );
@@ -444,7 +445,7 @@ fn resolveMemberDecl(
 }
 
 fn resolveMemberDeclFromType(
-    self: *const DeclStore,
+    self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
     parent_decl_id: DeclId,
@@ -468,7 +469,7 @@ fn resolveMemberDeclFromType(
 }
 
 fn resolveTypeExprDecl(
-    self: *const DeclStore,
+    self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
     decl_id: DeclId,
@@ -484,7 +485,7 @@ fn resolveTypeExprDecl(
 }
 
 fn resolveImportMember(
-    self: *const DeclStore,
+    self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
     parent_file_id: FileStore.FileId,
@@ -512,8 +513,7 @@ fn resolveImportMember(
             self.gpa,
             parent_file_dir,
         ) catch @panic("Failed to resolve file"),
-        .stdlib => file_store.resolve(
-            "std/std.zig",
+        .stdlib => file_store.resolveStdLib(
             self.io,
             self.gpa,
             self.zig_lib_directory,
@@ -532,7 +532,7 @@ fn resolveImportMember(
     };
 
     return if (maybe_file_id) |file_id|
-        self.resolveFileRootMember(file_id, member_name)
+        self.resolveFileRootMember(file_store, file_id, member_name)
     else
         null;
 }
@@ -589,10 +589,13 @@ fn resolveContainerMember(
 }
 
 fn resolveFileRootMember(
-    self: *const DeclStore,
+    self: *DeclStore,
+    file_store: *FileStore,
     file_id: FileStore.FileId,
     member_name: []const u8,
 ) ?DeclId {
+    _ = self.store(file_id, file_store, self.gpa);
+
     const root_decl_id = self.fileRootDecl(file_id) orelse return null;
     const root_scope_id = self.scopeForOwnerDecl(root_decl_id) orelse return null;
     return self.scopeDecl(root_scope_id, member_name);

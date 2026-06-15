@@ -113,6 +113,15 @@ pub fn resolve(
     return id;
 }
 
+pub fn resolveStdLib(
+    self: *FileStore,
+    io: std.Io,
+    gpa: std.mem.Allocator,
+    zig_lib_directory: []const u8,
+) !FileId {
+    return self.resolve("std/std.zig", io, gpa, zig_lib_directory);
+}
+
 pub fn fileTree(self: *const FileStore, id: FileId) *const std.zig.Ast {
     return &self.files.items(.tree)[id.toIndex()];
 }
