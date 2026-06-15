@@ -54,8 +54,15 @@ pub fn build(b: *std.Build) !void {
         total_test_count += 1;
 
         if (skippedTestCase(rule_name, test_name)) |skipped| {
-            try skipped_tests.append(b.allocator, skipped);
-            continue;
+            var is_focused = false;
+            if (test_focus_on_rule) |r| {
+                if (std.mem.eql(u8, r, rule_name))
+                    is_focused = true;
+            }
+            if (!is_focused) {
+                try skipped_tests.append(b.allocator, skipped);
+                continue;
+            }
         }
 
         const run_integration_test = b.addRunArtifact(test_runner_exe);
