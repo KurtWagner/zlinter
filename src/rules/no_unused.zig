@@ -162,18 +162,13 @@ fn isFieldAccessOfRootContainer(
     const node_data = tree.nodeData(node);
     const lhs = node_data.node_and_token.@"0";
 
-    if (try context.resolveTypeOfNodeDeprecated(doc, lhs)) |t| {
-        const resolved = zlinter.ast.resolveDeclLiteralResultTypeSafe(t);
-        switch (resolved.data) {
-            .container => |scope_handle| return isContainerRoot(scope_handle),
-            else => {},
-        }
+    if (context.resolveTypeOfNode(doc, lhs)) |resolved| {
+        return if (context.decl_store.rootDecl(doc.file_id)) |root_decl_id|
+            resolved.decl_id == root_decl_id
+        else
+            false;
     }
     return false;
-}
-
-fn isContainerRoot(container: anytype) bool {
-    return container.scope_handle.toNode() == .root;
 }
 
 test "no_unused" {
@@ -254,6 +249,35 @@ test "no_unused" {
         source,
         .{},
         Config{ .container_declaration = .off },
+        &.{},
+    );
+
+    // Root through @This()
+    try zlinter.testing.testRunRule(
+        rule,
+        \\const used_by_root_field = 123;
+        \\
+        \\pub fn main() void {
+        \\    _ = @This().used_by_root_field;
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{},
+    );
+
+    // Root through reference
+    try zlinter.testing.testRunRule(
+        rule,
+        \\const Self = @This();
+        \\const used_by_root_field = 123;
+        \\
+        \\pub fn main() void {
+        \\    _ = Self.used_by_root_field;
+        \\}
+    ,
+        .{},
+        Config{},
         &.{},
     );
 }

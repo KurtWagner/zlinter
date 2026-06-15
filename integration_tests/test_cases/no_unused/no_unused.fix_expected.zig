@@ -25,3 +25,13 @@ const also_explicitly_disabled = 0;
 // zlinter-disable-next-line different_rule
 
 // Comment
+
+// Example where referencing root self.
+const Self = @This();
+const used_by_root_field_so_good = 123;
+const also_used_by_root_field_so_good = 321;
+
+pub fn run() void {
+    _ = @This().used_by_root_field_so_good;
+    _ = Self.also_used_by_root_field_so_good;
+}

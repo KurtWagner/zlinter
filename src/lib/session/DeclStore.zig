@@ -217,6 +217,83 @@ pub fn declResolvedType(self: *const DeclStore, id: DeclId) ?TypeStore.TypeId {
     return self.decls.items(.resolved_type)[id.toIndex()];
 }
 
+/// Resolves an expression node to the declaration it names.
+///
+/// `context_decl_id` supplies the lexical scope to start lookup from. For
+/// example, resolving an identifier inside a function should search that
+/// function's local scope before walking out to the file root.
+pub fn resolveNodeDecl(
+    self: *DeclStore,
+    file_store: *FileStore,
+    module_store: *const ModuleStore,
+    context_decl_id: DeclId,
+    node: std.zig.Ast.Node.Index,
+) ?DeclId {
+    const file_id = self.declFileId(context_decl_id);
+    const tree = file_store.fileTree(file_id);
+    const unwrapped = ast.unwrapNode(tree.*, node, .{
+        .unwrap_optional_unwrap = false,
+    });
+    if (isThisBuiltinCall(tree, unwrapped)) {
+        return self.rootDecl(file_id);
+    }
+
+    return self.resolveExprDecl(
+        file_store,
+        module_store,
+        context_decl_id,
+        node,
+    );
+}
+
+/// Returns the stored declaration represented by this AST node, if any.
+///
+/// This is a direct node-to-declaration lookup, it does not resolve identifier
+/// references or field accesses.
+pub fn declByNode(
+    self: *const DeclStore,
+    file_id: FileStore.FileId,
+    node: std.zig.Ast.Node.Index,
+) ?DeclId {
+    return self.declByAstNode(file_id, node);
+}
+
+pub fn rootDecl(
+    self: *const DeclStore,
+    file_id: FileStore.FileId,
+) ?DeclId {
+    return self.fileRootDecl(file_id);
+}
+
+/// Returns the declaration that should be treated as the container identity.
+///
+/// Most declarations resolve to themselves. Aliases such as
+/// `const Self = @This();` resolve to the file root declaration so callers can
+/// treat `Self.member` the same as `@This().member`.
+pub fn resolvedContainerDecl(
+    self: *const DeclStore,
+    file_store: *const FileStore,
+    decl_id: DeclId,
+) ?DeclId {
+    const file_id = self.declFileId(decl_id);
+    const node = self.declAstNode(decl_id) orelse return null;
+
+    if (node == .root) return decl_id;
+
+    const tree = file_store.fileTree(file_id);
+    const var_decl = tree.fullVarDecl(node) orelse return decl_id;
+    const init_node = var_decl.ast.init_node.unwrap() orelse return decl_id;
+    const init_expr = ast.unwrapNode(tree.*, init_node, .{
+        .unwrap_optional_unwrap = false,
+    });
+
+    if (isThisBuiltinCall(tree, init_expr)) {
+        return self.rootDecl(file_id);
+    }
+
+    return decl_id;
+}
+
 /// Looks up a declaration by name directly within a scope.
 fn scopeDecl(self: *const DeclStore, scope_id: ScopeId, name: []const u8) ?DeclId {
     return self.scopes.items(.decl_by_name)[scope_id.toIndex()].get(name);
@@ -570,6 +647,17 @@ fn writeImportPath(
         },
         .failure => null,
     };
+}
+
+fn isThisBuiltinCall(tree: *const std.zig.Ast, node: std.zig.Ast.Node.Index) bool {
+    switch (tree.nodeTag(node)) {
+        .builtin_call,
+        .builtin_call_comma,
+        .builtin_call_two,
+        .builtin_call_two_comma,
+        => return std.mem.eql(u8, tree.tokenSlice(tree.nodeMainToken(node)), "@This"),
+        else => return false,
+    }
 }
 
 fn resolveContainerMember(

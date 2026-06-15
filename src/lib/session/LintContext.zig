@@ -445,6 +445,89 @@ pub fn initDocument(
     }
 }
 
+pub const ResolvedNodeType = struct {
+    summary: TypeStore.TypeSummary,
+    decl_id: DeclStore.DeclId,
+};
+
+/// Resolves the type summary for an expression node.
+///
+/// This first resolves the expression to the declaration it names, then asks
+/// `DeclStore` to normalize container aliases such as `const Self = @This();`.
+/// The returned `decl_id` is the declaration whose resolved type produced the
+/// summary, not necessarily the declaration textually named by `node`.
+pub fn resolveTypeOfNode(
+    self: *LintContext,
+    doc: *const LintDocument,
+    node: Ast.Node.Index,
+) ?ResolvedNodeType {
+    const immediate_decl_id = self.immediateDeclForNode(doc, node);
+    const resolved_decl_id = if (immediate_decl_id) |decl_id|
+        self.decl_store.resolvedContainerDecl(
+            &self.file_store,
+            decl_id,
+        ) orelse decl_id
+    else
+        null;
+
+    if (resolved_decl_id) |decl_id| {
+        if (self.decl_store.declResolvedType(decl_id)) |type_id| {
+            return .{
+                .summary = self.type_store.summary(type_id),
+                .decl_id = decl_id,
+            };
+        }
+    }
+
+    return null;
+}
+
+/// Resolves `node` to the declaration it directly names.
+///
+/// Expression lookup needs a lexical starting point, so this first finds the
+/// nearest declaration containing `node` and then resolves from that scope.
+fn immediateDeclForNode(
+    self: *LintContext,
+    doc: *const LintDocument,
+    node: Ast.Node.Index,
+) ?DeclStore.DeclId {
+    const context_decl_id = self.contextDeclForNode(
+        doc,
+        node,
+    ) orelse
+        return null;
+
+    return self.decl_store.resolveNodeDecl(
+        &self.file_store,
+        &self.module_store,
+        context_decl_id,
+        node,
+    );
+}
+
+/// Finds the declaration whose scope should anchor lookup for `node`.
+///
+/// This is about where the expression appears, not what it refers to. For an
+/// expression inside a function body this will usually be the function decl,
+/// if no closer declaration is found, lookup starts at the file root.
+fn contextDeclForNode(
+    self: *const LintContext,
+    doc: *const LintDocument,
+    node: Ast.Node.Index,
+) ?DeclStore.DeclId {
+    var current: ?Ast.Node.Index = node;
+    while (current) |current_node| {
+        if (self.decl_store.declByNode(
+            doc.file_id,
+            current_node,
+        )) |decl_id|
+            return decl_id;
+
+        current = doc.lineage.items(.parent)[@intFromEnum(current_node)];
+    }
+    return self.decl_store.rootDecl(doc.file_id);
+}
+
 /// Resolves the type of node or null if it can't be resolved.
 pub fn resolveTypeOfNodeDeprecated(_: *LintContext, _: *const LintDocument, _: Ast.Node.Index) !?zls.Analyser.Type {
     return null;

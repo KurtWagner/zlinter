@@ -141,7 +141,6 @@ const skipped_test_cases = [_]SkippedTestCase{
     .{ .rule_name = "no_deprecated", .test_name = "cross_file_alias_chain" },
     .{ .rule_name = "no_deprecated", .test_name = "no_deprecated" },
     .{ .rule_name = "no_hidden_allocations", .test_name = "no_hidden_allocations" },
-    .{ .rule_name = "no_unused", .test_name = "no_unused" },
     .{ .rule_name = "require_errdefer_dealloc", .test_name = "require_errdefer_dealloc" },
     .{ .rule_name = "require_exhaustive_enum_switch", .test_name = "call_condition_token" },
     .{ .rule_name = "require_exhaustive_enum_switch", .test_name = "require_exhaustive_enum_switch" },

@@ -1005,7 +1005,6 @@ const skipped_rule_unit_tests = [_][]const u8{
     "import_ordering",
     "no_deprecated",
     "no_hidden_allocations",
-    "no_unused",
     "require_errdefer_dealloc",
     "require_exhaustive_enum_switch",
     "no_literal_args",
