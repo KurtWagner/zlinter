@@ -291,6 +291,7 @@ fn runLinterRules(
         std.debug.print("Linting: '{s}'\n", .{file.abs_path});
 
         const file_id = try context.resolveFile(file.abs_path);
+        context.debugPrintFileDecls(file_id);
 
         var compiled_unit_it = context.resolveCompiledUnits(file_id);
         var resolved_any = false;

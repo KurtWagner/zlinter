@@ -1520,6 +1520,51 @@ test "getEnumInfoFromType" {
     );
 }
 
+// TODO: #149 - needs tests
+pub fn declTypeNode(tree: *const std.zig.Ast, node: std.zig.Ast.Node.Index) ?std.zig.Ast.Node.Index {
+    if (tree.fullVarDecl(node)) |var_decl| return var_decl.ast.type_node.unwrap();
+    if (tree.fullContainerField(node)) |field| return field.ast.type_expr.unwrap();
+
+    var buffer: [1]std.zig.Ast.Node.Index = undefined;
+    if (tree.fullFnProto(&buffer, node)) |fn_proto| return fn_proto.ast.return_type.unwrap();
+
+    return null;
+}
+
+// TODO: #149 - needs tests
+/// Returns the name token for a node declaration.
+pub fn declNameToken(tree: *const std.zig.Ast, node: std.zig.Ast.Node.Index) ?std.zig.Ast.TokenIndex {
+    return switch (tree.nodeTag(node)) {
+        // Main token is name
+        .container_field_init,
+        .container_field_align,
+        .container_field,
+        => tree.nodeMainToken(node),
+        // Main token is mutation (e.g., var or const)
+        .global_var_decl,
+        .local_var_decl,
+        .aligned_var_decl,
+        .simple_var_decl,
+        => tree.nodeMainToken(node) + 1,
+        // Main token is "fn"
+        .fn_decl,
+        => tree.nodeMainToken(node) + 1,
+        // Main token may be a name identifier
+        .fn_proto_simple,
+        .fn_proto_multi,
+        .fn_proto_one,
+        .fn_proto,
+        => {
+            const token = tree.nodeMainToken(node) + 1;
+            return switch (tree.tokenTag(token)) {
+                .identifier => token,
+                else => null,
+            };
+        },
+        else => null,
+    };
+}
+
 const session = @import("session.zig");
 const std = @import("std");
 const testing = @import("testing.zig");

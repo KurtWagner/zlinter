@@ -18,7 +18,8 @@ cwd: []const u8,
 compile_contexts: std.MultiArrayList(CompileContext) = .empty,
 file_store: FileStore = .empty,
 module_store: ModuleStore = .empty,
-decl_store: DeclStore = .empty,
+decl_store: DeclStore = undefined, // zlinter-disable-current-line no_undefined - set in init
+type_store: TypeStore = .empty,
 build_config_store: BuildConfigStore = .empty,
 
 deprecated: struct {
@@ -30,6 +31,13 @@ pub fn init(self: *LintContext) !void {
     const config: zls.Config = .{
         .zig_exe_path = self.zig_exe,
         .zig_lib_path = self.zig_lib_directory,
+    };
+
+    // TODO: #149 - refactor to not do this
+    self.decl_store = .{
+        .gpa = self.gpa,
+        .zig_lib_directory = self.zig_lib_directory,
+        .io = self.io,
     };
 
     self.deprecated.document_store = zls.DocumentStore{
@@ -81,6 +89,7 @@ pub fn deinit(self: *LintContext) void {
     self.compile_contexts.deinit(self.gpa);
     self.module_store.deinit(self.gpa);
     self.decl_store.deinit(self.gpa);
+    self.type_store.deinit(self.gpa);
 }
 
 fn initBuildConfig(self: *LintContext) !void {
@@ -127,13 +136,20 @@ fn consumeBuildConfigStep(
         return;
     };
 
-    const root_file_id = self.module_store.rootFile(root_module_id);
-
-    _ = self.decl_store.store(
-        root_file_id,
-        &self.file_store,
-        self.gpa,
-    );
+    // TODO: #149 - should we bother doing this?
+    // for (self.module_store.modules.items(.root_file)) |module_root_file_id| {
+    //     _ = self.decl_store.store(
+    //         module_root_file_id,
+    //         &self.file_store,
+    //         self.gpa,
+    //     );
+    // }
+    // const root_file_id = self.module_store.rootFile(root_module_id);
+    // _ = self.decl_store.store(
+    //     root_file_id,
+    //     &self.file_store,
+    //     self.gpa,
+    // );
 
     const compile_context_id: CompileContext.Id = .fromIndex(self.compile_contexts.len);
     try self.compile_contexts.append(self.gpa, .{
@@ -143,34 +159,34 @@ fn consumeBuildConfigStep(
     errdefer _ = self.compile_contexts.swapRemove(compile_context_id.toIndex());
 
     // TODO: #149 - this is still experimental descendents population.
-    {
-        var map: std.AutoHashMapUnmanaged(files.ImportIterator.Import, void) = .empty;
-        defer map.deinit(self.gpa);
+    // {
+    //     var map: std.AutoHashMapUnmanaged(files.Import, void) = .empty;
+    //     defer map.deinit(self.gpa);
 
-        var it: files.ImportIterator = .{
-            .file_store = &self.file_store,
-            .io = self.io,
-            .cwd = std.fs.path.dirname(self.file_store.fileAbsPath(root_file_id)) orelse self.cwd,
-            .gpa = self.gpa,
-            .zig_lib_directory = self.zig_lib_directory,
-        };
-        defer it.deinit();
+    //     var it: files.ImportIterator = .{
+    //         .file_store = &self.file_store,
+    //         .io = self.io,
+    //         .cwd = std.fs.path.dirname(self.file_store.fileAbsPath(root_file_id)) orelse self.cwd,
+    //         .gpa = self.gpa,
+    //         .zig_lib_directory = self.zig_lib_directory,
+    //     };
+    //     defer it.deinit();
 
-        try it.init(root_file_id);
-        while (try it.next()) |child_import| {
-            try map.put(self.gpa, child_import, {});
-            std.debug.print(" Visited Descendent: '{t}' '{s}'\n", .{
-                child_import.kind,
-                self.file_store.fileAbsPath(child_import.file_id),
-            });
+    //     try it.init(root_file_id);
+    //     while (try it.next()) |child_import| {
+    //         try map.put(self.gpa, child_import, {});
+    //         std.debug.print(" Visited Descendent: '{t}' '{s}'\n", .{
+    //             child_import.kind,
+    //             self.file_store.fileAbsPath(child_import.file_id),
+    //         });
 
-            _ = self.decl_store.store(
-                child_import.file_id,
-                &self.file_store,
-                self.gpa,
-            );
-        }
-    }
+    //         _ = self.decl_store.store(
+    //             child_import.file_id,
+    //             &self.file_store,
+    //             self.gpa,
+    //         );
+    //     }
+    // }
 }
 
 fn resolveBuildModule(
@@ -281,7 +297,20 @@ fn resolveBuildModuleShallow(
 }
 
 pub fn resolveFile(self: *LintContext, input_path: []const u8) !FileStore.FileId {
-    return self.file_store.resolve(input_path, self.io, self.gpa, self.cwd);
+    const id = try self.file_store.resolve(
+        input_path,
+        self.io,
+        self.gpa,
+        self.cwd,
+    );
+    self.decl_store.resolveFileTypes(
+        id,
+        &self.file_store,
+        &self.module_store,
+        &self.type_store,
+        self.gpa,
+    );
+    return id;
 }
 
 pub const CompiledContextIterator = struct {
@@ -313,6 +342,14 @@ pub fn resolveCompiledUnits(
         .ctx = self,
         .file_id = file_id,
     };
+}
+
+pub fn debugPrintFileDecls(self: *const LintContext, file_id: FileStore.FileId) void {
+    self.decl_store.debugPrintFileDecls(
+        file_id,
+        &self.file_store,
+        &self.type_store,
+    );
 }
 
 /// Loads and parses zig file into the document store.
@@ -423,7 +460,7 @@ pub fn resolveTypeOfTypeNode(self: *LintContext, doc: *const LintDocument, node:
 }
 
 // TODO: Write tests and clean this up as they're not really all needed
-pub const TypeKind = @import("DeclStore.zig").Type;
+pub const TypeKind = @import("TypeStore.zig").Type;
 
 // TODO: This has gotten out of hand and really needs a revamp.... patching
 // for now to get things happy with latest changes to master but needs love
@@ -1330,6 +1367,7 @@ const DeclStore = @import("DeclStore.zig");
 const FileStore = @import("FileStore.zig");
 const LintDocument = @import("LintDocument.zig");
 const ModuleStore = @import("ModuleStore.zig");
+const TypeStore = @import("TypeStore.zig");
 const Ast = std.zig.Ast;
 
 test {

@@ -113,8 +113,26 @@ pub fn rootFile(self: *const ModuleStore, module_id: ModuleId) FileId {
     return self.modules.items(.root_file)[module_id.toIndex()];
 }
 
-pub fn namedImports(self: *const ModuleStore, module_id: ModuleId) *const std.StringHashMapUnmanaged(ModuleId) {
+pub fn moduleForRootFile(self: *const ModuleStore, file_id: FileId) ?ModuleId {
+    for (self.modules.items(.root_file), 0..) |root_file, index| {
+        if (root_file == file_id) return .fromIndex(index);
+    }
+    return null;
+}
+
+pub fn namedImports(
+    self: *const ModuleStore,
+    module_id: ModuleId,
+) *const std.StringHashMapUnmanaged(ModuleId) {
     return &self.modules.items(.named_imports)[module_id.toIndex()];
+}
+
+pub fn namedImport(
+    self: *const ModuleStore,
+    module_id: ModuleId,
+    name: []const u8,
+) ?ModuleId {
+    return self.namedImports(module_id).get(name);
 }
 
 const FileId = @import("FileStore.zig").FileId;

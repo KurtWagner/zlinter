@@ -399,6 +399,32 @@ pub fn resolveLazyPath(
     }
 }
 
+// TODO: #149 - probably shouldn't live in here...
+pub const Import = packed struct {
+    pub const Kind = enum(u5) {
+        relative = 0,
+        stdlib = 1,
+        root = 2,
+        builtin = 3,
+        module = 4,
+
+        pub fn init(import_path: []const u8) Kind {
+            return if (std.mem.endsWith(u8, import_path, ".zig") and !std.fs.path.isAbsolute(import_path))
+                .relative
+            else if (std.mem.eql(u8, import_path, "std"))
+                .stdlib
+            else if (std.mem.eql(u8, import_path, "root"))
+                .root
+            else if (std.mem.eql(u8, import_path, "builtin"))
+                .builtin
+            else
+                .module;
+        }
+    };
+    kind: Kind,
+    file_id: FileStore.FileId,
+};
+
 // TODO: #149 - needs tests
 /// Walks imports with no visited or path type checks (module and relative).
 pub const ImportIterator = struct {
@@ -412,32 +438,6 @@ pub const ImportIterator = struct {
     cwd: []const u8,
     seen: std.bit_set.StaticBitSet(10240) = .empty,
     queue: std.ArrayList(Import) = .empty,
-
-    // TODO: #149 - probably shouldn't live in here...
-    pub const Import = packed struct {
-        pub const Kind = enum(u5) {
-            relative = 0,
-            stdlib = 1,
-            root = 2,
-            builtin = 3,
-            module = 4,
-
-            pub fn init(import_path: []const u8) Kind {
-                return if (std.mem.endsWith(u8, import_path, ".zig") and !std.fs.path.isAbsolute(import_path))
-                    .relative
-                else if (std.mem.eql(u8, import_path, "std"))
-                    .stdlib
-                else if (std.mem.eql(u8, import_path, "root"))
-                    .root
-                else if (std.mem.eql(u8, import_path, "builtin"))
-                    .builtin
-                else
-                    .module;
-            }
-        };
-        kind: Kind,
-        file_id: FileStore.FileId,
-    };
 
     pub fn init(it: *ImportIterator, root: FileStore.FileId) !void {
         it.seen.set(root.toIndex());
