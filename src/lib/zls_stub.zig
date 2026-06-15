@@ -257,7 +257,7 @@ pub const Analyser = struct {
 
     pub fn deinit(_: *Analyser) void {}
 
-    pub fn resolveTypeOfNode(_: *Analyser, _: NodeWithHandle) error{ OutOfMemory, Canceled }!?Type {
+    pub fn resolveTypeOfNodeDeprecated(_: *Analyser, _: NodeWithHandle) error{ OutOfMemory, Canceled }!?Type {
         return null;
     }
 

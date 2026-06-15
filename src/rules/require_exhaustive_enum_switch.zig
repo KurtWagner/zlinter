@@ -88,7 +88,7 @@ fn run(
 
         const switch_info = tree.fullSwitch(node) orelse continue :nodes;
 
-        const switch_expr_type = try context.resolveTypeOfNode(
+        const switch_expr_type = try context.resolveTypeOfNodeDeprecated(
             doc,
             switch_info.ast.condition,
         ) orelse continue :nodes;

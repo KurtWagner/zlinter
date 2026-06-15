@@ -238,7 +238,7 @@ fn declRequiringCleanup(
             false,
     }) return null;
 
-    const var_decl_type = try context.resolveTypeOfNode(doc, maybe_var_decl_node) orelse return null;
+    const var_decl_type = try context.resolveTypeOfNodeDeprecated(doc, maybe_var_decl_node) orelse return null;
     switch (var_decl_type.data) {
         .container => |container| {
             const scope_handle = container.scope_handle;

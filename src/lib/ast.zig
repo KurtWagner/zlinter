@@ -1485,7 +1485,7 @@ test "getEnumInfoFromType" {
     const exhaustive_enum_decl_node = try testing.expectVarDecl(tree, "E");
     const exhaustive_enum_decl = tree.fullVarDecl(exhaustive_enum_decl_node).?;
     const exhaustive_enum_init = exhaustive_enum_decl.ast.init_node.unwrap().?;
-    const exhaustive_enum_type = (try context.resolveTypeOfNode(doc, exhaustive_enum_init)) orelse return error.TestExpectedType;
+    const exhaustive_enum_type = (try context.resolveTypeOfNodeDeprecated(doc, exhaustive_enum_init)) orelse return error.TestExpectedType;
     var exhaustive_enum_info = try getEnumInfoFromType(
         resolveDeclLiteralResultTypeSafe(exhaustive_enum_type),
         std.testing.allocator,
@@ -1499,7 +1499,7 @@ test "getEnumInfoFromType" {
     const non_exhaustive_enum_decl_node = try testing.expectVarDecl(tree, "NE");
     const non_exhaustive_enum_decl = tree.fullVarDecl(non_exhaustive_enum_decl_node).?;
     const non_exhaustive_enum_init = non_exhaustive_enum_decl.ast.init_node.unwrap().?;
-    const non_exhaustive_enum_type = (try context.resolveTypeOfNode(doc, non_exhaustive_enum_init)) orelse return error.TestExpectedType;
+    const non_exhaustive_enum_type = (try context.resolveTypeOfNodeDeprecated(doc, non_exhaustive_enum_init)) orelse return error.TestExpectedType;
     var non_exhaustive_enum_info = try getEnumInfoFromType(
         resolveDeclLiteralResultTypeSafe(non_exhaustive_enum_type),
         std.testing.allocator,
@@ -1513,7 +1513,7 @@ test "getEnumInfoFromType" {
     const not_enum_decl_node = try testing.expectVarDecl(tree, "X");
     const not_enum_decl = tree.fullVarDecl(not_enum_decl_node).?;
     const not_enum_init = not_enum_decl.ast.init_node.unwrap().?;
-    const not_enum_type = (try context.resolveTypeOfNode(doc, not_enum_init)) orelse return error.TestExpectedType;
+    const not_enum_type = (try context.resolveTypeOfNodeDeprecated(doc, not_enum_init)) orelse return error.TestExpectedType;
     const resolved_not_enum_type = resolveDeclLiteralResultTypeSafe(not_enum_type);
     try std.testing.expect(
         (try getEnumInfoFromType(resolved_not_enum_type, std.testing.allocator)) == null,

@@ -446,14 +446,14 @@ pub fn initDocument(
 }
 
 /// Resolves the type of node or null if it can't be resolved.
-pub fn resolveTypeOfNode(self: *LintContext, doc: *const LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
-    return self.deprecated.analyser.resolveTypeOfNode(.of(node, doc.handle));
+pub fn resolveTypeOfNodeDeprecated(_: *LintContext, _: *const LintDocument, _: Ast.Node.Index) !?zls.Analyser.Type {
+    return null;
 }
 
 /// Resolves the type of a node that points to a type (e.g., return type) or
 /// null if it cannot be resolved.
-pub fn resolveTypeOfTypeNode(self: *LintContext, doc: *const LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
-    const resolved_type = try self.resolveTypeOfNode(doc, node) orelse return null;
+pub fn rresolveTypeOfTypeNodeDeprecated(self: *LintContext, doc: *const LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
+    const resolved_type = try self.resolveTypeOfNodeDeprecated(doc, node) orelse return null;
     const instance_type = if (resolved_type.isMetaType()) resolved_type else try resolved_type.instanceTypeVal(&self.deprecated.analyser) orelse resolved_type;
 
     return ast.resolveDeclLiteralResultTypeSafe(instance_type);
@@ -470,7 +470,7 @@ pub const TypeKind = @import("TypeStore.zig").Type;
 ///
 /// This will return null if the kind could not be resolved, usually indicating
 /// that the input was unexpected / invalid.
-pub fn resolveTypeKind(self: *LintContext, doc: *const LintDocument, input: union(enum) {
+pub fn resolveTypeKindDeprecated(self: *LintContext, doc: *const LintDocument, input: union(enum) {
     var_decl: Ast.full.VarDecl,
     container_field: Ast.full.ContainerField,
     type_node: Ast.Node.Index,
@@ -537,7 +537,7 @@ pub fn resolveTypeKind(self: *LintContext, doc: *const LintDocument, input: unio
                     const decl_node = decl_with_handle.decl.ast_node;
                     if (decl_with_handle.handle.tree.fullVarDecl(decl_node)) |var_decl| {
                         if (std.mem.eql(u8, decl_with_handle.handle.uri.raw, doc.handle.uri.raw)) {
-                            return try self.resolveTypeKind(doc, .{ .var_decl = var_decl });
+                            return try self.resolveTypeKindDeprecated(doc, .{ .var_decl = var_decl });
                         }
                     }
 
@@ -554,7 +554,7 @@ pub fn resolveTypeKind(self: *LintContext, doc: *const LintDocument, input: unio
                     }
                 }
             }
-        } else if (try self.resolveTypeOfNode(doc, node)) |type_node_type| {
+        } else if (try self.resolveTypeOfNodeDeprecated(doc, node)) |type_node_type| {
             if (!type_node_type.is_type_val) {
                 return if (type_node_type.isTypeFunc())
                     .fn_returns_type
@@ -610,7 +610,7 @@ pub fn resolveTypeKind(self: *LintContext, doc: *const LintDocument, input: unio
                     const decl_node = decl_with_handle.decl.ast_node;
                     if (decl_with_handle.handle.tree.fullVarDecl(decl_node)) |var_decl| {
                         if (std.mem.eql(u8, decl_with_handle.handle.uri.raw, doc.handle.uri.raw)) {
-                            return try self.resolveTypeKind(doc, .{ .var_decl = var_decl });
+                            return try self.resolveTypeKindDeprecated(doc, .{ .var_decl = var_decl });
                         }
                     }
                 }
@@ -768,7 +768,7 @@ pub fn resolveTypeKind(self: *LintContext, doc: *const LintDocument, input: unio
                 .keyword_enum => .enum_type,
                 inline else => |token| @panic("Unexpected container main token: " ++ @tagName(token)),
             };
-        } else if (try self.resolveTypeOfNode(doc, node)) |init_node_type| {
+        } else if (try self.resolveTypeOfNodeDeprecated(doc, node)) |init_node_type| {
             if (!init_node_type.is_type_val) {
                 return if (init_node_type.isTypeFunc())
                     .fn_returns_type
@@ -1335,9 +1335,9 @@ test "LintContext.resolveTypeKind" {
 
         const node = doc.handle.tree.rootDecls()[0];
         const actual_kind = if (doc.handle.tree.fullVarDecl(node)) |var_decl|
-            try context.resolveTypeKind(doc, .{ .var_decl = var_decl })
+            try context.resolveTypeKindDeprecated(doc, .{ .var_decl = var_decl })
         else if (doc.handle.tree.fullContainerField(node)) |container_field|
-            try context.resolveTypeKind(doc, .{ .container_field = container_field })
+            try context.resolveTypeKindDeprecated(doc, .{ .container_field = container_field })
         else
             @panic("Fail");
 

@@ -99,7 +99,7 @@ fn run(
             const fn_name_token = fn_proto.name_token.?;
             const fn_name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(fn_name_token));
 
-            const return_type = (try context.resolveTypeOfTypeNode(
+            const return_type = (try context.rresolveTypeOfTypeNodeDeprecated(
                 doc,
                 fn_proto.ast.return_type.unwrap().?,
             )) orelse continue :nodes;
@@ -228,7 +228,7 @@ fn classifyParamTypeKind(
         .{},
     );
 
-    var type_kind = try context.resolveTypeKind(
+    var type_kind = try context.resolveTypeKindDeprecated(
         doc,
         .{ .type_node = param },
     );
@@ -266,7 +266,7 @@ fn classifyParamTypeKind(
             if (decl_with_handle.handle.tree.fullVarDecl(
                 decl_with_handle.decl.ast_node,
             )) |var_decl| {
-                type_kind = try context.resolveTypeKind(
+                type_kind = try context.resolveTypeKindDeprecated(
                     doc,
                     .{ .var_decl = var_decl },
                 );
@@ -275,7 +275,7 @@ fn classifyParamTypeKind(
     }
     if ((type_kind orelse .other) != .other) return type_kind;
 
-    if (try context.resolveTypeOfTypeNode(doc, param)) |param_type| {
+    if (try context.rresolveTypeOfTypeNodeDeprecated(doc, param)) |param_type| {
         if (param_type.isTypeFunc()) return .fn_type_returns_type;
         if (param_type.isFunc()) return .fn_type;
     }
