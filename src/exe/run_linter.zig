@@ -3,7 +3,7 @@ const default_formatter = zlinter.formatters.DefaultFormatter{};
 
 // TODO: #149 - use verbose at build time for build options to control this.
 // then use std.log.info instead of the custom printer.
-pub const std_options: std.Options = .{ .log_level = .info };
+pub const std_options: std.Options = .{ .log_level = .err };
 
 pub fn main(init: std.process.Init.Minimal) !u8 {
     // TODO: Work out whether this should swap to the "juicy" main allocators
@@ -287,23 +287,24 @@ fn runLinterRules(
     defer context.deinit();
 
     // TODO: #149 - Remove this just poking around.
-    for (lint_files) |file| {
-        std.debug.print("Linting: '{s}'\n", .{file.abs_path});
+    if (args.verbose) {
+        for (lint_files) |file| {
+            std.debug.print("Linting: '{s}'\n", .{file.abs_path});
 
-        const file_id = try context.resolveFile(file.abs_path);
-        context.debugPrintFileDecls(file_id);
+            const file_id = try context.resolveFile(file.abs_path);
+            context.debugPrintFileDecls(file_id);
 
-        var compiled_unit_it = context.resolveCompiledUnits(file_id);
-        var resolved_any = false;
-        while (compiled_unit_it.next()) |index| {
-            resolved_any = true;
-            std.debug.print(" - {d}\n", .{index});
-        }
-        if (!resolved_any) {
-            std.debug.print(" - none\n", .{});
+            var compiled_unit_it = context.resolveCompiledUnits(file_id);
+            var resolved_any = false;
+            while (compiled_unit_it.next()) |index| {
+                resolved_any = true;
+                std.debug.print(" - {d}\n", .{index});
+            }
+            if (!resolved_any) {
+                std.debug.print(" - none\n", .{});
+            }
         }
     }
-
     var enabled_rules = enabledRules(args.rules);
 
     var config_overrides_arena = std.heap.ArenaAllocator.init(gpa);

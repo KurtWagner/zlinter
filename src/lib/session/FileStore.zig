@@ -108,7 +108,7 @@ pub fn resolve(
     try self.path_to_index.putNoClobber(gpa, abs_path, id);
     errdefer _ = self.path_to_index.remove(abs_path);
 
-    std.debug.print("File store: adding '{s}\n", .{abs_path});
+    std.log.info("File store: adding '{s}", .{abs_path});
 
     return id;
 }

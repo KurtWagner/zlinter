@@ -72,7 +72,7 @@ pub fn resolve(
     ) catch unreachable;
 
     // TODO: #147 - log based on verbosity
-    std.debug.print("Resolving '{s}'\n", .{normal_path});
+    std.log.info("Resolving '{s}'", .{normal_path});
 
     if (self.path_to_config.get(normal_path)) |index|
         return index;
@@ -86,7 +86,7 @@ pub fn resolve(
         },
         .path => |path| path,
     };
-    std.debug.print(" = Root: {s}\n", .{build_root_path});
+    std.log.info(" = Root: {s}", .{build_root_path});
 
     // TODO: #147 - catch and report build errors appropriately otherwise it appears as missing build config...
     const config_path = try files.resolveBuildConfigurationPath(
@@ -182,7 +182,7 @@ fn findNearestBuildRoot(
     var dir = src_path;
 
     while (true) {
-        std.debug.print(" -- checking '{s}'\n", .{dir});
+        std.log.info(" -- checking '{s}'", .{dir});
         if (self.path_to_config.get(dir)) |index|
             return .{ .config_id = .{
                 .index = index,

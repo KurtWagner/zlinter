@@ -350,7 +350,9 @@ pub fn build(b: *std.Build) void {
         }
 
         if (skippedRuleUnitTest(rule_import.name)) {
-            std.log.warn("Skipping rule unit tests for {s}", .{rule_import.name});
+            if (b.graph.verbose) {
+                std.log.warn("Skipping rule unit tests for {s}", .{rule_import.name});
+            }
             continue;
         }
 
