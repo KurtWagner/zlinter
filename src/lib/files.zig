@@ -335,11 +335,11 @@ pub fn resolveBuildConfigurationPath(
     }
     switch (config_path_result.term) {
         .exited => |code| if (code != 0) {
-            std.debug.print("{s}", .{config_path_result.stderr});
+            std.log.err("{s}", .{config_path_result.stderr});
             return error.ConfigurationLookupFailed;
         },
         else => {
-            std.debug.print("{s}", .{config_path_result.stderr});
+            std.log.err("{s}", .{config_path_result.stderr});
             return error.ConfigurationLookupFailed;
         },
     }
