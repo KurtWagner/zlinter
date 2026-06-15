@@ -1006,14 +1006,9 @@ fn resolveModuleIndex(modules: []const *std.Build.Module, module: *std.Build.Mod
 const skipped_rule_unit_tests = [_][]const u8{
     // TODO: #149 - bring these rules back once their integration tests are stable.
     "declaration_naming",
-    "field_ordering",
     "function_naming",
-    "import_ordering",
     "no_deprecated",
-    "no_hidden_allocations",
-    "require_errdefer_dealloc",
     "require_exhaustive_enum_switch",
-    "no_literal_args",
 };
 
 fn skippedRuleUnitTest(rule_name: []const u8) bool {
