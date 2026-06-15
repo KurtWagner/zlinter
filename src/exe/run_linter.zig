@@ -1,9 +1,12 @@
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 const default_formatter = zlinter.formatters.DefaultFormatter{};
 
-// TODO: #149 - use verbose at build time for build options to control this.
-// then use std.log.info instead of the custom printer.
-pub const std_options: std.Options = .{ .log_level = .err };
+pub const std_options: std.Options = .{
+    .log_level = if (@import("zlinter_build_config").verbose)
+        .info
+    else
+        .err,
+};
 
 pub fn main(init: std.process.Init.Minimal) !u8 {
     // TODO: Work out whether this should swap to the "juicy" main allocators

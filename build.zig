@@ -585,6 +585,10 @@ fn buildStep(
         .imports = &.{zlinter_import},
     });
 
+    const zlinter_build_config = b.addOptions();
+    zlinter_build_config.addOption(bool, "verbose", b.graph.verbose);
+    exe_module.addImport("zlinter_build_config", zlinter_build_config.createModule());
+
     // --------------------------------------------------------------------
     // Generate dynamic rules and rules config
     // --------------------------------------------------------------------
@@ -618,6 +622,8 @@ fn buildStep(
 
     run.addArg("--zig_lib_directory");
     run.addFileArg(.zig_lib);
+
+    if (b.graph.verbose) run.addArg("--verbose");
 
     var include_paths: std.ArrayList([]const u8) = .empty;
     defer include_paths.deinit(b.allocator);
