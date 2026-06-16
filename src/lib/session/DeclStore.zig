@@ -1067,18 +1067,24 @@ fn resolveImportMember(
         return null;
 
     const import_kind: files.Import.Kind = .init(import_path);
-    const maybe_file_id: ?FileStore.FileId = switch (import_kind) {
+    const maybe_file_id: ?FileStore.FileId = file_id: switch (import_kind) {
         .relative => file_store.resolve(
             import_path,
             self.io,
             self.gpa,
             parent_file_dir,
-        ) catch @panic("Failed to resolve file"),
+        ) catch |e| {
+            std.log.err("Failed to resolve '{s}': {t}", .{ import_path, e });
+            break :file_id null;
+        },
         .stdlib => file_store.resolveStdLib(
             self.io,
             self.gpa,
             self.zig_lib_directory,
-        ) catch @panic("Failed to resolve file"),
+        ) catch |e| {
+            std.log.err("Failed to stdlib: {t}", .{e});
+            break :file_id null;
+        },
         // TODO: #149 - handle "root" and "builtin" imports.
         .builtin => null,
         .root => null,

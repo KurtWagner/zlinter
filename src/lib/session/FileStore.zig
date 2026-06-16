@@ -69,8 +69,6 @@ pub fn resolve(
     const zone = tracy.traceNamed(@src(), "FileStore.resolve");
     defer zone.end();
 
-    std.log.info("Resolving '{s}' to '{s}'", .{ cwd, input_path });
-
     var fba_buffer: [std.fs.max_path_bytes]u8 = undefined;
     var fba: std.heap.FixedBufferAllocator = .init(&fba_buffer);
 
@@ -108,7 +106,8 @@ pub fn resolve(
     try self.path_to_index.putNoClobber(gpa, abs_path, id);
     errdefer _ = self.path_to_index.remove(abs_path);
 
-    std.log.info("File store: adding '{s}", .{abs_path});
+    std.log.info("Resolving '{s}' to '{s}'", .{ cwd, input_path });
+    std.log.info(" - adding '{s}", .{abs_path});
 
     return id;
 }

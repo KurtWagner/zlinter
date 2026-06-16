@@ -71,9 +71,6 @@ pub fn resolve(
         &.{ cwd, input_path },
     ) catch unreachable;
 
-    // TODO: #147 - log based on verbosity
-    std.log.info("Resolving '{s}'", .{normal_path});
-
     if (self.path_to_config.get(normal_path)) |index|
         return index;
 
