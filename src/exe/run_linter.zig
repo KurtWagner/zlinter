@@ -679,7 +679,7 @@ fn runFixes(
 ///
 /// The returned string must be freed by the caller. i.e., `allocator.free(error_message);`
 fn allocAstErrorMsg(
-    tree: *const Ast,
+    tree: Ast,
     err: Ast.Error,
     allocator: std.mem.Allocator,
 ) ![]const u8 {

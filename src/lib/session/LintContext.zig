@@ -501,7 +501,7 @@ pub const EnumInfo = struct {
     }
 };
 
-inline fn enumMemberTagName(tree: *const Ast, member: Ast.Node.Index) ?[]const u8 {
+inline fn enumMemberTagName(tree: Ast, member: Ast.Node.Index) ?[]const u8 {
     // zlinter-disable-next-line require_exhaustive_enum_switch
     return switch (tree.nodeTag(member)) {
         .container_field,
@@ -713,7 +713,7 @@ fn resolveEnumDeclAlias(
 
 fn enumDeclIsNonExhaustive(
     self: *LintContext,
-    tree: *const Ast,
+    tree: Ast,
     container_decl: Ast.full.ContainerDecl,
 ) bool {
     _ = self;
@@ -1012,7 +1012,7 @@ fn typeKindFromTarget(
 }
 
 fn typeKindFromTypeNode(
-    tree: *const Ast,
+    tree: Ast,
     type_node: Ast.Node.Index,
 ) ?TypeStore.Type {
     const summary = TypeStore.summarizeTypeNode(
@@ -1027,7 +1027,7 @@ fn typeKindFromTypeNode(
 }
 
 fn typeKindFromValueTypeNode(
-    tree: *const Ast,
+    tree: Ast,
     type_node: Ast.Node.Index,
 ) ?TypeStore.Type {
     return switch (typeKindFromTypeNode(tree, type_node) orelse return null) {
@@ -1130,7 +1130,7 @@ fn typeKindFromValueNode(
     );
 }
 
-fn isImportBuiltinCall(tree: *const Ast, node: Ast.Node.Index) bool {
+fn isImportBuiltinCall(tree: Ast, node: Ast.Node.Index) bool {
     return switch (tree.nodeTag(node)) {
         .builtin_call,
         .builtin_call_comma,
@@ -1192,7 +1192,7 @@ fn resolveImportRootDecl(
 }
 
 fn writeImportPath(
-    tree: *const Ast,
+    tree: Ast,
     node: Ast.Node.Index,
     buffer: *[std.fs.max_path_bytes]u8,
 ) ?[]const u8 {
@@ -1227,7 +1227,7 @@ fn writeImportPath(
 }
 
 fn typeKindFromTypeValueExpr(
-    tree: *const Ast,
+    tree: Ast,
     node: Ast.Node.Index,
 ) ?TypeStore.Type {
     const summary = TypeStore.summarizeTypeNode(
@@ -1242,7 +1242,7 @@ fn typeKindFromTypeValueExpr(
 }
 
 fn valueExprIsTypeInfoProjection(
-    tree: *const Ast,
+    tree: Ast,
     node: Ast.Node.Index,
 ) bool {
     const tag = tree.nodeTag(node);
@@ -1269,7 +1269,7 @@ fn valueExprIsTypeInfoProjection(
 }
 
 fn containerDeclTypeKind(
-    tree: *const Ast,
+    tree: Ast,
     container_decl: Ast.full.ContainerDecl,
 ) TypeStore.Type {
     return switch (tree.tokenTag(container_decl.ast.main_token)) {

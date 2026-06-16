@@ -82,7 +82,7 @@ pub const ChildIterator = union(enum) {
         clobbers: Ast.Node.OptionalIndex,
     },
 
-    pub fn init(tree: *const Ast, node: Ast.Node.Index) ChildIterator {
+    pub fn init(tree: Ast, node: Ast.Node.Index) ChildIterator {
         return switch (tree.nodeTag(node)) {
             .bool_not,
             .negation,
@@ -415,7 +415,7 @@ pub const ChildIterator = union(enum) {
         };
     }
 
-    pub fn next(it: *ChildIterator, tree: *const Ast) ?Ast.Node.Index {
+    pub fn next(it: *ChildIterator, tree: Ast) ?Ast.Node.Index {
         sw: switch (it.*) {
             .array => |*array| {
                 const result = array[0].unwrap() orelse return null;
@@ -528,7 +528,7 @@ pub const ChildIterator = union(enum) {
 
 pub fn nodeChildrenAlloc(
     gpa: std.mem.Allocator,
-    tree: *const Ast,
+    tree: Ast,
     node: Ast.Node.Index,
 ) error{OutOfMemory}![]Ast.Node.Index {
     var children: std.ArrayList(Ast.Node.Index) = .empty;
@@ -577,7 +577,7 @@ pub fn deferBlock(doc: *const session.LintDocument, file_store: *const FileStore
     }
 }
 
-pub fn isBlock(tree: *const Ast, node: Ast.Node.Index) bool {
+pub fn isBlock(tree: Ast, node: Ast.Node.Index) bool {
     return switch (tree.nodeTag(node)) {
         .block_two, .block_two_semicolon, .block, .block_semicolon => true,
         else => false,
@@ -586,7 +586,7 @@ pub fn isBlock(tree: *const Ast, node: Ast.Node.Index) bool {
 
 /// Returns true if identifier node and itentifier node has the given kind.
 pub fn isIdentiferKind(
-    tree: *const Ast,
+    tree: Ast,
     node: Ast.Node.Index,
     kind: enum { type },
 ) bool {
@@ -603,7 +603,7 @@ pub fn isIdentiferKind(
 ///
 /// For example if you want `?StructType` to be treated the same as `StructType`.
 pub fn unwrapNode(
-    tree: *const Ast,
+    tree: Ast,
     node: Ast.Node.Index,
     options: struct {
         /// i.e., ?T => T
@@ -645,7 +645,7 @@ pub fn unwrapNode(
 /// This can be useful if you have a node and want to work out where it's
 /// contained (e.g., within a struct).
 pub fn isNodeOverlapping(
-    tree: *const Ast,
+    tree: Ast,
     a: Ast.Node.Index,
     b: Ast.Node.Index,
 ) bool {
@@ -661,12 +661,12 @@ pub fn isNodeOverlapping(
 
 /// Returns true if the tree is of a file that's an implicit struct with fields
 /// and not namespace
-pub fn isRootImplicitStruct(tree: *const Ast) bool {
+pub fn isRootImplicitStruct(tree: Ast) bool {
     return !isContainerNamespace(tree, tree.containerDeclRoot());
 }
 
 /// Returns true if the container is a namespace (i.e., no fields just declarations)
-pub fn isContainerNamespace(tree: *const Ast, container_decl: Ast.full.ContainerDecl) bool {
+pub fn isContainerNamespace(tree: Ast, container_decl: Ast.full.ContainerDecl) bool {
     for (container_decl.ast.members) |member| {
         if (tree.nodeTag(member).isContainerField()) return false;
     }
@@ -751,7 +751,7 @@ test "deferBlock - has expected children" {
 }
 
 /// Returns true if return type is `!type` or `error{ErrorName}!type` or `ErrorName!type`
-pub fn fnProtoReturnsError(tree: *const Ast, fn_proto: Ast.full.FnProto) bool {
+pub fn fnProtoReturnsError(tree: Ast, fn_proto: Ast.full.FnProto) bool {
     const return_node = fn_proto.ast.return_type.unwrap() orelse return false;
     const tag = tree.nodeTag(return_node);
     return switch (tag) {
@@ -842,7 +842,7 @@ pub const FnDecl = struct {
 
 /// Returns the function declaration (proto and block) if node is a function declaration,
 /// otherwise returns null.
-pub fn fnDecl(tree: *const Ast, node: Ast.Node.Index, fn_proto_buffer: *[1]Ast.Node.Index) ?FnDecl {
+pub fn fnDecl(tree: Ast, node: Ast.Node.Index, fn_proto_buffer: *[1]Ast.Node.Index) ?FnDecl {
     switch (tree.nodeTag(node)) {
         .fn_decl => {
             const data = tree.nodeData(node);
@@ -858,7 +858,7 @@ pub fn fnDecl(tree: *const Ast, node: Ast.Node.Index, fn_proto_buffer: *[1]Ast.N
 ///
 /// For example `parent.ok` and `parent.child.ok` would return a token index
 /// pointing to `ok`.
-pub fn fieldVarAccess(tree: *const Ast, node: Ast.Node.Index) ?Ast.TokenIndex {
+pub fn fieldVarAccess(tree: Ast, node: Ast.Node.Index) ?Ast.TokenIndex {
     if (tree.nodeTag(node) != .field_access) return null;
 
     const last_token = tree.lastToken(node);
@@ -875,7 +875,7 @@ pub fn fieldVarAccess(tree: *const Ast, node: Ast.Node.Index) ?Ast.TokenIndex {
 ///
 /// For example, `parent.ok` and `parent.child.ok` would match var name `ok` but
 /// not `child` (even though it is a field access above `ok`).
-pub fn isFieldVarAccess(tree: *const Ast, node: Ast.Node.Index, var_names: []const []const u8) bool {
+pub fn isFieldVarAccess(tree: Ast, node: Ast.Node.Index, var_names: []const []const u8) bool {
     const identifier_token = fieldVarAccess(tree, node) orelse return false;
     const actual_var_name = tree.tokenSlice(identifier_token);
 
@@ -913,7 +913,7 @@ pub const Statement = union(enum) {
 /// Returns if, for, while, switch case, defer and errdefer and catch statements
 /// focusing on the expression node attached, which is relevant in whether or not
 /// it's a block enclosed in braces.
-pub fn fullStatement(tree: *const Ast, node: Ast.Node.Index) ?Statement {
+pub fn fullStatement(tree: Ast, node: Ast.Node.Index) ?Statement {
     return if (tree.fullIf(node)) |ifStatement|
         .{ .@"if" = ifStatement }
     else if (tree.fullWhile(node)) |whileStatement|
@@ -934,7 +934,7 @@ pub fn fullStatement(tree: *const Ast, node: Ast.Node.Index) ?Statement {
 pub const Visibility = enum { public, private };
 
 /// Returns the visibility of a given function proto.
-pub fn fnProtoVisibility(tree: *const Ast, fn_decl: Ast.full.FnProto) Visibility {
+pub fn fnProtoVisibility(tree: Ast, fn_decl: Ast.full.FnProto) Visibility {
     const visibility_token = fn_decl.visib_token orelse return .private;
     return switch (tree.tokens.items(.tag)[visibility_token]) {
         .keyword_pub => .public,
@@ -943,7 +943,7 @@ pub fn fnProtoVisibility(tree: *const Ast, fn_decl: Ast.full.FnProto) Visibility
 }
 
 /// Returns the visibility of a given variable declaration.
-pub fn varDeclVisibility(tree: *const Ast, var_decl: Ast.full.VarDecl) Visibility {
+pub fn varDeclVisibility(tree: Ast, var_decl: Ast.full.VarDecl) Visibility {
     const visibility_token = var_decl.visib_token orelse return .private;
     return switch (tree.tokens.items(.tag)[visibility_token]) {
         .keyword_pub => .public,
@@ -1005,7 +1005,7 @@ test "isFieldVarAccess" {
         defer tree.deinit(std.testing.allocator);
 
         const actual = isFieldVarAccess(
-            &tree,
+            tree,
             tree.fullVarDecl(try testing.expectSingleNodeOfTag(
                 &tree,
                 &.{
@@ -1022,7 +1022,7 @@ test "isFieldVarAccess" {
 }
 
 /// Returns true if enum literal matching a given var name
-pub fn isEnumLiteral(tree: *const Ast, node: Ast.Node.Index, enum_names: []const []const u8) bool {
+pub fn isEnumLiteral(tree: Ast, node: Ast.Node.Index, enum_names: []const []const u8) bool {
     if (tree.nodeTag(node) != .enum_literal) return false;
 
     const actual_enum_name = tree.tokenSlice(tree.nodeMainToken(node));
@@ -1463,7 +1463,7 @@ test "findFnCall" {
 }
 
 // TODO: #149 - needs tests
-pub fn declTypeNode(tree: *const std.zig.Ast, node: std.zig.Ast.Node.Index) ?std.zig.Ast.Node.Index {
+pub fn declTypeNode(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) ?std.zig.Ast.Node.Index {
     if (tree.fullVarDecl(node)) |var_decl| return var_decl.ast.type_node.unwrap();
     if (tree.fullContainerField(node)) |field| return field.ast.type_expr.unwrap();
 
@@ -1475,7 +1475,7 @@ pub fn declTypeNode(tree: *const std.zig.Ast, node: std.zig.Ast.Node.Index) ?std
 
 // TODO: #149 - needs tests
 /// Returns the name token for a node declaration.
-pub fn declNameToken(tree: *const std.zig.Ast, node: std.zig.Ast.Node.Index) ?std.zig.Ast.TokenIndex {
+pub fn declNameToken(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) ?std.zig.Ast.TokenIndex {
     return switch (tree.nodeTag(node)) {
         // Main token is name
         .container_field_init,

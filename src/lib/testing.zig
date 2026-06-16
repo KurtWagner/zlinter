@@ -142,7 +142,7 @@ pub fn expectContainsExactlyStrings(expected: []const []const u8, actual: []cons
 /// tests.
 pub fn expectNodeSlices(
     expected: []const []const u8,
-    tree: *const Ast,
+    tree: Ast,
     actual: []const Ast.Node.Index,
 ) !void {
     assertTestOnly();
@@ -171,7 +171,7 @@ pub fn expectNodeSlices(
 ///
 /// This method will return a collision error if more than one var declaration
 /// matches the name.
-pub fn expectVarDecl(tree: *const Ast, name: []const u8) !Ast.Node.Index {
+pub fn expectVarDecl(tree: Ast, name: []const u8) !Ast.Node.Index {
     assertTestOnly();
 
     var found: ?Ast.Node.Index = null;
@@ -194,7 +194,7 @@ pub fn expectVarDecl(tree: *const Ast, name: []const u8) !Ast.Node.Index {
 ///
 /// This is to encourage smaller unit tests and to ensure that the order does
 /// not matter when asserting. Alternatively use `expectNodeOfTagFirst`
-pub fn expectSingleNodeOfTag(tree: *const Ast, comptime tags: []const Ast.Node.Tag) !Ast.Node.Index {
+pub fn expectSingleNodeOfTag(tree: Ast, comptime tags: []const Ast.Node.Tag) !Ast.Node.Index {
     assertTestOnly();
 
     var found: ?Ast.Node.Index = null;

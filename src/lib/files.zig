@@ -486,7 +486,7 @@ pub const ImportIterator = struct {
 
     fn handleBuiltinCall(
         it: *ImportIterator,
-        tree: *const std.zig.Ast,
+        tree: std.zig.Ast,
         gpa: std.mem.Allocator,
         node: std.zig.Ast.Node.Index,
         file_id: FileStore.FileId,

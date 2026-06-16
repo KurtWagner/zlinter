@@ -139,7 +139,7 @@ fn run(
         null;
 }
 
-fn isEmptyOrUnreachableBlock(tree: *const Ast, node: Ast.Node.Index) enum { none, empty, @"unreachable" } {
+fn isEmptyOrUnreachableBlock(tree: Ast, node: Ast.Node.Index) enum { none, empty, @"unreachable" } {
     const tag = tree.nodeTag(node);
     std.debug.assert(tag == .block_two or tag == .block_two_semicolon);
 

@@ -230,7 +230,7 @@ fn resolveScopedImports(
 }
 
 /// Returns the import path if `@import` built in call.
-fn isImportCall(tree: *const Ast, node: Ast.Node.Index) ?[]const u8 {
+fn isImportCall(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
     switch (tree.nodeTag(node)) {
         .builtin_call_two,
         .builtin_call_two_comma,

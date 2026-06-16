@@ -122,8 +122,8 @@ pub fn resolveStdLib(
     return self.resolve("std/std.zig", io, gpa, zig_lib_directory);
 }
 
-pub fn fileTree(self: *const FileStore, id: FileId) *const std.zig.Ast {
-    return &self.files.items(.tree)[id.toIndex()];
+pub fn fileTree(self: *const FileStore, id: FileId) std.zig.Ast {
+    return self.files.items(.tree)[id.toIndex()];
 }
 
 pub fn fileSource(self: *const FileStore, id: FileId) [:0]const u8 {

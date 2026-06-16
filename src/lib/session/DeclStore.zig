@@ -32,7 +32,6 @@ const Decl = struct {
     kind: DeclKind,
     resolved_type: ?TypeStore.TypeId = null,
     resolved_type_target: ?TypeTarget = null,
-
 };
 
 const Scope = struct {
@@ -1026,7 +1025,7 @@ fn resolveValueAliasDecl(
     );
 }
 
-fn nodeBelongsToTree(tree: *const std.zig.Ast, node: std.zig.Ast.Node.Index) bool {
+fn nodeBelongsToTree(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) bool {
     return @intFromEnum(node) < tree.nodes.len;
 }
 
@@ -1100,7 +1099,7 @@ fn resolveImportMember(
 }
 
 fn writeImportPath(
-    tree: *const std.zig.Ast,
+    tree: std.zig.Ast,
     node: std.zig.Ast.Node.Index,
     buffer: *[std.fs.max_path_bytes]u8,
 ) ?[]const u8 {
@@ -1134,7 +1133,7 @@ fn writeImportPath(
     };
 }
 
-fn isThisBuiltinCall(tree: *const std.zig.Ast, node: std.zig.Ast.Node.Index) bool {
+fn isThisBuiltinCall(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) bool {
     switch (tree.nodeTag(node)) {
         .builtin_call,
         .builtin_call_comma,
@@ -1288,7 +1287,7 @@ fn appendDecl(
 fn putDecl(
     self: *DeclStore,
     gpa: std.mem.Allocator,
-    tree: *const std.zig.Ast,
+    tree: std.zig.Ast,
     file_id: FileStore.FileId,
     scope_id: ScopeId,
     name_token: std.zig.Ast.TokenIndex,
@@ -1322,7 +1321,7 @@ fn putDecl(
 fn putNodeDecl(
     self: *DeclStore,
     gpa: std.mem.Allocator,
-    tree: *const std.zig.Ast,
+    tree: std.zig.Ast,
     file_id: FileStore.FileId,
     scope_id: ScopeId,
     node: std.zig.Ast.Node.Index,
@@ -1344,7 +1343,7 @@ fn putNodeDecl(
 fn walkNode(
     self: *DeclStore,
     gpa: std.mem.Allocator,
-    tree: *const std.zig.Ast,
+    tree: std.zig.Ast,
     file_id: FileStore.FileId,
     scope_id: ScopeId,
     node: std.zig.Ast.Node.Index,
@@ -1420,7 +1419,7 @@ fn walkNode(
 fn walkContainer(
     self: *DeclStore,
     gpa: std.mem.Allocator,
-    tree: *const std.zig.Ast,
+    tree: std.zig.Ast,
     file_id: FileStore.FileId,
     scope_id: ScopeId,
     node: std.zig.Ast.Node.Index,
@@ -1445,7 +1444,7 @@ fn walkContainer(
             => {
                 var field = tree.fullContainerField(member).?;
                 if (is_struct and field.ast.tuple_like) continue;
-                field.convertToNonTupleLike(tree);
+                field.convertToNonTupleLike(&tree);
                 if (field.ast.tuple_like) continue;
 
                 const name_token = field.ast.main_token;
@@ -1483,7 +1482,7 @@ fn walkContainer(
 fn walkFn(
     self: *DeclStore,
     gpa: std.mem.Allocator,
-    tree: *const std.zig.Ast,
+    tree: std.zig.Ast,
     file_id: FileStore.FileId,
     parent_scope_id: ScopeId,
     node: std.zig.Ast.Node.Index,
@@ -1498,7 +1497,7 @@ fn walkFn(
         null,
     );
 
-    var it = fn_proto.iterate(tree);
+    var it = fn_proto.iterate(&tree);
     while (it.next()) |param| {
         if (param.name_token) |name_token|
             _ = self.putDecl(
@@ -1547,7 +1546,7 @@ fn walkFn(
 fn walkBlock(
     self: *DeclStore,
     gpa: std.mem.Allocator,
-    tree: *const std.zig.Ast,
+    tree: std.zig.Ast,
     file_id: FileStore.FileId,
     parent_scope_id: ScopeId,
     node: std.zig.Ast.Node.Index,
@@ -1620,7 +1619,7 @@ fn walkBlock(
 fn walkChildren(
     self: *DeclStore,
     gpa: std.mem.Allocator,
-    tree: *const std.zig.Ast,
+    tree: std.zig.Ast,
     file_id: FileStore.FileId,
     scope_id: ScopeId,
     node: std.zig.Ast.Node.Index,
@@ -1645,7 +1644,7 @@ fn walkChildren(
 ///    break :block_label 10;
 /// };
 /// ```
-fn blockLabel(tree: *const std.zig.Ast, node: std.zig.Ast.Node.Index) ?std.zig.Ast.TokenIndex {
+fn blockLabel(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) ?std.zig.Ast.TokenIndex {
     const main_token = tree.nodeMainToken(node);
     if (main_token < 2) return null;
     if (tree.tokenTag(main_token - 1) != .colon) return null;

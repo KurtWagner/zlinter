@@ -128,7 +128,7 @@ fn run(
 /// given contents. e.g., `@panic("OOM")` would match `&.{"OOM"}`.
 /// Contents are case sensitive
 fn builtinHasParamContent(
-    tree: *const Ast,
+    tree: Ast,
     node: Ast.Node.Index,
     contents: []const []const u8,
 ) bool {

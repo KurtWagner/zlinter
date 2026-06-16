@@ -28,7 +28,7 @@ pub fn source(self: *const LintDocument, context: *const LintContext) [:0]const 
     return context.file_store.fileSource(self.file_id);
 }
 
-pub fn tree(self: *const LintDocument, context: *const LintContext) *const Ast {
+pub fn tree(self: *const LintDocument, context: *const LintContext) Ast {
     return context.file_store.fileTree(self.file_id);
 }
 

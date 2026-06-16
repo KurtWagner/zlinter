@@ -47,7 +47,7 @@ pub fn jsonTree(
         indent: u32 = 0,
         node_children: *std.json.Array,
 
-        fn callback(self: @This(), context_tree: *const Ast, child_node: Ast.Node.Index) error{OutOfMemory}!void {
+        fn callback(self: @This(), context_tree: Ast, child_node: Ast.Node.Index) error{OutOfMemory}!void {
             if (child_node == .root) return;
 
             var node_object = std.json.ObjectMap.empty;
@@ -118,11 +118,11 @@ pub fn jsonTree(
 }
 
 fn iterateChildren(
-    tree: *const Ast,
+    tree: Ast,
     node: Ast.Node.Index,
     context: anytype,
     comptime Error: type,
-    comptime callback: fn (@TypeOf(context), *const Ast, Ast.Node.Index) Error!void,
+    comptime callback: fn (@TypeOf(context), Ast, Ast.Node.Index) Error!void,
 ) Error!void {
     var it = ast.ChildIterator.init(tree, node);
     while (it.next(tree)) |child_node| {

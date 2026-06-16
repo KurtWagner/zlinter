@@ -215,7 +215,7 @@ fn run(
         null;
 }
 
-fn isThisBuiltinCall(tree: *const Ast, node: Ast.Node.Index) bool {
+fn isThisBuiltinCall(tree: Ast, node: Ast.Node.Index) bool {
     const expr = zlinter.ast.unwrapNode(tree, node, .{
         .unwrap_optional_unwrap = false,
     });

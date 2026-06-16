@@ -77,7 +77,7 @@ fn run(
         null;
 }
 
-fn loopDepth(doc: *const zlinter.session.LintDocument, tree: *const Ast, node: Ast.Node.Index) u32 {
+fn loopDepth(doc: *const zlinter.session.LintDocument, tree: Ast, node: Ast.Node.Index) u32 {
     var depth: u32 = 0;
     var it = doc.nodeAncestorIterator(node);
     while (it.next()) |ancestor| {
@@ -87,7 +87,7 @@ fn loopDepth(doc: *const zlinter.session.LintDocument, tree: *const Ast, node: A
     return depth;
 }
 
-fn isLoopNode(tree: *const Ast, node: Ast.Node.Index) bool {
+fn isLoopNode(tree: Ast, node: Ast.Node.Index) bool {
     return switch (tree.nodeTag(node)) {
         .@"while",
         .while_simple,
@@ -99,7 +99,7 @@ fn isLoopNode(tree: *const Ast, node: Ast.Node.Index) bool {
     };
 }
 
-fn hasContinueLabel(tree: *const Ast, node: Ast.Node.Index) bool {
+fn hasContinueLabel(tree: Ast, node: Ast.Node.Index) bool {
     const opt_label, _ = tree.nodeData(node).opt_token_and_opt_node;
     return optionalTokenPresent(opt_label);
 }

@@ -203,7 +203,7 @@ fn appendDeprecatedProblem(
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
     context: *zlinter.session.LintContext,
-    tree: *const Ast,
+    tree: Ast,
     node_index: Ast.Node.Index,
     decl_id: zlinter.session.DeclStore.DeclId,
     comptime message_fmt: []const u8,
@@ -295,7 +295,7 @@ fn resolveEnumLiteralContextTypeDecl(
 }
 
 fn structInitFieldNameToken(
-    tree: *const Ast,
+    tree: Ast,
     struct_init: Ast.full.StructInit,
     node: Ast.Node.Index,
 ) ?Ast.TokenIndex {
@@ -312,7 +312,7 @@ fn structInitFieldNameToken(
     return null;
 }
 
-fn nodeWithin(tree: *const Ast, container: Ast.Node.Index, node: Ast.Node.Index) bool {
+fn nodeWithin(tree: Ast, container: Ast.Node.Index, node: Ast.Node.Index) bool {
     return container == node or ast.isNodeOverlapping(tree, container, node);
 }
 

@@ -40,7 +40,7 @@ pub const LintProblemLocation = struct {
         .byte_offset = 0,
     };
 
-    pub fn startOfNode(tree: *const Ast, index: Ast.Node.Index) LintProblemLocation {
+    pub fn startOfNode(tree: Ast, index: Ast.Node.Index) LintProblemLocation {
         return .startOfToken(tree, tree.firstToken(index));
     }
 
@@ -63,7 +63,7 @@ pub const LintProblemLocation = struct {
         }, LintProblemLocation.startOfNode(&tree, b_decl));
     }
 
-    pub fn endOfNode(tree: *const Ast, index: Ast.Node.Index) LintProblemLocation {
+    pub fn endOfNode(tree: Ast, index: Ast.Node.Index) LintProblemLocation {
         return .endOfToken(tree, tree.lastToken(index));
     }
 
@@ -86,7 +86,7 @@ pub const LintProblemLocation = struct {
         }, LintProblemLocation.endOfNode(&tree, b_decl));
     }
 
-    pub fn startOfToken(tree: *const Ast, index: Ast.TokenIndex) LintProblemLocation {
+    pub fn startOfToken(tree: Ast, index: Ast.TokenIndex) LintProblemLocation {
         return .{
             .byte_offset = tree.tokenStart(index),
         };
@@ -120,7 +120,7 @@ pub const LintProblemLocation = struct {
         }, LintProblemLocation.startOfToken(&tree, 7));
     }
 
-    pub fn endOfToken(tree: *const Ast, index: Ast.TokenIndex) LintProblemLocation {
+    pub fn endOfToken(tree: Ast, index: Ast.TokenIndex) LintProblemLocation {
         return .{
             // Minus 1 as inclusive
             .byte_offset = tree.tokenStart(index) + tree.tokenSlice(index).len - 1,

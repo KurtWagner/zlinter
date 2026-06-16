@@ -188,7 +188,7 @@ pub fn summarizeRoot() TypeSummary {
 }
 
 pub fn summarizeFnProto(
-    tree: *const Ast,
+    tree: Ast,
     fn_proto: Ast.full.FnProto,
     comptime as_type_value: bool,
 ) TypeSummary {
@@ -203,14 +203,14 @@ pub fn summarizeFnProto(
 }
 
 pub fn summarizeValueNode(
-    tree: *const Ast,
+    tree: Ast,
     value_node: Ast.Node.Index,
 ) ?TypeSummary {
     return summarizeValueExpr(tree, value_node);
 }
 
 pub fn summarizeFnReturnType(
-    tree: *const Ast,
+    tree: Ast,
     fn_proto: Ast.full.FnProto,
 ) ?TypeSummary {
     const return_type = fn_proto.ast.return_type.unwrap() orelse return null;
@@ -218,7 +218,7 @@ pub fn summarizeFnReturnType(
 }
 
 pub fn summarizeTypeNode(
-    tree: *const Ast,
+    tree: Ast,
     type_node: Ast.Node.Index,
 ) TypeSummary {
     return summarizeTypeExpr(tree, type_node) orelse
@@ -226,7 +226,7 @@ pub fn summarizeTypeNode(
 }
 
 fn summarizeDeclType(
-    tree: *const Ast,
+    tree: Ast,
     maybe_type_node: ?Ast.Node.Index,
     maybe_value_node: ?Ast.Node.Index,
 ) ?TypeSummary {
@@ -242,7 +242,7 @@ fn summarizeDeclType(
 }
 
 fn summarizeTypeExpr(
-    tree: *const Ast,
+    tree: Ast,
     type_node: Ast.Node.Index,
 ) ?TypeSummary {
     const node = ast.unwrapNode(tree, type_node, .{});
@@ -272,7 +272,7 @@ fn summarizeTypeExpr(
 }
 
 fn summarizeValueExpr(
-    tree: *const Ast,
+    tree: Ast,
     value_node: Ast.Node.Index,
 ) ?TypeSummary {
     const node = ast.unwrapNode(tree, value_node, .{
@@ -330,7 +330,7 @@ fn summarizeValueExpr(
 }
 
 fn summarizeContainerDecl(
-    tree: *const Ast,
+    tree: Ast,
     container_decl: Ast.full.ContainerDecl,
     comptime mode: enum { instance, type_value },
 ) TypeSummary {

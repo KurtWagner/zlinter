@@ -214,7 +214,7 @@ fn run(
 }
 
 fn functionReturnTypeKind(
-    tree: *const Ast,
+    tree: Ast,
     fn_proto: Ast.full.FnProto,
 ) ?zlinter.session.TypeStore.Type {
     const return_type_node = fn_proto.ast.return_type.unwrap() orelse return null;
@@ -229,7 +229,7 @@ fn functionReturnTypeKind(
 fn classifyParamTypeKind(
     context: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
-    tree: *const Ast,
+    tree: Ast,
     param: Ast.Node.Index,
     seen_param_kinds: []const ParamKind,
 ) ?zlinter.session.TypeStore.Type {
@@ -284,7 +284,7 @@ fn classifyParamTypeKind(
 }
 
 /// Returns fn proto if node is fn proto and has a name token.
-pub fn namedFnProto(tree: *const Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?Ast.full.FnProto {
+pub fn namedFnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?Ast.full.FnProto {
     if (fnProto(tree, buffer, node)) |fn_proto| {
         if (fn_proto.name_token != null) return fn_proto;
     }
@@ -292,7 +292,7 @@ pub fn namedFnProto(tree: *const Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node
 }
 
 /// Returns fn proto if node is fn proto and has a name token.
-pub fn fnProto(tree: *const Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?Ast.full.FnProto {
+pub fn fnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?Ast.full.FnProto {
     if (switch (tree.nodeTag(node)) {
         .fn_proto => tree.fnProto(node),
         .fn_proto_multi => tree.fnProtoMulti(node),
