@@ -221,7 +221,7 @@ fn run(
                         context.resolveDeclValueKind(decl_id)
                     else
                         null;
-                    const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const container_kind: zlinter.session.LintContext.TypeKind = tuple: {
+                    const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const container_kind: zlinter.session.TypeStore.Type = tuple: {
                         break :tuple switch (container_tag) {
                             .keyword_struct => if (type_kind) |kind|
                                 switch (kind) {

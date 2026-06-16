@@ -862,20 +862,17 @@ pub fn rresolveTypeOfTypeNodeDeprecated(self: *LintContext, doc: *const LintDocu
     return ast.resolveDeclLiteralResultTypeSafe(instance_type);
 }
 
-// TODO: Write tests and clean this up as they're not really all needed
-pub const TypeKind = @import("TypeStore.zig").Type;
-
 pub fn resolveDeclTypeKind(
     self: *LintContext,
     decl_id: DeclStore.DeclId,
-) ?TypeKind {
+) ?TypeStore.Type {
     return self.resolveDeclTypeKindDepth(decl_id, 16);
 }
 
 pub fn resolveDeclValueKind(
     self: *LintContext,
     decl_id: DeclStore.DeclId,
-) ?TypeKind {
+) ?TypeStore.Type {
     return self.resolveDeclValueKindDepth(decl_id, 16);
 }
 
@@ -883,7 +880,7 @@ fn resolveDeclValueKindDepth(
     self: *LintContext,
     decl_id: DeclStore.DeclId,
     remaining_depth: u8,
-) ?TypeKind {
+) ?TypeStore.Type {
     if (remaining_depth == 0) return null;
 
     const file_id = self.decl_store.declFileId(decl_id);
@@ -948,7 +945,7 @@ fn resolveDeclTypeKindDepth(
     self: *LintContext,
     decl_id: DeclStore.DeclId,
     remaining_depth: u8,
-) ?TypeKind {
+) ?TypeStore.Type {
     if (remaining_depth == 0) return null;
 
     if (self.decl_store.declResolvedType(decl_id)) |type_id| {
@@ -1014,7 +1011,7 @@ fn typeKindFromTarget(
     self: *LintContext,
     target: DeclStore.TypeTarget,
     remaining_depth: u8,
-) ?TypeKind {
+) ?TypeStore.Type {
     return switch (target) {
         .decl => |decl_id| self.resolveDeclTypeKindDepth(
             decl_id,
@@ -1038,7 +1035,7 @@ fn typeKindFromTarget(
 fn typeKindFromTypeNode(
     tree: *const Ast,
     type_node: Ast.Node.Index,
-) ?TypeKind {
+) ?TypeStore.Type {
     const summary = TypeStore.summarizeTypeNode(
         tree,
         type_node,
@@ -1053,7 +1050,7 @@ fn typeKindFromTypeNode(
 fn typeKindFromValueTypeNode(
     tree: *const Ast,
     type_node: Ast.Node.Index,
-) ?TypeKind {
+) ?TypeStore.Type {
     return switch (typeKindFromTypeNode(tree, type_node) orelse return null) {
         .type,
         .@"fn",
@@ -1068,7 +1065,7 @@ fn typeKindFromValueNode(
     context_decl_id: DeclStore.DeclId,
     value_node: Ast.Node.Index,
     remaining_depth: u8,
-) ?TypeKind {
+) ?TypeStore.Type {
     if (remaining_depth == 0) return null;
 
     const tree = self.file_store.fileTree(
@@ -1253,7 +1250,7 @@ fn writeImportPath(
 fn typeKindFromTypeValueExpr(
     tree: *const Ast,
     node: Ast.Node.Index,
-) ?TypeKind {
+) ?TypeStore.Type {
     const summary = TypeStore.summarizeTypeNode(
         tree,
         node,
@@ -1295,7 +1292,7 @@ fn valueExprIsTypeInfoProjection(
 fn containerDeclTypeKind(
     tree: *const Ast,
     container_decl: Ast.full.ContainerDecl,
-) TypeKind {
+) TypeStore.Type {
     return switch (tree.tokenTag(container_decl.ast.main_token)) {
         .keyword_struct => if (ast.isContainerNamespace(
             tree,
@@ -1456,7 +1453,7 @@ test "LintContext.resolveTypeKind" {
 
     const TestCase = struct {
         contents: [:0]const u8,
-        kind: ?LintContext.TypeKind,
+        kind: ?TypeStore.Type,
     };
 
     for ([_]TestCase{

@@ -54,7 +54,7 @@ pub const Config = struct {
 
 const ParamKind = struct {
     name: []const u8,
-    kind: zlinter.session.LintContext.TypeKind,
+    kind: zlinter.session.TypeStore.Type,
 };
 
 /// Builds and returns the function_naming rule.
@@ -216,7 +216,7 @@ fn run(
 fn functionReturnTypeKind(
     tree: *const Ast,
     fn_proto: Ast.full.FnProto,
-) ?zlinter.session.LintContext.TypeKind {
+) ?zlinter.session.TypeStore.Type {
     const return_type_node = fn_proto.ast.return_type.unwrap() orelse return null;
     return zlinter.session.TypeStore.summarizeTypeNode(
         tree,
@@ -232,14 +232,14 @@ fn classifyParamTypeKind(
     tree: *const Ast,
     param: Ast.Node.Index,
     seen_param_kinds: []const ParamKind,
-) ?zlinter.session.LintContext.TypeKind {
+) ?zlinter.session.TypeStore.Type {
     const param_type_node = zlinter.ast.unwrapNode(
         tree,
         param,
         .{},
     );
 
-    var type_kind: ?zlinter.session.LintContext.TypeKind =
+    var type_kind: ?zlinter.session.TypeStore.Type =
         zlinter.session.TypeStore.summarizeTypeNode(tree, param).coarseType();
     switch (type_kind orelse .other) {
         .unknown, .other, .primitive => {},
