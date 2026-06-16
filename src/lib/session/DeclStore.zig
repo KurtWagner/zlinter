@@ -4,6 +4,8 @@ const DeclStore = @This();
 
 decls: std.MultiArrayList(Decl) = .empty,
 scopes: std.MultiArrayList(Scope) = .empty,
+decl_by_ast_node: std.AutoHashMapUnmanaged(DeclAstNodeKey, DeclId) = .empty,
+scope_by_owner: std.AutoHashMapUnmanaged(ScopeOwnerKey, ScopeId) = .empty,
 
 // TODO: #149 - use better pattern for passing these common things around
 gpa: std.mem.Allocator,
@@ -73,6 +75,35 @@ pub const TypeTarget = union(enum) {
         node: std.zig.Ast.Node.Index,
     },
 };
+
+const DeclAstNodeKey = enum(u64) {
+    _,
+
+    fn init(file_id: FileStore.FileId, ast_node: std.zig.Ast.Node.Index) DeclAstNodeKey {
+        return @enumFromInt(packFileNodeKey(file_id, ast_node));
+    }
+};
+
+const ScopeOwnerKey = enum(u64) {
+    _,
+
+    fn init(file_id: FileStore.FileId, owner_node: std.zig.Ast.Node.Index) ScopeOwnerKey {
+        return @enumFromInt(packFileNodeKey(file_id, owner_node));
+    }
+};
+
+fn packFileNodeKey(
+    file_id: FileStore.FileId,
+    node: std.zig.Ast.Node.Index,
+) u64 {
+    return (@as(u64, @intFromEnum(file_id)) << 32) |
+        @as(u64, @intFromEnum(node));
+}
+
+comptime {
+    std.debug.assert(@bitSizeOf(FileStore.FileId) == 32);
+    std.debug.assert(@bitSizeOf(std.zig.Ast.Node.Index) == 32);
+}
 
 /// Stores declarations and lexical scopes for a parsed file.
 pub fn store(
@@ -161,6 +192,8 @@ pub fn deinit(self: *DeclStore, gpa: std.mem.Allocator) void {
     for (self.scopes.items(.decl_by_name)) |*decl_by_name|
         decl_by_name.deinit(gpa);
 
+    self.decl_by_ast_node.deinit(gpa);
+    self.scope_by_owner.deinit(gpa);
     self.decls.deinit(gpa);
     self.scopes.deinit(gpa);
 }
@@ -328,14 +361,7 @@ pub fn scopeByNode(
     const zone = tracy.traceNamed(@src(), "DeclStore.scopeByNode");
     defer zone.end();
 
-    for (
-        self.scopes.items(.file_id),
-        self.scopes.items(.owner_node),
-        0..,
-    ) |scope_file_id, owner_node, index| {
-        if (scope_file_id == file_id and owner_node == node) return .fromIndex(index);
-    }
-    return null;
+    return self.scope_by_owner.get(.init(file_id, node));
 }
 
 /// Returns the declaration that should be treated as the container identity.
@@ -1270,17 +1296,7 @@ fn declByAstNode(
     const zone = tracy.traceNamed(@src(), "DeclStore.declByAstNode");
     defer zone.end();
 
-    for (
-        self.decls.items(.file_id),
-        self.decls.items(.ast_node),
-        0..,
-    ) |decl_file_id, maybe_ast_node, index| {
-        if (decl_file_id != file_id) continue;
-        if (maybe_ast_node == null or maybe_ast_node.? != node) continue;
-        return .fromIndex(index);
-    }
-
-    return null;
+    return self.decl_by_ast_node.get(.init(file_id, node));
 }
 
 fn fileRootDecl(
@@ -1320,6 +1336,11 @@ fn appendScope(
         .owner_decl_id = owner_decl_id,
         .decl_by_name = .empty,
     }) catch @panic("OOM");
+    self.scope_by_owner.putNoClobber(
+        gpa,
+        .init(file_id, owner_node),
+        scope_id,
+    ) catch @panic("OOM");
     return scope_id;
 }
 
@@ -1343,6 +1364,13 @@ fn appendDecl(
         .file_id = file_id,
         .kind = kind,
     }) catch @panic("OOM");
+    if (ast_node) |node| {
+        self.decl_by_ast_node.putNoClobber(
+            gpa,
+            .init(file_id, node),
+            decl_id,
+        ) catch @panic("OOM");
+    }
     return decl_id;
 }
 
