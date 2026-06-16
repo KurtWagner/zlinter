@@ -23,6 +23,9 @@ type_store: TypeStore = .empty,
 build_config_store: BuildConfigStore = .empty,
 
 pub fn init(self: *LintContext) !void {
+    const zone = tracy.traceNamed(@src(), "LintContext.init");
+    defer zone.end();
+
     // TODO: #149 - refactor to not do this
     self.decl_store = .{
         .gpa = self.gpa,
@@ -68,6 +71,9 @@ fn consumeBuildConfigStep(
     config_id: BuildConfigStore.ConfigId,
     step_index: std.Build.Configuration.Step.Index,
 ) !void {
+    const zone = tracy.traceNamed(@src(), "LintContext.consumeBuildConfigStep");
+    defer zone.end();
+
     const build_config = self.build_config_store.buildConfig(config_id);
     const step = build_config.steps[@intFromEnum(step_index)];
 
@@ -145,6 +151,9 @@ fn resolveBuildModule(
     config_id: BuildConfigStore.ConfigId,
     build_module_index: std.Build.Configuration.Module.Index,
 ) !?ModuleStore.ModuleId {
+    const zone = tracy.traceNamed(@src(), "LintContext.resolveBuildModule");
+    defer zone.end();
+
     const build_config = self.build_config_store.buildConfig(config_id);
 
     var seen: std.AutoHashMapUnmanaged(
@@ -220,6 +229,9 @@ fn resolveBuildModuleShallow(
     config_id: BuildConfigStore.ConfigId,
     build_module_index: std.Build.Configuration.Module.Index,
 ) !?ModuleStore.ModuleId {
+    const zone = tracy.traceNamed(@src(), "LintContext.resolveBuildModuleShallow");
+    defer zone.end();
+
     const build_root_path = self.build_config_store.buildRootPath(config_id);
     const build_config = self.build_config_store.buildConfig(config_id);
 
@@ -248,6 +260,9 @@ fn resolveBuildModuleShallow(
 }
 
 pub fn resolveFile(self: *LintContext, input_path: []const u8) !FileStore.FileId {
+    const zone = tracy.traceNamed(@src(), "LintContext.resolveFile");
+    defer zone.end();
+
     const id = try self.file_store.resolve(
         input_path,
         self.io,
@@ -312,6 +327,9 @@ pub fn initDocument(
     gpa: std.mem.Allocator,
     doc: *LintDocument,
 ) !void {
+    const zone = tracy.traceNamed(@src(), "LintContext.initDocument");
+    defer zone.end();
+
     const abs_path = self.file_store.fileAbsPath(file_id);
     std.debug.assert(std.fs.path.isAbsolute(abs_path));
 
@@ -394,6 +412,9 @@ pub fn resolveTypeOfNode(
     doc: *const LintDocument,
     node: Ast.Node.Index,
 ) ?ResolvedNodeType {
+    const zone = tracy.traceNamed(@src(), "LintContext.resolveTypeOfNode");
+    defer zone.end();
+
     const immediate_decl_id = self.immediateDeclForNode(doc, node);
     const resolved_decl_id = if (immediate_decl_id) |decl_id|
         self.decl_store.resolvedContainerDecl(
@@ -421,6 +442,9 @@ pub fn resolveDeclOfNode(
     doc: *const LintDocument,
     node: Ast.Node.Index,
 ) ?DeclStore.DeclId {
+    const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclOfNode");
+    defer zone.end();
+
     return self.immediateDeclForNode(doc, node);
 }
 
@@ -430,6 +454,9 @@ pub fn resolveDeclMember(
     parent_decl_id: DeclStore.DeclId,
     member_name: []const u8,
 ) ?DeclStore.DeclId {
+    const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclMember");
+    defer zone.end();
+
     return self.decl_store.resolveMemberDecl(
         &self.file_store,
         &self.module_store,
@@ -444,6 +471,9 @@ pub fn resolveDeclTypeMember(
     parent_decl_id: DeclStore.DeclId,
     member_name: []const u8,
 ) ?DeclStore.DeclId {
+    const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclTypeMember");
+    defer zone.end();
+
     return self.decl_store.resolveDeclTypeMember(
         &self.file_store,
         &self.module_store,
@@ -457,6 +487,9 @@ pub fn resolveDeclTypeDecl(
     self: *LintContext,
     decl_id: DeclStore.DeclId,
 ) ?DeclStore.DeclId {
+    const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclTypeDecl");
+    defer zone.end();
+
     return self.decl_store.resolveDeclTypeDecl(
         &self.file_store,
         &self.module_store,
@@ -816,6 +849,9 @@ fn immediateDeclForNode(
     doc: *const LintDocument,
     node: Ast.Node.Index,
 ) ?DeclStore.DeclId {
+    const zone = tracy.traceNamed(@src(), "LintContext.immediateDeclForNode");
+    defer zone.end();
+
     const context_scope_id = self.contextScopeForNode(doc, node) orelse return null;
 
     return self.decl_store.resolveNodeDeclFromScope(
@@ -837,6 +873,9 @@ fn contextScopeForNode(
     doc: *const LintDocument,
     node: Ast.Node.Index,
 ) ?DeclStore.ScopeId {
+    const zone = tracy.traceNamed(@src(), "LintContext.contextScopeForNode");
+    defer zone.end();
+
     var current: ?Ast.Node.Index = node;
     while (current) |current_node| {
         if (self.decl_store.scopeByNode(doc.file_id, current_node)) |scope_id| {
@@ -1746,8 +1785,7 @@ const TypeStore = @import("TypeStore.zig");
 const Ast = std.zig.Ast;
 
 test {
-    refAllDeclsExcept(@This(), &.{
-    });
+    refAllDeclsExcept(@This(), &.{});
 }
 
 fn refAllDeclsExcept(comptime T: type, comptime excluded_declarations: []const []const u8) void {

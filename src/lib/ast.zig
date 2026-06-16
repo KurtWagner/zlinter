@@ -531,6 +531,9 @@ pub fn nodeChildrenAlloc(
     tree: Ast,
     node: Ast.Node.Index,
 ) error{OutOfMemory}![]Ast.Node.Index {
+    const zone = tracy.traceNamed(@src(), "ast.nodeChildrenAlloc");
+    defer zone.end();
+
     var children: std.ArrayList(Ast.Node.Index) = .empty;
     defer children.deinit(gpa);
 
@@ -560,6 +563,9 @@ pub const DeferBlock = struct {
 };
 
 pub fn deferBlock(doc: *const session.LintDocument, file_store: *const FileStore, node: Ast.Node.Index, allocator: std.mem.Allocator) !?DeferBlock {
+    const zone = tracy.traceNamed(@src(), "ast.deferBlock");
+    defer zone.end();
+
     const tree = file_store.fileTree(doc.file_id);
 
     const data = tree.nodeData(node);
@@ -1045,6 +1051,9 @@ pub const EnumInfo = struct {
 /// Returns enum tag info for a resolved enum type. Returns null if the type
 /// is not a container-backed enum or cannot be resolved.
 pub fn getEnumInfoFromType(enum_type: zls.Analyser.Type, gpa: std.mem.Allocator) !?EnumInfo {
+    const zone = tracy.traceNamed(@src(), "ast.getEnumInfoFromType");
+    defer zone.end();
+
     const container = switch (enum_type.data) {
         .container => |info| info,
         else => return null,
@@ -1166,6 +1175,9 @@ pub fn findFnCall(
     call_buffer: *[1]Ast.Node.Index,
     names: []const []const u8,
 ) ?FnCall {
+    const zone = tracy.traceNamed(@src(), "ast.findFnCall");
+    defer zone.end();
+
     std.debug.assert(names.len > 0);
 
     if (fnCall(
@@ -1232,6 +1244,9 @@ pub fn fnCall(
     buffer: *[1]Ast.Node.Index,
     names: []const []const u8,
 ) ?FnCall {
+    const zone = tracy.traceNamed(@src(), "ast.fnCall");
+    defer zone.end();
+
     const tree = file_store.fileTree(doc.file_id);
     const call = tree.fullCall(buffer, node) orelse return null;
 
@@ -1510,6 +1525,7 @@ pub fn declNameToken(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) ?std.zig.A
 const session = @import("session.zig");
 const std = @import("std");
 const testing = @import("testing.zig");
+const tracy = @import("tracy");
 const zls = @import("zls");
 const Ast = std.zig.Ast;
 const FileStore = @import("session/FileStore.zig");

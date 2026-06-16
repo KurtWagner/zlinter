@@ -92,6 +92,9 @@ pub fn deinit(self: *ModuleStore, gpa: std.mem.Allocator) void {
 }
 
 pub fn resolve(self: *ModuleStore, gpa: std.mem.Allocator, seed: ModuleSeed) !ModuleId {
+    const zone = tracy.traceNamed(@src(), "ModuleStore.resolve");
+    defer zone.end();
+
     const key: ModuleKey = .init(seed);
     if (self.module_key_to_module_id.get(key)) |id|
         return id;
@@ -138,3 +141,4 @@ pub fn namedImport(
 const FileId = @import("FileStore.zig").FileId;
 const BuildConfigStore = @import("BuildConfigStore.zig");
 const std = @import("std");
+const tracy = @import("tracy");

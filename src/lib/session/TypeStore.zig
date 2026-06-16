@@ -159,6 +159,9 @@ pub fn store(
     gpa: std.mem.Allocator,
     type_summary: TypeSummary,
 ) TypeId {
+    const zone = tracy.traceNamed(@src(), "TypeStore.store");
+    defer zone.end();
+
     // TODO: #149 - optimise this
     for (self.summaries.items, 0..) |existing, index|
         if (existing.eql(type_summary)) return .fromIndex(index);
@@ -192,6 +195,9 @@ pub fn summarizeFnProto(
     fn_proto: Ast.full.FnProto,
     comptime as_type_value: bool,
 ) TypeSummary {
+    const zone = tracy.traceNamed(@src(), "TypeStore.summarizeFnProto");
+    defer zone.end();
+
     const returns_type = if (fn_proto.ast.return_type.unwrap()) |return_node| returns_type: {
         const unwrapped_return = ast.unwrapNode(tree, return_node, .{});
         break :returns_type ast.isIdentiferKind(tree, unwrapped_return, .type);
@@ -206,6 +212,9 @@ pub fn summarizeValueNode(
     tree: Ast,
     value_node: Ast.Node.Index,
 ) ?TypeSummary {
+    const zone = tracy.traceNamed(@src(), "TypeStore.summarizeValueNode");
+    defer zone.end();
+
     return summarizeValueExpr(tree, value_node);
 }
 
@@ -213,6 +222,9 @@ pub fn summarizeFnReturnType(
     tree: Ast,
     fn_proto: Ast.full.FnProto,
 ) ?TypeSummary {
+    const zone = tracy.traceNamed(@src(), "TypeStore.summarizeFnReturnType");
+    defer zone.end();
+
     const return_type = fn_proto.ast.return_type.unwrap() orelse return null;
     return summarizeTypeNode(tree, return_type);
 }
@@ -221,6 +233,9 @@ pub fn summarizeTypeNode(
     tree: Ast,
     type_node: Ast.Node.Index,
 ) TypeSummary {
+    const zone = tracy.traceNamed(@src(), "TypeStore.summarizeTypeNode");
+    defer zone.end();
+
     return summarizeTypeExpr(tree, type_node) orelse
         .unknown;
 }
@@ -245,6 +260,9 @@ fn summarizeTypeExpr(
     tree: Ast,
     type_node: Ast.Node.Index,
 ) ?TypeSummary {
+    const zone = tracy.traceNamed(@src(), "TypeStore.summarizeTypeExpr");
+    defer zone.end();
+
     const node = ast.unwrapNode(tree, type_node, .{});
 
     if (tree.nodeTag(node) == .identifier) {
@@ -275,6 +293,9 @@ fn summarizeValueExpr(
     tree: Ast,
     value_node: Ast.Node.Index,
 ) ?TypeSummary {
+    const zone = tracy.traceNamed(@src(), "TypeStore.summarizeValueExpr");
+    defer zone.end();
+
     const node = ast.unwrapNode(tree, value_node, .{
         .unwrap_optional_unwrap = false,
     });
@@ -430,3 +451,4 @@ fn parsePrimitiveIntBits(text: []const u8) ?u16 {
 const Ast = std.zig.Ast;
 const ast = @import("../ast.zig");
 const std = @import("std");
+const tracy = @import("tracy");

@@ -35,6 +35,9 @@ pub fn tree(self: *const LintDocument, context: *const LintContext) Ast {
 /// Returns true if the problem should be skipped based on line level
 /// disable comments.
 pub fn shouldSkipProblem(self: *LintDocument, problem: LintProblem) error{OutOfMemory}!bool {
+    const zone = tracy.traceNamed(@src(), "LintDocument.shouldSkipProblem");
+    defer zone.end();
+
     return self.skipper.shouldSkip(problem);
 }
 
@@ -81,6 +84,9 @@ pub fn isEnclosedInTestBlock(
     context: *const LintContext,
     node: Ast.Node.Index,
 ) bool {
+    const zone = tracy.traceNamed(@src(), "LintDocument.isEnclosedInTestBlock");
+    defer zone.end();
+
     const document_tree = self.tree(context);
     var next = node;
     while (self.lineage.items(.parent)[@intFromEnum(next)]) |parent| {
@@ -236,6 +242,7 @@ const FileStore = @import("FileStore.zig");
 const LintContext = @import("LintContext.zig");
 const LintProblem = @import("../results.zig").LintProblem;
 const Ast = std.zig.Ast;
+const tracy = @import("tracy");
 
 test {
     std.testing.refAllDecls(@This());
