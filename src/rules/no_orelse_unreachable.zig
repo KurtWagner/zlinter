@@ -65,7 +65,7 @@ fn run(
         null;
 }
 
-fn isUnreachableBlock(tree: Ast, node: Ast.Node.Index) bool {
+fn isUnreachableBlock(tree: *const Ast, node: Ast.Node.Index) bool {
     const tag = tree.nodeTag(node);
     if (tag != .block_two and tag != .block_two_semicolon) return false;
 

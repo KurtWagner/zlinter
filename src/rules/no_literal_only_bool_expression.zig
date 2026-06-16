@@ -133,7 +133,7 @@ const Literal = enum {
 };
 
 /// Does not consider string literals, only booleans, numbers and chars
-fn isLiteral(tree: Ast, node: Ast.Node.Index) ?Literal {
+fn isLiteral(tree: *const Ast, node: Ast.Node.Index) ?Literal {
     return switch (tree.nodeTag(node)) {
         .number_literal => .number,
         .char_literal => .char,

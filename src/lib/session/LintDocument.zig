@@ -6,7 +6,6 @@ const LintDocument = @This();
 file_id: FileStore.FileId,
 
 // TODO: #149 - do not use, will be removed.
-handle: *zls.DocumentStore.Handle,
 lineage: ast.NodeLineage,
 comments: comments_module.CommentsDocument,
 skipper: comments_module.LazyRuleSkipper,
@@ -29,8 +28,8 @@ pub fn source(self: *const LintDocument, context: *const LintContext) [:0]const 
     return context.file_store.fileSource(self.file_id);
 }
 
-pub fn tree(self: *const LintDocument, context: *const LintContext) Ast {
-    return context.file_store.fileTree(self.file_id).*;
+pub fn tree(self: *const LintDocument, context: *const LintContext) *const Ast {
+    return context.file_store.fileTree(self.file_id);
 }
 
 /// Returns true if the problem should be skipped based on line level
@@ -159,70 +158,70 @@ test "LintDocument.isEnclosedInTestBlock" {
 
     try std.testing.expect(
         !doc.isEnclosedInTestBlock(&context, try testing.expectVarDecl(
-            doc.handle.tree,
+            doc.tree(&context),
             "is_not_in_test",
         )),
     );
 
     try std.testing.expect(
         doc.isEnclosedInTestBlock(&context, try testing.expectVarDecl(
-            doc.handle.tree,
+            doc.tree(&context),
             "is_in_test_without_name",
         )),
     );
 
     try std.testing.expect(
         doc.isEnclosedInTestBlock(&context, try testing.expectVarDecl(
-            doc.handle.tree,
+            doc.tree(&context),
             "is_in_test_if_condition_a",
         )),
     );
 
     try std.testing.expect(
         doc.isEnclosedInTestBlock(&context, try testing.expectVarDecl(
-            doc.handle.tree,
+            doc.tree(&context),
             "is_in_test_if_condition_b",
         )),
     );
 
     try std.testing.expect(
         doc.isEnclosedInTestBlock(&context, try testing.expectVarDecl(
-            doc.handle.tree,
+            doc.tree(&context),
             "is_in_test_if_condition_c",
         )),
     );
 
     try std.testing.expect(
         !doc.isEnclosedInTestBlock(&context, try testing.expectVarDecl(
-            doc.handle.tree,
+            doc.tree(&context),
             "is_not_in_test_if_condition",
         )),
     );
 
     try std.testing.expect(
         doc.isEnclosedInTestBlock(&context, try testing.expectVarDecl(
-            doc.handle.tree,
+            doc.tree(&context),
             "is_in_test_nested_if_condition_a",
         )),
     );
 
     try std.testing.expect(
         doc.isEnclosedInTestBlock(&context, try testing.expectVarDecl(
-            doc.handle.tree,
+            doc.tree(&context),
             "is_in_test_nested_if_condition_b",
         )),
     );
 
     try std.testing.expect(
         doc.isEnclosedInTestBlock(&context, try testing.expectVarDecl(
-            doc.handle.tree,
+            doc.tree(&context),
             "is_in_test_nested_if_condition_c",
         )),
     );
 
     try std.testing.expect(
         !doc.isEnclosedInTestBlock(&context, try testing.expectVarDecl(
-            doc.handle.tree,
+            doc.tree(&context),
             "is_not_in_test_nested_if_condition_a",
         )),
     );
@@ -233,7 +232,6 @@ const comments_module = @import("../comments.zig");
 const common = @import("common.zig");
 const std = @import("std");
 const testing = @import("../testing.zig");
-const zls = @import("zls");
 const FileStore = @import("FileStore.zig");
 const LintContext = @import("LintContext.zig");
 const LintProblem = @import("../results.zig").LintProblem;

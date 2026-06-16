@@ -233,21 +233,11 @@ pub fn build(b: *std.Build) void {
         .tracy_callstack_depth = tracy_callstack_depth,
     });
 
-    const zls_stub_module = b.createModule(.{
-        .root_source_file = b.path("src/lib/zls_stub.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
     const zlinter_lib_module = b.addModule("zlinter", .{
         .root_source_file = b.path("src/lib/zlinter.zig"),
         .target = target,
         .optimize = optimize,
         .imports = &.{
-            .{
-                .name = "zls",
-                .module = zls_stub_module,
-            },
             .{
                 .name = "tracy",
                 .module = tracy_module,
@@ -1005,8 +995,6 @@ fn resolveModuleIndex(modules: []const *std.Build.Module, module: *std.Build.Mod
 
 const skipped_rule_unit_tests = [_][]const u8{
     // TODO: #149 - bring these rules back once their integration tests are stable.
-    "declaration_naming",
-    "require_exhaustive_enum_switch",
 };
 
 fn skippedRuleUnitTest(rule_name: []const u8) bool {

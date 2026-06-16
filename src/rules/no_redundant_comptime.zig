@@ -38,7 +38,7 @@ const redundant_types = [_][]const u8{
     "comptime_float",
 };
 
-fn isRedundantComptimeType(tree: Ast, type_expr: Ast.Node.Index) bool {
+fn isRedundantComptimeType(tree: *const Ast, type_expr: Ast.Node.Index) bool {
     if (tree.nodeTag(type_expr) != .identifier) return false;
     const slice = tree.tokenSlice(tree.firstToken(type_expr));
     for (redundant_types) |t| {
@@ -76,7 +76,7 @@ fn run(
             else => null,
         } orelse continue;
 
-        var param_it = fn_proto.iterate(&tree);
+        var param_it = fn_proto.iterate(tree);
         while (param_it.next()) |param| {
             const comptime_token = param.comptime_noalias orelse continue;
             if (tree.tokenTag(comptime_token) != .keyword_comptime) continue;

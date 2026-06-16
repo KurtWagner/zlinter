@@ -217,7 +217,10 @@ fn run(
 
             fields: for (container_decl.ast.members) |member| {
                 if (tree.fullContainerField(member)) |container_field| {
-                    const type_kind = try context.resolveTypeKindDeprecated(doc, .{ .container_field = container_field });
+                    const type_kind = if (context.decl_store.declByNode(doc.file_id, member)) |decl_id|
+                        context.resolveDeclTypeKind(decl_id)
+                    else
+                        null;
                     const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const container_kind: zlinter.session.LintContext.TypeKind = tuple: {
                         break :tuple switch (container_tag) {
                             .keyword_struct => if (type_kind) |kind|

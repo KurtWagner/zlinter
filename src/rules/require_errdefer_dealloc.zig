@@ -154,6 +154,7 @@ fn processBlock(
             );
         } else if (try zlinter.ast.deferBlock(
             doc,
+            &context.file_store,
             child_node,
             arena,
         )) |defer_block| {
@@ -161,6 +162,7 @@ fn processBlock(
             for (defer_block.children) |defer_block_child| {
                 if (zlinter.ast.findFnCall(
                     doc,
+                    &context.file_store,
                     defer_block_child,
                     &call_buffer,
                     &.{"deinit"},
@@ -226,6 +228,7 @@ fn declRequiringCleanup(
         ),
         else => if (zlinter.ast.fnCall(
             doc,
+            &context.file_store,
             init_node,
             &call_buffer,
             &.{ "init", "initCapacity" },
@@ -238,49 +241,35 @@ fn declRequiringCleanup(
             false,
     }) return null;
 
-    const var_decl_type = try context.resolveTypeOfNodeDeprecated(doc, maybe_var_decl_node) orelse return null;
-    switch (var_decl_type.data) {
-        .container => |container| {
-            const scope_handle = container.scope_handle;
-            const node = scope_handle.toNode();
-            const tag = scope_handle.handle.tree.nodeTag(node);
-            switch (tag) {
-                .container_decl,
-                .container_decl_arg,
-                .container_decl_arg_trailing,
-                .container_decl_trailing,
-                .container_decl_two,
-                .container_decl_two_trailing,
-                => {
-                    const scope_tree = scope_handle.handle.tree;
+    const var_decl_id = context.decl_store.declByNode(
+        doc.file_id,
+        maybe_var_decl_node,
+    ) orelse return null;
+    if (!declHasPublicDeinit(context, var_decl_id)) return null;
 
-                    const has_deinit_method: bool = has_deinit_method: {
-                        var buffer: [2]Ast.Node.Index = undefined;
-                        const container_decl = scope_tree.fullContainerDecl(&buffer, node).?;
-                        for (container_decl.ast.members) |member| {
-                            var fn_proto_buffer: [1]Ast.Node.Index = undefined;
-                            const fn_decl = zlinter.ast.fnDecl(scope_tree, member, &fn_proto_buffer) orelse continue;
+    return .{ .decl_name_token = var_decl.ast.mut_token + 1 };
+}
 
-                            if (zlinter.ast.fnProtoVisibility(scope_tree, fn_decl.proto) == .private) continue;
+fn declHasPublicDeinit(
+    context: *zlinter.session.LintContext,
+    decl_id: zlinter.session.DeclStore.DeclId,
+) bool {
+    const deinit_decl_id = context.resolveDeclTypeMember(
+        decl_id,
+        "deinit",
+    ) orelse return false;
 
-                            const name_token = fn_decl.proto.name_token orelse continue;
-                            const name = scope_tree.tokenSlice(name_token);
+    const file_id = context.decl_store.declFileId(deinit_decl_id);
+    const tree = context.file_store.fileTree(file_id);
+    const node = context.decl_store.declAstNode(deinit_decl_id) orelse return false;
 
-                            if (std.mem.eql(u8, name, "deinit")) break :has_deinit_method true;
-                        }
-                        break :has_deinit_method false;
-                    };
-                    if (!has_deinit_method) return null;
+    var fn_proto_buffer: [1]Ast.Node.Index = undefined;
+    const fn_proto = tree.fullFnProto(
+        &fn_proto_buffer,
+        node,
+    ) orelse return false;
 
-                    return .{ .decl_name_token = var_decl.ast.mut_token + 1 };
-                },
-                else => {},
-            }
-        },
-        else => {},
-    }
-
-    return null;
+    return zlinter.ast.fnProtoVisibility(tree, fn_proto) != .private;
 }
 
 /// Returns true if it looks like based on parameters that the given call use
@@ -316,7 +305,13 @@ fn hasNonFreeingAllocatorParam(
                 }
             },
             .field_access => if (zlinter.ast.isFieldVarAccess(tree, param_node, skip_var_and_field_names)) return true,
-            else => if (zlinter.ast.fnCall(doc, param_node, &call_buffer, &.{"allocator"})) |call| {
+            else => if (zlinter.ast.fnCall(
+                doc,
+                &context.file_store,
+                param_node,
+                &call_buffer,
+                &.{"allocator"},
+            )) |call| {
                 switch (call.kind) {
                     // e.g., checking for `arena.allocator()` call. Unfortunately
                     // currently won't capture deeply nested, like `parent.arena.allocator()`
@@ -419,6 +414,7 @@ test "hasNonFreeingAllocatorParam" {
             doc,
             &context,
             tree.fullCall(&buffer, try zlinter.testing.expectNodeOfTagFirst(
+                &context,
                 doc,
                 &.{
                     .call,

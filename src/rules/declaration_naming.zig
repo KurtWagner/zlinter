@@ -118,7 +118,11 @@ fn run(
             if (token_tag == .keyword_export) continue :nodes;
         }
 
-        const type_kind = try context.resolveTypeKindDeprecated(doc, .{ .var_decl = var_decl }) orelse continue :nodes;
+        const decl_id = context.decl_store.declByNode(
+            doc.file_id,
+            node,
+        ) orelse continue :nodes;
+        const type_kind = context.resolveDeclTypeKind(decl_id) orelse .other;
         const name_token = var_decl.ast.mut_token + 1;
         const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
 

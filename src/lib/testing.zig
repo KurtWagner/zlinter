@@ -10,9 +10,6 @@ pub fn loadFakeDocument(
 ) !*LintDocument {
     assertTestOnly();
 
-    // TODO: #149 - bring back
-    // if (true) return error.SkipZigTest;
-
     const io = std.testing.io;
 
     if (std.fs.path.dirname(file_name)) |dir_name|
@@ -145,7 +142,7 @@ pub fn expectContainsExactlyStrings(expected: []const []const u8, actual: []cons
 /// tests.
 pub fn expectNodeSlices(
     expected: []const []const u8,
-    tree: Ast,
+    tree: *const Ast,
     actual: []const Ast.Node.Index,
 ) !void {
     assertTestOnly();
@@ -174,7 +171,7 @@ pub fn expectNodeSlices(
 ///
 /// This method will return a collision error if more than one var declaration
 /// matches the name.
-pub fn expectVarDecl(tree: Ast, name: []const u8) !Ast.Node.Index {
+pub fn expectVarDecl(tree: *const Ast, name: []const u8) !Ast.Node.Index {
     assertTestOnly();
 
     var found: ?Ast.Node.Index = null;
@@ -197,7 +194,7 @@ pub fn expectVarDecl(tree: Ast, name: []const u8) !Ast.Node.Index {
 ///
 /// This is to encourage smaller unit tests and to ensure that the order does
 /// not matter when asserting. Alternatively use `expectNodeOfTagFirst`
-pub fn expectSingleNodeOfTag(tree: Ast, comptime tags: []const Ast.Node.Tag) !Ast.Node.Index {
+pub fn expectSingleNodeOfTag(tree: *const Ast, comptime tags: []const Ast.Node.Tag) !Ast.Node.Index {
     assertTestOnly();
 
     var found: ?Ast.Node.Index = null;
@@ -216,16 +213,21 @@ pub fn expectSingleNodeOfTag(tree: Ast, comptime tags: []const Ast.Node.Tag) !As
 }
 
 /// Expects at least one node and returns it matching a set of tags
-pub fn expectNodeOfTagFirst(doc: *const LintDocument, comptime tags: []const Ast.Node.Tag) !Ast.Node.Index {
+pub fn expectNodeOfTagFirst(
+    context: *const LintContext,
+    doc: *const LintDocument,
+    comptime tags: []const Ast.Node.Tag,
+) !Ast.Node.Index {
     assertTestOnly();
 
+    const tree = doc.tree(context);
     var it = try doc.nodeLineageIterator(.root, std.testing.allocator);
     defer it.deinit();
 
     while (try it.next()) |node_and_children| {
         const node = node_and_children[0];
         inline for (tags) |tag| {
-            if (doc.handle.tree.nodeTag(node) == tag) {
+            if (tree.nodeTag(node) == tag) {
                 return node;
             }
         }
@@ -263,7 +265,7 @@ fn runRule(
         arena.allocator(),
     );
 
-    const tree = doc.handle.tree;
+    const tree = doc.tree(&context);
     std.testing.expectEqual(tree.errors.len, 0) catch |err| {
         std.debug.print("Failed to parse AST:\n{s}\n", .{contents});
         for (tree.errors) |ast_err| {

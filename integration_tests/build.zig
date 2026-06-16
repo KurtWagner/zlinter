@@ -127,23 +127,6 @@ const SkippedTestCase = struct {
 
 const skipped_test_cases = [_]SkippedTestCase{
     // TODO: #149 - fix thes rules...
-    .{ .rule_name = "declaration_naming", .test_name = "aliases_included" },
-    .{ .rule_name = "declaration_naming", .test_name = "functions" },
-    .{ .rule_name = "declaration_naming", .test_name = "namespaces" },
-    .{ .rule_name = "declaration_naming", .test_name = "regression_80" },
-    .{ .rule_name = "declaration_naming", .test_name = "regression_132" },
-    .{ .rule_name = "declaration_naming", .test_name = "types" },
-    .{ .rule_name = "field_ordering", .test_name = "field_ordering" },
-    .{ .rule_name = "function_naming", .test_name = "function_naming" },
-    .{ .rule_name = "function_naming", .test_name = "extern_included" },
-    .{ .rule_name = "import_ordering", .test_name = "ascending" },
-    .{ .rule_name = "import_ordering", .test_name = "descending_no_chunks" },
-    .{ .rule_name = "no_deprecated", .test_name = "cross_file_alias_chain" },
-    .{ .rule_name = "no_deprecated", .test_name = "no_deprecated" },
-    .{ .rule_name = "no_hidden_allocations", .test_name = "no_hidden_allocations" },
-    .{ .rule_name = "require_errdefer_dealloc", .test_name = "require_errdefer_dealloc" },
-    .{ .rule_name = "require_exhaustive_enum_switch", .test_name = "call_condition_token" },
-    .{ .rule_name = "require_exhaustive_enum_switch", .test_name = "require_exhaustive_enum_switch" },
 };
 
 fn skippedTestCase(rule_name: []const u8, test_name: []const u8) ?SkippedTestCase {

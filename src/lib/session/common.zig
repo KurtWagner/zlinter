@@ -4,7 +4,7 @@ pub const max_zig_file_size_bytes = bytes: {
 };
 
 /// Returns true if the if statement appears to enforce that its block is test only
-pub fn isTestOnlyCondition(tree: Ast, if_statement: Ast.full.If) bool {
+pub fn isTestOnlyCondition(tree: *const Ast, if_statement: Ast.full.If) bool {
     const cond_node = if_statement.ast.cond_expr;
     return switch (tree.nodeTag(cond_node)) {
         .identifier => std.mem.eql(u8, "is_test", tree.getNodeSource(cond_node)),

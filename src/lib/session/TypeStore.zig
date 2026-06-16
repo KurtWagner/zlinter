@@ -178,8 +178,8 @@ pub fn summarizeFnProto(
     comptime as_type_value: bool,
 ) TypeSummary {
     const returns_type = if (fn_proto.ast.return_type.unwrap()) |return_node| returns_type: {
-        const unwrapped_return = ast.unwrapNode(tree.*, return_node, .{});
-        break :returns_type ast.isIdentiferKind(tree.*, unwrapped_return, .type);
+        const unwrapped_return = ast.unwrapNode(tree, return_node, .{});
+        break :returns_type ast.isIdentiferKind(tree, unwrapped_return, .type);
     } else false;
 
     return .{
@@ -254,7 +254,7 @@ fn summarizeTypeExpr(
     tree: *const Ast,
     type_node: Ast.Node.Index,
 ) ?TypeSummary {
-    const node = ast.unwrapNode(tree.*, type_node, .{});
+    const node = ast.unwrapNode(tree, type_node, .{});
 
     if (tree.nodeTag(node) == .identifier) {
         const name = tree.getNodeSource(node);
@@ -284,7 +284,7 @@ fn summarizeValueExpr(
     tree: *const Ast,
     value_node: Ast.Node.Index,
 ) ?TypeSummary {
-    const node = ast.unwrapNode(tree.*, value_node, .{
+    const node = ast.unwrapNode(tree, value_node, .{
         .unwrap_optional_unwrap = false,
     });
 
@@ -346,8 +346,8 @@ fn summarizeContainerDecl(
     const token_tag = tree.tokenTag(container_decl.ast.main_token);
     return .{ .kind = switch (token_tag) {
         .keyword_struct => switch (mode) {
-            .instance => if (ast.isContainerNamespace(tree.*, container_decl)) .namespace_type else .struct_instance,
-            .type_value => if (ast.isContainerNamespace(tree.*, container_decl)) .namespace_type else .struct_type,
+            .instance => if (ast.isContainerNamespace(tree, container_decl)) .namespace_type else .struct_instance,
+            .type_value => if (ast.isContainerNamespace(tree, container_decl)) .namespace_type else .struct_type,
         },
         .keyword_union => switch (mode) {
             .instance => .union_instance,

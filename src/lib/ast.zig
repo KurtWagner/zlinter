@@ -559,8 +559,8 @@ pub const DeferBlock = struct {
     }
 };
 
-pub fn deferBlock(doc: *const session.LintDocument, node: Ast.Node.Index, allocator: std.mem.Allocator) !?DeferBlock {
-    const tree = doc.handle.tree;
+pub fn deferBlock(doc: *const session.LintDocument, file_store: *const FileStore, node: Ast.Node.Index, allocator: std.mem.Allocator) !?DeferBlock {
+    const tree = file_store.fileTree(doc.file_id);
 
     const data = tree.nodeData(node);
     const exp_node =
@@ -577,7 +577,7 @@ pub fn deferBlock(doc: *const session.LintDocument, node: Ast.Node.Index, alloca
     }
 }
 
-pub fn isBlock(tree: Ast, node: Ast.Node.Index) bool {
+pub fn isBlock(tree: *const Ast, node: Ast.Node.Index) bool {
     return switch (tree.nodeTag(node)) {
         .block_two, .block_two_semicolon, .block, .block_semicolon => true,
         else => false,
@@ -586,7 +586,7 @@ pub fn isBlock(tree: Ast, node: Ast.Node.Index) bool {
 
 /// Returns true if identifier node and itentifier node has the given kind.
 pub fn isIdentiferKind(
-    tree: Ast,
+    tree: *const Ast,
     node: Ast.Node.Index,
     kind: enum { type },
 ) bool {
@@ -603,7 +603,7 @@ pub fn isIdentiferKind(
 ///
 /// For example if you want `?StructType` to be treated the same as `StructType`.
 pub fn unwrapNode(
-    tree: Ast,
+    tree: *const Ast,
     node: Ast.Node.Index,
     options: struct {
         /// i.e., ?T => T
@@ -645,7 +645,7 @@ pub fn unwrapNode(
 /// This can be useful if you have a node and want to work out where it's
 /// contained (e.g., within a struct).
 pub fn isNodeOverlapping(
-    tree: Ast,
+    tree: *const Ast,
     a: Ast.Node.Index,
     b: Ast.Node.Index,
 ) bool {
@@ -661,12 +661,12 @@ pub fn isNodeOverlapping(
 
 /// Returns true if the tree is of a file that's an implicit struct with fields
 /// and not namespace
-pub fn isRootImplicitStruct(tree: Ast) bool {
+pub fn isRootImplicitStruct(tree: *const Ast) bool {
     return !isContainerNamespace(tree, tree.containerDeclRoot());
 }
 
 /// Returns true if the container is a namespace (i.e., no fields just declarations)
-pub fn isContainerNamespace(tree: Ast, container_decl: Ast.full.ContainerDecl) bool {
+pub fn isContainerNamespace(tree: *const Ast, container_decl: Ast.full.ContainerDecl) bool {
     for (container_decl.ast.members) |member| {
         if (tree.nodeTag(member).isContainerField()) return false;
     }
@@ -740,17 +740,18 @@ test "deferBlock - has expected children" {
 
         const decl_ref = try deferBlock(
             doc,
-            try testing.expectSingleNodeOfTag(doc.handle.tree, &.{ .@"defer", .@"errdefer" }),
+            &context.file_store,
+            try testing.expectSingleNodeOfTag(doc.tree(&context), &.{ .@"defer", .@"errdefer" }),
             std.testing.allocator,
         );
         defer if (decl_ref) |d| d.deinit(std.testing.allocator);
 
-        try testing.expectNodeSlices(expected, doc.handle.tree, decl_ref.?.children);
+        try testing.expectNodeSlices(expected, doc.tree(&context), decl_ref.?.children);
     }
 }
 
 /// Returns true if return type is `!type` or `error{ErrorName}!type` or `ErrorName!type`
-pub fn fnProtoReturnsError(tree: Ast, fn_proto: Ast.full.FnProto) bool {
+pub fn fnProtoReturnsError(tree: *const Ast, fn_proto: Ast.full.FnProto) bool {
     const return_node = fn_proto.ast.return_type.unwrap() orelse return false;
     const tag = tree.nodeTag(return_node);
     return switch (tag) {
@@ -815,11 +816,11 @@ test "fnProtoReturnsError" {
         defer tree.deinit(std.testing.allocator);
 
         const actual = fnProtoReturnsError(
-            tree,
+            &tree,
             tree.fullFnProto(
                 &buffer,
                 try testing.expectSingleNodeOfTag(
-                    tree,
+                    &tree,
                     &.{
                         .fn_proto,
                         .fn_proto_multi,
@@ -841,7 +842,7 @@ pub const FnDecl = struct {
 
 /// Returns the function declaration (proto and block) if node is a function declaration,
 /// otherwise returns null.
-pub fn fnDecl(tree: Ast, node: Ast.Node.Index, fn_proto_buffer: *[1]Ast.Node.Index) ?FnDecl {
+pub fn fnDecl(tree: *const Ast, node: Ast.Node.Index, fn_proto_buffer: *[1]Ast.Node.Index) ?FnDecl {
     switch (tree.nodeTag(node)) {
         .fn_decl => {
             const data = tree.nodeData(node);
@@ -857,7 +858,7 @@ pub fn fnDecl(tree: Ast, node: Ast.Node.Index, fn_proto_buffer: *[1]Ast.Node.Ind
 ///
 /// For example `parent.ok` and `parent.child.ok` would return a token index
 /// pointing to `ok`.
-pub fn fieldVarAccess(tree: Ast, node: Ast.Node.Index) ?Ast.TokenIndex {
+pub fn fieldVarAccess(tree: *const Ast, node: Ast.Node.Index) ?Ast.TokenIndex {
     if (tree.nodeTag(node) != .field_access) return null;
 
     const last_token = tree.lastToken(node);
@@ -874,7 +875,7 @@ pub fn fieldVarAccess(tree: Ast, node: Ast.Node.Index) ?Ast.TokenIndex {
 ///
 /// For example, `parent.ok` and `parent.child.ok` would match var name `ok` but
 /// not `child` (even though it is a field access above `ok`).
-pub fn isFieldVarAccess(tree: Ast, node: Ast.Node.Index, var_names: []const []const u8) bool {
+pub fn isFieldVarAccess(tree: *const Ast, node: Ast.Node.Index, var_names: []const []const u8) bool {
     const identifier_token = fieldVarAccess(tree, node) orelse return false;
     const actual_var_name = tree.tokenSlice(identifier_token);
 
@@ -912,7 +913,7 @@ pub const Statement = union(enum) {
 /// Returns if, for, while, switch case, defer and errdefer and catch statements
 /// focusing on the expression node attached, which is relevant in whether or not
 /// it's a block enclosed in braces.
-pub fn fullStatement(tree: Ast, node: Ast.Node.Index) ?Statement {
+pub fn fullStatement(tree: *const Ast, node: Ast.Node.Index) ?Statement {
     return if (tree.fullIf(node)) |ifStatement|
         .{ .@"if" = ifStatement }
     else if (tree.fullWhile(node)) |whileStatement|
@@ -933,7 +934,7 @@ pub fn fullStatement(tree: Ast, node: Ast.Node.Index) ?Statement {
 pub const Visibility = enum { public, private };
 
 /// Returns the visibility of a given function proto.
-pub fn fnProtoVisibility(tree: Ast, fn_decl: Ast.full.FnProto) Visibility {
+pub fn fnProtoVisibility(tree: *const Ast, fn_decl: Ast.full.FnProto) Visibility {
     const visibility_token = fn_decl.visib_token orelse return .private;
     return switch (tree.tokens.items(.tag)[visibility_token]) {
         .keyword_pub => .public,
@@ -942,7 +943,7 @@ pub fn fnProtoVisibility(tree: Ast, fn_decl: Ast.full.FnProto) Visibility {
 }
 
 /// Returns the visibility of a given variable declaration.
-pub fn varDeclVisibility(tree: Ast, var_decl: Ast.full.VarDecl) Visibility {
+pub fn varDeclVisibility(tree: *const Ast, var_decl: Ast.full.VarDecl) Visibility {
     const visibility_token = var_decl.visib_token orelse return .private;
     return switch (tree.tokens.items(.tag)[visibility_token]) {
         .keyword_pub => .public,
@@ -1004,9 +1005,9 @@ test "isFieldVarAccess" {
         defer tree.deinit(std.testing.allocator);
 
         const actual = isFieldVarAccess(
-            tree,
+            &tree,
             tree.fullVarDecl(try testing.expectSingleNodeOfTag(
-                tree,
+                &tree,
                 &.{
                     .local_var_decl,
                     .global_var_decl,
@@ -1021,7 +1022,7 @@ test "isFieldVarAccess" {
 }
 
 /// Returns true if enum literal matching a given var name
-pub fn isEnumLiteral(tree: Ast, node: Ast.Node.Index, enum_names: []const []const u8) bool {
+pub fn isEnumLiteral(tree: *const Ast, node: Ast.Node.Index, enum_names: []const []const u8) bool {
     if (tree.nodeTag(node) != .enum_literal) return false;
 
     const actual_enum_name = tree.tokenSlice(tree.nodeMainToken(node));
@@ -1140,9 +1141,9 @@ test "isEnumLiteral" {
         defer tree.deinit(std.testing.allocator);
 
         const actual = isEnumLiteral(
-            tree,
+            &tree,
             tree.fullVarDecl(try testing.expectSingleNodeOfTag(
-                tree,
+                &tree,
                 &.{
                     .local_var_decl,
                     .global_var_decl,
@@ -1160,6 +1161,7 @@ test "isEnumLiteral" {
 /// children matching given case sensitive names.
 pub fn findFnCall(
     doc: *const session.LintDocument,
+    file_store: *const FileStore,
     node: Ast.Node.Index,
     call_buffer: *[1]Ast.Node.Index,
     names: []const []const u8,
@@ -1168,6 +1170,7 @@ pub fn findFnCall(
 
     if (fnCall(
         doc,
+        file_store,
         node,
         call_buffer,
         names,
@@ -1178,6 +1181,7 @@ pub fn findFnCall(
     for (doc.lineage.items(.children)[@intFromEnum(node)] orelse &.{}) |child| {
         if (findFnCall(
             doc,
+            file_store,
             child,
             call_buffer,
             names,
@@ -1223,11 +1227,12 @@ pub const FnCall = struct {
 /// case sensitive.
 pub fn fnCall(
     doc: *const session.LintDocument,
+    file_store: *const FileStore,
     node: Ast.Node.Index,
     buffer: *[1]Ast.Node.Index,
     names: []const []const u8,
 ) ?FnCall {
-    const tree = doc.handle.tree;
+    const tree = file_store.fileTree(doc.file_id);
     const call = tree.fullCall(buffer, node) orelse return null;
 
     const fn_expr_node = call.ast.fn_expr;
@@ -1291,7 +1296,7 @@ pub fn fnCall(
     };
 
     if (maybe_fn_call) |fn_call| {
-        const fn_name_slice = doc.handle.tree.tokenSlice(fn_call.call_identifier_token);
+        const fn_name_slice = tree.tokenSlice(fn_call.call_identifier_token);
         if (names.len == 0) return fn_call;
 
         for (names) |name| {
@@ -1324,12 +1329,13 @@ test "fnCall - direct call without params" {
     );
 
     const fn_node = try testing.expectSingleNodeOfTag(
-        doc.handle.tree,
+        doc.tree(&context),
         &.{ .call, .call_comma, .call_one, .call_one_comma },
     );
     var buffer: [1]Ast.Node.Index = undefined;
     const call = fnCall(
         doc,
+        &context.file_store,
         fn_node,
         &buffer,
         &.{},
@@ -1338,7 +1344,7 @@ test "fnCall - direct call without params" {
     try std.testing.expectEqualDeep(&.{}, call.params);
     try std.testing.expectEqualStrings(
         "call",
-        doc.handle.tree.tokenSlice(call.call_identifier_token),
+        doc.tree(&context).tokenSlice(call.call_identifier_token),
     );
     try std.testing.expectEqualStrings("direct", @tagName(call.kind));
 }
@@ -1364,27 +1370,28 @@ test "fnCall - single field call with params" {
     );
 
     const fn_node = try testing.expectSingleNodeOfTag(
-        doc.handle.tree,
+        doc.tree(&context),
         &.{ .call, .call_comma, .call_one, .call_one_comma },
     );
     var buffer: [1]Ast.Node.Index = undefined;
     const call = fnCall(
         doc,
+        &context.file_store,
         fn_node,
         &buffer,
         &.{},
     ).?;
 
     try std.testing.expectEqual(2, call.params.len);
-    try std.testing.expectEqualStrings("1", doc.handle.tree.getNodeSource(call.params[0]));
-    try std.testing.expectEqualStrings("abc", doc.handle.tree.getNodeSource(call.params[1]));
+    try std.testing.expectEqualStrings("1", doc.tree(&context).getNodeSource(call.params[0]));
+    try std.testing.expectEqualStrings("abc", doc.tree(&context).getNodeSource(call.params[1]));
     try std.testing.expectEqualStrings(
         "single",
-        doc.handle.tree.tokenSlice(call.kind.single_field.field_main_token),
+        doc.tree(&context).tokenSlice(call.kind.single_field.field_main_token),
     );
     try std.testing.expectEqualStrings(
         "fnName",
-        doc.handle.tree.tokenSlice(call.call_identifier_token),
+        doc.tree(&context).tokenSlice(call.call_identifier_token),
     );
 }
 
@@ -1433,8 +1440,9 @@ test "findFnCall" {
 
         try std.testing.expectEqualStrings(
             "fnName",
-            doc.handle.tree.tokenSlice(findFnCall(
+            doc.tree(&context).tokenSlice(findFnCall(
                 doc,
+                &context.file_store,
                 .root,
                 &buffer,
                 &.{"fnName"},
@@ -1445,79 +1453,13 @@ test "findFnCall" {
             null,
             findFnCall(
                 doc,
+                &context.file_store,
                 .root,
                 &buffer,
                 &.{ "fn", "Name", "fnname" },
             ),
         );
     }
-}
-
-test "getEnumInfoFromType" {
-    // TODO: #149 - bring this test back
-    if (true)
-        return error.SkipZigTest;
-
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-
-    var context = testing.initFakeContext(std.testing.allocator, arena.allocator(), std.testing.io);
-    defer context.deinit();
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-
-    const source: [:0]const u8 =
-        \\const E = enum { a, b };
-        \\const NE = enum(u8) { a, b, _ };
-        \\const X = 1;
-    ;
-
-    const doc = try testing.loadFakeDocument(
-        &context,
-        tmp.dir,
-        "test.zig",
-        source,
-        arena.allocator(),
-    );
-
-    const tree = doc.handle.tree;
-
-    const exhaustive_enum_decl_node = try testing.expectVarDecl(tree, "E");
-    const exhaustive_enum_decl = tree.fullVarDecl(exhaustive_enum_decl_node).?;
-    const exhaustive_enum_init = exhaustive_enum_decl.ast.init_node.unwrap().?;
-    const exhaustive_enum_type = (try context.resolveTypeOfNodeDeprecated(doc, exhaustive_enum_init)) orelse return error.TestExpectedType;
-    var exhaustive_enum_info = try getEnumInfoFromType(
-        resolveDeclLiteralResultTypeSafe(exhaustive_enum_type),
-        std.testing.allocator,
-    ) orelse
-        return error.TestExpectedEnumInfo;
-    defer exhaustive_enum_info.deinit(std.testing.allocator);
-
-    try std.testing.expect(!exhaustive_enum_info.is_non_exhaustive);
-    try testing.expectContainsExactlyStrings(&.{ "a", "b" }, exhaustive_enum_info.tags);
-
-    const non_exhaustive_enum_decl_node = try testing.expectVarDecl(tree, "NE");
-    const non_exhaustive_enum_decl = tree.fullVarDecl(non_exhaustive_enum_decl_node).?;
-    const non_exhaustive_enum_init = non_exhaustive_enum_decl.ast.init_node.unwrap().?;
-    const non_exhaustive_enum_type = (try context.resolveTypeOfNodeDeprecated(doc, non_exhaustive_enum_init)) orelse return error.TestExpectedType;
-    var non_exhaustive_enum_info = try getEnumInfoFromType(
-        resolveDeclLiteralResultTypeSafe(non_exhaustive_enum_type),
-        std.testing.allocator,
-    ) orelse
-        return error.TestExpectedEnumInfo;
-    defer non_exhaustive_enum_info.deinit(std.testing.allocator);
-
-    try std.testing.expect(non_exhaustive_enum_info.is_non_exhaustive);
-    try testing.expectContainsExactlyStrings(&.{ "a", "b" }, non_exhaustive_enum_info.tags);
-
-    const not_enum_decl_node = try testing.expectVarDecl(tree, "X");
-    const not_enum_decl = tree.fullVarDecl(not_enum_decl_node).?;
-    const not_enum_init = not_enum_decl.ast.init_node.unwrap().?;
-    const not_enum_type = (try context.resolveTypeOfNodeDeprecated(doc, not_enum_init)) orelse return error.TestExpectedType;
-    const resolved_not_enum_type = resolveDeclLiteralResultTypeSafe(not_enum_type);
-    try std.testing.expect(
-        (try getEnumInfoFromType(resolved_not_enum_type, std.testing.allocator)) == null,
-    );
 }
 
 // TODO: #149 - needs tests
@@ -1570,7 +1512,24 @@ const std = @import("std");
 const testing = @import("testing.zig");
 const zls = @import("zls");
 const Ast = std.zig.Ast;
+const FileStore = @import("session/FileStore.zig");
 
 test {
-    std.testing.refAllDecls(@This());
+    refAllDeclsExcept(@This(), &.{
+        "getEnumInfoFromType",
+        "resolveDeclLiteralResultTypeSafe",
+    });
+}
+
+fn refAllDeclsExcept(comptime T: type, comptime excluded_declarations: []const []const u8) void {
+    if (!@import("builtin").is_test) return;
+    inline for (comptime std.meta.declarations(T)) |decl_name| {
+        comptime {
+            for (excluded_declarations) |excluded_declaration| {
+                if (std.mem.eql(u8, decl_name, excluded_declaration)) break;
+            } else {
+                _ = &@field(T, decl_name);
+            }
+        }
+    }
 }

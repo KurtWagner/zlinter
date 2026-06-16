@@ -117,7 +117,7 @@ fn run(
         null;
 }
 
-fn hasDocComments(tree: Ast, node: Ast.Node.Index) !bool {
+fn hasDocComments(tree: *const Ast, node: Ast.Node.Index) !bool {
     return switch (tree.nodeTag(node)) {
         .root => tree.tokenTag(0) == .container_doc_comment,
         .global_var_decl,

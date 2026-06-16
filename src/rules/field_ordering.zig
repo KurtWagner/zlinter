@@ -217,7 +217,7 @@ fn run(
 /// Span between two nodes (or the same node) including comments and leading
 /// whitespace like newlines.
 fn nodeSpanIncludingComments(
-    tree: Ast,
+    tree: *const Ast,
     first_node: Ast.Node.Index,
     last_node: Ast.Node.Index,
     options: struct { consume_trailing_comma: bool = false },
@@ -238,7 +238,7 @@ fn nodeSpanIncludingComments(
     return .{ start, end };
 }
 
-fn firstTokenIncludingComments(tree: Ast, node: Ast.Node.Index) Ast.TokenIndex {
+fn firstTokenIncludingComments(tree: *const Ast, node: Ast.Node.Index) Ast.TokenIndex {
     var token = tree.firstToken(node);
     while (tree.tokens.items(.tag)[token - 1] == .doc_comment) token -= 1;
     return token;

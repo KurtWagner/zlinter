@@ -168,7 +168,7 @@ fn run(
         null;
 }
 
-fn isEmptyBlock(tree: Ast, node: Ast.Node.Index) bool {
+fn isEmptyBlock(tree: *const Ast, node: Ast.Node.Index) bool {
     const is_block = switch (tree.nodeTag(node)) {
         .block,
         .block_semicolon,
@@ -193,7 +193,7 @@ fn isEmptyBlock(tree: Ast, node: Ast.Node.Index) bool {
     return true;
 }
 
-fn fnDeclBlock(tree: Ast, node: Ast.Node.Index) ?Ast.Node.Index {
+fn fnDeclBlock(tree: *const Ast, node: Ast.Node.Index) ?Ast.Node.Index {
     return switch (tree.nodeTag(node)) {
         .fn_decl => tree.nodeData(node).node_and_node.@"1",
         else => null,

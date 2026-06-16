@@ -35,16 +35,15 @@ fn run(
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
-    const tree = doc.tree(context);
-
     var arena_allocator = std.heap.ArenaAllocator.init(gpa);
     defer arena_allocator.deinit();
     const arena = arena_allocator.allocator();
 
     var index: u32 = @intFromEnum(Ast.Node.Index.root);
-    while (index < tree.nodes.len) : (index += 1) {
+    while (index < doc.tree(context).nodes.len) : (index += 1) {
         defer _ = arena_allocator.reset(.retain_capacity);
 
+        const tree = doc.tree(context);
         const node: Ast.Node.Index = @enumFromInt(index);
         const tag = tree.nodeTag(node);
         switch (tag) {
@@ -204,7 +203,7 @@ fn appendDeprecatedProblem(
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
     context: *zlinter.session.LintContext,
-    tree: Ast,
+    tree: *const Ast,
     node_index: Ast.Node.Index,
     decl_id: zlinter.session.DeclStore.DeclId,
     comptime message_fmt: []const u8,
@@ -296,7 +295,7 @@ fn resolveEnumLiteralContextTypeDecl(
 }
 
 fn structInitFieldNameToken(
-    tree: Ast,
+    tree: *const Ast,
     struct_init: Ast.full.StructInit,
     node: Ast.Node.Index,
 ) ?Ast.TokenIndex {
@@ -313,7 +312,7 @@ fn structInitFieldNameToken(
     return null;
 }
 
-fn nodeWithin(tree: Ast, container: Ast.Node.Index, node: Ast.Node.Index) bool {
+fn nodeWithin(tree: *const Ast, container: Ast.Node.Index, node: Ast.Node.Index) bool {
     return container == node or ast.isNodeOverlapping(tree, container, node);
 }
 

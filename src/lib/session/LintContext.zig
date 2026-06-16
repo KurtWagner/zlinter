@@ -22,17 +22,7 @@ decl_store: DeclStore = undefined, // zlinter-disable-current-line no_undefined 
 type_store: TypeStore = .empty,
 build_config_store: BuildConfigStore = .empty,
 
-deprecated: struct {
-    document_store: zls.DocumentStore,
-    analyser: zls.Analyser,
-} = undefined, // zlinter-disable-current-line no_undefined - set in init
-
 pub fn init(self: *LintContext) !void {
-    const config: zls.Config = .{
-        .zig_exe_path = self.zig_exe,
-        .zig_lib_path = self.zig_lib_directory,
-    };
-
     // TODO: #149 - refactor to not do this
     self.decl_store = .{
         .gpa = self.gpa,
@@ -40,50 +30,11 @@ pub fn init(self: *LintContext) !void {
         .io = self.io,
     };
 
-    self.deprecated.document_store = zls.DocumentStore{
-        .io = self.io,
-        .allocator = self.gpa,
-        .config = .{
-            .zig_exe_path = self.zig_exe,
-            .zig_lib_dir = dir: {
-                const absolute_zig_lib_directory = std.Io.Dir.cwd().realPathFileAlloc(
-                    self.io,
-                    self.zig_lib_directory,
-                    self.arena,
-                ) catch unreachable;
-
-                break :dir .{
-                    .handle = std.Io.Dir.openDirAbsolute(
-                        self.io,
-                        absolute_zig_lib_directory,
-                        .{},
-                    ) catch unreachable,
-                    .path = absolute_zig_lib_directory,
-                };
-            },
-            .build_runner_path = config.build_runner_path,
-            .builtin_path = config.builtin_path,
-            .wasi_preopens = switch (builtin.os.tag) {
-                .wasi => try std.fs.wasi.preopensAlloc(self.arena),
-                else => {},
-            },
-        },
-    };
-
-    self.deprecated.analyser = zls.Analyser.init(
-        self.gpa,
-        self.arena,
-        &self.deprecated.document_store,
-        null,
-    );
-
     // TODO: #149 - investigate using fake BuildConfigStore
     if (!builtin.is_test) try self.initBuildConfig();
 }
 
 pub fn deinit(self: *LintContext) void {
-    self.deprecated.document_store.deinit();
-    self.deprecated.analyser.deinit();
     self.build_config_store.deinit(self.gpa);
     self.file_store.deinit(self.gpa);
     self.compile_contexts.deinit(self.gpa);
@@ -364,23 +315,6 @@ pub fn initDocument(
     const abs_path = self.file_store.fileAbsPath(file_id);
     std.debug.assert(std.fs.path.isAbsolute(abs_path));
 
-    var buffer: [std.fs.max_path_bytes]u8 = undefined;
-    const size = try std.Io.Dir.cwd().realPathFile(
-        self.io,
-        abs_path,
-        &buffer,
-    );
-
-    var mem: [std.fs.max_path_bytes]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&mem);
-
-    const uri = try zls.Uri.fromPath(
-        fba.allocator(),
-        buffer[0..size],
-    );
-
-    const handle = (try self.deprecated.document_store.getOrLoadHandle(uri)) orelse return error.HandleError;
-
     const source = self.file_store.fileSource(file_id);
     const tree = self.file_store.fileTree(file_id);
 
@@ -389,7 +323,6 @@ pub fn initDocument(
 
     doc.* = .{
         .file_id = file_id,
-        .handle = handle,
         .lineage = .empty,
         .comments = src_comments,
         .skipper = undefined, // zlinter-disable-current-line no_undefined - set below
@@ -505,6 +438,20 @@ pub fn resolveDeclMember(
     );
 }
 
+/// Resolves a member from the type represented by a declaration.
+pub fn resolveDeclTypeMember(
+    self: *LintContext,
+    parent_decl_id: DeclStore.DeclId,
+    member_name: []const u8,
+) ?DeclStore.DeclId {
+    return self.decl_store.resolveDeclTypeMember(
+        &self.file_store,
+        &self.module_store,
+        parent_decl_id,
+        member_name,
+    );
+}
+
 /// Resolves the declaration named by a declaration's type expression.
 pub fn resolveDeclTypeDecl(
     self: *LintContext,
@@ -515,6 +462,310 @@ pub fn resolveDeclTypeDecl(
         &self.module_store,
         decl_id,
     );
+}
+
+/// Returns the cached concrete type target for a declaration, when one was
+/// resolved while indexing the file.
+pub fn declResolvedTypeTarget(
+    self: *const LintContext,
+    decl_id: DeclStore.DeclId,
+) ?DeclStore.TypeTarget {
+    return self.decl_store.declResolvedTypeTarget(decl_id);
+}
+
+/// Returns the cached concrete type declaration for a declaration, when one
+/// was resolved while indexing the file and is represented by a declaration.
+pub fn declResolvedTypeDecl(
+    self: *const LintContext,
+    decl_id: DeclStore.DeclId,
+) ?DeclStore.DeclId {
+    return self.decl_store.declResolvedTypeDecl(decl_id);
+}
+
+pub const EnumInfo = struct {
+    file_id: FileStore.FileId,
+    container_node: Ast.Node.Index,
+    is_non_exhaustive: bool,
+
+    pub fn containerDecl(
+        self: EnumInfo,
+        context: *const LintContext,
+        buffer: *[2]Ast.Node.Index,
+    ) ?Ast.full.ContainerDecl {
+        const tree = context.file_store.fileTree(self.file_id);
+        return tree.fullContainerDecl(buffer, self.container_node);
+    }
+
+    pub fn tagName(self: EnumInfo, context: *const LintContext, member: Ast.Node.Index) ?[]const u8 {
+        return enumMemberTagName(context.file_store.fileTree(self.file_id), member);
+    }
+};
+
+inline fn enumMemberTagName(tree: *const Ast, member: Ast.Node.Index) ?[]const u8 {
+    // zlinter-disable-next-line require_exhaustive_enum_switch
+    return switch (tree.nodeTag(member)) {
+        .container_field,
+        .container_field_align,
+        .container_field_init,
+        => tree.tokenSlice(tree.nodeMainToken(member)),
+        else => null,
+    };
+}
+
+/// Resolves an expression to the concrete enum declaration that determines its
+/// values. This preserves enum identity where a coarse type summary such as
+/// `.enum_instance` cannot list the enum's tags.
+pub fn resolveEnumDeclOfNode(
+    self: *LintContext,
+    doc: *const LintDocument,
+    expr_node: Ast.Node.Index,
+) ?DeclStore.DeclId {
+    const tree = doc.tree(self);
+    const node = ast.unwrapNode(tree, expr_node, .{
+        .unwrap_optional_unwrap = false,
+    });
+
+    var call_buffer: [1]Ast.Node.Index = undefined;
+    if (tree.fullCall(&call_buffer, node)) |call| {
+        const callee_decl_id = self.resolveDeclOfNode(
+            doc,
+            call.ast.fn_expr,
+        ) orelse return null;
+        return self.resolveFunctionReturnEnumDecl(callee_decl_id);
+    }
+
+    const decl_id = self.resolveDeclOfNode(doc, node) orelse return null;
+    return self.resolveDeclEnumType(decl_id);
+}
+
+/// Returns enum declaration metadata for a declaration whose value is an enum
+/// container declaration.
+pub fn enumInfo(
+    self: *LintContext,
+    decl_id: DeclStore.DeclId,
+) ?EnumInfo {
+    const file_id = self.decl_store.declFileId(decl_id);
+    const tree = self.file_store.fileTree(file_id);
+    const decl_node = self.decl_store.declAstNode(decl_id) orelse return null;
+    const var_decl = tree.fullVarDecl(decl_node) orelse return null;
+    const init_node = var_decl.ast.init_node.unwrap() orelse return null;
+    const init_expr = ast.unwrapNode(tree, init_node, .{});
+
+    var container_decl_buffer: [2]Ast.Node.Index = undefined;
+    const container_decl = tree.fullContainerDecl(
+        &container_decl_buffer,
+        init_expr,
+    ) orelse return null;
+    if (tree.tokenTag(container_decl.ast.main_token) != .keyword_enum) return null;
+
+    const info: EnumInfo = .{
+        .file_id = file_id,
+        .container_node = init_expr,
+        .is_non_exhaustive = self.enumDeclIsNonExhaustive(tree, container_decl),
+    };
+    return info;
+}
+
+/// Resolves a switch case value expression to an enum tag name, including simple
+/// aliases such as `const tag = Enum.a; tag`.
+pub fn resolveEnumTagNameOfNode(
+    self: *LintContext,
+    doc: *const LintDocument,
+    expr_node: Ast.Node.Index,
+) ?[]const u8 {
+    const tree = doc.tree(self);
+    const node = ast.unwrapNode(tree, expr_node, .{
+        .unwrap_optional_unwrap = false,
+    });
+
+    // zlinter-disable-next-line require_exhaustive_enum_switch
+    return switch (tree.nodeTag(node)) {
+        .enum_literal => tree.tokenSlice(tree.nodeMainToken(node)),
+        .field_access => tag_name: {
+            const last_token = tree.lastToken(node);
+            if (tree.tokenTag(last_token) != .identifier) break :tag_name null;
+            break :tag_name tree.tokenSlice(last_token);
+        },
+        .identifier => tag_name: {
+            const decl_id = self.resolveDeclOfNode(
+                doc,
+                node,
+            ) orelse break :tag_name null;
+            break :tag_name self.tagNameFromDeclValue(decl_id);
+        },
+        else => null,
+    };
+}
+
+fn resolveFunctionReturnEnumDecl(
+    self: *LintContext,
+    fn_decl_id: DeclStore.DeclId,
+) ?DeclStore.DeclId {
+    const file_id = self.decl_store.declFileId(fn_decl_id);
+    const tree = self.file_store.fileTree(file_id);
+    const node = self.decl_store.declAstNode(fn_decl_id) orelse return null;
+
+    var fn_proto_buffer: [1]Ast.Node.Index = undefined;
+    const fn_proto = tree.fullFnProto(
+        &fn_proto_buffer,
+        node,
+    ) orelse return null;
+    const return_type = fn_proto.ast.return_type.unwrap() orelse return null;
+    const return_decl_id = self.decl_store.resolveNodeDecl(
+        &self.file_store,
+        &self.module_store,
+        fn_decl_id,
+        return_type,
+    ) orelse return null;
+
+    return self.resolveEnumDeclAlias(return_decl_id);
+}
+
+fn resolveDeclEnumType(
+    self: *LintContext,
+    decl_id: DeclStore.DeclId,
+) ?DeclStore.DeclId {
+    if (self.enumInfo(decl_id) != null) return decl_id;
+
+    if (self.resolveDeclTypeDecl(decl_id)) |type_decl_id| {
+        if (self.resolveEnumDeclAlias(type_decl_id)) |enum_decl_id|
+            return enum_decl_id;
+    }
+
+    return self.resolveEnumDeclFromValue(decl_id);
+}
+
+fn resolveEnumDeclFromValue(
+    self: *LintContext,
+    decl_id: DeclStore.DeclId,
+) ?DeclStore.DeclId {
+    const file_id = self.decl_store.declFileId(decl_id);
+    const tree = self.file_store.fileTree(file_id);
+    const decl_node = self.decl_store.declAstNode(decl_id) orelse return null;
+    const var_decl = tree.fullVarDecl(decl_node) orelse return null;
+    const init_node = var_decl.ast.init_node.unwrap() orelse return null;
+
+    return self.resolveEnumDeclFromValueExpr(
+        decl_id,
+        init_node,
+    );
+}
+
+fn resolveEnumDeclFromValueExpr(
+    self: *LintContext,
+    context_decl_id: DeclStore.DeclId,
+    value_node: Ast.Node.Index,
+) ?DeclStore.DeclId {
+    const file_id = self.decl_store.declFileId(context_decl_id);
+    const tree = self.file_store.fileTree(file_id);
+    const node = ast.unwrapNode(tree, value_node, .{
+        .unwrap_optional_unwrap = false,
+    });
+
+    if (tree.nodeTag(node) == .field_access) {
+        const lhs, _ = tree.nodeData(node).node_and_token;
+        const lhs_decl_id = self.decl_store.resolveNodeDecl(
+            &self.file_store,
+            &self.module_store,
+            context_decl_id,
+            lhs,
+        ) orelse return null;
+        return self.resolveEnumDeclAlias(lhs_decl_id);
+    }
+
+    const target_decl_id = self.decl_store.resolveNodeDecl(
+        &self.file_store,
+        &self.module_store,
+        context_decl_id,
+        node,
+    ) orelse return null;
+    return self.resolveDeclEnumType(target_decl_id);
+}
+
+fn resolveEnumDeclAlias(
+    self: *LintContext,
+    decl_id: DeclStore.DeclId,
+) ?DeclStore.DeclId {
+    var current_decl_id = decl_id;
+    var remaining_alias_depth: u8 = 16;
+
+    while (remaining_alias_depth > 0) : (remaining_alias_depth -= 1) {
+        if (self.enumInfo(current_decl_id) != null) return current_decl_id;
+
+        const file_id = self.decl_store.declFileId(current_decl_id);
+        const tree = self.file_store.fileTree(file_id);
+        const decl_node = self.decl_store.declAstNode(current_decl_id) orelse return null;
+        const var_decl = tree.fullVarDecl(decl_node) orelse return null;
+        const init_node = var_decl.ast.init_node.unwrap() orelse return null;
+        const target_decl_id = self.decl_store.resolveNodeDecl(
+            &self.file_store,
+            &self.module_store,
+            current_decl_id,
+            init_node,
+        ) orelse return null;
+
+        if (target_decl_id == current_decl_id) return null;
+        current_decl_id = target_decl_id;
+    }
+
+    return null;
+}
+
+fn enumDeclIsNonExhaustive(
+    self: *LintContext,
+    tree: *const Ast,
+    container_decl: Ast.full.ContainerDecl,
+) bool {
+    _ = self;
+    if (container_decl.ast.members.len == 0) return false;
+    const last_member = container_decl.ast.members[container_decl.ast.members.len - 1];
+    const tag = enumMemberTagName(tree, last_member) orelse return false;
+    return std.mem.eql(u8, tag, "_");
+}
+
+fn tagNameFromDeclValue(
+    self: *LintContext,
+    decl_id: DeclStore.DeclId,
+) ?[]const u8 {
+    const file_id = self.decl_store.declFileId(decl_id);
+    const tree = self.file_store.fileTree(file_id);
+    const decl_node = self.decl_store.declAstNode(decl_id) orelse return null;
+    const var_decl = tree.fullVarDecl(decl_node) orelse return null;
+    const init_node = var_decl.ast.init_node.unwrap() orelse return null;
+
+    return self.tagNameFromValueExpr(decl_id, init_node);
+}
+
+fn tagNameFromValueExpr(
+    self: *LintContext,
+    context_decl_id: DeclStore.DeclId,
+    value_node: Ast.Node.Index,
+) ?[]const u8 {
+    const file_id = self.decl_store.declFileId(context_decl_id);
+    const tree = self.file_store.fileTree(file_id);
+    const node = ast.unwrapNode(tree, value_node, .{
+        .unwrap_optional_unwrap = false,
+    });
+
+    // zlinter-disable-next-line require_exhaustive_enum_switch
+    return switch (tree.nodeTag(node)) {
+        .enum_literal => tree.tokenSlice(tree.nodeMainToken(node)),
+        .field_access => blk: {
+            const last_token = tree.lastToken(node);
+            if (tree.tokenTag(last_token) != .identifier) break :blk null;
+            break :blk tree.tokenSlice(last_token);
+        },
+        .identifier => blk: {
+            const target_decl_id = self.decl_store.resolveNodeDecl(
+                &self.file_store,
+                &self.module_store,
+                context_decl_id,
+                node,
+            ) orelse break :blk null;
+            break :blk self.tagNameFromDeclValue(target_decl_id);
+        },
+        else => null,
+    };
 }
 
 /// Allocates the leading doc comments for a declaration without comment tokens.
@@ -614,410 +865,250 @@ pub fn rresolveTypeOfTypeNodeDeprecated(self: *LintContext, doc: *const LintDocu
 // TODO: Write tests and clean this up as they're not really all needed
 pub const TypeKind = @import("TypeStore.zig").Type;
 
-// TODO: This has gotten out of hand and really needs a revamp.... patching
-// for now to get things happy with latest changes to master but needs love
-// as not sustainable....
-/// Resolves a given declaration or container field by looking at the type
-/// node (if any) and then the value node (if any) to resolve the type.
-///
-/// This will return null if the kind could not be resolved, usually indicating
-/// that the input was unexpected / invalid.
-pub fn resolveTypeKindDeprecated(self: *LintContext, doc: *const LintDocument, input: union(enum) {
-    var_decl: Ast.full.VarDecl,
-    container_field: Ast.full.ContainerField,
-    type_node: Ast.Node.Index,
-}) !?TypeKind {
-    const is_direct_type_node = switch (input) {
-        .type_node => true,
-        else => false,
-    };
-    const maybe_type_node: ?Ast.Node.Index = switch (input) {
-        .var_decl => |var_decl| var_decl.ast.type_node.unwrap(),
-        .container_field => |container_field| container_field.ast.type_expr.unwrap(),
-        .type_node => |node| node,
-    };
-    const maybe_value_node: ?Ast.Node.Index = switch (input) {
-        .var_decl => |var_decl| var_decl.ast.init_node.unwrap(),
-        .container_field => |container_field| container_field.ast.value_expr.unwrap(),
-        .type_node => null,
-    };
+pub fn resolveDeclTypeKind(
+    self: *LintContext,
+    decl_id: DeclStore.DeclId,
+) ?TypeKind {
+    return self.resolveDeclTypeKindDepth(decl_id, 16);
+}
 
-    var container_decl_buffer: [2]Ast.Node.Index = undefined;
+fn resolveDeclTypeKindDepth(
+    self: *LintContext,
+    decl_id: DeclStore.DeclId,
+    remaining_depth: u8,
+) ?TypeKind {
+    if (remaining_depth == 0) return null;
+
+    if (self.decl_store.declResolvedType(decl_id)) |type_id| {
+        const kind = self.type_store.summary(type_id).coarseType();
+        if (kind != .other) return kind;
+    }
+
+    if (self.declResolvedTypeTarget(decl_id)) |target| {
+        if (self.typeKindFromTarget(
+            target,
+            remaining_depth - 1,
+        )) |kind| return kind;
+    }
+
+    const file_id = self.decl_store.declFileId(decl_id);
+    const tree = self.file_store.fileTree(file_id);
+    const node = self.decl_store.declAstNode(decl_id) orelse return null;
+
     var fn_proto_buffer: [1]Ast.Node.Index = undefined;
+    if (tree.fullFnProto(&fn_proto_buffer, node)) |fn_proto| {
+        return TypeStore.summarizeFnProto(
+            tree,
+            fn_proto,
+            false,
+        ).coarseType();
+    }
 
-    const tree = doc.handle.tree;
-
-    // First we try looking for a <type> node in the declaration. e.g.,
-    // `const var_name: <type> = ....`
-    if (maybe_type_node) |type_node| {
-        const node = ast.unwrapNode(tree, type_node, .{});
-
-        if (tree.fullFnProto(&fn_proto_buffer, node)) |fn_proto| {
-            if (fn_proto.ast.return_type.unwrap()) |return_node| {
-                const return_unwrapped = ast.unwrapNode(tree, return_node, .{});
-
-                // If it's a function proto, then return whether or not the function returns `type`
-                const is_type_identifier = ast.isIdentiferKind(tree, return_unwrapped, .type);
-                return if (is_type_identifier) .fn_returns_type else .@"fn";
-            } else {
-                return .@"fn";
-            }
-        } else if (tree.fullContainerDecl(&container_decl_buffer, node)) |container_decl| {
-            // If's it's a container declaration (e.g., struct {}) then resolve what type of container
-            switch (tree.tokens.items(.tag)[container_decl.ast.main_token]) {
-                // Instance of namespace should be impossible but to be safe
-                // we will just return null to say we couldn't resolve the kind
-                .keyword_struct => return if (ast.isContainerNamespace(tree, container_decl)) null else .struct_instance,
-                .keyword_union => return .union_instance,
-                .keyword_opaque => return .opaque_instance,
-                .keyword_enum => return .enum_instance,
-                inline else => |token| @panic("Unexpected container main token: " ++ @tagName(token)),
-            }
-        } else if ((tree.nodeTag(node) == .identifier and std.mem.eql(u8, tree.getNodeSource(node), "type")) or
-            ast.isIdentiferKind(tree, node, .type))
-        {
-            return .type;
-        } else if (is_direct_type_node and tree.nodeTag(node) == .identifier) {
-            const identifier_token = tree.firstToken(node);
-            const source_index = tree.tokens.items(.start)[identifier_token];
-            if (try self.deprecated.analyser.lookupSymbolGlobal(
-                doc.handle,
-                tree.tokenSlice(identifier_token),
-                source_index,
-            )) |decl_with_handle| {
-                if (decl_with_handle.decl == .ast_node) {
-                    const decl_node = decl_with_handle.decl.ast_node;
-                    if (decl_with_handle.handle.tree.fullVarDecl(decl_node)) |var_decl| {
-                        if (std.mem.eql(u8, decl_with_handle.handle.uri.raw, doc.handle.uri.raw)) {
-                            return try self.resolveTypeKindDeprecated(doc, .{ .var_decl = var_decl });
-                        }
-                    }
-
-                    var fn_decl_buffer: [1]Ast.Node.Index = undefined;
-                    if (decl_with_handle.handle.tree.fullFnProto(&fn_decl_buffer, decl_node)) |fn_proto| {
-                        if (fn_proto.ast.return_type.unwrap()) |return_node| {
-                            const return_unwrapped = ast.unwrapNode(decl_with_handle.handle.tree, return_node, .{});
-                            return if (ast.isIdentiferKind(decl_with_handle.handle.tree, return_unwrapped, .type))
-                                .fn_returns_type
-                            else
-                                .@"fn";
-                        }
-                        return .@"fn";
-                    }
-                }
-            }
-        } else if (try self.resolveTypeOfNodeDeprecated(doc, node)) |type_node_type| {
-            if (!type_node_type.is_type_val) {
-                return if (type_node_type.isTypeFunc())
-                    .fn_returns_type
-                else if (type_node_type.isFunc())
-                    .@"fn"
-                else
-                    .other;
-            }
-
-            const decl = ast.resolveDeclLiteralResultTypeSafe(type_node_type);
-
-            return if (decl.isUnionType())
-                .union_instance
-            else if (decl.isEnumType())
-                .enum_instance
-            else if (decl.isStructType(&self.deprecated.analyser))
-                .struct_instance
-            else if (decl.isTypeFunc())
-                .fn_returns_type
-            else if (decl.isFunc())
-                .@"fn"
-            else if (isTypeUnknown(type_node_type))
-                .other
-            else
-                .other;
+    if (tree.fullVarDecl(node)) |var_decl| {
+        if (var_decl.ast.type_node.unwrap()) |type_node| {
+            if (typeKindFromTypeNode(tree, type_node)) |kind| return kind;
         }
 
-        if (maybe_value_node == null) {
-            return if ((tree.nodeTag(node) == .identifier and std.mem.eql(u8, tree.getNodeSource(node), "type")) or
-                ast.isIdentiferKind(tree, node, .type))
-                .type
-            else
-                .other;
+        if (var_decl.ast.init_node.unwrap()) |init_node| {
+            return self.typeKindFromValueNode(
+                decl_id,
+                init_node,
+                remaining_depth - 1,
+            );
         }
     }
 
-    // Then we look at the initialisation <value> if a type couldn't be used
-    // from then declaration. e.g., `const var_name = <value>`
-    if (maybe_value_node) |value_node| {
-        const node = ast.unwrapNode(tree, value_node, .{
-            .unwrap_optional_unwrap = false,
-        });
-
-        if (tree.nodeTag(node) == .identifier) {
-            const identifier_token = tree.firstToken(node);
-            const source_index = tree.tokens.items(.start)[identifier_token];
-            if (try self.deprecated.analyser.lookupSymbolGlobal(
-                doc.handle,
-                tree.tokenSlice(identifier_token),
-                source_index,
-            )) |decl_with_handle| {
-                if (decl_with_handle.decl == .ast_node) {
-                    const decl_node = decl_with_handle.decl.ast_node;
-                    if (decl_with_handle.handle.tree.fullVarDecl(decl_node)) |var_decl| {
-                        if (std.mem.eql(u8, decl_with_handle.handle.uri.raw, doc.handle.uri.raw)) {
-                            return try self.resolveTypeKindDeprecated(doc, .{ .var_decl = var_decl });
-                        }
-                    }
-                }
-            }
-        }
-        if (tree.nodeTag(node) == .field_access) {
-            const lhs = tree.nodeData(node).node_and_token.@"0";
-            if (tree.nodeTag(lhs) == .identifier) {
-                lhs_lookup: {
-                    const lhs_token = tree.firstToken(lhs);
-                    const lhs_source_index = tree.tokens.items(.start)[lhs_token];
-                    const decl_with_handle = (try self.deprecated.analyser.lookupSymbolGlobal(
-                        doc.handle,
-                        tree.tokenSlice(lhs_token),
-                        lhs_source_index,
-                    )) orelse break :lhs_lookup;
-                    if (decl_with_handle.decl != .ast_node) break :lhs_lookup;
-
-                    const decl_node = decl_with_handle.decl.ast_node;
-                    const var_decl = decl_with_handle.handle.tree.fullVarDecl(decl_node) orelse break :lhs_lookup;
-                    const init_node = var_decl.ast.init_node.unwrap() orelse break :lhs_lookup;
-                    const container_decl = decl_with_handle.handle.tree.fullContainerDecl(&container_decl_buffer, init_node) orelse break :lhs_lookup;
-                    const container_token_tag = decl_with_handle.handle.tree.tokens.items(.tag)[container_decl.ast.main_token];
-                    if (container_token_tag == .keyword_enum) return .enum_instance;
-                }
-            }
-
-            var arena_allocator = std.heap.ArenaAllocator.init(self.gpa);
-            defer arena_allocator.deinit();
-            const arena = arena_allocator.allocator();
-
-            if (try self.resolveDecl(doc.handle, node, arena)) |decl_with_handle| {
-                if (decl_with_handle.decl == .ast_node) {
-                    const decl_node = decl_with_handle.decl.ast_node;
-                    if (decl_with_handle.handle.tree.nodeTag(decl_node) == .enum_literal) {
-                        return .enum_instance;
-                    }
-                }
-            }
+    if (tree.fullContainerField(node)) |container_field| {
+        if (container_field.ast.type_expr.unwrap()) |type_node| {
+            if (typeKindFromTypeNode(tree, type_node)) |kind| return kind;
         }
 
-        var struct_init_buffer: [2]Ast.Node.Index = undefined;
-        var fn_proto_from_init_buffer: [1]Ast.Node.Index = undefined;
-        if (tree.fullStructInit(&struct_init_buffer, node)) |struct_init| {
-            if (struct_init.ast.type_expr.unwrap()) |init_type_expr| {
-                const init_type = ast.unwrapNode(tree, init_type_expr, .{});
-                if (tree.fullFnProto(&fn_proto_from_init_buffer, init_type)) |fn_proto| {
-                    if (fn_proto.ast.return_type.unwrap()) |return_node| {
-                        const return_unwrapped = ast.unwrapNode(tree, return_node, .{});
-                        return if (ast.isIdentiferKind(tree, return_unwrapped, .type))
-                            .fn_returns_type
-                        else
-                            .@"fn";
-                    }
-                    return .@"fn";
-                }
-
-                if (tree.nodeTag(init_type) == .identifier) {
-                    const type_name_token = tree.firstToken(init_type);
-                    const source_index = tree.tokens.items(.start)[type_name_token];
-                    if (try self.deprecated.analyser.lookupSymbolGlobal(
-                        doc.handle,
-                        tree.tokenSlice(type_name_token),
-                        source_index,
-                    )) |decl_with_handle| {
-                        if (decl_with_handle.decl == .ast_node) {
-                            const decl_node = decl_with_handle.decl.ast_node;
-                            if (decl_with_handle.handle.tree.fullContainerDecl(&container_decl_buffer, decl_node)) |container_decl| {
-                                if (ast.isContainerNamespace(decl_with_handle.handle.tree, container_decl)) return null;
-                            }
-                            if (decl_with_handle.handle.tree.fullVarDecl(decl_node)) |var_decl| {
-                                if (var_decl.ast.init_node.unwrap()) |init_node| {
-                                    if (decl_with_handle.handle.tree.fullContainerDecl(&container_decl_buffer, init_node)) |container_decl| {
-                                        const container_token_tag = decl_with_handle.handle.tree.tokens.items(.tag)[container_decl.ast.main_token];
-                                        switch (container_token_tag) {
-                                            .keyword_struct => {
-                                                if (ast.isContainerNamespace(decl_with_handle.handle.tree, container_decl)) return null;
-                                                return .struct_instance;
-                                            },
-                                            .keyword_union => return .union_instance,
-                                            .keyword_enum => return .enum_instance,
-                                            .keyword_opaque => return .opaque_instance,
-                                            else => {},
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else return null;
-                }
-            }
-        }
-
-        if (tree.nodeTag(node) == .address_of) {
-            const target_node = tree.nodeData(node).node;
-
-            var fn_proto_buffer_addr_of: [1]Ast.Node.Index = undefined;
-            const target_unwrapped = ast.unwrapNode(tree, target_node, .{
-                .unwrap_optional_unwrap = false,
-            });
-            if (tree.fullFnProto(&fn_proto_buffer_addr_of, target_unwrapped)) |fn_proto| {
-                if (fn_proto.ast.return_type.unwrap()) |return_node| {
-                    const return_unwrapped = ast.unwrapNode(tree, return_node, .{});
-                    return if (ast.isIdentiferKind(tree, return_unwrapped, .type))
-                        .fn_returns_type
-                    else
-                        .@"fn";
-                }
-                return .@"fn";
-            }
-
-            var arena_allocator = std.heap.ArenaAllocator.init(self.gpa);
-            defer arena_allocator.deinit();
-            const arena = arena_allocator.allocator();
-            if (try self.resolveDecl(doc.handle, target_node, arena)) |decl_with_handle| {
-                if (decl_with_handle.decl == .ast_node) {
-                    const decl_node = decl_with_handle.decl.ast_node;
-                    if (decl_with_handle.handle.tree.fullFnProto(&fn_proto_buffer_addr_of, decl_node)) |fn_proto| {
-                        if (fn_proto.ast.return_type.unwrap()) |return_node| {
-                            const return_unwrapped = ast.unwrapNode(decl_with_handle.handle.tree, return_node, .{});
-                            return if (ast.isIdentiferKind(decl_with_handle.handle.tree, return_unwrapped, .type))
-                                .fn_returns_type
-                            else
-                                .@"fn";
-                        }
-                        return .@"fn";
-                    }
-                }
-            }
-        }
-
-        // LIMITATION: All builtin calls to type of and type will return
-        // `type` without any resolution.
-        switch (tree.nodeTag(node)) {
-            .builtin_call_two,
-            .builtin_call_two_comma,
-            .builtin_call,
-            .builtin_call_comma,
-            => inline for (&.{ "@Type", "@TypeOf" }) |builtin_name| {
-                if (std.mem.eql(u8, builtin_name, tree.tokenSlice(tree.nodeMainToken(node)))) {
-                    return .type;
-                }
-            },
-            .error_set_decl,
-            .merge_error_sets,
-            => return .error_type,
-            else => {},
-        }
-
-        if (tree.fullContainerDecl(&container_decl_buffer, node)) |container_decl| {
-            return switch (tree.tokens.items(.tag)[container_decl.ast.main_token]) {
-                .keyword_struct => if (ast.isContainerNamespace(tree, container_decl)) .namespace_type else .struct_type,
-                .keyword_union => .union_type,
-                .keyword_opaque => .opaque_type,
-                .keyword_enum => .enum_type,
-                inline else => |token| @panic("Unexpected container main token: " ++ @tagName(token)),
-            };
-        } else if (try self.resolveTypeOfNodeDeprecated(doc, node)) |init_node_type| {
-            if (!init_node_type.is_type_val) {
-                return if (init_node_type.isTypeFunc())
-                    .fn_returns_type
-                else if (init_node_type.isFunc())
-                    .@"fn"
-                else
-                    .other;
-            }
-
-            const decl = ast.resolveDeclLiteralResultTypeSafe(init_node_type);
-
-            const is_error_container =
-                if (std.meta.hasMethod(@TypeOf(decl), "isErrorSetType"))
-                    decl.isErrorSetType(&self.deprecated.analyser)
-                else switch (decl.data) {
-                    .container => |container| result: {
-                        const container_node, const container_tree = .{ container.scope_handle.toNode(), container.scope_handle.handle.tree };
-
-                        if (container_node != .root) {
-                            switch (container_tree.nodeTag(container_node)) {
-                                .error_set_decl => break :result true,
-                                else => {},
-                            }
-                        }
-                        break :result false;
-                    },
-                    else => false,
-                };
-
-            const is_type_val = init_node_type.is_type_val;
-            if (!is_type_val and decl.data == .container) {
-                const container_node = decl.data.container.scope_handle.toNode();
-                if (container_node != .root) {
-                    const container_tree = decl.data.container.scope_handle.handle.tree;
-                    const container_token = container_tree.nodeMainToken(container_node);
-                    switch (container_tree.tokenTag(container_token)) {
-                        .keyword_struct => {
-                            var buf: [2]Ast.Node.Index = undefined;
-                            if (container_tree.fullContainerDecl(&buf, container_node)) |container_decl| {
-                                if (ast.isContainerNamespace(container_tree, container_decl)) return null;
-                            }
-                            return .struct_instance;
-                        },
-                        .keyword_union => return .union_instance,
-                        .keyword_opaque => return .opaque_instance,
-                        .keyword_enum => return .enum_instance,
-                        else => {},
-                    }
-                }
-            }
-
-            return if (is_error_container)
-                .error_type
-            else if (decl.isNamespace())
-                if (is_type_val) .namespace_type else null
-            else if (decl.isUnionType())
-                if (is_type_val) .union_type else .union_instance
-            else if (decl.isEnumType())
-                if (is_type_val) .enum_type else .enum_instance
-            else if (decl.isOpaqueType())
-                if (is_type_val) .opaque_type else null
-            else if (decl.isStructType(&self.deprecated.analyser))
-                if (is_type_val) .struct_type else .struct_instance
-            else if (decl.isTypeFunc())
-                if (is_type_val) .fn_type_returns_type else .fn_returns_type
-            else if (decl.isFunc())
-                if (is_type_val) .fn_type else .@"fn"
-            else if (decl.isMetaType())
-                .type
-            else if (is_type_val)
-                if (init_node_type.isErrorSetType(&self.deprecated.analyser))
-                    .error_type
-                else switch (init_node_type.data) {
-                    // TODO: Maybe this can be merged with what isErrorSet
-                    // is doing to be less branches.
-                    .ip_index => .type,
-                    else => null,
-                }
-            else if (try self.isCallReturningType(doc.handle, node))
-                return .type
-            else if (isTypeUnknown(init_node_type))
-                return null
-            else
-                return .other;
+        if (container_field.ast.value_expr.unwrap()) |value_node| {
+            return self.typeKindFromValueNode(
+                decl_id,
+                value_node,
+                remaining_depth - 1,
+            );
         }
     }
 
     return null;
 }
 
-/// Returns true if a resolved type is unknown. Typically this means that
-/// a linter should ignore any checks that rely on a type (e.g., naming styles)
-fn isTypeUnknown(node_type: zls.Analyser.Type) bool {
-    return switch (node_type.data) {
-        .ip_index => |info| info.type == .unknown_type or
-            info.type == .unknown_unknown,
-        else => false,
+fn typeKindFromTarget(
+    self: *LintContext,
+    target: DeclStore.TypeTarget,
+    remaining_depth: u8,
+) ?TypeKind {
+    return switch (target) {
+        .decl => |decl_id| self.resolveDeclTypeKindDepth(
+            decl_id,
+            remaining_depth,
+        ),
+        .container => |container| blk: {
+            const tree = self.file_store.fileTree(container.file_id);
+            if (@intFromEnum(container.node) >= tree.nodes.len) break :blk null;
+
+            var buffer: [2]Ast.Node.Index = undefined;
+            const container_decl = tree.fullContainerDecl(
+                &buffer,
+                container.node,
+            ) orelse break :blk null;
+
+            break :blk containerDeclTypeKind(tree, container_decl);
+        },
+    };
+}
+
+fn typeKindFromTypeNode(
+    tree: *const Ast,
+    type_node: Ast.Node.Index,
+) ?TypeKind {
+    const summary = TypeStore.summarizeTypeNode(
+        tree,
+        type_node,
+    );
+
+    return switch (summary) {
+        .kind => |kind| kind,
+        .primitive, .reference => null,
+    };
+}
+
+fn typeKindFromValueNode(
+    self: *LintContext,
+    context_decl_id: DeclStore.DeclId,
+    value_node: Ast.Node.Index,
+    remaining_depth: u8,
+) ?TypeKind {
+    if (remaining_depth == 0) return null;
+
+    const tree = self.file_store.fileTree(
+        self.decl_store.declFileId(context_decl_id),
+    );
+    const summary = TypeStore.summarizeValueNode(
+        tree,
+        value_node,
+    ) orelse return null;
+
+    switch (summary) {
+        .kind => |kind| return kind,
+        .primitive => return .other,
+        .reference => {},
+    }
+
+    const node = ast.unwrapNode(tree, value_node, .{
+        .unwrap_optional_unwrap = false,
+    });
+
+    if (valueExprIsTypeInfoProjection(tree, node)) return .type;
+
+    if (typeKindFromTypeValueExpr(tree, node)) |kind| return kind;
+
+    var struct_init_buffer: [2]Ast.Node.Index = undefined;
+    if (tree.fullStructInit(&struct_init_buffer, node)) |struct_init| {
+        if (struct_init.ast.type_expr.unwrap()) |type_expr| {
+            if (typeKindFromTypeNode(tree, type_expr)) |kind| return kind;
+        }
+    }
+
+    var call_buffer: [1]Ast.Node.Index = undefined;
+    if (tree.fullCall(&call_buffer, node)) |call| {
+        const callee_decl_id = self.decl_store.resolveNodeDecl(
+            &self.file_store,
+            &self.module_store,
+            context_decl_id,
+            call.ast.fn_expr,
+        ) orelse return null;
+        if (self.resolveDeclTypeKindDepth(
+            callee_decl_id,
+            remaining_depth - 1,
+        ) == .fn_returns_type) return .type;
+    }
+
+    if (tree.nodeTag(node) == .address_of) {
+        const target_node = tree.nodeData(node).node;
+        const target_decl_id = self.decl_store.resolveNodeDecl(
+            &self.file_store,
+            &self.module_store,
+            context_decl_id,
+            target_node,
+        ) orelse return null;
+
+        return self.resolveDeclTypeKindDepth(
+            target_decl_id,
+            remaining_depth - 1,
+        );
+    }
+
+    const target_decl_id = self.decl_store.resolveNodeDecl(
+        &self.file_store,
+        &self.module_store,
+        context_decl_id,
+        node,
+    ) orelse return null;
+
+    return self.resolveDeclTypeKindDepth(
+        target_decl_id,
+        remaining_depth - 1,
+    );
+}
+
+fn typeKindFromTypeValueExpr(
+    tree: *const Ast,
+    node: Ast.Node.Index,
+) ?TypeKind {
+    const summary = TypeStore.summarizeTypeNode(
+        tree,
+        node,
+    );
+    return switch (summary) {
+        .kind => |kind| kind,
+        .primitive => .type,
+        .reference => null,
+    };
+}
+
+fn valueExprIsTypeInfoProjection(
+    tree: *const Ast,
+    node: Ast.Node.Index,
+) bool {
+    const tag = tree.nodeTag(node);
+    switch (tag) {
+        .unwrap_optional => {
+            const target_node = tree.nodeData(node).node_and_token[0];
+            return valueExprIsTypeInfoProjection(tree, target_node);
+        },
+        .field_access => {
+            const target_node, _ = tree.nodeData(node).node_and_token;
+            return valueExprIsTypeInfoProjection(tree, target_node);
+        },
+        .builtin_call,
+        .builtin_call_comma,
+        .builtin_call_two,
+        .builtin_call_two_comma,
+        => return std.mem.eql(
+            u8,
+            tree.tokenSlice(tree.nodeMainToken(node)),
+            "@typeInfo",
+        ),
+        else => return false,
+    }
+}
+
+fn containerDeclTypeKind(
+    tree: *const Ast,
+    container_decl: Ast.full.ContainerDecl,
+) TypeKind {
+    return switch (tree.tokenTag(container_decl.ast.main_token)) {
+        .keyword_struct => if (ast.isContainerNamespace(
+            tree,
+            container_decl,
+        )) .namespace_type else .struct_type,
+        .keyword_union => .union_type,
+        .keyword_enum => .enum_type,
+        .keyword_opaque => .opaque_type,
+        else => .other,
     };
 }
 
@@ -1473,29 +1564,29 @@ test "LintContext.resolveTypeKind" {
             test_case.contents,
             arena.allocator(),
         );
-        std.testing.expectEqual(doc.handle.tree.errors.len, 0) catch |err| {
+        std.testing.expectEqual(doc.tree(&context).errors.len, 0) catch |err| {
             std.debug.print("Failed to parse AST:\n{s}\n", .{test_case.contents});
-            for (doc.handle.tree.errors) |ast_err| {
+            for (doc.tree(&context).errors) |ast_err| {
                 var buffer: [1024]u8 = undefined;
 
                 var writer = std.Io.File.stderr().writer(std.testing.io, &buffer).interface;
-                try doc.handle.tree.renderError(ast_err, &writer);
+                try doc.tree(&context).renderError(ast_err, &writer);
                 try writer.flush();
             }
             return err;
         };
 
-        const node = doc.handle.tree.rootDecls()[0];
-        const actual_kind = if (doc.handle.tree.fullVarDecl(node)) |var_decl|
+        const node = doc.tree(&context).rootDecls()[0];
+        const actual_kind = if (doc.tree(&context).fullVarDecl(node)) |var_decl|
             try context.resolveTypeKindDeprecated(doc, .{ .var_decl = var_decl })
-        else if (doc.handle.tree.fullContainerField(node)) |container_field|
+        else if (doc.tree(&context).fullContainerField(node)) |container_field|
             try context.resolveTypeKindDeprecated(doc, .{ .container_field = container_field })
         else
             @panic("Fail");
 
         std.testing.expectEqual(test_case.kind, actual_kind) catch |e| {
             const border: [50]u8 = @splat('-');
-            std.debug.print("Node:\n{s}\n{s}\n{s}\n", .{ border, doc.handle.tree.getNodeSource(node), border });
+            std.debug.print("Node:\n{s}\n{s}\n{s}\n", .{ border, doc.tree(&context).getNodeSource(node), border });
             std.debug.print("Expected: {any}\n", .{test_case.kind});
             std.debug.print("Actual: {any}\n", .{actual_kind});
             std.debug.print("Contents:\n{s}\n{s}\n{s}\n", .{ border, test_case.contents, border });
@@ -1523,5 +1614,21 @@ const TypeStore = @import("TypeStore.zig");
 const Ast = std.zig.Ast;
 
 test {
-    std.testing.refAllDecls(@This());
+    refAllDeclsExcept(@This(), &.{
+        "resolveTypeOfNodeDeprecated",
+        "rresolveTypeOfTypeNodeDeprecated",
+    });
+}
+
+fn refAllDeclsExcept(comptime T: type, comptime excluded_declarations: []const []const u8) void {
+    if (!builtin.is_test) return;
+    inline for (comptime std.meta.declarations(T)) |decl_name| {
+        comptime {
+            for (excluded_declarations) |excluded_declaration| {
+                if (std.mem.eql(u8, decl_name, excluded_declaration)) break;
+            } else {
+                _ = &@field(T, decl_name);
+            }
+        }
+    }
 }

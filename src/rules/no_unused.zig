@@ -135,7 +135,7 @@ fn run(
 
 /// Returns fn proto if node is fn declaration and has a name token.
 fn namedFnDeclProto(
-    tree: Ast,
+    tree: *const Ast,
     buffer: *[1]Ast.Node.Index,
     node: Ast.Node.Index,
 ) ?Ast.full.FnProto {

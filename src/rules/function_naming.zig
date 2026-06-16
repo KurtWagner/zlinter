@@ -214,12 +214,12 @@ fn run(
 }
 
 fn functionReturnTypeKind(
-    tree: Ast,
+    tree: *const Ast,
     fn_proto: Ast.full.FnProto,
 ) ?zlinter.session.LintContext.TypeKind {
     const return_type_node = fn_proto.ast.return_type.unwrap() orelse return null;
     return zlinter.session.TypeStore.summarizeTypeNode(
-        &tree,
+        tree,
         return_type_node,
     ).coarseType();
 }
@@ -229,7 +229,7 @@ fn functionReturnTypeKind(
 fn classifyParamTypeKind(
     context: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
-    tree: Ast,
+    tree: *const Ast,
     param: Ast.Node.Index,
     seen_param_kinds: []const ParamKind,
 ) ?zlinter.session.LintContext.TypeKind {
@@ -240,7 +240,7 @@ fn classifyParamTypeKind(
     );
 
     var type_kind: ?zlinter.session.LintContext.TypeKind =
-        zlinter.session.TypeStore.summarizeTypeNode(&tree, param).coarseType();
+        zlinter.session.TypeStore.summarizeTypeNode(tree, param).coarseType();
     if ((type_kind orelse .other) != .other) {
         if (type_kind == .type) {
             const is_type_literal = tree.nodeTag(param_type_node) == .identifier and
@@ -278,7 +278,7 @@ fn classifyParamTypeKind(
 }
 
 /// Returns fn proto if node is fn proto and has a name token.
-pub fn namedFnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?Ast.full.FnProto {
+pub fn namedFnProto(tree: *const Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?Ast.full.FnProto {
     if (fnProto(tree, buffer, node)) |fn_proto| {
         if (fn_proto.name_token != null) return fn_proto;
     }
@@ -286,7 +286,7 @@ pub fn namedFnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index)
 }
 
 /// Returns fn proto if node is fn proto and has a name token.
-pub fn fnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?Ast.full.FnProto {
+pub fn fnProto(tree: *const Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?Ast.full.FnProto {
     if (switch (tree.nodeTag(node)) {
         .fn_proto => tree.fnProto(node),
         .fn_proto_multi => tree.fnProtoMulti(node),

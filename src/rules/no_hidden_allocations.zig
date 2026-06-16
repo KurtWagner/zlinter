@@ -94,42 +94,21 @@ fn run(
         };
         if (!is_allocator_method) continue :nodes;
 
-        const decl_name, const uri = decl_name_and_uri: {
-            if (try context.deprecated.analyser.resolveVarDeclAlias(
-                .{
-                    .decl = .{ .ast_node = lhs },
-                    .handle = doc.handle,
-                    .container_type = null,
-                },
-            )) |decl_handle| {
-                const uri = decl_handle.handle.uri;
-
-                const name: []const u8 = name: switch (decl_handle.decl) {
-                    .ast_node => |ast_node| {
-                        if (decl_handle.handle.tree.fullVarDecl(ast_node)) |var_decl| {
-                            if (var_decl.ast.init_node.unwrap()) |init_node| {
-                                _ = init_node;
-                                // TODO: If .call_one then check return value
-                                // std.debug.print("{} - {s}\n", .{
-                                //     decl_handle.handle.tree.nodeTag(init_node),
-                                //     decl_handle.handle.tree.getNodeSource(init_node),
-                                // });
-                            }
-
-                            const name_token = var_decl.ast.mut_token + 1;
-                            break :name decl_handle.handle.tree.tokenSlice(name_token);
-                        }
-                        break :name null;
-                    },
-                    else => break :name null,
-                } orelse continue :nodes;
-                break :decl_name_and_uri .{ name, uri };
-            } else continue :nodes;
-        };
+        const decl_id = resolveAllocatorDecl(
+            context,
+            doc,
+            lhs,
+        ) orelse continue :nodes;
+        const decl_file_id = context.decl_store.declFileId(decl_id);
+        const decl_tree = context.file_store.fileTree(decl_file_id);
+        const decl_name_token = context.decl_store.declNameToken(decl_id) orelse
+            continue :nodes;
+        const decl_name = decl_tree.tokenSlice(decl_name_token);
+        const decl_abs_path = context.file_store.fileAbsPath(decl_file_id);
 
         var is_problem: bool = false;
         for (config.detect_allocators) |allocator_kind| {
-            if (!std.mem.endsWith(u8, uri.raw, allocator_kind.file_ends_with)) continue;
+            if (!std.mem.endsWith(u8, decl_abs_path, allocator_kind.file_ends_with)) continue;
             if (!std.mem.eql(u8, decl_name, allocator_kind.decl_name)) continue;
 
             is_problem = true;
@@ -154,6 +133,55 @@ fn run(
         )
     else
         null;
+}
+
+fn resolveAllocatorDecl(
+    context: *zlinter.session.LintContext,
+    doc: *const zlinter.session.LintDocument,
+    lhs: Ast.Node.Index,
+) ?zlinter.session.DeclStore.DeclId {
+    const decl_id = context.resolveDeclOfNode(doc, lhs) orelse return null;
+    return resolveDeclAlias(context, decl_id);
+}
+
+/// Allocators are often reached through local aliases.
+///
+/// For example,
+///
+/// ```
+/// const heap = std.heap;
+/// const allocator = heap.page_allocator;
+/// allocator.alloc(...);
+/// ```
+///
+/// This function walks `allocator` -> `heap.page_allocator` -> `std.heap.page_allocator`
+/// so detection is based on the original allocator declaration, not the
+/// alias declarations or their common `std.mem.Allocator` type.
+fn resolveDeclAlias(
+    context: *zlinter.session.LintContext,
+    decl_id: zlinter.session.DeclStore.DeclId,
+) zlinter.session.DeclStore.DeclId {
+    var current_decl_id = decl_id;
+    var remaining_alias_depth: u8 = 16; // Cap to avoid getting caught in a loop.
+
+    while (remaining_alias_depth > 0) : (remaining_alias_depth -= 1) {
+        const file_id = context.decl_store.declFileId(current_decl_id);
+        const tree = context.file_store.fileTree(file_id);
+        const decl_node = context.decl_store.declAstNode(current_decl_id) orelse return current_decl_id;
+        const var_decl = tree.fullVarDecl(decl_node) orelse return current_decl_id;
+        const init_node = var_decl.ast.init_node.unwrap() orelse return current_decl_id;
+        const target_decl_id = context.decl_store.resolveNodeDecl(
+            &context.file_store,
+            &context.module_store,
+            current_decl_id,
+            init_node,
+        ) orelse return current_decl_id;
+
+        if (target_decl_id == current_decl_id) return current_decl_id;
+        current_decl_id = target_decl_id;
+    }
+
+    return current_decl_id;
 }
 
 test {

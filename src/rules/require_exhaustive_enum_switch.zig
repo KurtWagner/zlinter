@@ -88,27 +88,21 @@ fn run(
 
         const switch_info = tree.fullSwitch(node) orelse continue :nodes;
 
-        const switch_expr_type = try context.resolveTypeOfNodeDeprecated(
-            doc,
-            switch_info.ast.condition,
-        ) orelse continue :nodes;
+        const switch_expr_enum_decl = context.resolveEnumDeclOfNode(doc, switch_info.ast.condition) orelse continue :nodes;
 
-        const resolved_switch_expr_type = zlinter.ast.resolveDeclLiteralResultTypeSafe(switch_expr_type);
-        if (!resolved_switch_expr_type.isEnumType()) continue :nodes;
-
-        var switch_expr_enum = try zlinter.ast.getEnumInfoFromType(
-            resolved_switch_expr_type,
-            gpa,
-        ) orelse continue :nodes;
-        defer switch_expr_enum.deinit(gpa);
-
+        const switch_expr_enum = context.enumInfo(switch_expr_enum_decl) orelse continue :nodes;
         if (switch_expr_enum.is_non_exhaustive) continue :nodes;
-        if (switch_expr_enum.tags.len == 0) continue :nodes;
+
+        var enum_member_buffer: [2]Ast.Node.Index = undefined;
+        const enum_container_decl = switch_expr_enum.containerDecl(context, &enum_member_buffer) orelse continue :nodes;
+        const enum_members = enum_container_decl.ast.members;
+        if (enum_members.len == 0) continue :nodes;
 
         defer complete_tag_set.clearRetainingCapacity();
-        try complete_tag_set.ensureTotalCapacity(@intCast(switch_expr_enum.tags.len));
-        for (switch_expr_enum.tags) |tag| {
-            complete_tag_set.putAssumeCapacity(tag, {});
+        try complete_tag_set.ensureTotalCapacity(@intCast(enum_members.len));
+        for (enum_members) |member| {
+            if (switch_expr_enum.tagName(context, member)) |tag|
+                complete_tag_set.putAssumeCapacity(tag, {});
         }
 
         // Set if an else case exists in switch
@@ -122,12 +116,7 @@ fn run(
                 if (else_case_node == null) else_case_node = case_node;
             } else {
                 case_values: for (switch_case.ast.values) |value_node| {
-                    const tag_name = try tagNameFromSwitchCaseValue(
-                        context,
-                        doc,
-                        tree,
-                        value_node,
-                    ) orelse continue :case_values;
+                    const tag_name = context.resolveEnumTagNameOfNode(doc, value_node) orelse continue :case_values;
 
                     if (complete_tag_set.contains(tag_name))
                         try used_tag_set.put(tag_name, {});
@@ -138,10 +127,9 @@ fn run(
         if (else_case_node != null) {
             missing_tags.clearRetainingCapacity();
 
-            for (switch_expr_enum.tags) |tag| {
-                if (!used_tag_set.contains(tag)) {
-                    try missing_tags.append(gpa, tag);
-                }
+            for (enum_members) |member| {
+                const tag = switch_expr_enum.tagName(context, member) orelse continue;
+                if (!used_tag_set.contains(tag)) try missing_tags.append(gpa, tag);
             }
 
             try lint_problems.append(gpa, .{
@@ -162,63 +150,6 @@ fn run(
         )
     else
         null;
-}
-
-fn tagNameFromSwitchCaseValue(
-    context: *zlinter.session.LintContext,
-    doc: *const zlinter.session.LintDocument,
-    tree: Ast,
-    node: Ast.Node.Index,
-) error{OutOfMemory}!?[]const u8 {
-    return switch (tree.nodeTag(node)) {
-        // e.g., `.a`
-        .enum_literal => tree.tokenSlice(tree.nodeMainToken(node)),
-        // e.g., `a` where `a = MyEnum.a`
-        .identifier => try tagNameForIdentifier(context, doc, tree, node),
-        // e.g., `MyEnum.a`
-        .field_access => blk: {
-            const last_token = tree.lastToken(node);
-            if (tree.tokenTag(last_token) != .identifier) break :blk null;
-            break :blk tree.tokenSlice(last_token);
-        },
-        else => {
-            std.log.err(
-                "require_exhaustive_enum_switch: unhandled switch case value node tag: {t}",
-                .{tree.nodeTag(node)},
-            );
-            return null;
-        },
-    } orelse null;
-}
-
-fn tagNameForIdentifier(
-    context: *zlinter.session.LintContext,
-    doc: *const zlinter.session.LintDocument,
-    tree: Ast,
-    node: Ast.Node.Index,
-) error{OutOfMemory}!?[]const u8 {
-    const token = tree.nodeMainToken(node);
-    std.debug.assert(tree.tokenTag(token) == .identifier);
-
-    const tag_name = tree.tokenSlice(token);
-    const decl = try context.deprecated.analyser.lookupSymbolGlobal(
-        doc.handle,
-        tag_name,
-        tree.tokenStart(token),
-    );
-
-    if (decl) |decl_node| {
-        const token_with_handle = decl_node.definitionToken(
-            &context.deprecated.analyser,
-            true,
-        ) catch |e| switch (e) {
-            error.OutOfMemory => return error.OutOfMemory,
-            error.Canceled => unreachable,
-        };
-        return token_with_handle.handle.tree.tokenSlice(token_with_handle.token);
-    }
-
-    return null;
 }
 
 fn buildProblemMessage(missing: []const []const u8, gpa: std.mem.Allocator) ![]const u8 {
