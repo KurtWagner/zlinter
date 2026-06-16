@@ -848,27 +848,6 @@ fn contextScopeForNode(
     return self.decl_store.scopeByNode(doc.file_id, .root);
 }
 
-/// Resolves the type of node or null if it can't be resolved.
-pub fn resolveTypeOfNodeDeprecated(_: *LintContext, _: *const LintDocument, _: Ast.Node.Index) !?zls.Analyser.Type {
-    return null;
-}
-
-/// Resolves the type of a node that points to a type (e.g., return type) or
-/// null if it cannot be resolved.
-pub fn rresolveTypeOfTypeNodeDeprecated(self: *LintContext, doc: *const LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
-    const resolved_type = try self.resolveTypeOfNodeDeprecated(doc, node) orelse return null;
-    const instance_type = if (resolved_type.isMetaType()) resolved_type else try resolved_type.instanceTypeVal(&self.deprecated.analyser) orelse resolved_type;
-
-    return ast.resolveDeclLiteralResultTypeSafe(instance_type);
-}
-
-pub fn resolveDeclTypeKind(
-    self: *LintContext,
-    decl_id: DeclStore.DeclId,
-) ?TypeStore.Type {
-    return self.resolveDeclTypeKindDepth(decl_id, 16);
-}
-
 pub fn resolveDeclValueKind(
     self: *LintContext,
     decl_id: DeclStore.DeclId,
@@ -1303,46 +1282,6 @@ fn containerDeclTypeKind(
         .keyword_opaque => .opaque_type,
         else => .other,
     };
-}
-
-/// Returns true if it's a call to a function that returns `type`.
-///
-/// For example:
-///
-/// ```
-/// const MyType = BuildType();
-/// //             ~~~~~~~~~~~  <---- this node would return true
-///
-/// fn BuildType() type {
-///   return struct {
-///     // ...
-///   };
-/// }
-/// ```
-///
-/// Returns false if not a call or if the call is to a function that does
-/// not return `type`.
-fn isCallReturningType(
-    self: *LintContext,
-    handle: *zls.DocumentStore.Handle,
-    node: Ast.Node.Index,
-) !bool {
-    var arena = std.heap.ArenaAllocator.init(self.gpa);
-    defer arena.deinit();
-
-    const child = (try self.resolveFnDecl(
-        handle,
-        node,
-        arena.allocator(),
-    )) orelse return false;
-
-    var fn_buffer: [1]Ast.Node.Index = undefined;
-    const return_type = child.handle.tree.fullFnProto(
-        &fn_buffer,
-        child.decl.ast_node,
-    ).?.ast.return_type.unwrap() orelse return false;
-    return child.handle.tree.nodeTag(return_type) == .identifier and
-        std.mem.eql(u8, child.handle.tree.getNodeSource(return_type), "type");
 }
 
 /// Resolves the declaration of a function from a function call.
@@ -1808,8 +1747,6 @@ const Ast = std.zig.Ast;
 
 test {
     refAllDeclsExcept(@This(), &.{
-        "resolveTypeOfNodeDeprecated",
-        "rresolveTypeOfTypeNodeDeprecated",
     });
 }
 

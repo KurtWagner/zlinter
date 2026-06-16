@@ -202,28 +202,6 @@ pub fn summarizeFnProto(
     else if (returns_type) .fn_returns_type else .@"fn";
 }
 
-pub fn summarizeVarDecl(
-    tree: *const Ast,
-    var_decl: Ast.full.VarDecl,
-) ?TypeSummary {
-    return summarizeDeclType(
-        tree,
-        var_decl.ast.type_node.unwrap(),
-        var_decl.ast.init_node.unwrap(),
-    );
-}
-
-pub fn summarizeContainerField(
-    tree: *const Ast,
-    field: Ast.full.ContainerField,
-) ?TypeSummary {
-    return summarizeDeclType(
-        tree,
-        field.ast.type_expr.unwrap(),
-        field.ast.value_expr.unwrap(),
-    );
-}
-
 pub fn summarizeValueNode(
     tree: *const Ast,
     value_node: Ast.Node.Index,

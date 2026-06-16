@@ -134,9 +134,5 @@ pub fn fileAbsPath(self: *const FileStore, id: FileId) []const u8 {
     return self.files.items(.abs_path)[id.toIndex()];
 }
 
-pub fn resolvedFile(self: *const FileStore, abs_path: []const u8) ?FileId {
-    return self.path_to_index.get(abs_path);
-}
-
 const std = @import("std");
 const tracy = @import("tracy");

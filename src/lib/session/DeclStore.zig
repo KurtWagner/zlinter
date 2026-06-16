@@ -33,23 +33,6 @@ const Decl = struct {
     resolved_type: ?TypeStore.TypeId = null,
     resolved_type_target: ?TypeTarget = null,
 
-    // TODO: #149 - just example of pattern to lookup things without duplicating, prob wont live here, places can call ast.* itself
-    /// Returns the declaration visibility when it can be derived from the AST node.
-    pub fn visibility(self: Decl, file_store: *const FileStore) ast.Visibility {
-        const node = self.ast_node orelse return .private;
-        const tree = file_store.fileTree(self.file_id);
-
-        if (tree.fullVarDecl(node)) |var_decl| {
-            return ast.varDeclVisibility(tree, var_decl);
-        }
-
-        var fn_proto_buffer: [1]std.zig.Ast.Node.Index = undefined;
-        if (tree.fullFnProto(&fn_proto_buffer, node)) |fn_proto| {
-            return ast.fnProtoVisibility(tree, fn_proto);
-        }
-
-        return .private;
-    }
 };
 
 const Scope = struct {
