@@ -68,7 +68,7 @@ pub const BuilderOptions = struct {
     /// For enormous projects consider using `.ReleaseFast`.
     optimize: std.builtin.OptimizeMode = .ReleaseSafe,
 
-    /// Enable Tracy integration using the pinned Tracy 0.11.1 dependency.
+    /// Enable Tracy integration using the pinned Tracy 0.13.1 dependency.
     tracy: bool = false,
     tracy_callstack: bool = false,
     tracy_allocation: bool = false,
@@ -218,7 +218,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const test_coverage = b.option(bool, "coverage", "Generate a coverage report with kcov");
     const test_focus_on_rule = b.option([]const u8, "test_focus_on_rule", "Only run tests for this rule");
-    const tracy = b.option(bool, "tracy", "Enable Tracy integration using the pinned Tracy 0.11.1 dependency") orelse false;
+    const tracy = b.option(bool, "tracy", "Enable Tracy integration using the pinned Tracy 0.13.1 dependency") orelse false;
     const tracy_callstack = b.option(bool, "tracy-callstack", "Include callstack information with Tracy data. Does nothing if -Dtracy is not provided. Default: false") orelse false;
     const tracy_allocation = b.option(bool, "tracy-allocation", "Include allocation information with Tracy data. Does nothing if -Dtracy is not provided. Default: false") orelse false;
     const tracy_callstack_depth = b.option(u32, "tracy-callstack-depth", "Declare callstack depth for Tracy data. Does nothing if -Dtracy-callstack is not provided. Default: 10") orelse 10;
