@@ -241,13 +241,16 @@ fn classifyParamTypeKind(
 
     var type_kind: ?zlinter.session.LintContext.TypeKind =
         zlinter.session.TypeStore.summarizeTypeNode(tree, param).coarseType();
-    if ((type_kind orelse .other) != .other) {
-        if (type_kind == .type) {
-            const is_type_literal = tree.nodeTag(param_type_node) == .identifier and
-                std.mem.eql(u8, tree.getNodeSource(param_type_node), "type");
-            if (!is_type_literal) return .other;
-        }
-        return type_kind;
+    switch (type_kind orelse .other) {
+        .unknown, .other, .primitive => {},
+        else => {
+            if (type_kind == .type) {
+                const is_type_literal = tree.nodeTag(param_type_node) == .identifier and
+                    std.mem.eql(u8, tree.getNodeSource(param_type_node), "type");
+                if (!is_type_literal) return .other;
+            }
+            return type_kind;
+        },
     }
 
     if (tree.nodeTag(param_type_node) != .identifier) return type_kind;
@@ -269,7 +272,10 @@ fn classifyParamTypeKind(
             type_kind = context.type_store.summary(type_id).coarseType();
         }
     }
-    if ((type_kind orelse .other) != .other) return type_kind;
+    switch (type_kind orelse .other) {
+        .unknown, .other, .primitive => {},
+        else => return type_kind,
+    }
 
     if (std.mem.endsWith(u8, type_name, "FnType")) return .fn_type_returns_type;
     if (std.mem.endsWith(u8, type_name, "Type")) return .type;

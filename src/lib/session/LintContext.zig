@@ -953,7 +953,10 @@ fn resolveDeclTypeKindDepth(
 
     if (self.decl_store.declResolvedType(decl_id)) |type_id| {
         const kind = self.type_store.summary(type_id).coarseType();
-        if (kind != .other) return kind;
+        switch (kind) {
+            .unknown, .other, .primitive => {},
+            else => return kind,
+        }
     }
 
     if (self.declResolvedTypeTarget(decl_id)) |target| {
@@ -1042,8 +1045,8 @@ fn typeKindFromTypeNode(
     );
 
     return switch (summary) {
-        .kind => |kind| kind,
-        .primitive, .reference => null,
+        .unknown, .primitive => null,
+        inline else => |_, tag| tag,
     };
 }
 
@@ -1093,9 +1096,9 @@ fn typeKindFromValueNode(
     ) orelse return null;
 
     switch (summary) {
-        .kind => |kind| return kind,
+        .unknown => {},
         .primitive => return .other,
-        .reference => {},
+        inline else => |_, tag| return tag,
     }
 
     if (valueExprIsTypeInfoProjection(tree, node)) return .type;
@@ -1256,9 +1259,9 @@ fn typeKindFromTypeValueExpr(
         node,
     );
     return switch (summary) {
-        .kind => |kind| kind,
+        .unknown => null,
         .primitive => .type,
-        .reference => null,
+        inline else => |_, tag| tag,
     };
 }
 

@@ -20,9 +20,13 @@ pub const TypeId = enum(u32) {
 
 // TODO: #149 - using this for compat with previous versions but can rethink this.
 pub const Type = enum {
+    /// Fallback when the summary cannot identify the expression as any known
+    /// type category yet.
+    unknown,
     /// Fallback when it's not a type or any of the identifiable `*_instance`
     /// kinds - usually this means its a primitive. e.g., `var age: u32 = 24;`
     other,
+    primitive,
     /// e.g., has type `fn () void`
     @"fn",
     /// e.g., has type `fn () type`
@@ -54,7 +58,9 @@ pub const Type = enum {
 
     pub fn name(self: Type) []const u8 {
         return switch (self) {
+            .unknown => "Unknown",
             .other => "Other",
+            .primitive => "Primitive",
             .@"fn" => "Function",
             .fn_returns_type => "Type function",
             .opaque_instance => "Opaque instance",
@@ -74,26 +80,36 @@ pub const Type = enum {
     }
 };
 
-pub const TypeSummary = union(enum) {
-    kind: Type,
+pub const TypeSummary = union(Type) {
+    unknown,
+    other,
     primitive: Primitive,
-    reference: []const u8,
+    @"fn",
+    fn_returns_type,
+    opaque_instance,
+    enum_instance,
+    struct_instance,
+    union_instance,
+    error_type,
+    fn_type,
+    fn_type_returns_type,
+    type,
+    enum_type,
+    struct_type,
+    namespace_type,
+    union_type,
+    opaque_type,
 
     pub fn coarseType(self: TypeSummary) Type {
-        return switch (self) {
-            .kind => |kind| kind,
-            .primitive => .other,
-            .reference => .other,
-        };
+        return std.meta.activeTag(self);
     }
 
     fn eql(a: TypeSummary, b: TypeSummary) bool {
         if (std.meta.activeTag(a) != std.meta.activeTag(b)) return false;
 
         return switch (a) {
-            .kind => |a_kind| a_kind == b.kind,
             .primitive => |a_primitive| a_primitive.eql(b.primitive),
-            .reference => |a_reference| std.mem.eql(u8, a_reference, b.reference),
+            else => true,
         };
     }
 };
@@ -158,18 +174,17 @@ pub fn summary(self: *const TypeStore, type_id: TypeId) TypeSummary {
 
 pub fn debugPrintSummary(summary_value: TypeSummary) void {
     switch (summary_value) {
-        .kind => |kind| std.debug.print("{s}", .{kind.name()}),
         .primitive => |primitive| switch (primitive) {
             .bool => std.debug.print("bool", .{}),
             .number => |number| std.debug.print("{s}", .{number.name}),
             .named => |name| std.debug.print("{s}", .{name}),
         },
-        .reference => |source| std.debug.print("{s}", .{source}),
+        inline else => |_, tag| std.debug.print("{s}", .{tag.name()}),
     }
 }
 // TODO: #149 - perhaps this can be more general - `summarize(node)` and switches out instead of expecting caller to do it?
 pub fn summarizeRoot() TypeSummary {
-    return .{ .kind = .namespace_type };
+    return .namespace_type;
 }
 
 pub fn summarizeFnProto(
@@ -182,11 +197,9 @@ pub fn summarizeFnProto(
         break :returns_type ast.isIdentiferKind(tree, unwrapped_return, .type);
     } else false;
 
-    return .{
-        .kind = if (as_type_value)
-            if (returns_type) .fn_type_returns_type else .fn_type
-        else if (returns_type) .fn_returns_type else .@"fn",
-    };
+    return if (as_type_value)
+        if (returns_type) .fn_type_returns_type else .fn_type
+    else if (returns_type) .fn_returns_type else .@"fn";
 }
 
 pub fn summarizeVarDecl(
@@ -231,7 +244,7 @@ pub fn summarizeTypeNode(
     type_node: Ast.Node.Index,
 ) TypeSummary {
     return summarizeTypeExpr(tree, type_node) orelse
-        .{ .reference = tree.getNodeSource(type_node) };
+        .unknown;
 }
 
 fn summarizeDeclType(
@@ -259,7 +272,7 @@ fn summarizeTypeExpr(
     if (tree.nodeTag(node) == .identifier) {
         const name = tree.getNodeSource(node);
         if (primitiveFromName(name)) |primitive| return .{ .primitive = primitive };
-        if (std.mem.eql(u8, name, "type")) return .{ .kind = .type };
+        if (std.mem.eql(u8, name, "type")) return .type;
     }
 
     var fn_proto_buffer: [1]Ast.Node.Index = undefined;
@@ -275,7 +288,7 @@ fn summarizeTypeExpr(
     switch (tree.nodeTag(node)) {
         .error_set_decl,
         .merge_error_sets,
-        => return .{ .kind = .error_type },
+        => return .error_type,
         else => return null,
     }
 }
@@ -294,7 +307,7 @@ fn summarizeValueExpr(
             if (std.mem.eql(u8, value, "true") or std.mem.eql(u8, value, "false")) {
                 return .{ .primitive = .bool };
             }
-            if (std.mem.eql(u8, value, "type")) return .{ .kind = .type };
+            if (std.mem.eql(u8, value, "type")) return .type;
         },
         .number_literal => {
             const value = tree.getNodeSource(node);
@@ -310,16 +323,16 @@ fn summarizeValueExpr(
         },
         .error_set_decl,
         .merge_error_sets,
-        => return .{ .kind = .error_type },
+        => return .error_type,
         .builtin_call_two,
         .builtin_call_two_comma,
         .builtin_call,
         .builtin_call_comma,
         => {
             const builtin_name = tree.tokenSlice(tree.nodeMainToken(node));
-            if (std.mem.eql(u8, builtin_name, "@import")) return .{ .kind = .namespace_type };
+            if (std.mem.eql(u8, builtin_name, "@import")) return .namespace_type;
             if (std.mem.eql(u8, builtin_name, "@Type") or std.mem.eql(u8, builtin_name, "@TypeOf")) {
-                return .{ .kind = .type };
+                return .type;
             }
         },
         else => {},
@@ -335,7 +348,7 @@ fn summarizeValueExpr(
         return summarizeContainerDecl(tree, container_decl, .type_value);
     }
 
-    return .{ .reference = tree.getNodeSource(value_node) };
+    return .unknown;
 }
 
 fn summarizeContainerDecl(
@@ -344,7 +357,7 @@ fn summarizeContainerDecl(
     comptime mode: enum { instance, type_value },
 ) TypeSummary {
     const token_tag = tree.tokenTag(container_decl.ast.main_token);
-    return .{ .kind = switch (token_tag) {
+    return switch (token_tag) {
         .keyword_struct => switch (mode) {
             .instance => if (ast.isContainerNamespace(tree, container_decl)) .namespace_type else .struct_instance,
             .type_value => if (ast.isContainerNamespace(tree, container_decl)) .namespace_type else .struct_type,
@@ -362,7 +375,7 @@ fn summarizeContainerDecl(
             .type_value => .enum_type,
         },
         inline else => |token| @panic("Unexpected container main token: " ++ @tagName(token)),
-    } };
+    };
 }
 
 fn primitiveFromName(name: []const u8) ?Primitive {
