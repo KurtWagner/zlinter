@@ -99,13 +99,13 @@ fn run(
             const fn_name_token = fn_proto.name_token.?;
             const fn_name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(fn_name_token));
 
-            const return_type = (try context.rresolveTypeOfTypeNodeDeprecated(
-                doc,
-                fn_proto.ast.return_type.unwrap().?,
-            )) orelse continue :nodes;
+            const return_type = functionReturnTypeKind(
+                tree,
+                fn_proto,
+            ) orelse continue :nodes;
 
             const error_message: ?[]const u8, const severity: ?zlinter.rules.LintProblemSeverity = msg: {
-                if (return_type.isMetaType()) {
+                if (return_type == .type) {
                     if (!config.function_that_returns_type.style.check(fn_name)) {
                         break :msg .{
                             try std.fmt.allocPrint(gpa, "Callable returning `type` should be {s}", .{config.function_that_returns_type.style.name()}),
@@ -161,7 +161,7 @@ fn run(
 
                 if (identifier.len == 1 and identifier[0] == '_') continue;
 
-                const type_kind = try classifyParamTypeKind(
+                const type_kind = classifyParamTypeKind(
                     context,
                     doc,
                     tree,
@@ -213,6 +213,17 @@ fn run(
         null;
 }
 
+fn functionReturnTypeKind(
+    tree: Ast,
+    fn_proto: Ast.full.FnProto,
+) ?zlinter.session.LintContext.TypeKind {
+    const return_type_node = fn_proto.ast.return_type.unwrap() orelse return null;
+    return zlinter.session.TypeStore.summarizeTypeNode(
+        &tree,
+        return_type_node,
+    ).coarseType();
+}
+
 // TODO: Move this classification into a shared helper (e.g., in session/context)
 // so declaration_naming and field_naming can reuse the same logic.
 fn classifyParamTypeKind(
@@ -221,17 +232,15 @@ fn classifyParamTypeKind(
     tree: Ast,
     param: Ast.Node.Index,
     seen_param_kinds: []const ParamKind,
-) !?zlinter.session.LintContext.TypeKind {
+) ?zlinter.session.LintContext.TypeKind {
     const param_type_node = zlinter.ast.unwrapNode(
         tree,
         param,
         .{},
     );
 
-    var type_kind = try context.resolveTypeKindDeprecated(
-        doc,
-        .{ .type_node = param },
-    );
+    var type_kind: ?zlinter.session.LintContext.TypeKind =
+        zlinter.session.TypeStore.summarizeTypeNode(&tree, param).coarseType();
     if ((type_kind orelse .other) != .other) {
         if (type_kind == .type) {
             const is_type_literal = tree.nodeTag(param_type_node) == .identifier and
@@ -255,30 +264,12 @@ fn classifyParamTypeKind(
         }
     }
 
-    const type_name_token = tree.firstToken(param_type_node);
-    const source_index = tree.tokens.items(.start)[type_name_token];
-    if (try context.deprecated.analyser.lookupSymbolGlobal(
-        doc.handle,
-        type_name,
-        source_index,
-    )) |decl_with_handle| {
-        if (decl_with_handle.decl == .ast_node) {
-            if (decl_with_handle.handle.tree.fullVarDecl(
-                decl_with_handle.decl.ast_node,
-            )) |var_decl| {
-                type_kind = try context.resolveTypeKindDeprecated(
-                    doc,
-                    .{ .var_decl = var_decl },
-                );
-            }
+    if (context.resolveDeclOfNode(doc, param_type_node)) |decl_id| {
+        if (context.decl_store.declResolvedType(decl_id)) |type_id| {
+            type_kind = context.type_store.summary(type_id).coarseType();
         }
     }
     if ((type_kind orelse .other) != .other) return type_kind;
-
-    if (try context.rresolveTypeOfTypeNodeDeprecated(doc, param)) |param_type| {
-        if (param_type.isTypeFunc()) return .fn_type_returns_type;
-        if (param_type.isFunc()) return .fn_type;
-    }
 
     if (std.mem.endsWith(u8, type_name, "FnType")) return .fn_type_returns_type;
     if (std.mem.endsWith(u8, type_name, "Type")) return .type;
