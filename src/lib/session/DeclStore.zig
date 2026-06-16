@@ -52,12 +52,14 @@ const Decl = struct {
 };
 
 const Scope = struct {
+    file_id: FileStore.FileId,
+    owner_node: std.zig.Ast.Node.Index,
     parent_scope_id: ?ScopeId,
     owner_decl_id: ?DeclId,
     decl_by_name: std.StringHashMapUnmanaged(DeclId),
 };
 
-const ScopeId = enum(u32) {
+pub const ScopeId = enum(u32) {
     _,
 
     pub fn fromIndex(index: usize) ScopeId {
@@ -109,6 +111,8 @@ pub fn store(
 
     const root_scope_id = self.appendScope(
         gpa,
+        file_id,
+        .root,
         null,
         root_decl_id,
     );
@@ -238,11 +242,40 @@ pub fn resolveNodeDecl(
         return self.rootDecl(file_id);
     }
 
-    return self.resolveExprDecl(
+    const scope_id = self.declScopeId(context_decl_id) orelse return null;
+    return self.resolveExprDeclFromScope(
         file_store,
         module_store,
-        context_decl_id,
+        file_id,
+        scope_id,
         node,
+        context_decl_id,
+    );
+}
+
+/// Resolves an expression node to the declaration it names from a lexical scope.
+pub fn resolveNodeDeclFromScope(
+    self: *DeclStore,
+    file_store: *FileStore,
+    module_store: *const ModuleStore,
+    file_id: FileStore.FileId,
+    scope_id: ScopeId,
+    node: std.zig.Ast.Node.Index,
+) ?DeclId {
+    const tree = file_store.fileTree(file_id);
+    const unwrapped = ast.unwrapNode(tree.*, node, .{
+        .unwrap_optional_unwrap = false,
+    });
+    if (isThisBuiltinCall(tree, unwrapped))
+        return self.rootDecl(file_id);
+
+    return self.resolveExprDeclFromScope(
+        file_store,
+        module_store,
+        file_id,
+        scope_id,
+        node,
+        null,
     );
 }
 
@@ -263,6 +296,22 @@ pub fn rootDecl(
     file_id: FileStore.FileId,
 ) ?DeclId {
     return self.fileRootDecl(file_id);
+}
+
+/// Returns the lexical scope owned by an AST node, if one was recorded.
+pub fn scopeByNode(
+    self: *const DeclStore,
+    file_id: FileStore.FileId,
+    node: std.zig.Ast.Node.Index,
+) ?ScopeId {
+    for (
+        self.scopes.items(.file_id),
+        self.scopes.items(.owner_node),
+        0..,
+    ) |scope_file_id, owner_node, index| {
+        if (scope_file_id == file_id and owner_node == node) return .fromIndex(index);
+    }
+    return null;
 }
 
 /// Returns the declaration that should be treated as the container identity.
@@ -292,6 +341,22 @@ pub fn resolvedContainerDecl(
     }
 
     return decl_id;
+}
+
+/// Resolves the declaration named by a declaration's type expression.
+pub fn resolveDeclTypeDecl(
+    self: *DeclStore,
+    file_store: *FileStore,
+    module_store: *const ModuleStore,
+    decl_id: DeclId,
+) ?DeclId {
+    const type_node = self.declTypeNode(decl_id) orelse return null;
+    return self.resolveTypeExprDecl(
+        file_store,
+        module_store,
+        decl_id,
+        type_node,
+    );
 }
 
 /// Looks up a declaration by name directly within a scope.
@@ -414,27 +479,49 @@ fn resolveExprDecl(
     decl_id: DeclId,
     expr_node: std.zig.Ast.Node.Index,
 ) ?DeclId {
-    const tree = file_store.fileTree(self.declFileId(decl_id));
+    const file_id = self.declFileId(decl_id);
+    const scope_id = self.declScopeId(decl_id) orelse return null;
+    return self.resolveExprDeclFromScope(
+        file_store,
+        module_store,
+        file_id,
+        scope_id,
+        expr_node,
+        decl_id,
+    );
+}
+
+fn resolveExprDeclFromScope(
+    self: *DeclStore,
+    file_store: *FileStore,
+    module_store: *const ModuleStore,
+    file_id: FileStore.FileId,
+    scope_id: ScopeId,
+    expr_node: std.zig.Ast.Node.Index,
+    skip_decl_id: ?DeclId,
+) ?DeclId {
+    const tree = file_store.fileTree(file_id);
     const node = ast.unwrapNode(tree.*, expr_node, .{
         .unwrap_optional_unwrap = false,
     });
 
     switch (tree.nodeTag(node)) {
         .identifier => {
-            const scope_id = self.declScopeId(decl_id) orelse return null;
             return self.lookupVisibleDecl(
                 scope_id,
                 tree.getNodeSource(node),
-                decl_id,
+                skip_decl_id,
             );
         },
         .field_access => {
             const target_node, const member_token = tree.nodeData(node).node_and_token;
-            const target_decl_id = self.resolveExprDecl(
+            const target_decl_id = self.resolveExprDeclFromScope(
                 file_store,
                 module_store,
-                decl_id,
+                file_id,
+                scope_id,
                 target_node,
+                skip_decl_id,
             ) orelse return null;
 
             return self.resolveMemberDecl(
@@ -465,7 +552,7 @@ fn resolveFunctionDeclReturnType(
     return TypeStore.summarizeFnReturnType(tree, fn_proto);
 }
 
-fn resolveMemberDecl(
+pub fn resolveMemberDecl(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
@@ -502,6 +589,39 @@ fn resolveMemberDecl(
         member_name,
     )) |decl_id| {
         return decl_id;
+    }
+
+    if (self.resolveExprDecl(
+        file_store,
+        module_store,
+        parent_decl_id,
+        init_node,
+    )) |target_decl_id| {
+        if (target_decl_id != parent_decl_id) {
+            if (self.resolveMemberDecl(
+                file_store,
+                module_store,
+                target_decl_id,
+                member_name,
+            )) |decl_id| return decl_id;
+        }
+    }
+
+    var struct_init_buffer: [2]std.zig.Ast.Node.Index = undefined;
+    if (tree.fullStructInit(&struct_init_buffer, init_node)) |struct_init| {
+        const type_expr = struct_init.ast.type_expr.unwrap() orelse return null;
+        const type_decl_id = self.resolveTypeExprDecl(
+            file_store,
+            module_store,
+            parent_decl_id,
+            type_expr,
+        ) orelse return null;
+        return self.resolveMemberDecl(
+            file_store,
+            module_store,
+            type_decl_id,
+            member_name,
+        );
     }
 
     var container_decl_buffer: [2]std.zig.Ast.Node.Index = undefined;
@@ -693,12 +813,12 @@ fn lookupVisibleDecl(
     self: *const DeclStore,
     start_scope_id: ScopeId,
     name: []const u8,
-    skip_decl_id: DeclId,
+    skip_decl_id: ?DeclId,
 ) ?DeclId {
     var maybe_scope_id: ?ScopeId = start_scope_id;
     while (maybe_scope_id) |scope_id| {
         if (self.scopeDecl(scope_id, name)) |decl_id| {
-            if (decl_id == skip_decl_id) return null;
+            if (skip_decl_id != null and decl_id == skip_decl_id.?) return null;
             return decl_id;
         }
         maybe_scope_id = self.scopes.items(.parent_scope_id)[scope_id.toIndex()];
@@ -760,11 +880,15 @@ fn fileRootDecl(
 fn appendScope(
     self: *DeclStore,
     gpa: std.mem.Allocator,
+    file_id: FileStore.FileId,
+    owner_node: std.zig.Ast.Node.Index,
     parent_scope_id: ?ScopeId,
     owner_decl_id: ?DeclId,
 ) ScopeId {
     const scope_id: ScopeId = .fromIndex(self.scopes.len);
     self.scopes.append(gpa, .{
+        .file_id = file_id,
+        .owner_node = owner_node,
         .parent_scope_id = parent_scope_id,
         .owner_decl_id = owner_decl_id,
         .decl_by_name = .empty,
@@ -878,6 +1002,8 @@ fn walkNode(
         => {
             const container_scope_id = self.appendScope(
                 gpa,
+                file_id,
+                node,
                 scope_id,
                 null,
             );
@@ -1001,6 +1127,8 @@ fn walkFn(
     const fn_proto = tree.fullFnProto(&buffer, node).?;
     const fn_scope_id = self.appendScope(
         gpa,
+        file_id,
+        node,
         parent_scope_id,
         null,
     );
@@ -1061,6 +1189,8 @@ fn walkBlock(
 ) void {
     const block_scope_id = self.appendScope(
         gpa,
+        file_id,
+        node,
         parent_scope_id,
         null,
     );

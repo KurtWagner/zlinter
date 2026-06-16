@@ -483,6 +483,80 @@ pub fn resolveTypeOfNode(
 }
 
 /// Resolves `node` to the declaration it directly names.
+pub fn resolveDeclOfNode(
+    self: *LintContext,
+    doc: *const LintDocument,
+    node: Ast.Node.Index,
+) ?DeclStore.DeclId {
+    return self.immediateDeclForNode(doc, node);
+}
+
+/// Resolves a member declaration from a container/type declaration.
+pub fn resolveDeclMember(
+    self: *LintContext,
+    parent_decl_id: DeclStore.DeclId,
+    member_name: []const u8,
+) ?DeclStore.DeclId {
+    return self.decl_store.resolveMemberDecl(
+        &self.file_store,
+        &self.module_store,
+        parent_decl_id,
+        member_name,
+    );
+}
+
+/// Resolves the declaration named by a declaration's type expression.
+pub fn resolveDeclTypeDecl(
+    self: *LintContext,
+    decl_id: DeclStore.DeclId,
+) ?DeclStore.DeclId {
+    return self.decl_store.resolveDeclTypeDecl(
+        &self.file_store,
+        &self.module_store,
+        decl_id,
+    );
+}
+
+/// Allocates the leading doc comments for a declaration without comment tokens.
+pub fn allocDeclDocComments(
+    self: *const LintContext,
+    allocator: std.mem.Allocator,
+    decl_id: DeclStore.DeclId,
+) !?[]const u8 {
+    const node = self.decl_store.declAstNode(decl_id) orelse return null;
+    if (node == .root) return null;
+
+    const file_id = self.decl_store.declFileId(decl_id);
+    const tree = self.file_store.fileTree(file_id);
+    const first_token = tree.firstToken(node);
+    if (first_token == 0) return null;
+
+    var first_doc_token = first_token;
+    while (first_doc_token > 0 and tree.tokenTag(first_doc_token - 1) == .doc_comment) {
+        first_doc_token -= 1;
+    }
+    if (first_doc_token == first_token) return null;
+
+    var comments_text = std.ArrayList(u8).empty;
+    errdefer comments_text.deinit(allocator);
+
+    var token = first_doc_token;
+    while (token < first_token) : (token += 1) {
+        if (token != first_doc_token) try comments_text.append(allocator, '\n');
+
+        const raw = tree.tokenSlice(token);
+        const without_marker = if (std.mem.startsWith(u8, raw, "///") or
+            std.mem.startsWith(u8, raw, "//!"))
+            raw[3..]
+        else
+            raw;
+        try comments_text.appendSlice(allocator, without_marker);
+    }
+
+    return try comments_text.toOwnedSlice(allocator);
+}
+
+/// Resolves `node` to the declaration it directly names.
 ///
 /// Expression lookup needs a lexical starting point, so this first finds the
 /// nearest declaration containing `node` and then resolves from that scope.
@@ -491,41 +565,36 @@ fn immediateDeclForNode(
     doc: *const LintDocument,
     node: Ast.Node.Index,
 ) ?DeclStore.DeclId {
-    const context_decl_id = self.contextDeclForNode(
-        doc,
-        node,
-    ) orelse
-        return null;
+    const context_scope_id = self.contextScopeForNode(doc, node) orelse return null;
 
-    return self.decl_store.resolveNodeDecl(
+    return self.decl_store.resolveNodeDeclFromScope(
         &self.file_store,
         &self.module_store,
-        context_decl_id,
+        doc.file_id,
+        context_scope_id,
         node,
     );
 }
 
-/// Finds the declaration whose scope should anchor lookup for `node`.
+/// Finds the innermost lexical scope that contains `node`.
 ///
-/// This is about where the expression appears, not what it refers to. For an
-/// expression inside a function body this will usually be the function decl,
-/// if no closer declaration is found, lookup starts at the file root.
-fn contextDeclForNode(
+/// Scope ownership is recorded by `DeclStore` while walking the AST. Use
+/// document lineage here instead of token positions so local variables and
+/// function parameters resolve from their actual block/function scope.
+fn contextScopeForNode(
     self: *const LintContext,
     doc: *const LintDocument,
     node: Ast.Node.Index,
-) ?DeclStore.DeclId {
+) ?DeclStore.ScopeId {
     var current: ?Ast.Node.Index = node;
     while (current) |current_node| {
-        if (self.decl_store.declByNode(
-            doc.file_id,
-            current_node,
-        )) |decl_id|
-            return decl_id;
+        if (self.decl_store.scopeByNode(doc.file_id, current_node)) |scope_id| {
+            return scope_id;
+        }
 
         current = doc.lineage.items(.parent)[@intFromEnum(current_node)];
     }
-    return self.decl_store.rootDecl(doc.file_id);
+    return self.decl_store.scopeByNode(doc.file_id, .root);
 }
 
 /// Resolves the type of node or null if it can't be resolved.

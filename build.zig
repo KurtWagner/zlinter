@@ -1007,7 +1007,6 @@ const skipped_rule_unit_tests = [_][]const u8{
     // TODO: #149 - bring these rules back once their integration tests are stable.
     "declaration_naming",
     "function_naming",
-    "no_deprecated",
     "require_exhaustive_enum_switch",
 };
 
