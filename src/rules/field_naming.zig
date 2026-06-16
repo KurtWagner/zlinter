@@ -218,7 +218,7 @@ fn run(
             fields: for (container_decl.ast.members) |member| {
                 if (tree.fullContainerField(member)) |container_field| {
                     const type_kind = if (context.decl_store.declByNode(doc.file_id, member)) |decl_id|
-                        context.resolveDeclTypeKind(decl_id)
+                        context.resolveDeclValueKind(decl_id)
                     else
                         null;
                     const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const container_kind: zlinter.session.LintContext.TypeKind = tuple: {
@@ -342,6 +342,43 @@ test "run - implicit struct (root struct)" {
                 .severity = .@"error",
                 .slice = "notGood",
                 .message = "Struct fields should be snake_case",
+            },
+        },
+    );
+}
+
+test "run - struct fields classify values, not annotated concrete types" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\
+        \\const Token = enum(u32) { alpha };
+        \\const namespace = struct { const value = 1; };
+        \\const Struct = struct {
+        \\    first: Token,
+        \\    last: ?Token,
+        \\    namespace_value: namespace,
+        \\    TypeField: type,
+        \\    bad_type: type,
+        \\    FnField: *const fn () type,
+        \\    bad_fn: *const fn () void,
+        \\};
+        \\
+        \\const problem: ?struct { first: Token, last: Token } = null;
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "field_naming",
+                .severity = .@"error",
+                .slice = "bad_type",
+                .message = "Type fields should be TitleCase",
+            },
+            .{
+                .rule_id = "field_naming",
+                .severity = .@"error",
+                .slice = "bad_fn",
+                .message = "Function fields should be camelCase",
             },
         },
     );

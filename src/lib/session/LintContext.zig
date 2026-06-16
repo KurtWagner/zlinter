@@ -872,6 +872,78 @@ pub fn resolveDeclTypeKind(
     return self.resolveDeclTypeKindDepth(decl_id, 16);
 }
 
+pub fn resolveDeclValueKind(
+    self: *LintContext,
+    decl_id: DeclStore.DeclId,
+) ?TypeKind {
+    return self.resolveDeclValueKindDepth(decl_id, 16);
+}
+
+fn resolveDeclValueKindDepth(
+    self: *LintContext,
+    decl_id: DeclStore.DeclId,
+    remaining_depth: u8,
+) ?TypeKind {
+    if (remaining_depth == 0) return null;
+
+    const file_id = self.decl_store.declFileId(decl_id);
+    const tree = self.file_store.fileTree(file_id);
+    const node = self.decl_store.declAstNode(decl_id) orelse return null;
+
+    if (node == .root) {
+        return if (ast.isRootImplicitStruct(tree)) .struct_type else .namespace_type;
+    }
+
+    var fn_proto_buffer: [1]Ast.Node.Index = undefined;
+    if (tree.fullFnProto(&fn_proto_buffer, node)) |fn_proto| {
+        return TypeStore.summarizeFnProto(
+            tree,
+            fn_proto,
+            false,
+        ).coarseType();
+    }
+
+    if (tree.fullVarDecl(node)) |var_decl| {
+        const init_node = var_decl.ast.init_node.unwrap();
+        if (var_decl.ast.type_node.unwrap()) |type_node| {
+            if (typeKindFromValueTypeNode(tree, type_node)) |kind| {
+                return kind;
+            }
+
+            return .other;
+        }
+
+        if (init_node) |value_node| {
+            return self.typeKindFromValueNode(
+                decl_id,
+                value_node,
+                remaining_depth - 1,
+            );
+        }
+    }
+
+    if (tree.fullContainerField(node)) |container_field| {
+        const value_node = container_field.ast.value_expr.unwrap();
+        if (container_field.ast.type_expr.unwrap()) |type_node| {
+            if (typeKindFromValueTypeNode(tree, type_node)) |kind| {
+                return kind;
+            }
+
+            return .other;
+        }
+
+        if (value_node) |expr| {
+            return self.typeKindFromValueNode(
+                decl_id,
+                expr,
+                remaining_depth - 1,
+            );
+        }
+    }
+
+    return null;
+}
+
 fn resolveDeclTypeKindDepth(
     self: *LintContext,
     decl_id: DeclStore.DeclId,
@@ -975,6 +1047,19 @@ fn typeKindFromTypeNode(
     };
 }
 
+fn typeKindFromValueTypeNode(
+    tree: *const Ast,
+    type_node: Ast.Node.Index,
+) ?TypeKind {
+    return switch (typeKindFromTypeNode(tree, type_node) orelse return null) {
+        .type,
+        .@"fn",
+        .fn_returns_type,
+        => |kind| kind,
+        else => null,
+    };
+}
+
 fn typeKindFromValueNode(
     self: *LintContext,
     context_decl_id: DeclStore.DeclId,
@@ -986,6 +1071,22 @@ fn typeKindFromValueNode(
     const tree = self.file_store.fileTree(
         self.decl_store.declFileId(context_decl_id),
     );
+    const node = ast.unwrapNode(tree, value_node, .{
+        .unwrap_optional_unwrap = false,
+    });
+
+    if (isImportBuiltinCall(tree, node)) {
+        const target_decl_id = self.resolveImportRootDecl(
+            self.decl_store.declFileId(context_decl_id),
+            node,
+        ) orelse return null;
+
+        return self.resolveDeclValueKindDepth(
+            target_decl_id,
+            remaining_depth - 1,
+        );
+    }
+
     const summary = TypeStore.summarizeValueNode(
         tree,
         value_node,
@@ -996,10 +1097,6 @@ fn typeKindFromValueNode(
         .primitive => return .other,
         .reference => {},
     }
-
-    const node = ast.unwrapNode(tree, value_node, .{
-        .unwrap_optional_unwrap = false,
-    });
 
     if (valueExprIsTypeInfoProjection(tree, node)) return .type;
 
@@ -1035,7 +1132,7 @@ fn typeKindFromValueNode(
             target_node,
         ) orelse return null;
 
-        return self.resolveDeclTypeKindDepth(
+        return self.resolveDeclValueKindDepth(
             target_decl_id,
             remaining_depth - 1,
         );
@@ -1048,10 +1145,106 @@ fn typeKindFromValueNode(
         node,
     ) orelse return null;
 
-    return self.resolveDeclTypeKindDepth(
+    return self.resolveDeclValueKindDepth(
         target_decl_id,
         remaining_depth - 1,
     );
+}
+
+fn isImportBuiltinCall(tree: *const Ast, node: Ast.Node.Index) bool {
+    return switch (tree.nodeTag(node)) {
+        .builtin_call,
+        .builtin_call_comma,
+        .builtin_call_two,
+        .builtin_call_two_comma,
+        => std.mem.eql(
+            u8,
+            tree.tokenSlice(tree.nodeMainToken(node)),
+            "@import",
+        ),
+        else => false,
+    };
+}
+
+fn resolveImportRootDecl(
+    self: *LintContext,
+    parent_file_id: FileStore.FileId,
+    node: Ast.Node.Index,
+) ?DeclStore.DeclId {
+    const tree = self.file_store.fileTree(parent_file_id);
+
+    var import_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    const import_path = writeImportPath(
+        tree,
+        node,
+        &import_path_buffer,
+    ) orelse return null;
+
+    const parent_abs_path = self.file_store.fileAbsPath(parent_file_id);
+    const parent_file_dir = std.fs.path.dirname(parent_abs_path) orelse ".";
+
+    const maybe_file_id: ?FileStore.FileId = switch (files.Import.Kind.init(import_path)) {
+        .relative => self.file_store.resolve(
+            import_path,
+            self.io,
+            self.gpa,
+            parent_file_dir,
+        ) catch return null,
+        .stdlib => self.file_store.resolveStdLib(
+            self.io,
+            self.gpa,
+            self.zig_lib_directory,
+        ) catch return null,
+        .builtin => null,
+        .root => null,
+        .module => id: {
+            const parent_module_id = self.module_store.moduleForRootFile(parent_file_id) orelse break :id null;
+            const imported_module_id = self.module_store.namedImport(
+                parent_module_id,
+                import_path,
+            ) orelse break :id null;
+            break :id self.module_store.rootFile(imported_module_id);
+        },
+    };
+
+    const file_id = maybe_file_id orelse return null;
+    _ = self.decl_store.store(file_id, &self.file_store, self.gpa);
+    return self.decl_store.rootDecl(file_id);
+}
+
+fn writeImportPath(
+    tree: *const Ast,
+    node: Ast.Node.Index,
+    buffer: *[std.fs.max_path_bytes]u8,
+) ?[]const u8 {
+    switch (tree.nodeTag(node)) {
+        .builtin_call,
+        .builtin_call_comma,
+        .builtin_call_two,
+        .builtin_call_two_comma,
+        => {},
+        else => return null,
+    }
+
+    if (!std.mem.eql(u8, tree.tokenSlice(tree.nodeMainToken(node)), "@import")) return null;
+
+    var params_buffer: [2]Ast.Node.Index = undefined;
+    const params = tree.builtinCallParams(&params_buffer, node) orelse return null;
+    if (params.len != 1) return null;
+
+    const import_arg = params[0];
+    if (tree.nodeTag(import_arg) != .string_literal) return null;
+
+    const raw_import = tree.tokenSlice(tree.nodeMainToken(import_arg));
+    var writer: std.Io.Writer = .fixed(buffer);
+
+    return switch (std.zig.string_literal.parseWrite(&writer, raw_import) catch return null) {
+        .success => path: {
+            writer.flush() catch return null;
+            break :path writer.buffer[0..writer.end];
+        },
+        .failure => null,
+    };
 }
 
 fn typeKindFromTypeValueExpr(

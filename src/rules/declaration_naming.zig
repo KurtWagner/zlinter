@@ -122,7 +122,11 @@ fn run(
             doc.file_id,
             node,
         ) orelse continue :nodes;
-        const type_kind = context.resolveDeclTypeKind(decl_id) orelse .other;
+        if (var_decl.ast.init_node.unwrap()) |init_node| {
+            if (isThisBuiltinCall(tree, init_node)) continue :nodes;
+        }
+
+        const type_kind = context.resolveDeclValueKind(decl_id) orelse .other;
         const name_token = var_decl.ast.mut_token + 1;
         const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
 
@@ -209,6 +213,21 @@ fn run(
         null;
 }
 
+fn isThisBuiltinCall(tree: *const Ast, node: Ast.Node.Index) bool {
+    const expr = zlinter.ast.unwrapNode(tree, node, .{
+        .unwrap_optional_unwrap = false,
+    });
+
+    return switch (tree.nodeTag(expr)) {
+        .builtin_call,
+        .builtin_call_comma,
+        .builtin_call_two,
+        .builtin_call_two_comma,
+        => std.mem.eql(u8, tree.tokenSlice(tree.nodeMainToken(expr)), "@This"),
+        else => false,
+    };
+}
+
 test {
     std.testing.refAllDecls(@This());
 }
@@ -272,6 +291,76 @@ test "declaration_naming" {
                 .rule_id = "declaration_naming",
                 .severity = .@"error",
                 .slice = "thisNotOk",
+                .message = "Type function declaration should be TitleCase",
+            },
+        },
+    );
+}
+
+test "declaration_naming classifies declaration values, not annotated instance types" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\
+        \\const Thing = struct {
+        \\    const Self = @This();
+        \\    field: u32,
+        \\};
+        \\const Choice = enum { a, b };
+        \\
+        \\const BadInstance: Thing = .{ .field = 1 };
+        \\var badInstance: Thing = .{ .field = 2 };
+        \\const BadChoice: Choice = .a;
+        \\var badChoice: Choice = .b;
+        \\const BadType: type = Thing;
+        \\const bad_type: type = Thing;
+        \\
+        \\fn TypeFunc() type {
+        \\    return Thing;
+        \\}
+        \\const goodTypeFunc: *const fn () type = TypeFunc;
+        \\
+        \\fn run() void {
+        \\    var output: Thing = .{ .field = 3 };
+        \\    _ = output;
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "BadInstance",
+                .message = "Constant declaration should be snake_case",
+            },
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "badInstance",
+                .message = "Variable declaration should be snake_case",
+            },
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "BadChoice",
+                .message = "Constant declaration should be snake_case",
+            },
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "badChoice",
+                .message = "Variable declaration should be snake_case",
+            },
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "bad_type",
+                .message = "Type declaration should be TitleCase",
+            },
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "goodTypeFunc",
                 .message = "Type function declaration should be TitleCase",
             },
         },
