@@ -339,13 +339,6 @@ pub fn build(b: *std.Build) void {
             if (!std.mem.eql(u8, rule_import.name, r)) continue;
         }
 
-        if (skippedRuleUnitTest(rule_import.name)) {
-            if (b.graph.verbose) {
-                std.log.warn("Skipping rule unit tests for {s}", .{rule_import.name});
-            }
-            continue;
-        }
-
         const test_rule_exe = b.addTest(.{
             .name = b.fmt("{s}_unit_test_coverage", .{rule_import.name}),
             .root_module = rule_import.module,
@@ -991,17 +984,6 @@ fn resolveModuleIndex(modules: []const *std.Build.Module, module: *std.Build.Mod
         if (candidate == module) return @intCast(index);
     }
     @panic("module import target was not found in compile module graph");
-}
-
-const skipped_rule_unit_tests = [_][]const u8{
-    // TODO: #149 - bring these rules back once their integration tests are stable.
-};
-
-fn skippedRuleUnitTest(rule_name: []const u8) bool {
-    for (skipped_rule_unit_tests) |skipped_rule_name| {
-        if (std.mem.eql(u8, rule_name, skipped_rule_name)) return true;
-    }
-    return false;
 }
 
 const BuildInfo = @import("src/lib/BuildInfo.zig");

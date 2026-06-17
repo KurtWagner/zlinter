@@ -289,25 +289,6 @@ fn runLinterRules(
     try context.init();
     defer context.deinit();
 
-    // TODO: #149 - Remove this just poking around.
-    if (args.verbose) {
-        for (lint_files) |file| {
-            std.debug.print("Linting: '{s}'\n", .{file.abs_path});
-
-            const file_id = try context.resolveFile(file.abs_path);
-            context.debugPrintFileDecls(file_id);
-
-            var compiled_unit_it = context.resolveCompiledUnits(file_id);
-            var resolved_any = false;
-            while (compiled_unit_it.next()) |index| {
-                resolved_any = true;
-                std.debug.print(" - {d}\n", .{index});
-            }
-            if (!resolved_any) {
-                std.debug.print(" - none\n", .{});
-            }
-        }
-    }
     var enabled_rules = enabledRules(args.rules);
 
     var config_overrides_arena = std.heap.ArenaAllocator.init(gpa);
