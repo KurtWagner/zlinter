@@ -56,11 +56,11 @@ pub const LintProblemLocation = struct {
 
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 0,
-        }, LintProblemLocation.startOfNode(&tree, a_decl));
+        }, LintProblemLocation.startOfNode(tree, a_decl));
 
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 17,
-        }, LintProblemLocation.startOfNode(&tree, b_decl));
+        }, LintProblemLocation.startOfNode(tree, b_decl));
     }
 
     pub fn endOfNode(tree: Ast, index: Ast.Node.Index) LintProblemLocation {
@@ -79,11 +79,11 @@ pub const LintProblemLocation = struct {
 
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 14,
-        }, LintProblemLocation.endOfNode(&tree, a_decl));
+        }, LintProblemLocation.endOfNode(tree, a_decl));
 
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 31,
-        }, LintProblemLocation.endOfNode(&tree, b_decl));
+        }, LintProblemLocation.endOfNode(tree, b_decl));
     }
 
     pub fn startOfToken(tree: Ast, index: Ast.TokenIndex) LintProblemLocation {
@@ -102,22 +102,22 @@ pub const LintProblemLocation = struct {
         // `pub` on line 1
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 0,
-        }, LintProblemLocation.startOfToken(&tree, 0));
+        }, LintProblemLocation.startOfToken(tree, 0));
 
         // `const` on line 1
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 4,
-        }, LintProblemLocation.startOfToken(&tree, 1));
+        }, LintProblemLocation.startOfToken(tree, 1));
 
         // `pub` on line 2
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 17,
-        }, LintProblemLocation.startOfToken(&tree, 6));
+        }, LintProblemLocation.startOfToken(tree, 6));
 
         // `const` on line 2
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 21,
-        }, LintProblemLocation.startOfToken(&tree, 7));
+        }, LintProblemLocation.startOfToken(tree, 7));
     }
 
     pub fn endOfToken(tree: Ast, index: Ast.TokenIndex) LintProblemLocation {
@@ -137,22 +137,22 @@ pub const LintProblemLocation = struct {
         // `pub` on line 1
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 2,
-        }, LintProblemLocation.endOfToken(&tree, 0));
+        }, LintProblemLocation.endOfToken(tree, 0));
 
         // `const` on line 1
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 8,
-        }, LintProblemLocation.endOfToken(&tree, 1));
+        }, LintProblemLocation.endOfToken(tree, 1));
 
         // `pub` on line 2
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 19,
-        }, LintProblemLocation.endOfToken(&tree, 6));
+        }, LintProblemLocation.endOfToken(tree, 6));
 
         // `const` on line 2
         try std.testing.expectEqualDeep(LintProblemLocation{
             .byte_offset = 25,
-        }, LintProblemLocation.endOfToken(&tree, 7));
+        }, LintProblemLocation.endOfToken(tree, 7));
     }
 
     pub fn startOfComment(doc: comments.CommentsDocument, comment: comments.Comment) LintProblemLocation {

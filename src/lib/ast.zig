@@ -822,11 +822,11 @@ test "fnProtoReturnsError" {
         defer tree.deinit(std.testing.allocator);
 
         const actual = fnProtoReturnsError(
-            &tree,
+            tree,
             tree.fullFnProto(
                 &buffer,
                 try testing.expectSingleNodeOfTag(
-                    &tree,
+                    tree,
                     &.{
                         .fn_proto,
                         .fn_proto_multi,
@@ -1013,7 +1013,7 @@ test "isFieldVarAccess" {
         const actual = isFieldVarAccess(
             tree,
             tree.fullVarDecl(try testing.expectSingleNodeOfTag(
-                &tree,
+                tree,
                 &.{
                     .local_var_decl,
                     .global_var_decl,
@@ -1150,9 +1150,9 @@ test "isEnumLiteral" {
         defer tree.deinit(std.testing.allocator);
 
         const actual = isEnumLiteral(
-            &tree,
+            tree,
             tree.fullVarDecl(try testing.expectSingleNodeOfTag(
-                &tree,
+                tree,
                 &.{
                     .local_var_decl,
                     .global_var_decl,

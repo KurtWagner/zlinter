@@ -52,11 +52,11 @@ pub fn jsonTree(
 
             var node_object = std.json.ObjectMap.empty;
             try node_object.put(self.arena, "tag", .{
-                .string = @tagName(context_tree.*.nodeTag(child_node)),
+                .string = @tagName(context_tree.nodeTag(child_node)),
             });
 
             try node_object.put(self.arena, "main_token", .{
-                .integer = context_tree.*.nodeMainToken(child_node),
+                .integer = context_tree.nodeMainToken(child_node),
             });
             try node_object.put(self.arena, "first_token", .{
                 .integer = context_tree.firstToken(child_node),
@@ -100,7 +100,7 @@ pub fn jsonTree(
 
     if (tree.errors.len == 0) {
         try iterateChildren(
-            &tree,
+            tree,
             .root,
             Context{
                 .arena = arena,
