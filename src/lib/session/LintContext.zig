@@ -1678,13 +1678,15 @@ test "LintContext.resolveTypeKind" {
             .contents =
             \\const err = error.MyError;
             ,
-            .kind = .other,
+            .kind = .instance,
+            .instance_value_kind = .error_set,
         },
         .{
             .contents =
             \\var MyError:error{a} = other;
             ,
-            .kind = .other,
+            .kind = .instance,
+            .instance_value_kind = .error_set,
         },
         // Union instance:
         .{

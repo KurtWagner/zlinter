@@ -99,6 +99,7 @@ pub const InstanceValue = struct {
         @"struct",
         @"union",
         @"opaque",
+        error_set,
 
         pub fn name(self: Kind) []const u8 {
             return switch (self) {
@@ -106,6 +107,7 @@ pub const InstanceValue = struct {
                 .@"struct" => "Struct instance",
                 .@"union" => "Union instance",
                 .@"opaque" => "Opaque instance",
+                .error_set => "Error instance",
             };
         }
     };
@@ -367,6 +369,7 @@ fn summarizeValueExpr(
         .error_set_decl,
         .merge_error_sets,
         => return .{ .type = .{ .kind = .error_set } },
+        .error_value => return .{ .instance = .{ .kind = .error_set } },
         .builtin_call_two,
         .builtin_call_two_comma,
         .builtin_call,

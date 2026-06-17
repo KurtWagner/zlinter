@@ -465,10 +465,10 @@ fn resolveVarDeclType(
     var_decl: std.zig.Ast.full.VarDecl,
 ) ?TypeStore.TypeSummary {
     const tree = file_store.fileTree(self.declFileId(decl_id));
-    if (var_decl.ast.type_node.unwrap()) |type_node| return TypeStore.summarizeTypeNode(
-        tree,
-        type_node,
-    );
+    if (var_decl.ast.type_node.unwrap()) |type_node| {
+        return valueSummaryFromTypeAnnotation(tree, type_node) orelse
+            TypeStore.summarizeTypeNode(tree, type_node);
+    }
     const init_node = var_decl.ast.init_node.unwrap() orelse return null;
     if (self.resolveCallReturnType(
         file_store,
@@ -499,10 +499,10 @@ fn resolveContainerFieldType(
     field: std.zig.Ast.full.ContainerField,
 ) ?TypeStore.TypeSummary {
     const tree = file_store.fileTree(self.declFileId(decl_id));
-    if (field.ast.type_expr.unwrap()) |type_node| return TypeStore.summarizeTypeNode(
-        tree,
-        type_node,
-    );
+    if (field.ast.type_expr.unwrap()) |type_node| {
+        return valueSummaryFromTypeAnnotation(tree, type_node) orelse
+            TypeStore.summarizeTypeNode(tree, type_node);
+    }
     const value_node = field.ast.value_expr.unwrap() orelse return null;
     if (self.resolveCallReturnType(
         file_store,
@@ -523,6 +523,17 @@ fn resolveContainerFieldType(
         value_node,
     )) |summary| return summary;
     return TypeStore.summarizeValueNode(tree, value_node);
+}
+
+fn valueSummaryFromTypeAnnotation(
+    tree: std.zig.Ast,
+    type_node: std.zig.Ast.Node.Index,
+) ?TypeStore.TypeSummary {
+    const type_summary = TypeStore.summarizeTypeNode(tree, type_node);
+    return switch (type_summary.typeValueKind() orelse return null) {
+        .error_set => .{ .instance = .{ .kind = .error_set } },
+        else => null,
+    };
 }
 
 fn resolveValueAliasType(
@@ -589,6 +600,12 @@ fn resolveInstanceValueType(
 
     if (tree.nodeTag(node) == .field_access) {
         const target_node, _ = tree.nodeData(node).node_and_token;
+        if (tree.nodeTag(target_node) == .identifier and
+            std.mem.eql(u8, tree.getNodeSource(target_node), "error"))
+        {
+            return .{ .instance = .{ .kind = .error_set } };
+        }
+
         const target_summary = self.resolveTypeExprValueSummary(
             file_store,
             module_store,
@@ -638,6 +655,7 @@ fn instanceSummaryFromTypeSummary(summary: TypeStore.TypeSummary) ?TypeStore.Typ
         .@"union" => .{ .instance = .{ .kind = .@"union" } },
         .@"enum" => .{ .instance = .{ .kind = .@"enum" } },
         .@"opaque" => .{ .instance = .{ .kind = .@"opaque" } },
+        .error_set => .{ .instance = .{ .kind = .error_set } },
         else => null,
     };
 }
