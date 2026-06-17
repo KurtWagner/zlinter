@@ -1,9 +1,16 @@
 const TypeStore = @This();
 
 summaries: std.ArrayList(TypeSummary),
+type_ids_by_summary: std.HashMapUnmanaged(
+    TypeSummary,
+    TypeId,
+    TypeSummaryContext,
+    std.hash_map.default_max_load_percentage,
+),
 
 pub const empty: TypeStore = .{
     .summaries = .empty,
+    .type_ids_by_summary = .empty,
 };
 
 pub const TypeId = enum(u32) {
@@ -89,6 +96,32 @@ pub const TypeSummary = union(Type) {
             else => true,
         };
     }
+
+    pub fn hash(self: TypeSummary) u64 {
+        var wy = std.hash.Wyhash.init(0);
+        std.hash.autoHash(&wy, std.meta.activeTag(self));
+
+        switch (self) {
+            .primitive => |primitive| std.hash.autoHash(&wy, primitive.hash()),
+            .type => |type_value| std.hash.autoHash(&wy, type_value.hash()),
+            .instance => |instance_value| std.hash.autoHash(&wy, instance_value.hash()),
+            else => {},
+        }
+
+        return wy.final();
+    }
+};
+
+const TypeSummaryContext = struct {
+    pub fn eql(self: TypeSummaryContext, a: TypeSummary, b: TypeSummary) bool {
+        _ = self;
+        return a.eql(b);
+    }
+
+    pub fn hash(self: TypeSummaryContext, key: TypeSummary) u64 {
+        _ = self;
+        return key.hash();
+    }
 };
 
 pub const InstanceValue = struct {
@@ -114,6 +147,12 @@ pub const InstanceValue = struct {
 
     fn eql(a: InstanceValue, b: InstanceValue) bool {
         return a.kind == b.kind;
+    }
+
+    fn hash(self: InstanceValue) u64 {
+        var wy = std.hash.Wyhash.init(0);
+        std.hash.autoHash(&wy, self.kind);
+        return wy.final();
     }
 };
 
@@ -153,6 +192,12 @@ pub const TypeValue = struct {
     fn eql(a: TypeValue, b: TypeValue) bool {
         return a.kind == b.kind;
     }
+
+    fn hash(self: TypeValue) u64 {
+        var wy = std.hash.Wyhash.init(0);
+        std.hash.autoHash(&wy, self.kind);
+        return wy.final();
+    }
 };
 
 pub const Primitive = union(enum) {
@@ -169,6 +214,15 @@ pub const Primitive = union(enum) {
             return std.mem.eql(u8, a.name, b.name) and
                 a.kind == b.kind and
                 a.bits == b.bits;
+        }
+
+        fn hash(self: Primitive.Number) u64 {
+            var wy = std.hash.Wyhash.init(0);
+            std.hash.autoHash(&wy, self.name.len);
+            wy.update(self.name);
+            std.hash.autoHash(&wy, self.kind);
+            std.hash.autoHash(&wy, self.bits);
+            return wy.final();
         }
     };
 
@@ -189,10 +243,27 @@ pub const Primitive = union(enum) {
             .named => |a_name| std.mem.eql(u8, a_name, b.named),
         };
     }
+
+    fn hash(self: Primitive) u64 {
+        var wy = std.hash.Wyhash.init(0);
+        std.hash.autoHash(&wy, std.meta.activeTag(self));
+
+        switch (self) {
+            .bool => {},
+            .number => |number| std.hash.autoHash(&wy, number.hash()),
+            .named => |name| {
+                std.hash.autoHash(&wy, name.len);
+                wy.update(name);
+            },
+        }
+
+        return wy.final();
+    }
 };
 
 pub fn deinit(self: *TypeStore, gpa: std.mem.Allocator) void {
     self.summaries.deinit(gpa);
+    self.type_ids_by_summary.deinit(gpa);
 }
 
 pub fn store(
@@ -203,12 +274,11 @@ pub fn store(
     const zone = tracy.traceNamed(@src(), "TypeStore.store");
     defer zone.end();
 
-    // TODO: #149 - optimise this
-    for (self.summaries.items, 0..) |existing, index|
-        if (existing.eql(type_summary)) return .fromIndex(index);
+    if (self.type_ids_by_summary.get(type_summary)) |type_id| return type_id;
 
     const type_id: TypeId = .fromIndex(self.summaries.items.len);
     self.summaries.append(gpa, type_summary) catch @panic("OOM");
+    self.type_ids_by_summary.put(gpa, type_summary, type_id) catch @panic("OOM");
     return type_id;
 }
 
@@ -510,6 +580,37 @@ fn parsePrimitiveIntBits(text: []const u8) ?u16 {
     }
 
     return value;
+}
+
+test "TypeStore.store deduplicates equivalent summaries" {
+    var type_store: TypeStore = .empty;
+    defer type_store.deinit(std.testing.allocator);
+
+    const first = type_store.store(std.testing.allocator, .{ .primitive = .{
+        .number = .{
+            .name = "u32",
+            .kind = .unsigned_int,
+            .bits = 32,
+        },
+    } });
+    const second = type_store.store(std.testing.allocator, .{ .primitive = .{
+        .number = .{
+            .name = "u32",
+            .kind = .unsigned_int,
+            .bits = 32,
+        },
+    } });
+    const third = type_store.store(std.testing.allocator, .{ .primitive = .{
+        .number = .{
+            .name = "u64",
+            .kind = .unsigned_int,
+            .bits = 64,
+        },
+    } });
+
+    try std.testing.expectEqual(first, second);
+    try std.testing.expect(third != first);
+    try std.testing.expectEqual(@as(usize, 2), type_store.summaries.items.len);
 }
 
 const Ast = std.zig.Ast;

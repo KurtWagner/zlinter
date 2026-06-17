@@ -4,8 +4,6 @@
 const LintDocument = @This();
 
 file_id: FileStore.FileId,
-
-// TODO: #149 - do not use, will be removed.
 lineage: ast.NodeLineage,
 comments: comments_module.CommentsDocument,
 skipper: comments_module.LazyRuleSkipper,
