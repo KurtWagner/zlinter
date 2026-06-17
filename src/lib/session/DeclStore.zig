@@ -467,7 +467,7 @@ fn resolveVarDeclType(
     const tree = file_store.fileTree(self.declFileId(decl_id));
     if (var_decl.ast.type_node.unwrap()) |type_node| {
         return valueSummaryFromTypeAnnotation(tree, type_node) orelse
-            TypeStore.summarizeTypeNode(tree, type_node);
+            explicitTypeAnnotationSummary(tree, type_node);
     }
     const init_node = var_decl.ast.init_node.unwrap() orelse return null;
     if (self.resolveCallReturnType(
@@ -501,7 +501,7 @@ fn resolveContainerFieldType(
     const tree = file_store.fileTree(self.declFileId(decl_id));
     if (field.ast.type_expr.unwrap()) |type_node| {
         return valueSummaryFromTypeAnnotation(tree, type_node) orelse
-            TypeStore.summarizeTypeNode(tree, type_node);
+            explicitTypeAnnotationSummary(tree, type_node);
     }
     const value_node = field.ast.value_expr.unwrap() orelse return null;
     if (self.resolveCallReturnType(
@@ -533,6 +533,21 @@ fn valueSummaryFromTypeAnnotation(
     return switch (type_summary.typeValueKind() orelse return null) {
         .error_set => .{ .instance = .{ .kind = .error_set } },
         else => null,
+    };
+}
+
+/// Explicit annotations are known type syntax even when `TypeStore` cannot
+/// resolve their underlying category. Treat those annotations as `.other`
+/// instead of `.unknown` so callers can distinguish "not modeled" from
+/// "resolution failed".
+fn explicitTypeAnnotationSummary(
+    tree: std.zig.Ast,
+    type_node: std.zig.Ast.Node.Index,
+) TypeStore.TypeSummary {
+    const summary = TypeStore.summarizeTypeNode(tree, type_node);
+    return switch (summary) {
+        .unknown => .other,
+        else => summary,
     };
 }
 

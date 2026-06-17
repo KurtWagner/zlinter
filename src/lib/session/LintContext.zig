@@ -1476,6 +1476,18 @@ test "LintContext.resolveTypeKind" {
             .contents = "name :[] const u8,",
             .kind = .primitive,
         },
+        .{
+            .contents = "var ptr: *u32 = undefined;",
+            .kind = .primitive,
+        },
+        .{
+            .contents = "var slice: []const u8 = undefined;",
+            .kind = .primitive,
+        },
+        .{
+            .contents = "var maybe: ?u32 = null;",
+            .kind = .primitive,
+        },
         // Type:
         // -----
         .{
