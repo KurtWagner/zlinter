@@ -31,11 +31,11 @@ configs: std.MultiArrayList(Config),
 /// An index for efficiently looking up what configuration is associated with
 /// a given source path or build root path. This is used internally by `resolve`
 /// and should never be used externally.
-path_to_config: std.StringHashMapUnmanaged(ConfigId),
+config_id_by_path: std.StringHashMapUnmanaged(ConfigId),
 
 pub const empty: BuildConfigStore = .{
     .configs = .empty,
-    .path_to_config = .empty,
+    .config_id_by_path = .empty,
 };
 
 pub fn deinit(self: *BuildConfigStore, gpa: std.mem.Allocator) void {
@@ -43,7 +43,7 @@ pub fn deinit(self: *BuildConfigStore, gpa: std.mem.Allocator) void {
         arena.deinit();
 
     self.configs.deinit(gpa);
-    self.path_to_config.deinit(gpa);
+    self.config_id_by_path.deinit(gpa);
 }
 
 /// Resolves a given directory or source path to the current or ancestor
@@ -71,7 +71,7 @@ pub fn resolve(
         &.{ cwd, input_path },
     ) catch unreachable;
 
-    if (self.path_to_config.get(normal_path)) |index|
+    if (self.config_id_by_path.get(normal_path)) |index|
         return index;
 
     const build_root = try self.findNearestBuildRoot(io, normal_path);
@@ -129,8 +129,8 @@ pub fn resolve(
     });
     errdefer _ = self.configs.swapRemove(config_id.toIndex());
 
-    try self.path_to_config.putNoClobber(gpa, build_root_key, config_id);
-    errdefer _ = self.path_to_config.remove(build_root_key);
+    try self.config_id_by_path.putNoClobber(gpa, build_root_key, config_id);
+    errdefer _ = self.config_id_by_path.remove(build_root_key);
 
     try self.cacheResolvedPaths(gpa, normal_path, build_root_key, config_id);
 
@@ -180,7 +180,7 @@ fn findNearestBuildRoot(
 
     while (true) {
         std.log.info(" -- checking '{s}'", .{dir});
-        if (self.path_to_config.get(dir)) |index|
+        if (self.config_id_by_path.get(dir)) |index|
             return .{ .config_id = .{
                 .index = index,
                 .path = dir,
@@ -230,11 +230,11 @@ fn cacheResolvedPaths(
     const arena = self.configs.items(.arena)[config_index].allocator();
 
     while (!std.mem.eql(u8, path, cached_ancestor_path)) {
-        if (!self.path_to_config.contains(path)) {
+        if (!self.config_id_by_path.contains(path)) {
             const key = try arena.dupe(u8, path);
             errdefer arena.free(key);
 
-            try self.path_to_config.putNoClobber(gpa, key, config_id);
+            try self.config_id_by_path.putNoClobber(gpa, key, config_id);
         }
 
         const parent = std.fs.path.dirname(path) orelse cached_ancestor_path;

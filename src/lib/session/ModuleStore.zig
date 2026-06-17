@@ -1,7 +1,7 @@
 const ModuleStore = @This();
 
 modules: std.MultiArrayList(ModuleEntry),
-module_key_to_module_id: std.HashMapUnmanaged(
+module_id_by_key: std.HashMapUnmanaged(
     ModuleKey,
     ModuleId,
     ModuleKeyContext,
@@ -12,7 +12,7 @@ pub const ModuleEntry = struct {
     root_file: FileId,
 
     /// Key owned imports configured by the build/module system (e.g., `@import("foo")`)
-    named_imports: std.StringHashMapUnmanaged(ModuleId),
+    module_id_by_import_name: std.StringHashMapUnmanaged(ModuleId),
 };
 
 const ModuleKeyContext = struct {
@@ -73,22 +73,22 @@ pub const ModuleSeed = struct {
     build_config_module: std.Build.Configuration.Module.Index,
 
     /// Key owned imports configured by the build/module system (e.g., `@import("foo")`)
-    named_imports: std.StringHashMapUnmanaged(ModuleId),
+    module_id_by_import_name: std.StringHashMapUnmanaged(ModuleId),
 };
 
 pub const empty: ModuleStore = .{
     .modules = .empty,
-    .module_key_to_module_id = .empty,
+    .module_id_by_key = .empty,
 };
 
 pub fn deinit(self: *ModuleStore, gpa: std.mem.Allocator) void {
-    for (self.modules.items(.named_imports)) |*named_imports| {
-        var it = named_imports.keyIterator();
+    for (self.modules.items(.module_id_by_import_name)) |*module_id_by_import_name| {
+        var it = module_id_by_import_name.keyIterator();
         while (it.next()) |key| gpa.free(key.*);
-        named_imports.deinit(gpa);
+        module_id_by_import_name.deinit(gpa);
     }
     self.modules.deinit(gpa);
-    self.module_key_to_module_id.deinit(gpa);
+    self.module_id_by_key.deinit(gpa);
 }
 
 pub fn resolve(self: *ModuleStore, gpa: std.mem.Allocator, seed: ModuleSeed) !ModuleId {
@@ -96,18 +96,18 @@ pub fn resolve(self: *ModuleStore, gpa: std.mem.Allocator, seed: ModuleSeed) !Mo
     defer zone.end();
 
     const key: ModuleKey = .init(seed);
-    if (self.module_key_to_module_id.get(key)) |id|
+    if (self.module_id_by_key.get(key)) |id|
         return id;
 
     const id: ModuleId = .fromIndex(self.modules.len);
     try self.modules.append(gpa, .{
         .root_file = seed.root_file,
-        .named_imports = seed.named_imports,
+        .module_id_by_import_name = seed.module_id_by_import_name,
     });
     errdefer _ = self.modules.swapRemove(id.toIndex());
 
-    try self.module_key_to_module_id.put(gpa, key, id);
-    errdefer _ = self.module_key_to_module_id.remove(key);
+    try self.module_id_by_key.put(gpa, key, id);
+    errdefer _ = self.module_id_by_key.remove(key);
 
     return id;
 }
@@ -123,11 +123,11 @@ pub fn moduleForRootFile(self: *const ModuleStore, file_id: FileId) ?ModuleId {
     return null;
 }
 
-pub fn namedImports(
+pub fn moduleIdsByImportName(
     self: *const ModuleStore,
     module_id: ModuleId,
 ) *const std.StringHashMapUnmanaged(ModuleId) {
-    return &self.modules.items(.named_imports)[module_id.toIndex()];
+    return &self.modules.items(.module_id_by_import_name)[module_id.toIndex()];
 }
 
 pub fn namedImport(
@@ -135,7 +135,7 @@ pub fn namedImport(
     module_id: ModuleId,
     name: []const u8,
 ) ?ModuleId {
-    return self.namedImports(module_id).get(name);
+    return self.moduleIdsByImportName(module_id).get(name);
 }
 
 const FileId = @import("FileStore.zig").FileId;

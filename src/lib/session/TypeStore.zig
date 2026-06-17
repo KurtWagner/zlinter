@@ -1,7 +1,7 @@
 const TypeStore = @This();
 
 summaries: std.ArrayList(TypeSummary),
-type_ids_by_summary: std.HashMapUnmanaged(
+type_id_by_summary: std.HashMapUnmanaged(
     TypeSummary,
     TypeId,
     TypeSummaryContext,
@@ -10,7 +10,7 @@ type_ids_by_summary: std.HashMapUnmanaged(
 
 pub const empty: TypeStore = .{
     .summaries = .empty,
-    .type_ids_by_summary = .empty,
+    .type_id_by_summary = .empty,
 };
 
 pub const TypeId = enum(u32) {
@@ -263,7 +263,7 @@ pub const Primitive = union(enum) {
 
 pub fn deinit(self: *TypeStore, gpa: std.mem.Allocator) void {
     self.summaries.deinit(gpa);
-    self.type_ids_by_summary.deinit(gpa);
+    self.type_id_by_summary.deinit(gpa);
 }
 
 pub fn store(
@@ -274,11 +274,11 @@ pub fn store(
     const zone = tracy.traceNamed(@src(), "TypeStore.store");
     defer zone.end();
 
-    if (self.type_ids_by_summary.get(type_summary)) |type_id| return type_id;
+    if (self.type_id_by_summary.get(type_summary)) |type_id| return type_id;
 
     const type_id: TypeId = .fromIndex(self.summaries.items.len);
     self.summaries.append(gpa, type_summary) catch @panic("OOM");
-    self.type_ids_by_summary.put(gpa, type_summary, type_id) catch @panic("OOM");
+    self.type_id_by_summary.put(gpa, type_summary, type_id) catch @panic("OOM");
     return type_id;
 }
 

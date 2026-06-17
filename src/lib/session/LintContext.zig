@@ -156,11 +156,11 @@ fn resolveBuildModule(
 
     const build_config = self.build_config_store.buildConfig(config_id);
 
-    var seen: std.AutoHashMapUnmanaged(
+    var module_id_by_build_module_index: std.AutoHashMapUnmanaged(
         std.Build.Configuration.Module.Index,
         ModuleStore.ModuleId,
     ) = .empty;
-    defer seen.deinit(self.gpa);
+    defer module_id_by_build_module_index.deinit(self.gpa);
 
     var queue: std.ArrayList(std.Build.Configuration.Module.Index) = .empty;
     defer queue.deinit(self.gpa);
@@ -170,54 +170,54 @@ fn resolveBuildModule(
         build_module_index,
     ) orelse return null;
 
-    try seen.put(self.gpa, build_module_index, root_module_id);
+    try module_id_by_build_module_index.put(self.gpa, build_module_index, root_module_id);
     try queue.append(self.gpa, build_module_index);
 
     while (queue.pop()) |current_build_module_index| {
-        const current_module_id = seen.get(current_build_module_index).?;
+        const current_module_id = module_id_by_build_module_index.get(current_build_module_index).?;
 
         // This exact build module may already have been populated by an earlier compile step.
-        if (self.module_store.namedImports(current_module_id).count() != 0) {
+        if (self.module_store.moduleIdsByImportName(current_module_id).count() != 0) {
             continue;
         }
 
         const build_module = current_build_module_index.get(build_config);
 
         const imports = build_module.import_table.get(build_config).imports.mal;
-        var named_imports: std.StringHashMapUnmanaged(ModuleStore.ModuleId) = .empty;
+        var module_id_by_import_name: std.StringHashMapUnmanaged(ModuleStore.ModuleId) = .empty;
         errdefer {
-            var it = named_imports.keyIterator();
+            var it = module_id_by_import_name.keyIterator();
             while (it.next()) |key| self.gpa.free(key.*);
-            named_imports.deinit(self.gpa);
+            module_id_by_import_name.deinit(self.gpa);
         }
 
-        try named_imports.ensureTotalCapacity(self.gpa, @intCast(imports.len));
+        try module_id_by_import_name.ensureTotalCapacity(self.gpa, @intCast(imports.len));
         for (imports.items(.name), imports.items(.module)) |
             build_import_name_id,
             build_import_module_index,
         | {
             const import_name_slice = build_import_name_id.slice(build_config);
 
-            const import_module_id = seen.get(build_import_module_index) orelse child: {
+            const import_module_id = module_id_by_build_module_index.get(build_import_module_index) orelse child: {
                 const resolved = (try self.resolveBuildModuleShallow(
                     config_id,
                     build_import_module_index,
                 )) orelse continue;
 
-                try seen.put(self.gpa, build_import_module_index, resolved);
+                try module_id_by_build_module_index.put(self.gpa, build_import_module_index, resolved);
                 try queue.append(self.gpa, build_import_module_index);
 
                 break :child resolved;
             };
 
-            named_imports.putAssumeCapacity(
+            module_id_by_import_name.putAssumeCapacity(
                 try self.gpa.dupe(u8, import_name_slice),
                 import_module_id,
             );
         }
 
-        self.module_store.modules.items(.named_imports)[current_module_id.toIndex()] = named_imports;
-        named_imports = .empty;
+        self.module_store.modules.items(.module_id_by_import_name)[current_module_id.toIndex()] = module_id_by_import_name;
+        module_id_by_import_name = .empty;
     }
 
     return root_module_id;
@@ -255,7 +255,7 @@ fn resolveBuildModuleShallow(
         ),
         .build_config = config_id,
         .build_config_module = build_module_index,
-        .named_imports = .empty,
+        .module_id_by_import_name = .empty,
     });
 }
 

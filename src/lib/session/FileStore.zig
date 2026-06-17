@@ -36,11 +36,11 @@ files: std.MultiArrayList(File),
 /// Normalized absolute path strings to file id. Don't access this
 /// directly, instead use `resolve(...)` and use the returned index with
 /// `ast(index)` and `source(index)`.
-path_to_index: std.StringHashMapUnmanaged(FileId),
+file_id_by_path: std.StringHashMapUnmanaged(FileId),
 
 pub const empty: FileStore = .{
     .files = .empty,
-    .path_to_index = .empty,
+    .file_id_by_path = .empty,
 };
 
 pub fn deinit(self: *FileStore, gpa: std.mem.Allocator) void {
@@ -56,7 +56,7 @@ pub fn deinit(self: *FileStore, gpa: std.mem.Allocator) void {
     }
 
     self.files.deinit(gpa);
-    self.path_to_index.deinit(gpa); // Paths owned by File.
+    self.file_id_by_path.deinit(gpa); // Paths owned by File.
 }
 
 pub fn resolve(
@@ -76,7 +76,7 @@ pub fn resolve(
         fba.allocator(),
         &.{ cwd, input_path },
     ) catch unreachable;
-    if (self.path_to_index.get(normal_path)) |index| return index;
+    if (self.file_id_by_path.get(normal_path)) |index| return index;
 
     const source: [:0]const u8 = try std.Io.Dir.cwd().readFileAllocOptions(
         io,
@@ -103,8 +103,8 @@ pub fn resolve(
     });
     errdefer _ = self.files.swapRemove(id.toIndex());
 
-    try self.path_to_index.putNoClobber(gpa, abs_path, id);
-    errdefer _ = self.path_to_index.remove(abs_path);
+    try self.file_id_by_path.putNoClobber(gpa, abs_path, id);
+    errdefer _ = self.file_id_by_path.remove(abs_path);
 
     std.log.info("Resolving '{s}' to '{s}'", .{ cwd, input_path });
     std.log.info(" - adding '{s}", .{abs_path});

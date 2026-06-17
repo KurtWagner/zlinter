@@ -4,8 +4,8 @@ const DeclStore = @This();
 
 decls: std.MultiArrayList(Decl) = .empty,
 scopes: std.MultiArrayList(Scope) = .empty,
-decl_by_ast_node: std.AutoHashMapUnmanaged(DeclAstNodeKey, DeclId) = .empty,
-scope_by_owner: std.AutoHashMapUnmanaged(ScopeOwnerKey, ScopeId) = .empty,
+decl_id_by_ast_node: std.AutoHashMapUnmanaged(DeclAstNodeKey, DeclId) = .empty,
+scope_id_by_owner_node: std.AutoHashMapUnmanaged(ScopeOwnerKey, ScopeId) = .empty,
 
 // TODO: #149 - use better pattern for passing these common things around
 gpa: std.mem.Allocator,
@@ -41,7 +41,7 @@ const Scope = struct {
     owner_node: std.zig.Ast.Node.Index,
     parent_scope_id: ?ScopeId,
     owner_decl_id: ?DeclId,
-    decl_by_name: std.StringHashMapUnmanaged(DeclId),
+    decl_id_by_name: std.StringHashMapUnmanaged(DeclId),
 };
 
 pub const ScopeId = enum(u32) {
@@ -189,11 +189,11 @@ pub fn resolveFileTypes(
 
 /// Releases all declaration and scope storage owned by this store.
 pub fn deinit(self: *DeclStore, gpa: std.mem.Allocator) void {
-    for (self.scopes.items(.decl_by_name)) |*decl_by_name|
-        decl_by_name.deinit(gpa);
+    for (self.scopes.items(.decl_id_by_name)) |*decl_id_by_name|
+        decl_id_by_name.deinit(gpa);
 
-    self.decl_by_ast_node.deinit(gpa);
-    self.scope_by_owner.deinit(gpa);
+    self.decl_id_by_ast_node.deinit(gpa);
+    self.scope_id_by_owner_node.deinit(gpa);
     self.decls.deinit(gpa);
     self.scopes.deinit(gpa);
 }
@@ -361,7 +361,7 @@ pub fn scopeByNode(
     const zone = tracy.traceNamed(@src(), "DeclStore.scopeByNode");
     defer zone.end();
 
-    return self.scope_by_owner.get(.init(file_id, node));
+    return self.scope_id_by_owner_node.get(.init(file_id, node));
 }
 
 /// Returns the declaration that should be treated as the container identity.
@@ -414,7 +414,7 @@ pub fn resolveDeclTypeDecl(
 
 /// Looks up a declaration by name directly within a scope.
 fn scopeDecl(self: *const DeclStore, scope_id: ScopeId, name: []const u8) ?DeclId {
-    return self.scopes.items(.decl_by_name)[scope_id.toIndex()].get(name);
+    return self.scopes.items(.decl_id_by_name)[scope_id.toIndex()].get(name);
 }
 
 fn resolveDeclType(
@@ -1506,7 +1506,7 @@ fn declByAstNode(
     const zone = tracy.traceNamed(@src(), "DeclStore.declByAstNode");
     defer zone.end();
 
-    return self.decl_by_ast_node.get(.init(file_id, node));
+    return self.decl_id_by_ast_node.get(.init(file_id, node));
 }
 
 fn fileRootDecl(
@@ -1544,9 +1544,9 @@ fn appendScope(
         .owner_node = owner_node,
         .parent_scope_id = parent_scope_id,
         .owner_decl_id = owner_decl_id,
-        .decl_by_name = .empty,
+        .decl_id_by_name = .empty,
     }) catch @panic("OOM");
-    self.scope_by_owner.putNoClobber(
+    self.scope_id_by_owner_node.putNoClobber(
         gpa,
         .init(file_id, owner_node),
         scope_id,
@@ -1575,7 +1575,7 @@ fn appendDecl(
         .kind = kind,
     }) catch @panic("OOM");
     if (ast_node) |node| {
-        self.decl_by_ast_node.putNoClobber(
+        self.decl_id_by_ast_node.putNoClobber(
             gpa,
             .init(file_id, node),
             decl_id,
@@ -1609,7 +1609,7 @@ fn putDecl(
         scope_id,
         kind,
     );
-    self.scopes.items(.decl_by_name)[scope_id.toIndex()].putNoClobber(
+    self.scopes.items(.decl_id_by_name)[scope_id.toIndex()].putNoClobber(
         gpa,
         name,
         decl_id,
