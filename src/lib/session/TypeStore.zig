@@ -298,7 +298,7 @@ pub fn debugPrintSummary(summary_value: TypeSummary) void {
         inline else => |_, tag| std.debug.print("{s}", .{tag.name()}),
     }
 }
-// TODO: #149 - perhaps this can be more general - `summarize(node)` and switches out instead of expecting caller to do it?
+
 pub fn summarizeRoot() TypeSummary {
     return .{ .type = .{ .kind = .namespace } };
 }
