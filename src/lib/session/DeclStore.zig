@@ -117,10 +117,8 @@ pub fn store(
 
     // TODO: #149 - think abou multiple modules
 
-    // TODO: #149 - optimise this
-    for (self.decls.items(.file_id), 0..) |existing_file_id, decl_id| {
-        if (existing_file_id == file_id) return .fromIndex(decl_id);
-    }
+    if (self.decl_id_by_ast_node.get(.init(file_id, .root))) |root_decl_id|
+        return root_decl_id;
 
     const tree = file_store.fileTree(file_id);
 
