@@ -547,7 +547,7 @@ inline fn enumMemberTagName(tree: Ast, member: Ast.Node.Index) ?[]const u8 {
 
 /// Resolves an expression to the concrete enum declaration that determines its
 /// values. This preserves enum identity where a coarse type summary such as
-/// `.enum_instance` cannot list the enum's tags.
+/// `.instance = .enum` cannot list the enum's tags.
 pub fn resolveEnumDeclOfNode(
     self: *LintContext,
     doc: *const LintDocument,
@@ -895,14 +895,24 @@ pub fn resolveDeclValueKind(
     self: *LintContext,
     decl_id: DeclStore.DeclId,
 ) ?TypeStore.Type {
-    return self.resolveDeclValueKindDepth(decl_id, 16);
+    return if (self.resolveDeclValueSummary(decl_id)) |summary|
+        summary.coarseType()
+    else
+        null;
 }
 
-fn resolveDeclValueKindDepth(
+pub fn resolveDeclValueSummary(
+    self: *LintContext,
+    decl_id: DeclStore.DeclId,
+) ?TypeStore.TypeSummary {
+    return self.resolveDeclValueSummaryDepth(decl_id, 16);
+}
+
+fn resolveDeclValueSummaryDepth(
     self: *LintContext,
     decl_id: DeclStore.DeclId,
     remaining_depth: u8,
-) ?TypeStore.Type {
+) ?TypeStore.TypeSummary {
     if (remaining_depth == 0) return null;
 
     const file_id = self.decl_store.declFileId(decl_id);
@@ -910,7 +920,7 @@ fn resolveDeclValueKindDepth(
     const node = self.decl_store.declAstNode(decl_id) orelse return null;
 
     if (node == .root) {
-        return if (ast.isRootImplicitStruct(tree)) .struct_type else .namespace_type;
+        return .{ .type = .{ .kind = if (ast.isRootImplicitStruct(tree)) .@"struct" else .namespace } };
     }
 
     var fn_proto_buffer: [1]Ast.Node.Index = undefined;
@@ -919,21 +929,21 @@ fn resolveDeclValueKindDepth(
             tree,
             fn_proto,
             false,
-        ).coarseType();
+        );
     }
 
     if (tree.fullVarDecl(node)) |var_decl| {
         const init_node = var_decl.ast.init_node.unwrap();
         if (var_decl.ast.type_node.unwrap()) |type_node| {
-            if (typeKindFromValueTypeNode(tree, type_node)) |kind| {
-                return kind;
+            if (typeSummaryFromValueTypeNode(tree, type_node)) |summary| {
+                return summary;
             }
 
             return .other;
         }
 
         if (init_node) |value_node| {
-            return self.typeKindFromValueNode(
+            return self.typeSummaryFromValueNode(
                 decl_id,
                 value_node,
                 remaining_depth - 1,
@@ -944,15 +954,15 @@ fn resolveDeclValueKindDepth(
     if (tree.fullContainerField(node)) |container_field| {
         const value_node = container_field.ast.value_expr.unwrap();
         if (container_field.ast.type_expr.unwrap()) |type_node| {
-            if (typeKindFromValueTypeNode(tree, type_node)) |kind| {
-                return kind;
+            if (typeSummaryFromValueTypeNode(tree, type_node)) |summary| {
+                return summary;
             }
 
             return .other;
         }
 
         if (value_node) |expr| {
-            return self.typeKindFromValueNode(
+            return self.typeSummaryFromValueNode(
                 decl_id,
                 expr,
                 remaining_depth - 1,
@@ -963,26 +973,26 @@ fn resolveDeclValueKindDepth(
     return null;
 }
 
-fn resolveDeclTypeKindDepth(
+fn resolveDeclTypeSummaryDepth(
     self: *LintContext,
     decl_id: DeclStore.DeclId,
     remaining_depth: u8,
-) ?TypeStore.Type {
+) ?TypeStore.TypeSummary {
     if (remaining_depth == 0) return null;
 
     if (self.decl_store.declResolvedType(decl_id)) |type_id| {
-        const kind = self.type_store.summary(type_id).coarseType();
-        switch (kind) {
+        const summary = self.type_store.summary(type_id);
+        switch (summary) {
             .unknown, .other, .primitive => {},
-            else => return kind,
+            else => return summary,
         }
     }
 
     if (self.declResolvedTypeTarget(decl_id)) |target| {
-        if (self.typeKindFromTarget(
+        if (self.typeSummaryFromTarget(
             target,
             remaining_depth - 1,
-        )) |kind| return kind;
+        )) |summary| return summary;
     }
 
     const file_id = self.decl_store.declFileId(decl_id);
@@ -995,16 +1005,16 @@ fn resolveDeclTypeKindDepth(
             tree,
             fn_proto,
             false,
-        ).coarseType();
+        );
     }
 
     if (tree.fullVarDecl(node)) |var_decl| {
         if (var_decl.ast.type_node.unwrap()) |type_node| {
-            if (typeKindFromTypeNode(tree, type_node)) |kind| return kind;
+            if (typeSummaryFromTypeNode(tree, type_node)) |summary| return summary;
         }
 
         if (var_decl.ast.init_node.unwrap()) |init_node| {
-            return self.typeKindFromValueNode(
+            return self.typeSummaryFromValueNode(
                 decl_id,
                 init_node,
                 remaining_depth - 1,
@@ -1014,11 +1024,11 @@ fn resolveDeclTypeKindDepth(
 
     if (tree.fullContainerField(node)) |container_field| {
         if (container_field.ast.type_expr.unwrap()) |type_node| {
-            if (typeKindFromTypeNode(tree, type_node)) |kind| return kind;
+            if (typeSummaryFromTypeNode(tree, type_node)) |summary| return summary;
         }
 
         if (container_field.ast.value_expr.unwrap()) |value_node| {
-            return self.typeKindFromValueNode(
+            return self.typeSummaryFromValueNode(
                 decl_id,
                 value_node,
                 remaining_depth - 1,
@@ -1029,13 +1039,13 @@ fn resolveDeclTypeKindDepth(
     return null;
 }
 
-fn typeKindFromTarget(
+fn typeSummaryFromTarget(
     self: *LintContext,
     target: DeclStore.TypeTarget,
     remaining_depth: u8,
-) ?TypeStore.Type {
+) ?TypeStore.TypeSummary {
     return switch (target) {
-        .decl => |decl_id| self.resolveDeclTypeKindDepth(
+        .decl => |decl_id| self.resolveDeclTypeSummaryDepth(
             decl_id,
             remaining_depth,
         ),
@@ -1049,15 +1059,15 @@ fn typeKindFromTarget(
                 container.node,
             ) orelse break :blk null;
 
-            break :blk containerDeclTypeKind(tree, container_decl);
+            break :blk containerDeclTypeSummary(tree, container_decl);
         },
     };
 }
 
-fn typeKindFromTypeNode(
+fn typeSummaryFromTypeNode(
     tree: Ast,
     type_node: Ast.Node.Index,
-) ?TypeStore.Type {
+) ?TypeStore.TypeSummary {
     const summary = TypeStore.summarizeTypeNode(
         tree,
         type_node,
@@ -1065,29 +1075,33 @@ fn typeKindFromTypeNode(
 
     return switch (summary) {
         .unknown, .primitive => null,
-        inline else => |_, tag| tag,
+        else => summary,
     };
 }
 
-fn typeKindFromValueTypeNode(
+fn typeSummaryFromValueTypeNode(
     tree: Ast,
     type_node: Ast.Node.Index,
-) ?TypeStore.Type {
-    return switch (typeKindFromTypeNode(tree, type_node) orelse return null) {
-        .type,
+) ?TypeStore.TypeSummary {
+    const summary = typeSummaryFromTypeNode(tree, type_node) orelse return null;
+    return switch (summary.coarseType()) {
         .@"fn",
         .fn_returns_type,
-        => |kind| kind,
+        => summary,
+        .type => switch (summary.typeValueKind().?) {
+            .unknown => summary,
+            else => null,
+        },
         else => null,
     };
 }
 
-fn typeKindFromValueNode(
+fn typeSummaryFromValueNode(
     self: *LintContext,
     context_decl_id: DeclStore.DeclId,
     value_node: Ast.Node.Index,
     remaining_depth: u8,
-) ?TypeStore.Type {
+) ?TypeStore.TypeSummary {
     if (remaining_depth == 0) return null;
 
     const tree = self.file_store.fileTree(
@@ -1103,7 +1117,7 @@ fn typeKindFromValueNode(
             node,
         ) orelse return null;
 
-        return self.resolveDeclValueKindDepth(
+        return self.resolveDeclValueSummaryDepth(
             target_decl_id,
             remaining_depth - 1,
         );
@@ -1117,17 +1131,17 @@ fn typeKindFromValueNode(
     switch (summary) {
         .unknown => {},
         .primitive => return .other,
-        inline else => |_, tag| return tag,
+        else => return summary,
     }
 
-    if (valueExprIsTypeInfoProjection(tree, node)) return .type;
+    if (valueExprIsTypeInfoProjection(tree, node)) return .{ .type = .unknown };
 
-    if (typeKindFromTypeValueExpr(tree, node)) |kind| return kind;
+    if (typeSummaryFromTypeValueExpr(tree, node)) |type_summary| return type_summary;
 
     var struct_init_buffer: [2]Ast.Node.Index = undefined;
     if (tree.fullStructInit(&struct_init_buffer, node)) |struct_init| {
         if (struct_init.ast.type_expr.unwrap()) |type_expr| {
-            if (typeKindFromTypeNode(tree, type_expr)) |kind| return kind;
+            if (typeSummaryFromTypeNode(tree, type_expr)) |type_summary| return type_summary;
         }
     }
 
@@ -1139,10 +1153,20 @@ fn typeKindFromValueNode(
             context_decl_id,
             call.ast.fn_expr,
         ) orelse return null;
-        if (self.resolveDeclTypeKindDepth(
+        const callee_summary = self.resolveDeclTypeSummaryDepth(
             callee_decl_id,
             remaining_depth - 1,
-        ) == .fn_returns_type) return .type;
+        ) orelse return null;
+        if (callee_summary.coarseType() == .fn_returns_type) {
+            if (self.decl_store.resolveTypeFactoryResultTarget(
+                &self.file_store,
+                &self.module_store,
+                callee_decl_id,
+            )) |target| {
+                return self.typeSummaryFromTarget(target, remaining_depth - 1);
+            }
+            return .{ .type = .unknown };
+        }
     }
 
     if (tree.nodeTag(node) == .address_of) {
@@ -1154,7 +1178,7 @@ fn typeKindFromValueNode(
             target_node,
         ) orelse return null;
 
-        return self.resolveDeclValueKindDepth(
+        return self.resolveDeclValueSummaryDepth(
             target_decl_id,
             remaining_depth - 1,
         );
@@ -1167,7 +1191,7 @@ fn typeKindFromValueNode(
         node,
     ) orelse return null;
 
-    return self.resolveDeclValueKindDepth(
+    return self.resolveDeclValueSummaryDepth(
         target_decl_id,
         remaining_depth - 1,
     );
@@ -1269,18 +1293,18 @@ fn writeImportPath(
     };
 }
 
-fn typeKindFromTypeValueExpr(
+fn typeSummaryFromTypeValueExpr(
     tree: Ast,
     node: Ast.Node.Index,
-) ?TypeStore.Type {
+) ?TypeStore.TypeSummary {
     const summary = TypeStore.summarizeTypeNode(
         tree,
         node,
     );
     return switch (summary) {
         .unknown => null,
-        .primitive => .type,
-        inline else => |_, tag| tag,
+        .primitive => .{ .type = .{ .kind = .primitive } },
+        else => summary,
     };
 }
 
@@ -1311,18 +1335,18 @@ fn valueExprIsTypeInfoProjection(
     }
 }
 
-fn containerDeclTypeKind(
+fn containerDeclTypeSummary(
     tree: Ast,
     container_decl: Ast.full.ContainerDecl,
-) TypeStore.Type {
+) TypeStore.TypeSummary {
     return switch (tree.tokenTag(container_decl.ast.main_token)) {
         .keyword_struct => if (ast.isContainerNamespace(
             tree,
             container_decl,
-        )) .namespace_type else .struct_type,
-        .keyword_union => .union_type,
-        .keyword_enum => .enum_type,
-        .keyword_opaque => .opaque_type,
+        )) .{ .type = .{ .kind = .namespace } } else .{ .type = .{ .kind = .@"struct" } },
+        .keyword_union => .{ .type = .{ .kind = .@"union" } },
+        .keyword_enum => .{ .type = .{ .kind = .@"enum" } },
+        .keyword_opaque => .{ .type = .{ .kind = .@"opaque" } },
         else => .other,
     };
 }
@@ -1432,22 +1456,25 @@ test "LintContext.resolveTypeKind" {
     const TestCase = struct {
         contents: [:0]const u8,
         kind: TypeStore.Type,
+        type_value_kind: ?TypeStore.TypeValue.Kind = null,
+        instance_value_kind: ?TypeStore.InstanceValue.Kind = null,
     };
 
+    var failed = false;
     for ([_]TestCase{
-        // Other:
+        // Primitive:
         // ------
         .{
             .contents = "var ok:u32 = 10;",
-            .kind = .other,
+            .kind = .primitive,
         },
         .{
             .contents = "age:u8 = 10,",
-            .kind = .other,
+            .kind = .primitive,
         },
         .{
             .contents = "name :[] const u8,",
-            .kind = .other,
+            .kind = .primitive,
         },
         // Type:
         // -----
@@ -1503,17 +1530,20 @@ test "LintContext.resolveTypeKind" {
             \\   return struct { field: u32 };
             \\}
             ,
-            .kind = .struct_type,
+            .kind = .type,
+            .type_value_kind = .@"struct",
         },
         .{
             .contents = "const A = struct { field: u32 };",
-            .kind = .struct_type,
+            .kind = .type,
+            .type_value_kind = .@"struct",
         },
         // Namespace type:
         // ---------------
         .{
             .contents = "const a = struct { const decl: u32 = 1; };",
-            .kind = .namespace_type,
+            .kind = .type,
+            .type_value_kind = .namespace,
         },
         .{
             .contents =
@@ -1523,7 +1553,8 @@ test "LintContext.resolveTypeKind" {
             \\   }
             \\};
             ,
-            .kind = .namespace_type,
+            .kind = .type,
+            .type_value_kind = .namespace,
         },
         // Namespace instance (invalid use)
         // --------------------------------
@@ -1552,48 +1583,56 @@ test "LintContext.resolveTypeKind" {
         // Type that is function
         .{
             .contents = "var a = fn() void;",
-            .kind = .fn_type,
+            .kind = .type,
+            .type_value_kind = .@"fn",
         },
         .{
             .contents =
             \\const RefFunc = FuncType;
             \\const FuncType = fn() void;
             ,
-            .kind = .fn_type,
+            .kind = .type,
+            .type_value_kind = .@"fn",
         },
         .{
             .contents = "var a = *const fn() void;",
-            .kind = .fn_type,
+            .kind = .type,
+            .type_value_kind = .@"fn",
         },
         .{
             .contents =
             \\const RefFunc = FuncType;
             \\const FuncType = *const fn() void;
             ,
-            .kind = .fn_type,
+            .kind = .type,
+            .type_value_kind = .@"fn",
         },
         // Type that is function that returns type
         .{
             .contents = "var a = fn() type;",
-            .kind = .fn_type_returns_type,
+            .kind = .type,
+            .type_value_kind = .fn_returns_type,
         },
         .{
             .contents =
             \\const RefFunc = FuncType;
             \\const FuncType = fn() type;
             ,
-            .kind = .fn_type_returns_type,
+            .kind = .type,
+            .type_value_kind = .fn_returns_type,
         },
         .{
             .contents = "var a = *const fn() type;",
-            .kind = .fn_type_returns_type,
+            .kind = .type,
+            .type_value_kind = .fn_returns_type,
         },
         .{
             .contents =
             \\const RefFunc = FuncType;
             \\const FuncType = *const fn() type;
             ,
-            .kind = .fn_type_returns_type,
+            .kind = .type,
+            .type_value_kind = .fn_returns_type,
         },
         // Function that returns type
         .{
@@ -1616,20 +1655,23 @@ test "LintContext.resolveTypeKind" {
             .contents =
             \\var MyError = error {a,b,c};
             ,
-            .kind = .error_type,
+            .kind = .type,
+            .type_value_kind = .error_set,
         },
         .{
             .contents =
             \\var MyError = some.other.errors || OtherErrors;
             ,
-            .kind = .error_type,
+            .kind = .type,
+            .type_value_kind = .error_set,
         },
         .{
             .contents =
             \\var MyError = Reference;
             \\const Reference = error {a,b,c};
             ,
-            .kind = .error_type,
+            .kind = .type,
+            .type_value_kind = .error_set,
         },
         // Error instance
         .{
@@ -1650,7 +1692,8 @@ test "LintContext.resolveTypeKind" {
             \\const u = U{.a=1};
             \\const U = union { a: u32, b: f32 };
             ,
-            .kind = .union_instance,
+            .kind = .instance,
+            .instance_value_kind = .@"union",
         },
         .{
             .contents =
@@ -1658,7 +1701,8 @@ test "LintContext.resolveTypeKind" {
             \\const u = U{.a=1};
             \\const U = union { a: u32, b: f32 };
             ,
-            .kind = .union_instance,
+            .kind = .instance,
+            .instance_value_kind = .@"union",
         },
         // Struct instance:
         .{
@@ -1666,7 +1710,8 @@ test "LintContext.resolveTypeKind" {
             \\const s = S{.a=1};
             \\const S = struct { a: u32  };
             ,
-            .kind = .struct_instance,
+            .kind = .instance,
+            .instance_value_kind = .@"struct",
         },
         .{
             .contents =
@@ -1674,7 +1719,8 @@ test "LintContext.resolveTypeKind" {
             \\const s = S{.a=1};
             \\const S = struct { a: u32 };
             ,
-            .kind = .struct_instance,
+            .kind = .instance,
+            .instance_value_kind = .@"struct",
         },
         // Struct instance:
         .{
@@ -1682,7 +1728,8 @@ test "LintContext.resolveTypeKind" {
             \\const s = E.a;
             \\const E = enum { a, b  };
             ,
-            .kind = .enum_instance,
+            .kind = .instance,
+            .instance_value_kind = .@"enum",
         },
         .{
             .contents =
@@ -1690,7 +1737,8 @@ test "LintContext.resolveTypeKind" {
             \\const s = E.a;
             \\const E = enum { a, b };
             ,
-            .kind = .enum_instance,
+            .kind = .instance,
+            .instance_value_kind = .@"enum",
         },
         // Opaque type
         .{
@@ -1703,7 +1751,8 @@ test "LintContext.resolveTypeKind" {
             \\
             \\extern fn show_window(*Window) callconv(.C) void;
             ,
-            .kind = .opaque_type,
+            .kind = .type,
+            .type_value_kind = .@"opaque",
         },
         // Opaque instance
         .{
@@ -1752,38 +1801,52 @@ test "LintContext.resolveTypeKind" {
 
         const maybe_resolved_type = context.resolveTypeOfNode(doc, node);
 
-        if (maybe_resolved_type == null or std.meta.activeTag(maybe_resolved_type.?.summary) != test_case.kind) {
-            std.debug.print("{s}\n", .{tree.getNodeSource(node)});
-            if (maybe_resolved_type) |resolved_type|
-                std.debug.print(" - {t}\n", .{resolved_type.summary})
-            else
-                std.debug.print(" - <>\n", .{});
-            std.debug.print(" - Bad (expected {t})\n", .{test_case.kind});
-        } else {
-            std.debug.print("{s}\n", .{tree.getNodeSource(node)});
-            std.debug.print(" - {t}\n", .{maybe_resolved_type.?.summary});
-            std.debug.print(" - Good\n", .{});
+        const actual_kind: ?TypeStore.Type = if (maybe_resolved_type) |resolved_type|
+            resolved_type.summary.coarseType()
+        else
+            null;
+        const actual_type_value_kind: ?TypeStore.TypeValue.Kind = if (maybe_resolved_type) |resolved_type|
+            resolved_type.summary.typeValueKind()
+        else
+            null;
+        const actual_instance_value_kind: ?TypeStore.InstanceValue.Kind = if (maybe_resolved_type) |resolved_type|
+            resolved_type.summary.instanceValueKind()
+        else
+            null;
+
+        if (actual_kind != test_case.kind or
+            (test_case.type_value_kind != null and actual_type_value_kind != test_case.type_value_kind) or
+            (test_case.instance_value_kind != null and actual_instance_value_kind != test_case.instance_value_kind))
+        {
+            const border: [50]u8 = @splat('-');
+            std.debug.print("\n{s}\n{s}\n{s}\n{s}\n", .{
+                border,
+                border,
+                doc.tree(&context).getNodeSource(node),
+                border,
+            });
+            std.debug.print("Expected: {t}", .{test_case.kind});
+            if (test_case.type_value_kind) |type_value_kind| {
+                std.debug.print(".{t}", .{type_value_kind});
+            }
+            if (test_case.instance_value_kind) |instance_value_kind| {
+                std.debug.print(".{t}", .{instance_value_kind});
+            }
+            std.debug.print("\n", .{});
+            std.debug.print("Actual: {t}\n", .{maybe_resolved_type.?.summary});
+            std.debug.print("Contents:\n{s}\n{s}\n{s}\n{s}\n", .{
+                border,
+                test_case.contents,
+                border,
+                border,
+            });
+
+            failed = true;
         }
-        std.debug.print("---------------------\n", .{});
-
-        // const node = doc.tree(&context).rootDecls()[0];
-        // const actual_kind = if (doc.tree(&context).fullVarDecl(node)) |var_decl|
-        //     try context.resolveTypeKindDeprecated(doc, .{ .var_decl = var_decl })
-        // else if (doc.tree(&context).fullContainerField(node)) |container_field|
-        //     try context.resolveTypeKindDeprecated(doc, .{ .container_field = container_field })
-        // else
-        //     @panic("Fail");
-
-        // std.testing.expectEqual(test_case.kind, actual_kind) catch |e| {
-        //     const border: [50]u8 = @splat('-');
-        //     std.debug.print("Node:\n{s}\n{s}\n{s}\n", .{ border, doc.tree(&context).getNodeSource(node), border });
-        //     std.debug.print("Expected: {any}\n", .{test_case.kind});
-        //     std.debug.print("Actual: {any}\n", .{actual_kind});
-        //     std.debug.print("Contents:\n{s}\n{s}\n{s}\n", .{ border, test_case.contents, border });
-
-        //     return e;
-        // };
     }
+
+    if (failed)
+        return error.TestExpectedEqual;
 }
 
 const ast = @import("../ast.zig");

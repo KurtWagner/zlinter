@@ -18,7 +18,6 @@ pub const TypeId = enum(u32) {
     }
 };
 
-// TODO: #149 - using this for compat with previous versions but can rethink this.
 pub const Type = enum {
     /// Fallback when the summary cannot identify the expression as any known
     /// type category yet.
@@ -31,30 +30,10 @@ pub const Type = enum {
     @"fn",
     /// e.g., has type `fn () type`
     fn_returns_type,
-    opaque_instance,
-    /// e.g., has type `enum { ... }`
-    enum_instance,
-    /// e.g., has type `struct { field: u32 }`
-    struct_instance,
-    /// e.g., has type `union { a: u32, b: u32 }`
-    union_instance,
-    /// e.g., `const MyError = error { NotFound, Invalid };`
-    error_type,
-    /// e.g., `const Callback = *const fn () void;`
-    fn_type,
-    /// e.g., `const Callback = *const fn () void;`
-    fn_type_returns_type,
-    /// Is type `type` and not categorized as any other `*_type`
+    /// A value that is an instance of a container type.
+    instance,
+    /// A value whose Zig type is `type`.
     type,
-    /// e.g., `const Result = enum { good, bad };`
-    enum_type,
-    /// e.g., `const Person = struct { name: [] const u8 };`
-    struct_type,
-    /// e.g., `const colors = struct { const color = "red"; };`
-    namespace_type,
-    /// e.g., `const Color = union { rgba: Rgba, rgb: Rgb };`
-    union_type,
-    opaque_type,
 
     pub fn name(self: Type) []const u8 {
         return switch (self) {
@@ -63,19 +42,8 @@ pub const Type = enum {
             .primitive => "Primitive",
             .@"fn" => "Function",
             .fn_returns_type => "Type function",
-            .opaque_instance => "Opaque instance",
-            .enum_instance => "Enum instance",
-            .struct_instance => "Struct instance",
-            .union_instance => "Union instance",
-            .error_type => "Error",
-            .fn_type => "Function type",
-            .fn_type_returns_type => "Type function type",
+            .instance => "Instance",
             .type => "Type",
-            .enum_type => "Enum",
-            .struct_type => "Struct",
-            .namespace_type => "Namespace",
-            .union_type => "Union",
-            .opaque_type => "Opaque",
         };
     }
 };
@@ -86,22 +54,29 @@ pub const TypeSummary = union(Type) {
     primitive: Primitive,
     @"fn",
     fn_returns_type,
-    opaque_instance,
-    enum_instance,
-    struct_instance,
-    union_instance,
-    error_type,
-    fn_type,
-    fn_type_returns_type,
-    type,
-    enum_type,
-    struct_type,
-    namespace_type,
-    union_type,
-    opaque_type,
+    instance: InstanceValue,
+    type: TypeValue,
 
     pub fn coarseType(self: TypeSummary) Type {
         return std.meta.activeTag(self);
+    }
+
+    pub fn typeValueKind(self: TypeSummary) ?TypeValue.Kind {
+        return switch (self) {
+            .type => |type_value| type_value.kind,
+            else => null,
+        };
+    }
+
+    pub fn instanceValueKind(self: TypeSummary) ?InstanceValue.Kind {
+        return switch (self) {
+            .instance => |instance_value| instance_value.kind,
+            else => null,
+        };
+    }
+
+    pub fn isTypeValue(self: TypeSummary) bool {
+        return std.meta.activeTag(self) == .type;
     }
 
     fn eql(a: TypeSummary, b: TypeSummary) bool {
@@ -109,8 +84,72 @@ pub const TypeSummary = union(Type) {
 
         return switch (a) {
             .primitive => |a_primitive| a_primitive.eql(b.primitive),
+            .type => |a_type| a_type.eql(b.type),
+            .instance => |a_instance| a_instance.eql(b.instance),
             else => true,
         };
+    }
+};
+
+pub const InstanceValue = struct {
+    kind: Kind,
+
+    pub const Kind = enum {
+        @"enum",
+        @"struct",
+        @"union",
+        @"opaque",
+
+        pub fn name(self: Kind) []const u8 {
+            return switch (self) {
+                .@"enum" => "Enum instance",
+                .@"struct" => "Struct instance",
+                .@"union" => "Union instance",
+                .@"opaque" => "Opaque instance",
+            };
+        }
+    };
+
+    fn eql(a: InstanceValue, b: InstanceValue) bool {
+        return a.kind == b.kind;
+    }
+};
+
+pub const TypeValue = struct {
+    kind: Kind,
+
+    pub const unknown: TypeValue = .{ .kind = .unknown };
+
+    pub const Kind = enum {
+        unknown,
+        primitive,
+        @"fn",
+        fn_returns_type,
+        error_set,
+        @"enum",
+        @"struct",
+        namespace,
+        @"union",
+        @"opaque",
+
+        pub fn name(self: Kind) []const u8 {
+            return switch (self) {
+                .unknown => "Type",
+                .primitive => "Primitive type",
+                .@"fn" => "Function type",
+                .fn_returns_type => "Type function type",
+                .error_set => "Error",
+                .@"enum" => "Enum",
+                .@"struct" => "Struct",
+                .namespace => "Namespace",
+                .@"union" => "Union",
+                .@"opaque" => "Opaque",
+            };
+        }
+    };
+
+    fn eql(a: TypeValue, b: TypeValue) bool {
+        return a.kind == b.kind;
     }
 };
 
@@ -182,12 +221,14 @@ pub fn debugPrintSummary(summary_value: TypeSummary) void {
             .number => |number| std.debug.print("{s}", .{number.name}),
             .named => |name| std.debug.print("{s}", .{name}),
         },
+        .instance => |instance_value| std.debug.print("{s}", .{instance_value.kind.name()}),
+        .type => |type_value| std.debug.print("{s}", .{type_value.kind.name()}),
         inline else => |_, tag| std.debug.print("{s}", .{tag.name()}),
     }
 }
 // TODO: #149 - perhaps this can be more general - `summarize(node)` and switches out instead of expecting caller to do it?
 pub fn summarizeRoot() TypeSummary {
-    return .namespace_type;
+    return .{ .type = .{ .kind = .namespace } };
 }
 
 pub fn summarizeFnProto(
@@ -204,7 +245,7 @@ pub fn summarizeFnProto(
     } else false;
 
     return if (as_type_value)
-        if (returns_type) .fn_type_returns_type else .fn_type
+        .{ .type = .{ .kind = if (returns_type) .fn_returns_type else .@"fn" } }
     else if (returns_type) .fn_returns_type else .@"fn";
 }
 
@@ -268,13 +309,15 @@ fn summarizeTypeExpr(
     if (tree.nodeTag(node) == .identifier) {
         const name = tree.getNodeSource(node);
         if (primitiveFromName(name)) |primitive| return .{ .primitive = primitive };
-        if (std.mem.eql(u8, name, "type")) return .type;
+        if (std.mem.eql(u8, name, "type")) return .{ .type = .unknown };
     }
 
     var fn_proto_buffer: [1]Ast.Node.Index = undefined;
     if (tree.fullFnProto(&fn_proto_buffer, node)) |fn_proto| {
         return summarizeFnProto(tree, fn_proto, false);
     }
+
+    if (summarizePtrFnType(tree, node, false)) |ptr_fn_summary| return ptr_fn_summary;
 
     var container_decl_buffer: [2]Ast.Node.Index = undefined;
     if (tree.fullContainerDecl(&container_decl_buffer, node)) |container_decl| {
@@ -284,7 +327,7 @@ fn summarizeTypeExpr(
     switch (tree.nodeTag(node)) {
         .error_set_decl,
         .merge_error_sets,
-        => return .error_type,
+        => return .{ .type = .{ .kind = .error_set } },
         else => return null,
     }
 }
@@ -306,7 +349,8 @@ fn summarizeValueExpr(
             if (std.mem.eql(u8, value, "true") or std.mem.eql(u8, value, "false")) {
                 return .{ .primitive = .bool };
             }
-            if (std.mem.eql(u8, value, "type")) return .type;
+            if (primitiveFromName(value) != null) return .{ .type = .{ .kind = .primitive } };
+            if (std.mem.eql(u8, value, "type")) return .{ .type = .unknown };
         },
         .number_literal => {
             const value = tree.getNodeSource(node);
@@ -322,16 +366,16 @@ fn summarizeValueExpr(
         },
         .error_set_decl,
         .merge_error_sets,
-        => return .error_type,
+        => return .{ .type = .{ .kind = .error_set } },
         .builtin_call_two,
         .builtin_call_two_comma,
         .builtin_call,
         .builtin_call_comma,
         => {
             const builtin_name = tree.tokenSlice(tree.nodeMainToken(node));
-            if (std.mem.eql(u8, builtin_name, "@import")) return .namespace_type;
+            if (std.mem.eql(u8, builtin_name, "@import")) return .{ .type = .{ .kind = .namespace } };
             if (std.mem.eql(u8, builtin_name, "@Type") or std.mem.eql(u8, builtin_name, "@TypeOf")) {
-                return .type;
+                return .{ .type = .unknown };
             }
         },
         else => {},
@@ -342,12 +386,29 @@ fn summarizeValueExpr(
         return summarizeFnProto(tree, fn_proto, true);
     }
 
+    if (summarizePtrFnType(tree, node, true)) |ptr_fn_summary| return ptr_fn_summary;
+
     var container_decl_buffer: [2]Ast.Node.Index = undefined;
     if (tree.fullContainerDecl(&container_decl_buffer, node)) |container_decl| {
         return summarizeContainerDecl(tree, container_decl, .type_value);
     }
 
     return .unknown;
+}
+
+fn summarizePtrFnType(
+    tree: Ast,
+    node: Ast.Node.Index,
+    comptime as_type_value: bool,
+) ?TypeSummary {
+    const ptr_type = tree.fullPtrType(node) orelse return null;
+    var fn_proto_buffer: [1]Ast.Node.Index = undefined;
+    const fn_proto = tree.fullFnProto(
+        &fn_proto_buffer,
+        ptr_type.ast.child_type,
+    ) orelse return null;
+
+    return summarizeFnProto(tree, fn_proto, as_type_value);
 }
 
 fn summarizeContainerDecl(
@@ -358,20 +419,20 @@ fn summarizeContainerDecl(
     const token_tag = tree.tokenTag(container_decl.ast.main_token);
     return switch (token_tag) {
         .keyword_struct => switch (mode) {
-            .instance => if (ast.isContainerNamespace(tree, container_decl)) .namespace_type else .struct_instance,
-            .type_value => if (ast.isContainerNamespace(tree, container_decl)) .namespace_type else .struct_type,
+            .instance => if (ast.isContainerNamespace(tree, container_decl)) .{ .type = .{ .kind = .namespace } } else .{ .instance = .{ .kind = .@"struct" } },
+            .type_value => .{ .type = .{ .kind = if (ast.isContainerNamespace(tree, container_decl)) .namespace else .@"struct" } },
         },
         .keyword_union => switch (mode) {
-            .instance => .union_instance,
-            .type_value => .union_type,
+            .instance => .{ .instance = .{ .kind = .@"union" } },
+            .type_value => .{ .type = .{ .kind = .@"union" } },
         },
         .keyword_opaque => switch (mode) {
-            .instance => .opaque_instance,
-            .type_value => .opaque_type,
+            .instance => .{ .instance = .{ .kind = .@"opaque" } },
+            .type_value => .{ .type = .{ .kind = .@"opaque" } },
         },
         .keyword_enum => switch (mode) {
-            .instance => .enum_instance,
-            .type_value => .enum_type,
+            .instance => .{ .instance = .{ .kind = .@"enum" } },
+            .type_value => .{ .type = .{ .kind = .@"enum" } },
         },
         inline else => |token| @panic("Unexpected container main token: " ++ @tagName(token)),
     };

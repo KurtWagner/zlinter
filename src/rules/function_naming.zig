@@ -54,7 +54,7 @@ pub const Config = struct {
 
 const ParamKind = struct {
     name: []const u8,
-    kind: zlinter.session.TypeStore.Type,
+    kind: zlinter.session.TypeStore.TypeSummary,
 };
 
 /// Builds and returns the function_naming rule.
@@ -171,11 +171,18 @@ fn run(
 
                 if (type_kind) |kind| {
                     switch (kind) {
-                        .@"fn", .fn_type, .fn_returns_type, .fn_type_returns_type => {
+                        .@"fn", .fn_returns_type => {
                             try param_kinds.append(gpa, .{
                                 .name = identifier,
                                 .kind = kind,
                             });
+                        },
+                        .type => |type_value| switch (type_value.kind) {
+                            .@"fn", .fn_returns_type => try param_kinds.append(gpa, .{
+                                .name = identifier,
+                                .kind = kind,
+                            }),
+                            else => {},
                         },
                         else => {},
                     }
@@ -183,9 +190,13 @@ fn run(
 
                 const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const desc: []const u8 = style: {
                     break :style switch (type_kind orelse .other) {
-                        .fn_type, .@"fn" => .{ config.function_arg_that_is_fn, "Function argument of function" },
-                        .fn_type_returns_type, .fn_returns_type => .{ config.function_arg_that_is_type_fn, "Function argument of type function" },
-                        .type => .{ config.function_arg_that_is_type, "Function argument of type" },
+                        .@"fn" => .{ config.function_arg_that_is_fn, "Function argument of function" },
+                        .fn_returns_type => .{ config.function_arg_that_is_type_fn, "Function argument of type function" },
+                        .type => |type_value| switch (type_value.kind) {
+                            .@"fn" => .{ config.function_arg_that_is_fn, "Function argument of function" },
+                            .fn_returns_type => .{ config.function_arg_that_is_type_fn, "Function argument of type function" },
+                            else => .{ config.function_arg_that_is_type, "Function argument of type" },
+                        },
                         else => .{ config.function_arg, "Function argument" },
                     };
                 };
@@ -232,36 +243,39 @@ fn classifyParamTypeKind(
     tree: Ast,
     param: Ast.Node.Index,
     seen_param_kinds: []const ParamKind,
-) ?zlinter.session.TypeStore.Type {
+) ?zlinter.session.TypeStore.TypeSummary {
     const param_type_node = zlinter.ast.unwrapNode(
         tree,
         param,
         .{},
     );
 
-    var type_kind: ?zlinter.session.TypeStore.Type =
-        zlinter.session.TypeStore.summarizeTypeNode(tree, param).coarseType();
-    switch (type_kind orelse .other) {
+    var type_summary: ?zlinter.session.TypeStore.TypeSummary =
+        zlinter.session.TypeStore.summarizeTypeNode(tree, param);
+    switch (type_summary orelse .other) {
         .unknown, .other, .primitive => {},
         else => {
-            if (type_kind == .type) {
+            if (type_summary.?.coarseType() == .type) {
                 const is_type_literal = tree.nodeTag(param_type_node) == .identifier and
                     std.mem.eql(u8, tree.getNodeSource(param_type_node), "type");
                 if (!is_type_literal) return .other;
             }
-            return type_kind;
+            return type_summary;
         },
     }
 
-    if (tree.nodeTag(param_type_node) != .identifier) return type_kind;
+    if (tree.nodeTag(param_type_node) != .identifier) return type_summary;
 
     const type_name = tree.getNodeSource(param_type_node);
 
     for (seen_param_kinds) |param_kind| {
         if (std.mem.eql(u8, param_kind.name, type_name)) {
             return switch (param_kind.kind) {
-                .fn_type => .@"fn",
-                .fn_type_returns_type => .fn_returns_type,
+                .type => |type_value| switch (type_value.kind) {
+                    .@"fn" => .@"fn",
+                    .fn_returns_type => .fn_returns_type,
+                    else => param_kind.kind,
+                },
                 else => param_kind.kind,
             };
         }
@@ -269,18 +283,18 @@ fn classifyParamTypeKind(
 
     if (context.resolveDeclOfNode(doc, param_type_node)) |decl_id| {
         if (context.decl_store.declResolvedType(decl_id)) |type_id| {
-            type_kind = context.type_store.summary(type_id).coarseType();
+            type_summary = context.type_store.summary(type_id);
         }
     }
-    switch (type_kind orelse .other) {
+    switch (type_summary orelse .other) {
         .unknown, .other, .primitive => {},
-        else => return type_kind,
+        else => return type_summary,
     }
 
-    if (std.mem.endsWith(u8, type_name, "FnType")) return .fn_type_returns_type;
-    if (std.mem.endsWith(u8, type_name, "Type")) return .type;
+    if (std.mem.endsWith(u8, type_name, "FnType")) return .{ .type = .{ .kind = .fn_returns_type } };
+    if (std.mem.endsWith(u8, type_name, "Type")) return .{ .type = .unknown };
 
-    return type_kind;
+    return type_summary;
 }
 
 /// Returns fn proto if node is fn proto and has a name token.

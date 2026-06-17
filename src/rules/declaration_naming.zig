@@ -126,7 +126,7 @@ fn run(
             if (isThisBuiltinCall(tree, init_node)) continue :nodes;
         }
 
-        const type_kind = context.resolveDeclValueKind(decl_id) orelse .other;
+        const type_summary = context.resolveDeclValueSummary(decl_id) orelse .other;
         const name_token = var_decl.ast.mut_token + 1;
         const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
 
@@ -169,24 +169,23 @@ fn run(
 
         // Check name style:
         const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const var_desc: []const u8 =
-            switch (type_kind) {
+            switch (type_summary) {
                 .fn_returns_type => .{ config.decl_that_is_type_fn, "Type function" },
                 .@"fn" => .{ config.decl_that_is_fn, "Function" },
-                .namespace_type => .{ config.decl_that_is_namespace, "Namespace" },
-                .type => .{ config.decl_that_is_type, "Type" },
-                .fn_type, .fn_type_returns_type => .{ config.decl_that_is_type, "Function type" },
-                .struct_type => .{ config.decl_that_is_type, "Struct" },
-                .enum_type => .{ config.decl_that_is_type, "Enum" },
-                .union_type => .{ config.decl_that_is_type, "Union" },
-                .opaque_type => .{ config.decl_that_is_type, "Opaque" },
-                .error_type => .{ config.decl_that_is_type, "Error" },
+                .type => |type_value| switch (type_value.kind) {
+                    .namespace => .{ config.decl_that_is_namespace, "Namespace" },
+                    .@"fn", .fn_returns_type => .{ config.decl_that_is_type, "Function type" },
+                    .@"struct" => .{ config.decl_that_is_type, "Struct" },
+                    .@"enum" => .{ config.decl_that_is_type, "Enum" },
+                    .@"union" => .{ config.decl_that_is_type, "Union" },
+                    .@"opaque" => .{ config.decl_that_is_type, "Opaque" },
+                    .error_set => .{ config.decl_that_is_type, "Error" },
+                    .unknown, .primitive => .{ config.decl_that_is_type, "Type" },
+                },
                 .unknown,
                 .other,
                 .primitive,
-                .struct_instance,
-                .union_instance,
-                .enum_instance,
-                .opaque_instance,
+                .instance,
                 => switch (tree.tokens.items(.tag)[var_decl.ast.mut_token]) {
                     .keyword_const => .{ config.const_decl, "Constant" },
                     .keyword_var => .{ config.var_decl, "Variable" },
