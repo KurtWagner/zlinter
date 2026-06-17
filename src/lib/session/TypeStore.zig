@@ -79,7 +79,7 @@ pub const TypeSummary = union(Type) {
         return std.meta.activeTag(self) == .type;
     }
 
-    fn eql(a: TypeSummary, b: TypeSummary) bool {
+    pub fn eql(a: TypeSummary, b: TypeSummary) bool {
         if (std.meta.activeTag(a) != std.meta.activeTag(b)) return false;
 
         return switch (a) {

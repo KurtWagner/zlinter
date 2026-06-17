@@ -1455,9 +1455,7 @@ fn resolveDecl(
 test "LintContext.resolveTypeKind" {
     const TestCase = struct {
         contents: [:0]const u8,
-        kind: TypeStore.Type,
-        type_value_kind: ?TypeStore.TypeValue.Kind = null,
-        instance_value_kind: ?TypeStore.InstanceValue.Kind = null,
+        summary: TypeStore.TypeSummary,
     };
 
     var failed = false;
@@ -1466,60 +1464,128 @@ test "LintContext.resolveTypeKind" {
         // ------
         .{
             .contents = "var ok:u32 = 10;",
-            .kind = .primitive,
+            .summary = .{
+                .primitive = .{
+                    .number = .{
+                        .name = "u32",
+                        .kind = .unsigned_int,
+                        .bits = 32,
+                    },
+                },
+            },
         },
         .{
-            .contents = "age:u8 = 10,",
-            .kind = .primitive,
+            .contents = "age:i16 = 10,",
+            .summary = .{
+                .primitive = .{
+                    .number = .{
+                        .name = "i16",
+                        .kind = .signed_int,
+                        .bits = 16,
+                    },
+                },
+            },
+        },
+        .{
+            .contents = "var flag: bool = true;",
+            .summary = .{ .primitive = .bool },
         },
         .{
             .contents = "name :[] const u8,",
-            .kind = .primitive,
+            .summary = .{
+                .primitive = .{
+                    // TODO: #149 - Slice?
+                    .number = .{
+                        .name = "u8",
+                        .kind = .unsigned_int,
+                        .bits = 8,
+                    },
+                },
+            },
         },
         .{
-            .contents = "var ptr: *u32 = undefined;",
-            .kind = .primitive,
+            .contents = "var ptr: *i32 = undefined;",
+            .summary = .{
+                .primitive = .{
+                    .number = .{
+                        .name = "i32",
+                        .kind = .signed_int,
+                        .bits = 32,
+                    },
+                },
+            },
         },
         .{
             .contents = "var slice: []const u8 = undefined;",
-            .kind = .primitive,
+            .summary = .{
+                .primitive = .{
+                    // TODO: #149 - Slice?
+                    .number = .{
+                        .name = "u8",
+                        .kind = .unsigned_int,
+                        .bits = 8,
+                    },
+                },
+            },
         },
         .{
             .contents = "var maybe: ?u32 = null;",
-            .kind = .primitive,
+            .summary = .{
+                .primitive = .{
+                    .number = .{
+                        .name = "u32",
+                        .kind = .unsigned_int,
+                        .bits = 32,
+                    },
+                },
+            },
         },
         // Type:
         // -----
         .{
             .contents = "const A: type = u32;",
-            .kind = .type,
+            // TODO: #149 - u32?
+            .summary = .{ .type = .unknown },
         },
         .{
             .contents = "const A = u32;",
-            .kind = .type,
+            .summary = .{
+                // TODO: #149 - should we put more info in here like primitives?
+                .type = .{ .kind = .primitive },
+            },
         },
         .{
             .contents = "const A:?type = u32;",
-            .kind = .type,
+            .summary = .{
+                // TODO: #149 - u32?
+                .type = .unknown,
+            },
         },
         .{
             .contents = "const A:?type = null;",
-            .kind = .type,
+            .summary = .{
+                .type = .unknown,
+            },
         },
         .{
+            // TODO: #149 - should this be type of an instance and we assert actual typeof?
             .contents = "const A = @TypeOf(u32);",
-            .kind = .type,
+            .summary = .{
+                .type = .unknown,
+            },
         },
         .{
+            // TODO: #149 - u32?
             .contents =
             \\const A = BuildType();
             \\fn BuildType() type {
             \\   return u32;
             \\}
             ,
-            .kind = .type,
+            .summary = .{ .type = .unknown },
         },
         .{
+            // TODO: #149 - Test code is wrong? and should assert on resulting type
             .contents =
             \\const FloatType = IntToFloatType(u32);
             \\fn IntToFloatType(IntType: type) type {
@@ -1531,7 +1597,7 @@ test "LintContext.resolveTypeKind" {
             \\});
             \\}
             ,
-            .kind = .type,
+            .summary = .{ .type = .unknown },
         },
         // Struct type:
         // ------------
@@ -1542,20 +1608,23 @@ test "LintContext.resolveTypeKind" {
             \\   return struct { field: u32 };
             \\}
             ,
-            .kind = .type,
-            .type_value_kind = .@"struct",
+            .summary = .{
+                .type = .{ .kind = .@"struct" },
+            },
         },
         .{
             .contents = "const A = struct { field: u32 };",
-            .kind = .type,
-            .type_value_kind = .@"struct",
+            .summary = .{
+                .type = .{ .kind = .@"struct" },
+            },
         },
         // Namespace type:
         // ---------------
         .{
             .contents = "const a = struct { const decl: u32 = 1; };",
-            .kind = .type,
-            .type_value_kind = .namespace,
+            .summary = .{
+                .type = .{ .kind = .namespace },
+            },
         },
         .{
             .contents =
@@ -1565,11 +1634,13 @@ test "LintContext.resolveTypeKind" {
             \\   }
             \\};
             ,
-            .kind = .type,
-            .type_value_kind = .namespace,
+            .summary = .{
+                .type = .{ .kind = .namespace },
+            },
         },
         // Namespace instance (invalid use)
         // --------------------------------
+        // TODO: #149 - work out whats going on here
         // .{
         //     .contents =
         //     \\ const pointless = my_namespace{};
@@ -1581,7 +1652,7 @@ test "LintContext.resolveTypeKind" {
         // ---------------
         .{
             .contents = "var a: fn () void = undefined;",
-            .kind = .@"fn",
+            .summary = .@"fn",
         },
         .{
             .contents =
@@ -1590,61 +1661,69 @@ test "LintContext.resolveTypeKind" {
             \\  return 10;
             \\}
             ,
-            .kind = .@"fn",
+            .summary = .@"fn",
         },
         // Type that is function
         .{
             .contents = "var a = fn() void;",
-            .kind = .type,
-            .type_value_kind = .@"fn",
+            .summary = .{
+                .type = .{ .kind = .@"fn" },
+            },
         },
         .{
             .contents =
             \\const RefFunc = FuncType;
             \\const FuncType = fn() void;
             ,
-            .kind = .type,
-            .type_value_kind = .@"fn",
+            .summary = .{
+                .type = .{ .kind = .@"fn" },
+            },
         },
         .{
             .contents = "var a = *const fn() void;",
-            .kind = .type,
-            .type_value_kind = .@"fn",
+            .summary = .{
+                .type = .{ .kind = .@"fn" },
+            },
         },
         .{
             .contents =
             \\const RefFunc = FuncType;
             \\const FuncType = *const fn() void;
             ,
-            .kind = .type,
-            .type_value_kind = .@"fn",
+            .summary = .{
+                .type = .{ .kind = .@"fn" },
+            },
         },
         // Type that is function that returns type
         .{
             .contents = "var a = fn() type;",
-            .kind = .type,
-            .type_value_kind = .fn_returns_type,
+            .summary = .{
+                .type = .{ .kind = .fn_returns_type },
+            },
         },
         .{
             .contents =
             \\const RefFunc = FuncType;
             \\const FuncType = fn() type;
             ,
-            .kind = .type,
-            .type_value_kind = .fn_returns_type,
+            .summary = .{
+                .type = .{ .kind = .fn_returns_type },
+            },
         },
         .{
             .contents = "var a = *const fn() type;",
-            .kind = .type,
-            .type_value_kind = .fn_returns_type,
+            .summary = .{
+                .type = .{ .kind = .fn_returns_type },
+            },
         },
         .{
             .contents =
             \\const RefFunc = FuncType;
             \\const FuncType = *const fn() type;
             ,
-            .kind = .type,
-            .type_value_kind = .fn_returns_type,
+            .summary = .{
+                .type = .{ .kind = .fn_returns_type },
+            },
         },
         // Function that returns type
         .{
@@ -1654,51 +1733,56 @@ test "LintContext.resolveTypeKind" {
             \\  return f32;
             \\}
             ,
-            .kind = .fn_returns_type,
+            .summary = .fn_returns_type,
         },
         .{
             .contents =
             \\var a: *const fn () type = undefined;
             ,
-            .kind = .fn_returns_type,
+            .summary = .fn_returns_type,
         },
         // Error type
         .{
             .contents =
             \\var MyError = error {a,b,c};
             ,
-            .kind = .type,
-            .type_value_kind = .error_set,
+            .summary = .{
+                .type = .{ .kind = .error_set },
+            },
         },
         .{
             .contents =
             \\var MyError = some.other.errors || OtherErrors;
             ,
-            .kind = .type,
-            .type_value_kind = .error_set,
+            .summary = .{
+                .type = .{ .kind = .error_set },
+            },
         },
         .{
             .contents =
             \\var MyError = Reference;
             \\const Reference = error {a,b,c};
             ,
-            .kind = .type,
-            .type_value_kind = .error_set,
+            .summary = .{
+                .type = .{ .kind = .error_set },
+            },
         },
         // Error instance
         .{
             .contents =
             \\const err = error.MyError;
             ,
-            .kind = .instance,
-            .instance_value_kind = .error_set,
+            .summary = .{
+                .instance = .{ .kind = .error_set },
+            },
         },
         .{
             .contents =
             \\var MyError:error{a} = other;
             ,
-            .kind = .instance,
-            .instance_value_kind = .error_set,
+            .summary = .{
+                .instance = .{ .kind = .error_set },
+            },
         },
         // Union instance:
         .{
@@ -1706,8 +1790,9 @@ test "LintContext.resolveTypeKind" {
             \\const u = U{.a=1};
             \\const U = union { a: u32, b: f32 };
             ,
-            .kind = .instance,
-            .instance_value_kind = .@"union",
+            .summary = .{
+                .instance = .{ .kind = .@"union" },
+            },
         },
         .{
             .contents =
@@ -1715,8 +1800,9 @@ test "LintContext.resolveTypeKind" {
             \\const u = U{.a=1};
             \\const U = union { a: u32, b: f32 };
             ,
-            .kind = .instance,
-            .instance_value_kind = .@"union",
+            .summary = .{
+                .instance = .{ .kind = .@"union" },
+            },
         },
         // Struct instance:
         .{
@@ -1724,8 +1810,9 @@ test "LintContext.resolveTypeKind" {
             \\const s = S{.a=1};
             \\const S = struct { a: u32  };
             ,
-            .kind = .instance,
-            .instance_value_kind = .@"struct",
+            .summary = .{
+                .instance = .{ .kind = .@"struct" },
+            },
         },
         .{
             .contents =
@@ -1733,8 +1820,9 @@ test "LintContext.resolveTypeKind" {
             \\const s = S{.a=1};
             \\const S = struct { a: u32 };
             ,
-            .kind = .instance,
-            .instance_value_kind = .@"struct",
+            .summary = .{
+                .instance = .{ .kind = .@"struct" },
+            },
         },
         // Struct instance:
         .{
@@ -1742,8 +1830,9 @@ test "LintContext.resolveTypeKind" {
             \\const s = E.a;
             \\const E = enum { a, b  };
             ,
-            .kind = .instance,
-            .instance_value_kind = .@"enum",
+            .summary = .{
+                .instance = .{ .kind = .@"enum" },
+            },
         },
         .{
             .contents =
@@ -1751,8 +1840,9 @@ test "LintContext.resolveTypeKind" {
             \\const s = E.a;
             \\const E = enum { a, b };
             ,
-            .kind = .instance,
-            .instance_value_kind = .@"enum",
+            .summary = .{
+                .instance = .{ .kind = .@"enum" },
+            },
         },
         // Opaque type
         .{
@@ -1765,10 +1855,11 @@ test "LintContext.resolveTypeKind" {
             \\
             \\extern fn show_window(*Window) callconv(.C) void;
             ,
-            .kind = .type,
-            .type_value_kind = .@"opaque",
+            .summary = .{
+                .type = .{ .kind = .@"opaque" },
+            },
         },
-        // Opaque instance
+        // Other
         .{
             .contents =
             \\var main_window: *Window = undefined;
@@ -1780,7 +1871,7 @@ test "LintContext.resolveTypeKind" {
             \\
             \\extern fn show_window(*Window) callconv(.C) void;
             ,
-            .kind = .other,
+            .summary = .other,
         },
     }) |test_case| {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1815,23 +1906,10 @@ test "LintContext.resolveTypeKind" {
 
         const maybe_resolved_type = context.resolveTypeOfNode(doc, node);
 
-        const actual_kind: ?TypeStore.Type = if (maybe_resolved_type) |resolved_type|
-            resolved_type.summary.coarseType()
-        else
-            null;
-        const actual_type_value_kind: ?TypeStore.TypeValue.Kind = if (maybe_resolved_type) |resolved_type|
-            resolved_type.summary.typeValueKind()
-        else
-            null;
-        const actual_instance_value_kind: ?TypeStore.InstanceValue.Kind = if (maybe_resolved_type) |resolved_type|
-            resolved_type.summary.instanceValueKind()
-        else
-            null;
-
-        if (actual_kind != test_case.kind or
-            (test_case.type_value_kind != null and actual_type_value_kind != test_case.type_value_kind) or
-            (test_case.instance_value_kind != null and actual_instance_value_kind != test_case.instance_value_kind))
-        {
+        if (maybe_resolved_type == null or !TypeStore.TypeSummary.eql(
+            maybe_resolved_type.?.summary,
+            test_case.summary,
+        )) {
             const border: [50]u8 = @splat('-');
             std.debug.print("\n{s}\n{s}\n{s}\n{s}\n", .{
                 border,
@@ -1839,15 +1917,11 @@ test "LintContext.resolveTypeKind" {
                 doc.tree(&context).getNodeSource(node),
                 border,
             });
-            std.debug.print("Expected: {t}", .{test_case.kind});
-            if (test_case.type_value_kind) |type_value_kind| {
-                std.debug.print(".{t}", .{type_value_kind});
-            }
-            if (test_case.instance_value_kind) |instance_value_kind| {
-                std.debug.print(".{t}", .{instance_value_kind});
-            }
-            std.debug.print("\n", .{});
-            std.debug.print("Actual: {t}\n", .{maybe_resolved_type.?.summary});
+            std.debug.print("Expected: {t}\n", .{test_case.summary});
+            if (maybe_resolved_type) |resolved_type|
+                std.debug.print("Actual: {t}\n", .{resolved_type.summary})
+            else
+                std.debug.print("Actual: null\n", .{});
             std.debug.print("Contents:\n{s}\n{s}\n{s}\n{s}\n", .{
                 border,
                 test_case.contents,
