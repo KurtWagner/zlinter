@@ -74,11 +74,11 @@ pub fn resolve(
     if (self.config_id_by_path.get(normal_path)) |index|
         return index;
 
-    const build_root = try self.findNearestBuildRoot(io, normal_path);
+    const build_root = try self.findBuildRoot(io, normal_path);
 
     const build_root_path = switch (build_root) {
         .config_id => |cached| {
-            try self.cacheResolvedPaths(gpa, normal_path, cached.path, cached.index);
+            try self.cacheResolvedConfigPaths(gpa, normal_path, cached.path, cached.index);
             return cached.index;
         },
         .path => |path| path,
@@ -132,7 +132,7 @@ pub fn resolve(
     try self.config_id_by_path.putNoClobber(gpa, build_root_key, config_id);
     errdefer _ = self.config_id_by_path.remove(build_root_key);
 
-    try self.cacheResolvedPaths(gpa, normal_path, build_root_key, config_id);
+    try self.cacheResolvedConfigPaths(gpa, normal_path, build_root_key, config_id);
 
     return config_id;
 }
@@ -168,12 +168,12 @@ const BuildRoot = union(enum) {
 /// cached path that resolves to an existing configuration. Returning the cached
 /// path lets `resolve` backfill any missing descendant cache entries between the
 /// original source path and that ancestor.
-fn findNearestBuildRoot(
+fn findBuildRoot(
     self: *const BuildConfigStore,
     io: std.Io,
     src_path: []const u8,
 ) !BuildRoot {
-    const zone = tracy.traceNamed(@src(), "BuildConfigStore.findNearestBuildRoot");
+    const zone = tracy.traceNamed(@src(), "BuildConfigStore.findBuildRoot");
     defer zone.end();
 
     var dir = src_path;
@@ -213,14 +213,14 @@ fn findNearestBuildRoot(
 /// `cached_ancestor_path` must already be known to resolve to `config_id`.
 /// This lets future resolves for nearby descendants stop at the closest cached
 /// ancestor instead of probing every parent directory for `build.zig`.
-fn cacheResolvedPaths(
+fn cacheResolvedConfigPaths(
     self: *BuildConfigStore,
     gpa: std.mem.Allocator,
     src_path: []const u8,
     cached_ancestor_path: []const u8,
     config_id: ConfigId,
 ) !void {
-    const zone = tracy.traceNamed(@src(), "BuildConfigStore.cacheResolvedPaths");
+    const zone = tracy.traceNamed(@src(), "BuildConfigStore.cacheResolvedConfigPaths");
     defer zone.end();
 
     const config_index = config_id.toIndex();

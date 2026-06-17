@@ -531,7 +531,7 @@ pub const ImportIterator = struct {
                 it.gpa,
                 parent_file_dir,
             ),
-            .stdlib => try it.file_store.resolveStdLib(
+            .stdlib => try it.file_store.resolveStdlib(
                 it.io,
                 it.gpa,
                 it.zig_lib_directory,

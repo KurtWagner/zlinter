@@ -274,7 +274,7 @@ pub fn declResolvedTypeDecl(self: *const DeclStore, id: DeclId) ?DeclId {
 /// `context_decl_id` supplies the lexical scope to start lookup from. For
 /// example, resolving an identifier inside a function should search that
 /// function's local scope before walking out to the file root.
-pub fn resolveNodeDecl(
+pub fn resolveDeclByNode(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
@@ -304,8 +304,18 @@ pub fn resolveNodeDecl(
     );
 }
 
+pub fn resolveNodeDecl(
+    self: *DeclStore,
+    file_store: *FileStore,
+    module_store: *const ModuleStore,
+    context_decl_id: DeclId,
+    node: std.zig.Ast.Node.Index,
+) ?DeclId {
+    return self.resolveDeclByNode(file_store, module_store, context_decl_id, node);
+}
+
 /// Resolves an expression node to the declaration it names from a lexical scope.
-pub fn resolveNodeDeclFromScope(
+pub fn resolveDeclByNodeFromScope(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
@@ -333,16 +343,35 @@ pub fn resolveNodeDeclFromScope(
     );
 }
 
+pub fn resolveNodeDeclFromScope(
+    self: *DeclStore,
+    file_store: *FileStore,
+    module_store: *const ModuleStore,
+    file_id: FileStore.FileId,
+    scope_id: ScopeId,
+    node: std.zig.Ast.Node.Index,
+) ?DeclId {
+    return self.resolveDeclByNodeFromScope(file_store, module_store, file_id, scope_id, node);
+}
+
 /// Returns the stored declaration represented by this AST node, if any.
 ///
 /// This is a direct node-to-declaration lookup, it does not resolve identifier
 /// references or field accesses.
-pub fn declByNode(
+pub fn declIdByNode(
     self: *const DeclStore,
     file_id: FileStore.FileId,
     node: std.zig.Ast.Node.Index,
 ) ?DeclId {
     return self.declByAstNode(file_id, node);
+}
+
+pub fn declByNode(
+    self: *const DeclStore,
+    file_id: FileStore.FileId,
+    node: std.zig.Ast.Node.Index,
+) ?DeclId {
+    return self.declIdByNode(file_id, node);
 }
 
 pub fn rootDecl(
@@ -353,15 +382,23 @@ pub fn rootDecl(
 }
 
 /// Returns the lexical scope owned by an AST node, if one was recorded.
+pub fn scopeIdByNode(
+    self: *const DeclStore,
+    file_id: FileStore.FileId,
+    node: std.zig.Ast.Node.Index,
+) ?ScopeId {
+    const zone = tracy.traceNamed(@src(), "DeclStore.scopeIdByNode");
+    defer zone.end();
+
+    return self.scope_id_by_owner_node.get(.init(file_id, node));
+}
+
 pub fn scopeByNode(
     self: *const DeclStore,
     file_id: FileStore.FileId,
     node: std.zig.Ast.Node.Index,
 ) ?ScopeId {
-    const zone = tracy.traceNamed(@src(), "DeclStore.scopeByNode");
-    defer zone.end();
-
-    return self.scope_id_by_owner_node.get(.init(file_id, node));
+    return self.scopeIdByNode(file_id, node);
 }
 
 /// Returns the declaration that should be treated as the container identity.
@@ -1355,7 +1392,7 @@ fn resolveImportMember(
             std.log.err("Failed to resolve '{s}': {t}", .{ import_path, e });
             break :file_id null;
         },
-        .stdlib => file_store.resolveStdLib(
+        .stdlib => file_store.resolveStdlib(
             self.io,
             self.gpa,
             self.zig_lib_directory,
@@ -1367,12 +1404,12 @@ fn resolveImportMember(
         .builtin => null,
         .root => null,
         .module => id: {
-            const parent_module_id = module_store.moduleForRootFile(parent_file_id) orelse break :id null;
-            const imported_module_id = module_store.namedImport(
+            const parent_module_id = module_store.moduleIdByRootFile(parent_file_id) orelse break :id null;
+            const imported_module_id = module_store.moduleIdByImportName(
                 parent_module_id,
                 import_path,
             ) orelse break :id null;
-            break :id module_store.rootFile(imported_module_id);
+            break :id module_store.rootFileId(imported_module_id);
         },
     };
 

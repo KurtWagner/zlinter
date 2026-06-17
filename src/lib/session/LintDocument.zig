@@ -18,16 +18,28 @@ pub fn deinit(self: *LintDocument, gpa: std.mem.Allocator) void {
     self.skipper.deinit();
 }
 
-pub fn absPath(self: *const LintDocument, context: *const LintContext) []const u8 {
+pub fn fileAbsPath(self: *const LintDocument, context: *const LintContext) []const u8 {
     return context.file_store.fileAbsPath(self.file_id);
 }
 
-pub fn source(self: *const LintDocument, context: *const LintContext) [:0]const u8 {
+pub fn fileSource(self: *const LintDocument, context: *const LintContext) [:0]const u8 {
     return context.file_store.fileSource(self.file_id);
 }
 
-pub fn tree(self: *const LintDocument, context: *const LintContext) Ast {
+pub fn fileTree(self: *const LintDocument, context: *const LintContext) Ast {
     return context.file_store.fileTree(self.file_id);
+}
+
+pub fn tree(self: *const LintDocument, context: *const LintContext) Ast {
+    return self.fileTree(context);
+}
+
+pub fn source(self: *const LintDocument, context: *const LintContext) [:0]const u8 {
+    return self.fileSource(context);
+}
+
+pub fn absPath(self: *const LintDocument, context: *const LintContext) []const u8 {
+    return self.fileAbsPath(context);
 }
 
 /// Returns true if the problem should be skipped based on line level

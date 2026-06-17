@@ -101,7 +101,7 @@ fn consumeBuildConfigStep(
     //         self.gpa,
     //     );
     // }
-    // const root_file_id = self.module_store.rootFile(root_module_id);
+    // const root_file_id = self.module_store.rootFileId(root_module_id);
     // _ = self.decl_store.store(
     //     root_file_id,
     //     &self.file_store,
@@ -644,7 +644,7 @@ fn resolveFunctionReturnEnumDecl(
         node,
     ) orelse return null;
     const return_type = fn_proto.ast.return_type.unwrap() orelse return null;
-    const return_decl_id = self.decl_store.resolveNodeDecl(
+    const return_decl_id = self.decl_store.resolveDeclByNode(
         &self.file_store,
         &self.module_store,
         fn_decl_id,
@@ -697,7 +697,7 @@ fn resolveEnumDeclFromValueExpr(
 
     if (tree.nodeTag(node) == .field_access) {
         const lhs, _ = tree.nodeData(node).node_and_token;
-        const lhs_decl_id = self.decl_store.resolveNodeDecl(
+        const lhs_decl_id = self.decl_store.resolveDeclByNode(
             &self.file_store,
             &self.module_store,
             context_decl_id,
@@ -706,7 +706,7 @@ fn resolveEnumDeclFromValueExpr(
         return self.resolveEnumDeclAlias(lhs_decl_id);
     }
 
-    const target_decl_id = self.decl_store.resolveNodeDecl(
+    const target_decl_id = self.decl_store.resolveDeclByNode(
         &self.file_store,
         &self.module_store,
         context_decl_id,
@@ -730,7 +730,7 @@ fn resolveEnumDeclAlias(
         const decl_node = self.decl_store.declAstNode(current_decl_id) orelse return null;
         const var_decl = tree.fullVarDecl(decl_node) orelse return null;
         const init_node = var_decl.ast.init_node.unwrap() orelse return null;
-        const target_decl_id = self.decl_store.resolveNodeDecl(
+        const target_decl_id = self.decl_store.resolveDeclByNode(
             &self.file_store,
             &self.module_store,
             current_decl_id,
@@ -789,7 +789,7 @@ fn tagNameFromValueExpr(
             break :blk tree.tokenSlice(last_token);
         },
         .identifier => blk: {
-            const target_decl_id = self.decl_store.resolveNodeDecl(
+            const target_decl_id = self.decl_store.resolveDeclByNode(
                 &self.file_store,
                 &self.module_store,
                 context_decl_id,
@@ -852,13 +852,13 @@ fn immediateDeclForNode(
     const zone = tracy.traceNamed(@src(), "LintContext.immediateDeclForNode");
     defer zone.end();
 
-    if (self.decl_store.declByNode(doc.file_id, node)) |decl_id| {
+    if (self.decl_store.declIdByNode(doc.file_id, node)) |decl_id| {
         return decl_id;
     }
 
     const context_scope_id = self.contextScopeForNode(doc, node) orelse return null;
 
-    return self.decl_store.resolveNodeDeclFromScope(
+    return self.decl_store.resolveDeclByNodeFromScope(
         &self.file_store,
         &self.module_store,
         doc.file_id,
@@ -882,13 +882,13 @@ fn contextScopeForNode(
 
     var current: ?Ast.Node.Index = node;
     while (current) |current_node| {
-        if (self.decl_store.scopeByNode(doc.file_id, current_node)) |scope_id| {
+        if (self.decl_store.scopeIdByNode(doc.file_id, current_node)) |scope_id| {
             return scope_id;
         }
 
         current = doc.lineage.items(.parent)[@intFromEnum(current_node)];
     }
-    return self.decl_store.scopeByNode(doc.file_id, .root);
+    return self.decl_store.scopeIdByNode(doc.file_id, .root);
 }
 
 pub fn resolveDeclValueKind(
@@ -1236,7 +1236,7 @@ fn resolveImportRootDecl(
             self.gpa,
             parent_file_dir,
         ) catch return null,
-        .stdlib => self.file_store.resolveStdLib(
+        .stdlib => self.file_store.resolveStdlib(
             self.io,
             self.gpa,
             self.zig_lib_directory,
@@ -1244,12 +1244,12 @@ fn resolveImportRootDecl(
         .builtin => null,
         .root => null,
         .module => id: {
-            const parent_module_id = self.module_store.moduleForRootFile(parent_file_id) orelse break :id null;
-            const imported_module_id = self.module_store.namedImport(
+            const parent_module_id = self.module_store.moduleIdByRootFile(parent_file_id) orelse break :id null;
+            const imported_module_id = self.module_store.moduleIdByImportName(
                 parent_module_id,
                 import_path,
             ) orelse break :id null;
-            break :id self.module_store.rootFile(imported_module_id);
+            break :id self.module_store.rootFileId(imported_module_id);
         },
     };
 

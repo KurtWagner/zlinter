@@ -17,7 +17,7 @@ pub const Id = enum(u32) {
     }
 };
 
-pub fn kind(self: CompileContext, config: *const std.Build.Configuration) std.Build.Configuration.Step.Compile.Kind {
+pub fn stepKind(self: CompileContext, config: *const std.Build.Configuration) std.Build.Configuration.Step.Compile.Kind {
     const step = config.steps[self.step_index];
     const compile = step.extended.cast(
         config,
@@ -26,8 +26,16 @@ pub fn kind(self: CompileContext, config: *const std.Build.Configuration) std.Bu
     return compile.flags3.kind;
 }
 
-pub fn name(self: CompileContext, config: *const std.Build.Configuration) []const u8 {
+pub fn stepName(self: CompileContext, config: *const std.Build.Configuration) []const u8 {
     return config.steps[self.step_index].name.slice(config);
+}
+
+pub fn kind(self: CompileContext, config: *const std.Build.Configuration) std.Build.Configuration.Step.Compile.Kind {
+    return self.stepKind(config);
+}
+
+pub fn name(self: CompileContext, config: *const std.Build.Configuration) []const u8 {
+    return self.stepName(config);
 }
 
 const std = @import("std");

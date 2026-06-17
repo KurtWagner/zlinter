@@ -241,7 +241,7 @@ fn declRequiringCleanup(
             false,
     }) return null;
 
-    const var_decl_id = context.decl_store.declByNode(
+    const var_decl_id = context.decl_store.declIdByNode(
         doc.file_id,
         maybe_var_decl_node,
     ) orelse return null;

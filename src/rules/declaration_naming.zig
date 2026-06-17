@@ -118,7 +118,7 @@ fn run(
             if (token_tag == .keyword_export) continue :nodes;
         }
 
-        const decl_id = context.decl_store.declByNode(
+        const decl_id = context.decl_store.declIdByNode(
             doc.file_id,
             node,
         ) orelse continue :nodes;

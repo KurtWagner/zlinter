@@ -272,7 +272,7 @@ fn resolveEnumLiteralContextTypeDecl(
                 continue;
             };
             if (nodeWithin(tree, init_node, current)) {
-                const decl_id = context.decl_store.declByNode(doc.file_id, ancestor) orelse return null;
+                const decl_id = context.decl_store.declIdByNode(doc.file_id, ancestor) orelse return null;
                 return context.resolveDeclTypeDecl(decl_id);
             }
         }
@@ -283,7 +283,7 @@ fn resolveEnumLiteralContextTypeDecl(
                 continue;
             };
             if (nodeWithin(tree, value_node, current)) {
-                const decl_id = context.decl_store.declByNode(doc.file_id, ancestor) orelse return null;
+                const decl_id = context.decl_store.declIdByNode(doc.file_id, ancestor) orelse return null;
                 return context.resolveDeclTypeDecl(decl_id);
             }
         }

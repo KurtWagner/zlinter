@@ -217,7 +217,7 @@ fn run(
 
             fields: for (container_decl.ast.members) |member| {
                 if (tree.fullContainerField(member)) |container_field| {
-                    const type_summary = if (context.decl_store.declByNode(doc.file_id, member)) |decl_id|
+                    const type_summary = if (context.decl_store.declIdByNode(doc.file_id, member)) |decl_id|
                         context.resolveDeclValueSummary(decl_id)
                     else
                         null;
