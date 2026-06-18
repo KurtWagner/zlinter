@@ -24,6 +24,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+// zlinter-disable field_naming declaration_naming - respecting tracy C interface
+
 const std = @import("std");
 const assert = std.debug.assert;
 
