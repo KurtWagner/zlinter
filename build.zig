@@ -135,6 +135,7 @@ const StepBuilder = struct {
         ) catch @panic("OOM");
     }
 
+    // TODO: #149 - revisit this
     /// Adds a Zig compile step to lint.
     ///
     /// The compile step provides the root module, import table, target, and
@@ -147,10 +148,10 @@ const StepBuilder = struct {
     ///
     /// If no compile steps are added, zlinter falls back to path-based file
     /// resolution.
-    pub fn addCompile(self: *StepBuilder, compile: *std.Build.Step.Compile) void {
-        const arena = self.b.allocator;
-        self.compiled.append(arena, compile) catch @panic("OOM");
-    }
+    // pub fn addCompile(self: *StepBuilder, compile: *std.Build.Step.Compile) void {
+    //     const arena = self.b.allocator;
+    //     self.compiled.append(arena, compile) catch @panic("OOM");
+    // }
 
     /// Adds a source path to be linted.
     ///
