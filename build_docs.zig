@@ -7,8 +7,13 @@ pub fn main(init: std.process.Init) !void {
     const gpa = init.gpa;
 
     const args = try init.minimal.args.toSlice(init.arena.allocator());
+    if (args.len < 3) {
+        fatal("Expected output path and rules directory arguments", .{});
+    }
 
-    const output_file_path = args[1];
+    const rules_dir_path = args[1];
+    const output_file_path = args[2];
+
     var output_file = std.Io.Dir.cwd().createFile(io, output_file_path, .{}) catch |err| {
         fatal("Unable to open '{s}': {s}", .{ output_file_path, @errorName(err) });
     };
@@ -23,8 +28,30 @@ pub fn main(init: std.process.Init) !void {
         \\
     );
 
-    const file_names = try gpa.dupe([]const u8, args[2..]);
-    defer gpa.free(file_names);
+    var rule_files: std.ArrayList([]const u8) = .empty;
+    defer {
+        for (rule_files.items) |file_name| gpa.free(file_name);
+        rule_files.deinit(gpa);
+    }
+
+    var rules_dir = std.Io.Dir.cwd().openDir(io, rules_dir_path, .{ .iterate = true }) catch |err| {
+        fatal("Unable to open rules directory '{s}': {s}", .{ rules_dir_path, @errorName(err) });
+    };
+    defer rules_dir.close(io);
+
+    var walker = try rules_dir.walk(gpa);
+    defer walker.deinit();
+
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file) continue;
+        if (!std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+
+        const file_path = try std.fs.path.join(gpa, &.{ rules_dir_path, entry.path });
+        errdefer gpa.free(file_path);
+        try rule_files.append(gpa, file_path);
+    }
+
+    const file_names = rule_files.items;
     std.mem.sort([]const u8, file_names, {}, stringLessThan);
 
     var file_buffer: [2048]u8 = undefined;

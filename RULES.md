@@ -741,7 +741,7 @@ pub fn divide(x: i32, y: i32) !i32 {
 
 Flags redundant `comptime` on parameters whose types are always comptime-known.
 
-In Zig, parameters of type `type`, `comptime_int`, and `comptime_float` are always comptime. 
+In Zig, parameters of type `type`, `comptime_int`, and `comptime_float` are always comptime.
 Writing `comptime T: type` is equivalent to `T: type`.
 
 **Good:**

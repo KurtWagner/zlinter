@@ -222,8 +222,6 @@ pub fn build(b: *std.Build) void {
     const tracy_callstack = b.option(bool, "tracy-callstack", "Include callstack information with Tracy data. Does nothing if -Dtracy is not provided. Default: false") orelse false;
     const tracy_allocation = b.option(bool, "tracy-allocation", "Include allocation information with Tracy data. Does nothing if -Dtracy is not provided. Default: false") orelse false;
     const tracy_callstack_depth = b.option(u32, "tracy-callstack-depth", "Declare callstack depth for Tracy data. Does nothing if -Dtracy-callstack is not provided. Default: 10") orelse 10;
-    const io = b.graph.io;
-
     const tracy_module = createTracyModule(b, .{
         .target = target,
         .optimize = optimize,
@@ -500,6 +498,8 @@ pub fn build(b: *std.Build) void {
                 .optimize = .Debug,
             }),
         }));
+        doc_build_run.addDirectoryArg(b.path("src/rules"));
+
         const step = &doc_build_run.step;
 
         var install_step = b.addInstallFileWithDir(
@@ -508,24 +508,6 @@ pub fn build(b: *std.Build) void {
             "RULES.md",
         );
         install_step.step.dependOn(step);
-
-        // TODO: #149 - bring this back?
-        // const rules_lazy_path = b.path("src/rules");
-        // _ = step.addDirectoryWatchInput(rules_lazy_path) catch @panic("OOM");
-
-        var rules_dir = b.root.openDir(
-            io,
-            "src/rules",
-            .{ .iterate = true },
-        ) catch @panic("unable to open rules/ directory");
-        defer rules_dir.close(io);
-        {
-            var it = rules_dir.walk(b.allocator) catch @panic("OOM");
-            while (it.next(io) catch @panic("OOM")) |entry| {
-                if (!std.mem.endsWith(u8, entry.basename, ".zig")) continue;
-                doc_build_run.addFileArg(b.path(b.pathJoin(&.{ "src/rules", entry.path })));
-            }
-        }
 
         break :step &install_step.step;
     });
