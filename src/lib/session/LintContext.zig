@@ -33,7 +33,8 @@ pub fn init(self: *LintContext) !void {
         .io = self.io,
     };
 
-    // TODO: #149 - investigate using fake BuildConfigStore
+    // Maybe one day we will care enough to use a fake for tests but for now
+    // it's fine to ignore...
     if (!builtin.is_test) try self.initBuildConfig();
 }
 
@@ -235,37 +236,6 @@ pub fn resolveFile(self: *LintContext, input_path: []const u8) !FileStore.FileId
         self.gpa,
     );
     return id;
-}
-
-pub const CompiledContextIterator = struct {
-    ctx: *const LintContext,
-    file_id: FileStore.FileId,
-
-    index: usize = 0,
-
-    pub fn next(self: *CompiledContextIterator) ?CompileContext.Id {
-        while (self.index < self.ctx.compile_contexts.len) {
-            const index = self.index;
-            self.index += 1;
-
-            _ = index;
-            // TODO: #149 - bring back
-            // if (self.ctx.include_descendents.items[index].contains(self.file_id)) {
-            //     return @intCast(index);
-            // }
-        }
-        return null;
-    }
-};
-
-pub fn resolveCompiledUnits(
-    self: *const LintContext,
-    file_id: FileStore.FileId,
-) CompiledContextIterator {
-    return .{
-        .ctx = self,
-        .file_id = file_id,
-    };
 }
 
 pub fn debugPrintFileDecls(self: *const LintContext, file_id: FileStore.FileId) void {
@@ -1476,11 +1446,14 @@ test "LintContext.resolveTypeKind" {
             },
         },
         .{
-            // TODO: #149 - should this be type of an instance and we assert actual typeof?
-            .contents = "const A = @TypeOf(u32);",
-            .summary = .{
-                .type = .unknown,
-            },
+            // TODO: Should we be smart enough to know what type of resolves to?
+            // Gets a bit complicated for anything fancy. Probs better waiting
+            // for the build server api thing that should give us type info.
+            .contents =
+            \\const a:@TypeOf(value) = 2;
+            \\const value: u32 = 10;
+            ,
+            .summary = .other,
         },
         .{
             .contents =
