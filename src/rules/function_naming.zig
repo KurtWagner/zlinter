@@ -252,17 +252,12 @@ fn classifyParamTypeKind(
 
     var type_summary: ?zlinter.session.TypeStore.TypeSummary =
         zlinter.session.TypeStore.summarizeTypeNode(tree, param);
-    switch (type_summary orelse .other) {
-        .unknown, .other, .primitive => {},
-        else => {
-            if (type_summary.?.coarseType() == .type) {
-                const is_type_literal = tree.nodeTag(param_type_node) == .identifier and
-                    std.mem.eql(u8, tree.getNodeSource(param_type_node), "type");
-                if (!is_type_literal) return .other;
-            }
-            return type_summary;
-        },
-    }
+    if (paramValueKindFromTypeAnnotation(
+        tree,
+        param_type_node,
+        type_summary,
+    )) |param_value_kind|
+        return param_value_kind;
 
     if (tree.nodeTag(param_type_node) != .identifier) return type_summary;
 
@@ -286,19 +281,38 @@ fn classifyParamTypeKind(
             type_summary = context.type_store.summary(type_id);
         }
     }
-    switch (type_summary orelse .other) {
-        .unknown, .other, .primitive => {},
-        else => return type_summary,
-    }
+    if (paramValueKindFromTypeAnnotation(
+        tree,
+        param_type_node,
+        type_summary,
+    )) |param_value_kind|
+        return param_value_kind;
 
     if (std.mem.endsWith(u8, type_name, "FnType")) return .{ .type = .{ .kind = .fn_returns_type } };
-    if (std.mem.endsWith(u8, type_name, "Type")) return .{ .type = .unknown };
 
     return type_summary;
 }
 
+fn paramValueKindFromTypeAnnotation(
+    tree: Ast,
+    param_type_node: Ast.Node.Index,
+    maybe_type_summary: ?zlinter.session.TypeStore.TypeSummary,
+) ?zlinter.session.TypeStore.TypeSummary {
+    const type_summary = maybe_type_summary orelse return null;
+    return switch (type_summary) {
+        .unknown, .other, .primitive => null,
+        .@"fn", .fn_returns_type => type_summary,
+        .type => {
+            const is_type_literal = tree.nodeTag(param_type_node) == .identifier and
+                std.mem.eql(u8, tree.getNodeSource(param_type_node), "type");
+            return if (is_type_literal) type_summary else .other;
+        },
+        .instance, .slice, .array => .other,
+    };
+}
+
 /// Returns fn proto if node is fn proto and has a name token.
-pub fn namedFnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?Ast.full.FnProto {
+fn namedFnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?Ast.full.FnProto {
     if (fnProto(tree, buffer, node)) |fn_proto| {
         if (fn_proto.name_token != null) return fn_proto;
     }
@@ -306,7 +320,7 @@ pub fn namedFnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index)
 }
 
 /// Returns fn proto if node is fn proto and has a name token.
-pub fn fnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?Ast.full.FnProto {
+fn fnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?Ast.full.FnProto {
     if (switch (tree.nodeTag(node)) {
         .fn_proto => tree.fnProto(node),
         .fn_proto_multi => tree.fnProtoMulti(node),
@@ -459,6 +473,64 @@ test "general" {
                 .severity = .@"error",
                 .slice = "A",
                 .message = "Function argument should be snake_case",
+            },
+        },
+    );
+}
+
+test "function parameters named after value instances remain snake_case" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\
+        \\const Ast = struct {
+        \\    const Node = struct {
+        \\        const Index = u32;
+        \\    };
+        \\};
+        \\const Thing = struct {};
+        \\
+        \\fn takesNamedTypes(tree: Ast, node: Ast.Node.Index, thing: Thing) void {
+        \\    _ = tree;
+        \\    _ = node;
+        \\    _ = thing;
+        \\}
+        \\
+        \\fn takesGeneric(T: type, value: T, BadValue: T) void {
+        \\    _ = T;
+        \\    _ = value;
+        \\    _ = BadValue;
+        \\}
+        \\
+        \\fn takesTypes(GoodType: type, bad_type: type) void {
+        \\    _ = GoodType;
+        \\    _ = bad_type;
+        \\}
+        \\
+        \\fn takesFunctions(goodFn: *const fn () void, bad_fn: *const fn () void) void {
+        \\    _ = goodFn;
+        \\    _ = bad_fn;
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "BadValue",
+                .message = "Function argument should be snake_case",
+            },
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "bad_type",
+                .message = "Function argument of type should be TitleCase",
+            },
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "bad_fn",
+                .message = "Function argument of function should be camelCase",
             },
         },
     );

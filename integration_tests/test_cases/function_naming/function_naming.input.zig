@@ -40,6 +40,21 @@ pub const Parent = struct {
 };
 
 // Function args
+const std = @import("std");
+const Ast = std.zig.Ast;
+const Thing = struct {};
+
+fn typedValues(tree: Ast, node: Ast.Node.Index, thing: Thing) void {
+    _ = tree;
+    _ = node;
+    _ = thing;
+}
+
+fn genericValues(T: type, value: T) void {
+    _ = T;
+    _ = value;
+}
+
 fn exampleA(good_int: u32, BadInt: u32, badInt: u32) void {
     _ = good_int;
     _ = BadInt;
