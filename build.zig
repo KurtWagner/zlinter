@@ -299,21 +299,17 @@ pub fn build(b: *std.Build) void {
     });
     install_coverage.step.dependOn(&merge_coverage.step);
 
+    // This intentionally shells out to the nested integration_tests build so
+    // the tests exercise zlinter the way an external project consumes it. The
+    // parent build cannot observe the nested build graph, so use
+    // `cd integration_tests && zig build test --watch` when watching
+    // integration test inputs.
     const run_integration_tests = b.addSystemCommand(&.{ b.graph.zig_exe, "build", "test" });
     if (test_focus_on_rule) |r| {
         run_integration_tests.addArg(b.fmt("-Dtest_focus_on_rule={s}", .{r}));
     }
     run_integration_tests.setCwd(b.path("./integration_tests"));
     run_integration_tests.has_side_effects = true;
-
-    // Add directory and file inputs to ensure that we can watch and re-run tests
-    // as these can't be resolved magicaly through the system call.
-    // TODO: #149 - Look into adding this back
-    // addWatchInput(b, &run_integration_tests.step, b.path("./integration_tests/src"), .none) catch @panic("OOM");
-    // addWatchInput(b, &run_integration_tests.step, b.path("./integration_tests/test_cases"), .none) catch @panic("OOM");
-    // addWatchInput(b, &run_integration_tests.step, b.path("./src"), .none) catch @panic("OOM");
-    // addWatchInput(b, &run_integration_tests.step, b.path("./integration_tests/build.zig"), .none) catch @panic("OOM");
-    // addWatchInput(b, &run_integration_tests.step, b.path("./build_rules.zig"), .none) catch @panic("OOM");
 
     const integration_test_step = b.step("integration-test", "Run integration tests");
     integration_test_step.dependOn(&run_integration_tests.step);
