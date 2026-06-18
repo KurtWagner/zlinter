@@ -115,35 +115,8 @@ fn consumeBuildConfigStep(
     });
     errdefer _ = self.compile_contexts.swapRemove(compile_context_id.toIndex());
 
-    // TODO: #149 - this is still experimental descendents population.
-    // {
-    //     var map: std.AutoHashMapUnmanaged(files.Import, void) = .empty;
-    //     defer map.deinit(self.gpa);
-
-    //     var it: files.ImportIterator = .{
-    //         .file_store = &self.file_store,
-    //         .io = self.io,
-    //         .cwd = std.fs.path.dirname(self.file_store.fileAbsPath(root_file_id)) orelse self.cwd,
-    //         .gpa = self.gpa,
-    //         .zig_lib_directory = self.zig_lib_directory,
-    //     };
-    //     defer it.deinit();
-
-    //     try it.init(root_file_id);
-    //     while (try it.next()) |child_import| {
-    //         try map.put(self.gpa, child_import, {});
-    //         std.debug.print(" Visited Descendent: '{t}' '{s}'\n", .{
-    //             child_import.kind,
-    //             self.file_store.fileAbsPath(child_import.file_id),
-    //         });
-
-    //         _ = self.decl_store.store(
-    //             child_import.file_id,
-    //             &self.file_store,
-    //             self.gpa,
-    //         );
-    //     }
-    // }
+    // TODO: #149 - decide whether compile contexts should eagerly populate
+    // declarations for module descendants.
 }
 
 fn resolveBuildModule(
@@ -1111,7 +1084,7 @@ fn typeSummaryFromValueNode(
         .unwrap_optional_unwrap = false,
     });
 
-    if (isImportBuiltinCall(tree, node)) {
+    if (import_utils.isImportBuiltinCall(tree, node)) {
         const target_decl_id = self.resolveImportRootDecl(
             self.decl_store.declFileId(context_decl_id),
             node,
@@ -1197,21 +1170,6 @@ fn typeSummaryFromValueNode(
     );
 }
 
-fn isImportBuiltinCall(tree: Ast, node: Ast.Node.Index) bool {
-    return switch (tree.nodeTag(node)) {
-        .builtin_call,
-        .builtin_call_comma,
-        .builtin_call_two,
-        .builtin_call_two_comma,
-        => std.mem.eql(
-            u8,
-            tree.tokenSlice(tree.nodeMainToken(node)),
-            "@import",
-        ),
-        else => false,
-    };
-}
-
 fn resolveImportRootDecl(
     self: *LintContext,
     parent_file_id: FileStore.FileId,
@@ -1220,77 +1178,25 @@ fn resolveImportRootDecl(
     const tree = self.file_store.fileTree(parent_file_id);
 
     var import_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
-    const import_path = writeImportPath(
+    const import_path = import_utils.writeImportPath(
         tree,
         node,
         &import_path_buffer,
     ) orelse return null;
 
-    const parent_abs_path = self.file_store.fileAbsPath(parent_file_id);
-    const parent_file_dir = std.fs.path.dirname(parent_abs_path) orelse ".";
-
-    const maybe_file_id: ?FileStore.FileId = switch (files.Import.Kind.init(import_path)) {
-        .relative => self.file_store.resolve(
-            import_path,
-            self.io,
-            self.gpa,
-            parent_file_dir,
-        ) catch return null,
-        .stdlib => self.file_store.resolveStdlib(
-            self.io,
-            self.gpa,
-            self.zig_lib_directory,
-        ) catch return null,
-        .builtin => null,
-        .root => null,
-        .module => id: {
-            const parent_module_id = self.module_store.moduleIdByRootFile(parent_file_id) orelse break :id null;
-            const imported_module_id = self.module_store.moduleIdByImportName(
-                parent_module_id,
-                import_path,
-            ) orelse break :id null;
-            break :id self.module_store.rootFileId(imported_module_id);
-        },
-    };
+    const maybe_file_id = import_utils.resolveFile(
+        &self.file_store,
+        &self.module_store,
+        self.io,
+        self.gpa,
+        self.zig_lib_directory,
+        parent_file_id,
+        import_path,
+    ) catch return null;
 
     const file_id = maybe_file_id orelse return null;
     _ = self.decl_store.store(file_id, &self.file_store, self.gpa);
     return self.decl_store.rootDecl(file_id);
-}
-
-fn writeImportPath(
-    tree: Ast,
-    node: Ast.Node.Index,
-    buffer: *[std.fs.max_path_bytes]u8,
-) ?[]const u8 {
-    switch (tree.nodeTag(node)) {
-        .builtin_call,
-        .builtin_call_comma,
-        .builtin_call_two,
-        .builtin_call_two_comma,
-        => {},
-        else => return null,
-    }
-
-    if (!std.mem.eql(u8, tree.tokenSlice(tree.nodeMainToken(node)), "@import")) return null;
-
-    var params_buffer: [2]Ast.Node.Index = undefined;
-    const params = tree.builtinCallParams(&params_buffer, node) orelse return null;
-    if (params.len != 1) return null;
-
-    const import_arg = params[0];
-    if (tree.nodeTag(import_arg) != .string_literal) return null;
-
-    const raw_import = tree.tokenSlice(tree.nodeMainToken(import_arg));
-    var writer: std.Io.Writer = .fixed(buffer);
-
-    return switch (std.zig.string_literal.parseWrite(&writer, raw_import) catch return null) {
-        .success => path: {
-            writer.flush() catch return null;
-            break :path writer.buffer[0..writer.end];
-        },
-        .failure => null,
-    };
 }
 
 fn typeSummaryFromTypeValueExpr(
@@ -1941,6 +1847,7 @@ const ast = @import("../ast.zig");
 const builtin = @import("builtin");
 const comments = @import("../comments.zig");
 const files = @import("../files.zig");
+const import_utils = @import("imports.zig");
 const std = @import("std");
 const testing = @import("../testing.zig");
 const tracy = @import("tracy");

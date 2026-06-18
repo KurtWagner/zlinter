@@ -1368,88 +1368,31 @@ fn resolveImportMember(
 
     const tree = file_store.fileTree(parent_file_id);
 
-    const parent_abs_path = file_store.fileAbsPath(parent_file_id);
-    const parent_file_dir = std.fs.path.dirname(parent_abs_path) orelse ".";
-
     var import_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
-    const import_path = writeImportPath(
+    const import_path = import_utils.writeImportPath(
         tree,
         init_node,
         &import_path_buffer,
     ) orelse
         return null;
 
-    const import_kind: files.Import.Kind = .init(import_path);
-    const maybe_file_id: ?FileStore.FileId = file_id: switch (import_kind) {
-        .relative => file_store.resolve(
-            import_path,
-            self.io,
-            self.gpa,
-            parent_file_dir,
-        ) catch |e| {
-            std.log.err("Failed to resolve '{s}': {t}", .{ import_path, e });
-            break :file_id null;
-        },
-        .stdlib => file_store.resolveStdlib(
-            self.io,
-            self.gpa,
-            self.zig_lib_directory,
-        ) catch |e| {
-            std.log.err("Failed to stdlib: {t}", .{e});
-            break :file_id null;
-        },
-        // TODO: #149 - handle "root" and "builtin" imports.
-        .builtin => null,
-        .root => null,
-        .module => id: {
-            const parent_module_id = module_store.moduleIdByRootFile(parent_file_id) orelse break :id null;
-            const imported_module_id = module_store.moduleIdByImportName(
-                parent_module_id,
-                import_path,
-            ) orelse break :id null;
-            break :id module_store.rootFileId(imported_module_id);
-        },
+    const maybe_file_id = import_utils.resolveFile(
+        file_store,
+        module_store,
+        self.io,
+        self.gpa,
+        self.zig_lib_directory,
+        parent_file_id,
+        import_path,
+    ) catch |e| {
+        std.log.err("Failed to resolve import '{s}': {t}", .{ import_path, e });
+        return null;
     };
 
     return if (maybe_file_id) |file_id|
         self.resolveFileRootMember(file_store, file_id, member_name)
     else
         null;
-}
-
-fn writeImportPath(
-    tree: std.zig.Ast,
-    node: std.zig.Ast.Node.Index,
-    buffer: *[std.fs.max_path_bytes]u8,
-) ?[]const u8 {
-    switch (tree.nodeTag(node)) {
-        .builtin_call,
-        .builtin_call_comma,
-        .builtin_call_two,
-        .builtin_call_two_comma,
-        => {},
-        else => return null,
-    }
-
-    if (!std.mem.eql(u8, tree.tokenSlice(tree.nodeMainToken(node)), "@import")) return null;
-
-    var params_buffer: [2]std.zig.Ast.Node.Index = undefined;
-    const params = tree.builtinCallParams(&params_buffer, node) orelse return null;
-    if (params.len != 1) return null;
-
-    const import_arg = params[0];
-    if (tree.nodeTag(import_arg) != .string_literal) return null;
-
-    const raw_import = tree.tokenSlice(tree.nodeMainToken(import_arg));
-    var writer: std.Io.Writer = .fixed(buffer);
-
-    return switch (std.zig.string_literal.parseWrite(&writer, raw_import) catch return null) {
-        .success => path: {
-            writer.flush() catch return null;
-            break :path writer.buffer[0..writer.end];
-        },
-        .failure => null,
-    };
 }
 
 fn isThisBuiltinCall(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) bool {
@@ -2018,5 +1961,5 @@ const FileStore = @import("FileStore.zig");
 const ModuleStore = @import("ModuleStore.zig");
 const TypeStore = @import("TypeStore.zig");
 const ast = @import("../ast.zig");
-const files = @import("../files.zig");
+const import_utils = @import("imports.zig");
 const tracy = @import("tracy");

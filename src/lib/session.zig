@@ -9,6 +9,7 @@ pub const LintContext = @import("session/LintContext.zig");
 pub const LintDocument = @import("session/LintDocument.zig");
 pub const ModuleStore = @import("session/ModuleStore.zig");
 pub const TypeStore = @import("session/TypeStore.zig");
+pub const imports = @import("session/imports.zig");
 
 pub const max_zig_file_size_bytes = common.max_zig_file_size_bytes;
 
