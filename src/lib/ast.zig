@@ -1477,7 +1477,7 @@ test "findFnCall" {
     }
 }
 
-// TODO: #149 - needs tests
+/// Returns the explicit type node for a declaration node.
 pub fn declTypeNode(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) ?std.zig.Ast.Node.Index {
     if (tree.fullVarDecl(node)) |var_decl| return var_decl.ast.type_node.unwrap();
     if (tree.fullContainerField(node)) |field| return field.ast.type_expr.unwrap();
@@ -1488,8 +1488,95 @@ pub fn declTypeNode(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) ?std.zig.As
     return null;
 }
 
-// TODO: #149 - needs tests
-/// Returns the name token for a node declaration.
+test "declTypeNode - var declaration returns explicit type" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        "const typed: u32 = 1;",
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const var_decl = try testing.expectVarDecl(tree, "typed");
+    const type_node = declTypeNode(tree, var_decl).?;
+    try std.testing.expectEqualStrings("u32", tree.getNodeSource(type_node));
+}
+
+test "declTypeNode - var declaration without explicit type returns null" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        "const inferred = 2;",
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const var_decl = try testing.expectVarDecl(tree, "inferred");
+    try std.testing.expectEqual(null, declTypeNode(tree, var_decl));
+}
+
+test "declTypeNode - function declaration returns return type" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        \\fn named() bool {
+        \\    return true;
+        \\}
+    ,
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const fn_decl = try testing.expectSingleNodeOfTag(tree, &.{.fn_decl});
+    const type_node = declTypeNode(tree, fn_decl).?;
+    try std.testing.expectEqualStrings("bool", tree.getNodeSource(type_node));
+}
+
+test "declTypeNode - container field returns explicit type" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        \\const S = struct {
+        \\    field: i32,
+        \\};
+    ,
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const field = try testing.expectSingleNodeOfTag(
+        tree,
+        &.{ .container_field_init, .container_field_align, .container_field },
+    );
+    const type_node = declTypeNode(tree, field).?;
+    try std.testing.expectEqualStrings("i32", tree.getNodeSource(type_node));
+}
+
+test "declTypeNode - container field with default returns explicit type" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        \\const S = struct {
+        \\    defaulted: u16 = 3,
+        \\};
+    ,
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const field = try testing.expectSingleNodeOfTag(tree, &.{.container_field_init});
+    const type_node = declTypeNode(tree, field).?;
+    try std.testing.expectEqualStrings("u16", tree.getNodeSource(type_node));
+}
+
+test "declTypeNode - function type value is not a declaration type" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        "const Callback = fn (u8) void;",
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const var_decl = try testing.expectVarDecl(tree, "Callback");
+    try std.testing.expectEqual(null, declTypeNode(tree, var_decl));
+}
+
+/// Returns the identifier token that names a declaration node.
 pub fn declNameToken(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) ?std.zig.Ast.TokenIndex {
     return switch (tree.nodeTag(node)) {
         // Main token is name
@@ -1520,6 +1607,107 @@ pub fn declNameToken(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) ?std.zig.A
         },
         else => null,
     };
+}
+
+test "declNameToken - var declaration returns identifier token" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        "const typed: u32 = 1;",
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const var_decl = try testing.expectVarDecl(tree, "typed");
+    const name_token = declNameToken(tree, var_decl).?;
+    try std.testing.expectEqualStrings("typed", tree.tokenSlice(name_token));
+}
+
+test "declNameToken - function declaration returns identifier token" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        "fn named() void {}",
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const fn_decl = try testing.expectSingleNodeOfTag(tree, &.{.fn_decl});
+    const name_token = declNameToken(tree, fn_decl).?;
+    try std.testing.expectEqualStrings("named", tree.tokenSlice(name_token));
+}
+
+test "declNameToken - function prototype returns identifier token" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        "extern fn named() void;",
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const fn_proto = try testing.expectSingleNodeOfTag(
+        tree,
+        &.{ .fn_proto_simple, .fn_proto_multi, .fn_proto_one, .fn_proto },
+    );
+    const name_token = declNameToken(tree, fn_proto).?;
+    try std.testing.expectEqualStrings("named", tree.tokenSlice(name_token));
+}
+
+test "declNameToken - container field returns identifier token" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        \\const S = struct {
+        \\    field: i32,
+        \\};
+    ,
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const field = try testing.expectSingleNodeOfTag(
+        tree,
+        &.{ .container_field_init, .container_field_align, .container_field },
+    );
+    const name_token = declNameToken(tree, field).?;
+    try std.testing.expectEqualStrings("field", tree.tokenSlice(name_token));
+}
+
+test "declNameToken - container field with default returns identifier token" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        \\const S = struct {
+        \\    defaulted: u16 = 3,
+        \\};
+    ,
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const field = try testing.expectSingleNodeOfTag(tree, &.{.container_field_init});
+    const name_token = declNameToken(tree, field).?;
+    try std.testing.expectEqualStrings("defaulted", tree.tokenSlice(name_token));
+}
+
+test "declNameToken - anonymous function type returns null" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        "const Callback = fn (u8) void;",
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const var_decl = try testing.expectVarDecl(tree, "Callback");
+    const anonymous_fn_type = tree.fullVarDecl(var_decl).?.ast.init_node.unwrap().?;
+    try std.testing.expectEqual(null, declNameToken(tree, anonymous_fn_type));
+}
+
+test "declNameToken - non declaration returns null" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        "const typed: u32 = 1;",
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(null, declNameToken(tree, .root));
 }
 
 const session = @import("session.zig");
