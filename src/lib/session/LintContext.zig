@@ -1450,22 +1450,17 @@ test "LintContext.resolveTypeKind" {
         // -----
         .{
             .contents = "const A: type = u32;",
-            // TODO: #149 - u32?
             .summary = .{ .type = .unknown },
         },
         .{
             .contents = "const A = u32;",
             .summary = .{
-                // TODO: #149 - should we put more info in here like primitives?
                 .type = .{ .kind = .primitive },
             },
         },
         .{
             .contents = "const A:?type = u32;",
-            .summary = .{
-                // TODO: #149 - u32?
-                .type = .unknown,
-            },
+            .summary = .{ .type = .unknown },
         },
         .{
             .contents = "const A:?type = null;",
@@ -1481,7 +1476,6 @@ test "LintContext.resolveTypeKind" {
             },
         },
         .{
-            // TODO: #149 - u32?
             .contents =
             \\const A = BuildType();
             \\fn BuildType() type {
