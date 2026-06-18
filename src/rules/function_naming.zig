@@ -99,13 +99,13 @@ fn run(
             const fn_name_token = fn_proto.name_token.?;
             const fn_name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(fn_name_token));
 
-            const return_type = functionReturnTypeKind(
+            const return_type = functionReturnTypeSummary(
                 tree,
                 fn_proto,
             ) orelse continue :nodes;
 
             const error_message: ?[]const u8, const severity: ?zlinter.rules.LintProblemSeverity = msg: {
-                if (return_type == .type) {
+                if (functionReturnsType(return_type)) {
                     if (!config.function_that_returns_type.style.check(fn_name)) {
                         break :msg .{
                             try std.fmt.allocPrint(gpa, "Callable returning `type` should be {s}", .{config.function_that_returns_type.style.name()}),
@@ -224,15 +224,22 @@ fn run(
         null;
 }
 
-fn functionReturnTypeKind(
+fn functionReturnTypeSummary(
     tree: Ast,
     fn_proto: Ast.full.FnProto,
-) ?zlinter.session.TypeStore.Type {
+) ?zlinter.session.TypeStore.TypeSummary {
     const return_type_node = fn_proto.ast.return_type.unwrap() orelse return null;
     return zlinter.session.TypeStore.summarizeTypeNode(
         tree,
         return_type_node,
-    ).coarseType();
+    );
+}
+
+fn functionReturnsType(return_type: zlinter.session.TypeStore.TypeSummary) bool {
+    return switch (return_type) {
+        .type => |type_value| type_value.kind == .unknown,
+        else => false,
+    };
 }
 
 // TODO: Move this classification into a shared helper (e.g., in session/context)
@@ -533,6 +540,22 @@ test "function parameters named after value instances remain snake_case" {
                 .message = "Function argument of function should be camelCase",
             },
         },
+    );
+}
+
+test "function returning error set is not treated as returning type" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\
+        \\fn logAndReturnWriteFailure(comptime suffix: []const u8, err: anyerror) error{WriteFailure} {
+        \\    _ = suffix;
+        \\    _ = err;
+        \\    return error.WriteFailure;
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{},
     );
 }
 

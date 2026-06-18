@@ -94,3 +94,8 @@ extern fn extern_excluded() void;
 extern fn ExternExcluded() void;
 extern fn EXTERN_EXCLUDED() void;
 extern fn externWith(BadArg: u32, good_arg: u32, BAD_ARG: u32, badArg: u32) void;
+
+// Error is not treated as a type
+fn errorSetReturn() error{WriteFailure} {
+    return error.WriteFailure;
+}
