@@ -19,6 +19,57 @@ pub const Kind = enum(u5) {
     }
 };
 
+test "Kind.init - relative import path" {
+    try std.testing.expectEqual(
+        Kind.relative,
+        Kind.init("src/session/imports.zig"),
+    );
+    try std.testing.expectEqual(
+        Kind.relative,
+        Kind.init("./session/imports.zig"),
+    );
+    try std.testing.expectEqual(
+        Kind.relative,
+        Kind.init("./imports.zig"),
+    );
+    try std.testing.expectEqual(
+        Kind.relative,
+        Kind.init("imports.zig"),
+    );
+}
+
+test "Kind.init - stdlib import path" {
+    try std.testing.expectEqual(
+        Kind.stdlib,
+        Kind.init("std"),
+    );
+}
+
+test "Kind.init - root import path" {
+    try std.testing.expectEqual(
+        Kind.root,
+        Kind.init("root"),
+    );
+}
+
+test "Kind.init - builtin import path" {
+    try std.testing.expectEqual(
+        Kind.builtin,
+        Kind.init("builtin"),
+    );
+}
+
+test "Kind.init - absolute or other is module" {
+    try std.testing.expectEqual(
+        Kind.module,
+        Kind.init("/tmp/imports"),
+    );
+    try std.testing.expectEqual(
+        Kind.module,
+        Kind.init("imports"),
+    );
+}
+
 pub fn isImportBuiltinCall(tree: Ast, node: Ast.Node.Index) bool {
     return switch (tree.nodeTag(node)) {
         .builtin_call,
@@ -32,6 +83,36 @@ pub fn isImportBuiltinCall(tree: Ast, node: Ast.Node.Index) bool {
         ),
         else => false,
     };
+}
+
+test "isImportBuiltinCall - matches @import" {
+    const source: [:0]const u8 =
+        \\const value = @import("std");
+    ;
+
+    var tree = try Ast.parse(std.testing.allocator, source, .zig);
+    defer tree.deinit(std.testing.allocator);
+
+    const node = try testing.expectSingleNodeOfTag(
+        tree,
+        &.{.builtin_call_two},
+    );
+    try std.testing.expect(isImportBuiltinCall(tree, node));
+}
+
+test "isImportBuiltinCall - rejects other builtin calls" {
+    const source: [:0]const u8 =
+        \\const value = @sizeOf(u8);
+    ;
+
+    var tree = try Ast.parse(std.testing.allocator, source, .zig);
+    defer tree.deinit(std.testing.allocator);
+
+    const node = try testing.expectSingleNodeOfTag(
+        tree,
+        &.{.builtin_call_two},
+    );
+    try std.testing.expect(!isImportBuiltinCall(tree, node));
 }
 
 pub fn writeImportPath(
@@ -58,6 +139,40 @@ pub fn writeImportPath(
         },
         .failure => null,
     };
+}
+
+test "writeImportPath - parses string literal import path" {
+    const source: [:0]const u8 =
+        \\const value = @import("pkg/module.zig");
+    ;
+
+    var tree = try Ast.parse(std.testing.allocator, source, .zig);
+    defer tree.deinit(std.testing.allocator);
+
+    var buffer: [std.fs.max_path_bytes]u8 = undefined;
+    const node = try testing.expectSingleNodeOfTag(
+        tree,
+        &.{.builtin_call_two},
+    );
+    const path = writeImportPath(tree, node, &buffer);
+    try std.testing.expect(path != null);
+    try std.testing.expectEqualStrings("pkg/module.zig", path.?);
+}
+
+test "writeImportPath - rejects non-string import arguments" {
+    const source: [:0]const u8 =
+        \\const value = @import(123);
+    ;
+
+    var tree = try Ast.parse(std.testing.allocator, source, .zig);
+    defer tree.deinit(std.testing.allocator);
+
+    var buffer: [std.fs.max_path_bytes]u8 = undefined;
+    const node = try testing.expectSingleNodeOfTag(
+        tree,
+        &.{.builtin_call_two},
+    );
+    try std.testing.expect(writeImportPath(tree, node, &buffer) == null);
 }
 
 pub fn resolveFile(
@@ -102,6 +217,7 @@ pub fn resolveFile(
 const Ast = std.zig.Ast;
 const FileStore = @import("FileStore.zig");
 const ModuleStore = @import("ModuleStore.zig");
+const testing = @import("../testing.zig");
 const std = @import("std");
 
 test {
