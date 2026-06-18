@@ -93,21 +93,6 @@ fn consumeBuildConfigStep(
         return;
     };
 
-    // TODO: #149 - should we bother doing this?
-    // for (self.module_store.modules.items(.root_file)) |module_root_file_id| {
-    //     _ = self.decl_store.store(
-    //         module_root_file_id,
-    //         &self.file_store,
-    //         self.gpa,
-    //     );
-    // }
-    // const root_file_id = self.module_store.rootFileId(root_module_id);
-    // _ = self.decl_store.store(
-    //     root_file_id,
-    //     &self.file_store,
-    //     self.gpa,
-    // );
-
     const compile_context_id: CompileContext.Id = .fromIndex(self.compile_contexts.len);
     try self.compile_contexts.append(self.gpa, .{
         .step_index = step_index,
