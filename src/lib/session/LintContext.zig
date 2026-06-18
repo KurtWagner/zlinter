@@ -1561,14 +1561,15 @@ test "LintContext.resolveTypeKind" {
         },
         // Namespace instance (invalid use)
         // --------------------------------
-        // TODO: #149 - work out whats going on here
-        // .{
-        //     .contents =
-        //     \\ const pointless = my_namespace{};
-        //     \\ const my_namespace = struct { const decl: u32 = 1; };
-        //     ,
-        //     .kind = null,
-        // },
+        .{
+            .contents =
+            \\const pointless = my_namespace{};
+            \\const my_namespace = struct { const decl: u32 = 1; };
+            ,
+            .summary = .{
+                .instance = .{ .kind = .@"struct" },
+            },
+        },
         // Function:
         // ---------------
         .{

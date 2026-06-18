@@ -702,6 +702,9 @@ fn resolveTypeExprValueSummary(
 fn instanceSummaryFromTypeSummary(summary: TypeStore.TypeSummary) ?TypeStore.TypeSummary {
     return switch (summary.typeValueKind() orelse return null) {
         .@"struct" => .{ .instance = .{ .kind = .@"struct" } },
+        // Namespace containers are still zero-field structs at the value level,
+        // so struct init syntax on them should behave like a struct instance.
+        .namespace => .{ .instance = .{ .kind = .@"struct" } },
         .@"union" => .{ .instance = .{ .kind = .@"union" } },
         .@"enum" => .{ .instance = .{ .kind = .@"enum" } },
         .@"opaque" => .{ .instance = .{ .kind = .@"opaque" } },
