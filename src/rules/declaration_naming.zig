@@ -186,6 +186,8 @@ fn run(
                 .other,
                 .primitive,
                 .instance,
+                .slice,
+                .array,
                 => switch (tree.tokens.items(.tag)[var_decl.ast.mut_token]) {
                     .keyword_const => .{ config.const_decl, "Constant" },
                     .keyword_var => .{ config.var_decl, "Variable" },

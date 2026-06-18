@@ -41,6 +41,10 @@ pub const Type = enum {
     instance,
     /// A value whose Zig type is `type`.
     type,
+    /// e.g., []const u8
+    slice,
+    /// e.g., [10]u8
+    array,
 
     pub fn name(self: Type) []const u8 {
         return switch (self) {
@@ -51,6 +55,8 @@ pub const Type = enum {
             .fn_returns_type => "Type function",
             .instance => "Instance",
             .type => "Type",
+            .slice => "Slice",
+            .array => "Array",
         };
     }
 };
@@ -63,6 +69,8 @@ pub const TypeSummary = union(Type) {
     fn_returns_type,
     instance: InstanceValue,
     type: TypeValue,
+    slice: Slice,
+    array: Array,
 
     pub fn coarseType(self: TypeSummary) Type {
         return std.meta.activeTag(self);
@@ -93,6 +101,8 @@ pub const TypeSummary = union(Type) {
             .primitive => |a_primitive| a_primitive.eql(b.primitive),
             .type => |a_type| a_type.eql(b.type),
             .instance => |a_instance| a_instance.eql(b.instance),
+            .slice => |a_slice| a_slice.eql(b.slice),
+            .array => |a_array| a_array.eql(b.array),
             else => true,
         };
     }
@@ -105,6 +115,8 @@ pub const TypeSummary = union(Type) {
             .primitive => |primitive| std.hash.autoHash(&wy, primitive.hash()),
             .type => |type_value| std.hash.autoHash(&wy, type_value.hash()),
             .instance => |instance_value| std.hash.autoHash(&wy, instance_value.hash()),
+            .slice => |slice_value| std.hash.autoHash(&wy, slice_value.hash()),
+            .array => |array_value| std.hash.autoHash(&wy, array_value.hash()),
             else => {},
         }
 
@@ -152,6 +164,82 @@ pub const InstanceValue = struct {
     fn hash(self: InstanceValue) u64 {
         var wy = std.hash.Wyhash.init(0);
         std.hash.autoHash(&wy, self.kind);
+        return wy.final();
+    }
+};
+
+pub const ChildType = union(enum) {
+    unknown,
+    other,
+    primitive: Primitive,
+    @"fn",
+    fn_returns_type,
+    instance: InstanceValue,
+    type: TypeValue,
+
+    fn eql(a: ChildType, b: ChildType) bool {
+        if (std.meta.activeTag(a) != std.meta.activeTag(b)) return false;
+
+        return switch (a) {
+            .primitive => |a_primitive| a_primitive.eql(b.primitive),
+            .type => |a_type| a_type.eql(b.type),
+            .instance => |a_instance| a_instance.eql(b.instance),
+            else => true,
+        };
+    }
+
+    fn hash(self: ChildType) u64 {
+        var wy = std.hash.Wyhash.init(0);
+        std.hash.autoHash(&wy, std.meta.activeTag(self));
+
+        switch (self) {
+            .primitive => |primitive| std.hash.autoHash(&wy, primitive.hash()),
+            .type => |type_value| std.hash.autoHash(&wy, type_value.hash()),
+            .instance => |instance_value| std.hash.autoHash(&wy, instance_value.hash()),
+            else => {},
+        }
+
+        return wy.final();
+    }
+
+    fn fromSummary(type_summary: TypeSummary) ChildType {
+        return switch (type_summary) {
+            .unknown => .unknown,
+            .other => .other,
+            .primitive => |primitive| .{ .primitive = primitive },
+            .@"fn" => .@"fn",
+            .fn_returns_type => .fn_returns_type,
+            .instance => |instance_value| .{ .instance = instance_value },
+            .type => |type_value| .{ .type = type_value },
+            .slice, .array => .other,
+        };
+    }
+};
+
+pub const Slice = struct {
+    child_type: ChildType,
+
+    fn eql(a: Slice, b: Slice) bool {
+        return a.child_type.eql(b.child_type);
+    }
+
+    fn hash(self: Slice) u64 {
+        var wy = std.hash.Wyhash.init(0);
+        std.hash.autoHash(&wy, self.child_type.hash());
+        return wy.final();
+    }
+};
+
+pub const Array = struct {
+    child_type: ChildType,
+
+    fn eql(a: Array, b: Array) bool {
+        return a.child_type.eql(b.child_type);
+    }
+
+    fn hash(self: Array) u64 {
+        var wy = std.hash.Wyhash.init(0);
+        std.hash.autoHash(&wy, self.child_type.hash());
         return wy.final();
     }
 };
@@ -295,7 +383,30 @@ pub fn debugPrintSummary(summary_value: TypeSummary) void {
         },
         .instance => |instance_value| std.debug.print("{s}", .{instance_value.kind.name()}),
         .type => |type_value| std.debug.print("{s}", .{type_value.kind.name()}),
+        .slice => |slice_value| {
+            std.debug.print("slice(", .{});
+            debugPrintChildType(slice_value.child_type);
+            std.debug.print(")", .{});
+        },
+        .array => |array_value| {
+            std.debug.print("array(", .{});
+            debugPrintChildType(array_value.child_type);
+            std.debug.print(")", .{});
+        },
         inline else => |_, tag| std.debug.print("{s}", .{tag.name()}),
+    }
+}
+
+fn debugPrintChildType(child_type: ChildType) void {
+    switch (child_type) {
+        .primitive => |primitive| switch (primitive) {
+            .bool => std.debug.print("bool", .{}),
+            .number => |number| std.debug.print("{s}", .{number.name}),
+            .named => |name| std.debug.print("{s}", .{name}),
+        },
+        .instance => |instance_value| std.debug.print("{s}", .{instance_value.kind.name()}),
+        .type => |type_value| std.debug.print("{s}", .{type_value.kind.name()}),
+        inline else => |_, tag| std.debug.print("{s}", .{@tagName(tag)}),
     }
 }
 
@@ -376,7 +487,43 @@ fn summarizeTypeExpr(
     const zone = tracy.traceNamed(@src(), "TypeStore.summarizeTypeExpr");
     defer zone.end();
 
-    const node = ast.unwrapNode(tree, type_node, .{});
+    const node = ast.unwrapNode(tree, type_node, .{
+        .unwrap_pointer = false,
+    });
+
+    if (tree.fullArrayType(node)) |array_type| {
+        return .{
+            .array = .{
+                .child_type = ChildType.fromSummary(
+                    summarizeTypeExpr(tree, array_type.ast.elem_type) orelse .unknown,
+                ),
+            },
+        };
+    }
+
+    if (tree.fullPtrType(node)) |ptr_type| {
+        if (ptr_type.size == .slice) {
+            return .{
+                .slice = .{
+                    .child_type = ChildType.fromSummary(
+                        summarizeTypeExpr(tree, ptr_type.ast.child_type) orelse .unknown,
+                    ),
+                },
+            };
+        }
+
+        return summarizeTypeExpr(tree, ptr_type.ast.child_type);
+    }
+
+    if (tree.fullSlice(node)) |slice_type| {
+        return .{
+            .slice = .{
+                .child_type = ChildType.fromSummary(
+                    summarizeTypeExpr(tree, slice_type.ast.sliced) orelse .unknown,
+                ),
+            },
+        };
+    }
 
     if (tree.nodeTag(node) == .identifier) {
         const name = tree.getNodeSource(node);
@@ -412,8 +559,43 @@ fn summarizeValueExpr(
     defer zone.end();
 
     const node = ast.unwrapNode(tree, value_node, .{
+        .unwrap_pointer = false,
         .unwrap_optional_unwrap = false,
     });
+
+    if (tree.fullArrayType(node)) |array_type| {
+        return .{
+            .array = .{
+                .child_type = ChildType.fromSummary(
+                    summarizeTypeExpr(tree, array_type.ast.elem_type) orelse .unknown,
+                ),
+            },
+        };
+    }
+
+    if (tree.fullPtrType(node)) |ptr_type| {
+        if (ptr_type.size == .slice) {
+            return .{
+                .slice = .{
+                    .child_type = ChildType.fromSummary(
+                        summarizeTypeExpr(tree, ptr_type.ast.child_type) orelse .unknown,
+                    ),
+                },
+            };
+        }
+
+        return summarizeValueExpr(tree, ptr_type.ast.child_type);
+    }
+
+    if (tree.fullSlice(node)) |slice_type| {
+        return .{
+            .slice = .{
+                .child_type = ChildType.fromSummary(
+                    summarizeTypeExpr(tree, slice_type.ast.sliced) orelse .unknown,
+                ),
+            },
+        };
+    }
 
     switch (tree.nodeTag(node)) {
         .identifier => {

@@ -1399,12 +1399,31 @@ test "LintContext.resolveTypeKind" {
         .{
             .contents = "name :[] const u8,",
             .summary = .{
-                .primitive = .{
-                    // TODO: #149 - Slice?
-                    .number = .{
-                        .name = "u8",
-                        .kind = .unsigned_int,
-                        .bits = 8,
+                .slice = .{
+                    .child_type = .{
+                        .primitive = .{
+                            .number = .{
+                                .name = "u8",
+                                .kind = .unsigned_int,
+                                .bits = 8,
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        .{
+            .contents = "var arr: [4]u8 = undefined;",
+            .summary = .{
+                .array = .{
+                    .child_type = .{
+                        .primitive = .{
+                            .number = .{
+                                .name = "u8",
+                                .kind = .unsigned_int,
+                                .bits = 8,
+                            },
+                        },
                     },
                 },
             },
@@ -1424,12 +1443,15 @@ test "LintContext.resolveTypeKind" {
         .{
             .contents = "var slice: []const u8 = undefined;",
             .summary = .{
-                .primitive = .{
-                    // TODO: #149 - Slice?
-                    .number = .{
-                        .name = "u8",
-                        .kind = .unsigned_int,
-                        .bits = 8,
+                .slice = .{
+                    .child_type = .{
+                        .primitive = .{
+                            .number = .{
+                                .name = "u8",
+                                .kind = .unsigned_int,
+                                .bits = 8,
+                            },
+                        },
                     },
                 },
             },
@@ -1485,7 +1507,6 @@ test "LintContext.resolveTypeKind" {
             .summary = .{ .type = .unknown },
         },
         .{
-            // TODO: #149 - Test code is wrong? and should assert on resulting type
             .contents =
             \\const FloatType = IntToFloatType(u32);
             \\fn IntToFloatType(IntType: type) type {
