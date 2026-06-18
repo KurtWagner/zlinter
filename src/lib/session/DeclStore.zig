@@ -115,7 +115,7 @@ pub fn store(
     const zone = tracy.traceNamed(@src(), "DeclStore.store");
     defer zone.end();
 
-    // TODO: #149 - think abou multiple modules
+    // TODO: #149 - think about multiple modules
 
     if (self.decl_id_by_ast_node.get(.init(file_id, .root))) |root_decl_id|
         return root_decl_id;

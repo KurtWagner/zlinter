@@ -199,8 +199,9 @@ pub fn resolveFile(
             gpa,
             zig_lib_directory,
         ),
-        // TODO: #149 - handle "root" and "builtin" imports.
+        // TODO: #149 - handle "builtin" imports.
         .builtin,
+        // TODO: #149 - handle "root"  imports.
         .root,
         => null,
         .module => id: {
