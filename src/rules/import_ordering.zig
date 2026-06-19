@@ -1,7 +1,3 @@
-//! > [!WARNING]
-//! > The `import_ordering` rule is still under testing and development. It may
-//! > not work as expected and may change without notice.
-//!
 //! Enforces a consistent ordering of `@import` declarations in Zig source files.
 //!
 //! Maintaining a standardized import order improves readability and reduces
@@ -242,10 +238,11 @@ fn isImportCall(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
             const data = tree.nodeData(node);
             const lhs_node = data.opt_node_and_opt_node[0].unwrap() orelse return null;
 
-            std.debug.assert(tree.nodeTag(lhs_node) == .string_literal);
+            if (tree.nodeTag(lhs_node) != .string_literal) return null;
 
             const lhs_content = tree.tokenSlice(tree.nodeMainToken(lhs_node));
-            std.debug.assert(lhs_content.len > 2);
+            if (lhs_content.len <= 2) return null;
+
             return lhs_content[1 .. lhs_content.len - 1];
         },
         else => return null,
