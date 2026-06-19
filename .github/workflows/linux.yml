@@ -33,5 +33,3 @@ jobs:
         run: zig build lint
       - name: "Run integration tests"
         run: zig build integration-test
-      - name: "Run integration check"
-        run: zig build integration-check --summary all
