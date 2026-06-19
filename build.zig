@@ -96,14 +96,14 @@ pub fn builder(b: *std.Build, options: BuilderOptions) StepBuilder {
 
 /// Represents something that should be linted.
 const LintIncludeSource = union(enum) {
-    /// A source file path relative to build root.
-    src_path: []const u8,
+    file_path: std.Build.LazyPath,
+    dir_path: std.Build.LazyPath,
 };
 
 /// Represents something that should be excluded from linting.
 const LintExcludeSource = union(enum) {
-    /// A source file path relative to build root.
-    src_path: []const u8,
+    file_path: std.Build.LazyPath,
+    dir_path: std.Build.LazyPath,
 };
 
 const StepBuilder = struct {
@@ -169,21 +169,36 @@ const StepBuilder = struct {
     pub fn addPaths(
         self: *StepBuilder,
         paths: struct {
-            include: ?[]const []const u8 = null,
-            exclude: ?[]const []const u8 = null,
+            include_dirs: ?[]const std.Build.LazyPath = null,
+            include_files: ?[]const std.Build.LazyPath = null,
+            exclude_dirs: ?[]const std.Build.LazyPath = null,
+            exclude_files: ?[]const std.Build.LazyPath = null,
         },
     ) void {
         const arena = self.b.allocator;
 
-        if (paths.include) |includes|
+        if (paths.include_dirs) |includes|
             for (includes) |path| self.include.append(
                 arena,
-                .{ .src_path = self.b.dupe(path) },
+                .{ .dir_path = path },
             ) catch @panic("OOM");
-        if (paths.exclude) |excludes|
+
+        if (paths.include_files) |includes|
+            for (includes) |path| self.include.append(
+                arena,
+                .{ .file_path = path },
+            ) catch @panic("OOM");
+
+        if (paths.exclude_dirs) |excludes|
             for (excludes) |path| self.exclude.append(
                 arena,
-                .{ .src_path = self.b.dupe(path) },
+                .{ .dir_path = path },
+            ) catch @panic("OOM");
+
+        if (paths.exclude_files) |excludes|
+            for (excludes) |path| self.exclude.append(
+                arena,
+                .{ .file_path = path },
             ) catch @panic("OOM");
     }
 
@@ -402,9 +417,9 @@ pub fn build(b: *std.Build) void {
         var include = std.ArrayList(LintIncludeSource).empty;
         var exclude = std.ArrayList(LintExcludeSource).empty;
 
-        include.append(b.allocator, .{ .src_path = "./" }) catch @panic("OOM");
-        exclude.append(b.allocator, .{ .src_path = "integration_tests/test_cases" }) catch @panic("OOM");
-        exclude.append(b.allocator, .{ .src_path = "integration_tests/src/test_case_references.zig" }) catch @panic("OOM");
+        include.append(b.allocator, .{ .dir_path = b.path("./") }) catch @panic("OOM");
+        exclude.append(b.allocator, .{ .dir_path = b.path("integration_tests/test_cases") }) catch @panic("OOM");
+        exclude.append(b.allocator, .{ .file_path = b.path("integration_tests/src/test_case_references.zig") }) catch @panic("OOM");
 
         break :step buildStep(
             b,
@@ -581,21 +596,23 @@ fn buildStep(
 
     if (b.graph.verbose) run.addArg("--verbose");
 
-    var include_paths: std.ArrayList([]const u8) = .empty;
-    defer include_paths.deinit(b.allocator);
-
-    var exclude_paths: std.ArrayList([]const u8) = .empty;
-    defer exclude_paths.deinit(b.allocator);
-
-    for (include) |source| {
-        switch (source) {
-            .src_path => |path| include_paths.append(b.allocator, path) catch @panic("OOM"),
+    if (include.len > 0) {
+        run.addArg("--include");
+        for (include) |source| {
+            switch (source) {
+                .file_path => |path| run.addFileArg(path),
+                .dir_path => |path| run.addDirectoryArg(path),
+            }
         }
     }
 
-    for (exclude) |source| {
-        switch (source) {
-            .src_path => |path| exclude_paths.append(b.allocator, path) catch @panic("OOM"),
+    if (exclude.len > 0) {
+        run.addArg("--exclude");
+        for (exclude) |source| {
+            switch (source) {
+                .file_path => |path| run.addFileArg(path),
+                .dir_path => |path| run.addDirectoryArg(path),
+            }
         }
     }
 
@@ -609,8 +626,9 @@ fn buildStep(
 
     buff.writer.writeInt(u32, 0, .little) catch @panic("stdin write failed");
     std.zon.stringify.serialize(BuildInfo{
-        .include_paths = if (include_paths.items.len > 0) include_paths.items else null,
-        .exclude_paths = if (exclude_paths.items.len > 0) exclude_paths.items else null,
+        // TODO: #149 - decide whether we want this to hang around.
+        .include_paths = null,
+        .exclude_paths = null,
     }, .{}, &buff.writer) catch @panic("Invalid build info");
 
     const stdin_bytes = buff.written();
