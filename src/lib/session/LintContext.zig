@@ -16,11 +16,11 @@ cwd: []const u8,
 /// Lives for the full linter invocation.
 session_arena: std.mem.Allocator,
 compile_contexts: std.MultiArrayList(CompileContext) = .empty,
-file_store: FileStore = undefined, // zlinter-disable-current-line no_undefined - set in init
-module_store: ModuleStore = undefined, // zlinter-disable-current-line no_undefined - set in init
-decl_store: DeclStore = undefined, // zlinter-disable-current-line no_undefined - set in init
-type_store: TypeStore = undefined, // zlinter-disable-current-line no_undefined - set in init
-build_config_store: BuildConfigStore = undefined, // zlinter-disable-current-line no_undefined - set in init
+file_store: FileStore,
+module_store: ModuleStore,
+decl_store: DeclStore,
+type_store: TypeStore,
+build_config_store: BuildConfigStore,
 
 pub fn init(self: *LintContext) !void {
     const zone = tracy.traceNamed(@src(), "LintContext.init");
