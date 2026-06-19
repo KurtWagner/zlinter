@@ -3,19 +3,8 @@
 const LintSession = @This();
 const LintContext = LintSession;
 
-io: std.Io,
+runtime: *const LintRuntime,
 
-/// Externally owned slice to zig executable path
-zig_exe: []const u8,
-
-/// Externally owned slice to zig lib directory path
-zig_lib_directory: []const u8,
-
-/// Externally owned slice to current working directory
-cwd: []const u8,
-
-/// Lives for the full linter invocation.
-session_arena: std.mem.Allocator,
 compile_contexts: std.MultiArrayList(CompileContext) = .empty,
 compile_context_ids_by_file: std.AutoHashMapUnmanaged(FileStore.FileId, std.ArrayList(CompileContext.Id)) = .empty,
 compile_file_index_built: bool = false,
@@ -52,7 +41,7 @@ pub fn init(self: *LintContext, focus_compiled_names: ?[]const []const u8) !void
                 };
                 if (maybe_focus_id) |focus_id|
                     oom(self.focused_compiled_contexts.put(
-                        self.session_arena,
+                        self.runtime.session_arena,
                         focus_id,
                         {},
                     ))
@@ -67,7 +56,7 @@ pub fn init(self: *LintContext, focus_compiled_names: ?[]const []const u8) !void
 
                 if (compilePriority(kind) == selected_priority) {
                     oom(self.focused_compiled_contexts.put(
-                        self.session_arena,
+                        self.runtime.session_arena,
                         .fromIndex(i),
                         {},
                     ));
@@ -82,9 +71,9 @@ fn initBuildConfig(self: *LintContext) !BuildConfigStore.ConfigId {
     defer zone.end();
 
     const config_id = try self.build_config_store.resolve(
-        self.io,
-        self.zig_exe,
-        self.cwd,
+        self.runtime.io,
+        self.runtime.zig_exe,
+        self.runtime.cwd,
         ".",
     );
 
@@ -160,7 +149,7 @@ fn consumeBuildConfigStep(
         return;
     };
 
-    self.compile_contexts.append(self.session_arena, .{
+    self.compile_contexts.append(self.runtime.session_arena, .{
         .step_index = step_index,
         .root_module = root_module_id,
     }) catch unreachable;
@@ -180,18 +169,18 @@ fn resolveBuildModule(
         std.Build.Configuration.Module.Index,
         ModuleStore.ModuleId,
     ) = .empty;
-    defer module_id_by_build_module_index.deinit(self.session_arena);
+    defer module_id_by_build_module_index.deinit(self.runtime.session_arena);
 
     var queue: std.ArrayList(std.Build.Configuration.Module.Index) = .empty;
-    defer queue.deinit(self.session_arena);
+    defer queue.deinit(self.runtime.session_arena);
 
     const root_module_id = try self.resolveBuildModuleShallow(
         config_id,
         build_module_index,
     ) orelse return null;
 
-    module_id_by_build_module_index.put(self.session_arena, build_module_index, root_module_id) catch unreachable;
-    queue.append(self.session_arena, build_module_index) catch unreachable;
+    module_id_by_build_module_index.put(self.runtime.session_arena, build_module_index, root_module_id) catch unreachable;
+    queue.append(self.runtime.session_arena, build_module_index) catch unreachable;
 
     while (queue.pop()) |current_build_module_index| {
         const current_module_id = module_id_by_build_module_index.get(current_build_module_index).?;
@@ -206,7 +195,7 @@ fn resolveBuildModule(
         const imports = build_module.import_table.get(build_config).imports.mal;
         var module_id_by_import_name: std.StringHashMapUnmanaged(ModuleStore.ModuleId) = .empty;
 
-        module_id_by_import_name.ensureTotalCapacity(self.session_arena, @intCast(imports.len)) catch unreachable;
+        module_id_by_import_name.ensureTotalCapacity(self.runtime.session_arena, @intCast(imports.len)) catch unreachable;
         for (imports.items(.name), imports.items(.module)) |
             build_import_name_id,
             build_import_module_index,
@@ -219,14 +208,14 @@ fn resolveBuildModule(
                     build_import_module_index,
                 )) orelse continue;
 
-                module_id_by_build_module_index.put(self.session_arena, build_import_module_index, resolved) catch unreachable;
-                queue.append(self.session_arena, build_import_module_index) catch unreachable;
+                module_id_by_build_module_index.put(self.runtime.session_arena, build_import_module_index, resolved) catch unreachable;
+                queue.append(self.runtime.session_arena, build_import_module_index) catch unreachable;
 
                 break :child resolved;
             };
 
             module_id_by_import_name.putAssumeCapacity(
-                self.session_arena.dupe(u8, import_name_slice) catch unreachable,
+                self.runtime.session_arena.dupe(u8, import_name_slice) catch unreachable,
                 import_module_id,
             );
         }
@@ -256,16 +245,16 @@ fn resolveBuildModuleShallow(
     const root_path = try files.resolveLazyPath(
         root_source_file,
         build_config,
-        self.session_arena,
+        self.runtime.session_arena,
         build_root_path,
     ) orelse return null;
-    defer self.session_arena.free(root_path);
+    defer self.runtime.session_arena.free(root_path);
 
     return self.module_store.resolve(.{
         .root_file = try self.file_store.resolve(
             root_path,
-            self.io,
-            self.cwd,
+            self.runtime.io,
+            self.runtime.cwd,
         ),
         .build_config = config_id,
         .build_config_module = build_module_index,
@@ -279,8 +268,8 @@ pub fn resolveFile(self: *LintContext, input_path: []const u8) !FileStore.FileId
 
     const id = try self.file_store.resolve(
         input_path,
-        self.io,
-        self.cwd,
+        self.runtime.io,
+        self.runtime.cwd,
     );
     self.decl_store.resolveFileTypes(
         id,
@@ -348,13 +337,13 @@ fn appendCompileContextForFile(
     compile_context_id: CompileContext.Id,
 ) void {
     const entry = oom(self.compile_context_ids_by_file.getOrPut(
-        self.session_arena,
+        self.runtime.session_arena,
         file_id,
     ));
     if (!entry.found_existing)
         entry.value_ptr.* = .empty;
 
-    oom(entry.value_ptr.append(self.session_arena, compile_context_id));
+    oom(entry.value_ptr.append(self.runtime.session_arena, compile_context_id));
 }
 
 const ReachKey = enum(u64) {
@@ -419,8 +408,8 @@ fn indexCompileContextFiles(
                     const resolved_file_id = import_utils.resolveFile(
                         &self.file_store,
                         &self.module_store,
-                        self.io,
-                        self.zig_lib_directory,
+                        self.runtime.io,
+                        self.runtime.zig_lib_directory,
                         .{
                             .parent_file_id = item.file_id,
                             .compile_root_file_id = compile_root_file_id,
@@ -1358,8 +1347,8 @@ fn resolveImportRootDecl(
     const maybe_file_id = import_utils.resolveFile(
         &self.file_store,
         &self.module_store,
-        self.io,
-        self.zig_lib_directory,
+        self.runtime.io,
+        self.runtime.zig_lib_directory,
         .{
             .parent_file_id = parent_file_id,
             .compile_root_file_id = self.compile_root_file_id,
@@ -2076,20 +2065,8 @@ const ModuleStore = @import("ModuleStore.zig");
 const TypeStore = @import("TypeStore.zig");
 const Ast = std.zig.Ast;
 const oom = @import("../allocations.zig").oom;
+const LintRuntime = @import("LintRuntime.zig");
 
 test {
-    refAllDeclsExcept(@This(), &.{});
-}
-
-fn refAllDeclsExcept(comptime T: type, comptime excluded_declarations: []const []const u8) void {
-    if (!builtin.is_test) return;
-    inline for (comptime std.meta.declarations(T)) |decl_name| {
-        comptime {
-            for (excluded_declarations) |excluded_declaration| {
-                if (std.mem.eql(u8, decl_name, excluded_declaration)) break;
-            } else {
-                _ = &@field(T, decl_name);
-            }
-        }
-    }
+    std.testing.refAllDecls(@This());
 }

@@ -55,7 +55,7 @@ pub fn initFakeContext(
 ) LintSession {
     assertTestOnly();
 
-    var session: LintSession = .{
+    var runtime: LintRuntime = .{
         .io = io,
         .session_arena = arena,
         // TODO: If we really ever need to we can pass zig exe through a build
@@ -64,6 +64,10 @@ pub fn initFakeContext(
         .zig_exe = "zig",
         .zig_lib_directory = ".",
         .cwd = ".",
+    };
+
+    var session: LintSession = .{
+        .runtime = &runtime,
         .file_store = .init(arena),
         .module_store = .init(arena),
         .build_config_store = .init(arena),
@@ -430,6 +434,7 @@ const LintResult = @import("results.zig").LintResult;
 const LintProblemFix = @import("results.zig").LintProblemFix;
 const strings = @import("strings.zig");
 const Ast = std.zig.Ast;
+const LintRuntime = @import("session/LintRuntime.zig");
 
 test {
     std.testing.refAllDecls(@This());

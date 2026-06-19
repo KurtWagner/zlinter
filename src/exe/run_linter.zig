@@ -269,12 +269,16 @@ fn runLinterRules(
         item_timers.unloadAndPrint("Rules", printer);
     };
 
-    var context: zlinter.session.LintSession = .{
+    var runtime: LintRuntime = .{
         .io = io,
         .session_arena = session_arena,
         .zig_exe = zig_exe,
         .zig_lib_directory = zig_lib_directory,
         .cwd = cwd,
+    };
+
+    var session: zlinter.session.LintSession = .{
+        .runtime = &runtime,
         .file_store = .init(session_arena),
         .module_store = .init(session_arena),
         .build_config_store = .init(session_arena),
@@ -285,7 +289,7 @@ fn runLinterRules(
             zig_lib_directory,
         ),
     };
-    try context.init(args.compile_names);
+    try session.init(args.compile_names);
 
     var enabled_rules = enabledRules(args.rules);
 
@@ -344,11 +348,11 @@ fn runLinterRules(
         }
         printer.println(.verbose, "[{d}/{d}] Linting: {s}", .{ i + 1, lint_files.len, cwd_rel_path });
 
-        const file_id = context.resolveFile(lint_file.abs_path) catch |e| {
+        const file_id = session.resolveFile(lint_file.abs_path) catch |e| {
             printer.println(.err, "Unable to open file: {s} ({s})", .{ cwd_rel_path, @errorName(e) });
             continue :files;
         };
-        const file_abs_path = context.file_store.fileAbsPath(file_id);
+        const file_abs_path = session.file_store.fileAbsPath(file_id);
 
         var rule_timer = Timer.createStarted(io);
         defer {
@@ -363,13 +367,13 @@ fn runLinterRules(
         }
 
         var doc: zlinter.session.LintDocument = undefined;
-        context.initDocument(file_id, file_arena, &doc) catch |e| {
+        session.initDocument(file_id, file_arena, &doc) catch |e| {
             printer.println(.err, "Unable to open file: {s} ({s})", .{ cwd_rel_path, @errorName(e) });
             continue :files;
         };
 
         printer.println(.verbose, "  - Load document: {d}ms", .{timer.lapMilliseconds()});
-        const tree = doc.tree(&context);
+        const tree = doc.tree(&session);
         printer.println(.verbose, "    - {d} bytes", .{tree.source.len});
         printer.println(.verbose, "    - {d} nodes", .{tree.nodes.len});
         printer.println(.verbose, "    - {d} tokens", .{tree.tokens.len});
@@ -408,7 +412,7 @@ fn runLinterRules(
         }
         printer.println(.verbose, "  - Process syntax errors: {d}ms", .{timer.lapMilliseconds()});
 
-        const compile_context_ids = try context.compileContextIdsForFile(
+        const compile_context_ids = try session.compileContextIdsForFile(
             file_id,
             file_arena,
         );
@@ -420,10 +424,10 @@ fn runLinterRules(
             const rule = rules[rule_index];
             switch (rule.execution) {
                 .syntax_only => {
-                    context.setCompileRootFileId(null);
+                    session.setCompileRootFileId(null);
                     if (try rule.run(
                         rule,
-                        &context,
+                        &session,
                         &doc,
                         session_arena,
                         .{ .config = rule_configs[rule_index] },
@@ -438,11 +442,11 @@ fn runLinterRules(
                 },
                 .compile_context => {
                     if (compile_context_ids.len == 0) {
-                        context.setCompileRootFileId(null);
-                        context.resolveFileTypes(file_id);
+                        session.setCompileRootFileId(null);
+                        session.resolveFileTypes(file_id);
                         if (try rule.run(
                             rule,
-                            &context,
+                            &session,
                             &doc,
                             session_arena,
                             .{ .config = rule_configs[rule_index] },
@@ -456,15 +460,15 @@ fn runLinterRules(
                         }
                     } else {
                         for (compile_context_ids) |compile_context_id| {
-                            if (!context.focused_compiled_contexts.contains(compile_context_id))
+                            if (!session.focused_compiled_contexts.contains(compile_context_id))
                                 continue;
 
-                            const compile_root_file_id = context.compileRootFileId(compile_context_id);
-                            context.setCompileRootFileId(compile_root_file_id);
-                            context.resolveFileTypes(file_id);
+                            const compile_root_file_id = session.compileRootFileId(compile_context_id);
+                            session.setCompileRootFileId(compile_root_file_id);
+                            session.resolveFileTypes(file_id);
                             if (try rule.run(
                                 rule,
-                                &context,
+                                &session,
                                 &doc,
                                 session_arena,
                                 .{
@@ -1002,3 +1006,4 @@ const rules_configs = @import("rules").rules_configs; // Generated in build_rule
 const rules_configs_types = @import("rules").rules_configs_types; // Generated in build_rules.zig
 const Ast = std.zig.Ast;
 const oom = zlinter.allocations.oom;
+const LintRuntime = zlinter.session.LintRuntime;
