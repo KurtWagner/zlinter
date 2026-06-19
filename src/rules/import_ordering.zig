@@ -515,11 +515,10 @@ test "order" {
             .disabled_by_comment = false,
             .fix = .{
                 .start = 25,
-                .end = 75,
+                .end = 74,
                 .text =
-                \\ const b = @import("b");
-                \\ const c = @import("c");
-                ,
+                \\ const b = @import("b"); const c = @import("c");
+                \\
             },
         }},
     );
@@ -558,10 +557,10 @@ test "order" {
                 .disabled_by_comment = false,
                 .fix = .{
                     .start = 51,
-                    .end = 101,
+                    .end = 100,
                     .text =
-                    \\ const c = @import("c");
-                    \\ const d = @import("d");
+                    \\ const c = @import("c"); const d = @import("d");
+                    \\
                     ,
                 },
             },
@@ -588,12 +587,12 @@ test "order" {
                 .disabled_by_comment = false,
                 .fix = .{
                     .start = 0,
-                    .end = 57,
+                    .end = 56,
                     .text =
-                    \\ const a = @import("a");
-                    \\ const b = @import(
+                    \\ const a = @import("a"); const b = @import(
                     \\   "b",
                     \\ );
+                    \\
                     ,
                 },
             },
@@ -796,7 +795,7 @@ test "allow_line_separated_chunks" {
                 .message = "Import 'a' should be grouped with other imports",
                 .fix = .{
                     .start = 0,
-                    .end = 58,
+                    .end = 57,
                     .text =
                     \\ const a = @import("a");
                     \\ const b = @import(
@@ -827,7 +826,7 @@ test "allow_line_separated_chunks" {
                 .message = "Import 'b' should be grouped with other imports",
                 .fix = .{
                     .start = 0,
-                    .end = 51,
+                    .end = 50,
                     .text =
                     \\ const b = @import("b");
                     \\ const a = @import("a");
