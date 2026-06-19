@@ -179,7 +179,6 @@ pub fn resolveFile(
     file_store: *FileStore,
     module_store: *const ModuleStore,
     io: std.Io,
-    gpa: std.mem.Allocator,
     zig_lib_directory: []const u8,
     parent_file_id: FileStore.FileId,
     import_path: []const u8,
@@ -191,12 +190,10 @@ pub fn resolveFile(
         .relative => try file_store.resolve(
             import_path,
             io,
-            gpa,
             parent_file_dir,
         ),
         .stdlib => try file_store.resolveStdlib(
             io,
-            gpa,
             zig_lib_directory,
         ),
         // TODO: #149 - handle "builtin" imports.

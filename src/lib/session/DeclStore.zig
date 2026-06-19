@@ -8,10 +8,22 @@ decl_id_by_ast_node: std.AutoHashMapUnmanaged(DeclAstNodeKey, DeclId) = .empty,
 scope_id_by_owner_node: std.AutoHashMapUnmanaged(ScopeOwnerKey, ScopeId) = .empty,
 
 // TODO: #149 - use better pattern for passing these common things around
-gpa: std.mem.Allocator,
+arena: std.mem.Allocator,
 io: std.Io,
 /// externally owned
 zig_lib_directory: []const u8,
+
+pub fn init(
+    arena: std.mem.Allocator,
+    io: std.Io,
+    zig_lib_directory: []const u8,
+) DeclStore {
+    return .{
+        .arena = arena,
+        .io = io,
+        .zig_lib_directory = zig_lib_directory,
+    };
+}
 
 pub const DeclKind = enum {
     /// e.g., `const value = 1`, `fn run() void`, or a function parameter.
@@ -110,7 +122,6 @@ pub fn store(
     self: *DeclStore,
     file_id: FileStore.FileId,
     file_store: *FileStore,
-    gpa: std.mem.Allocator,
 ) DeclId {
     const zone = tracy.traceNamed(@src(), "DeclStore.store");
     defer zone.end();
@@ -123,7 +134,6 @@ pub fn store(
     const tree = file_store.fileTree(file_id);
 
     const root_decl_id = self.appendDecl(
-        gpa,
         file_id,
         null,
         .root,
@@ -133,7 +143,6 @@ pub fn store(
     );
 
     const root_scope_id = self.appendScope(
-        gpa,
         file_id,
         .root,
         null,
@@ -141,7 +150,6 @@ pub fn store(
     );
 
     self.walkContainer(
-        gpa,
         tree,
         file_id,
         root_scope_id,
@@ -157,12 +165,11 @@ pub fn resolveFileTypes(
     file_store: *FileStore,
     module_store: *const ModuleStore,
     type_store: *TypeStore,
-    gpa: std.mem.Allocator,
 ) void {
     const zone = tracy.traceNamed(@src(), "DeclStore.resolveFileTypes");
     defer zone.end();
 
-    _ = self.store(file_id, file_store, gpa);
+    _ = self.store(file_id, file_store);
 
     var it = self.fileDeclIterator(file_id);
     while (it.next()) |decl_id| {
@@ -171,7 +178,7 @@ pub fn resolveFileTypes(
             module_store,
             decl_id,
         )) |summary|
-            type_store.store(gpa, summary)
+            type_store.store(summary)
         else
             null;
         const type_target = self.resolveDeclTypeTargetForValue(
@@ -183,17 +190,6 @@ pub fn resolveFileTypes(
         self.decls.items(.resolved_type)[decl_id.toIndex()] = type_id;
         self.decls.items(.resolved_type_target)[decl_id.toIndex()] = type_target;
     }
-}
-
-/// Releases all declaration and scope storage owned by this store.
-pub fn deinit(self: *DeclStore, gpa: std.mem.Allocator) void {
-    for (self.scopes.items(.decl_id_by_name)) |*decl_id_by_name|
-        decl_id_by_name.deinit(gpa);
-
-    self.decl_id_by_ast_node.deinit(gpa);
-    self.scope_id_by_owner_node.deinit(gpa);
-    self.decls.deinit(gpa);
-    self.scopes.deinit(gpa);
 }
 
 /// Debug helper that prints all declarations recorded for a file.
@@ -941,10 +937,10 @@ pub fn resolveMemberDecl(
     }
 
     var container_decl_buffer: [2]std.zig.Ast.Node.Index = undefined;
-    const init = ast.unwrapNode(tree, init_node, .{});
+    const unwrapped_init = ast.unwrapNode(tree, init_node, .{});
     if (tree.fullContainerDecl(
         &container_decl_buffer,
-        init,
+        unwrapped_init,
     )) |container_decl| {
         return self.resolveContainerMember(
             file_store,
@@ -1383,7 +1379,6 @@ fn resolveImportMember(
         file_store,
         module_store,
         self.io,
-        self.gpa,
         self.zig_lib_directory,
         parent_file_id,
         import_path,
@@ -1437,7 +1432,7 @@ fn resolveFileRootMember(
     const zone = tracy.traceNamed(@src(), "DeclStore.resolveFileRootMember");
     defer zone.end();
 
-    _ = self.store(file_id, file_store, self.gpa);
+    _ = self.store(file_id, file_store);
 
     const root_decl_id = self.fileRootDecl(file_id) orelse return null;
     const root_scope_id = self.scopeForOwnerDecl(root_decl_id) orelse return null;
@@ -1513,14 +1508,13 @@ fn fileRootDecl(
 /// Appends a scope and returns its typed id.
 fn appendScope(
     self: *DeclStore,
-    gpa: std.mem.Allocator,
     file_id: FileStore.FileId,
     owner_node: std.zig.Ast.Node.Index,
     parent_scope_id: ?ScopeId,
     owner_decl_id: ?DeclId,
 ) ScopeId {
     const scope_id: ScopeId = .fromIndex(self.scopes.len);
-    self.scopes.append(gpa, .{
+    self.scopes.append(self.arena, .{
         .file_id = file_id,
         .owner_node = owner_node,
         .parent_scope_id = parent_scope_id,
@@ -1528,7 +1522,7 @@ fn appendScope(
         .decl_id_by_name = .empty,
     }) catch @panic("OOM");
     self.scope_id_by_owner_node.putNoClobber(
-        gpa,
+        self.arena,
         .init(file_id, owner_node),
         scope_id,
     ) catch @panic("OOM");
@@ -1538,7 +1532,6 @@ fn appendScope(
 /// Appends a declaration record and returns its typed id.
 fn appendDecl(
     self: *DeclStore,
-    gpa: std.mem.Allocator,
     file_id: FileStore.FileId,
     name_token: ?std.zig.Ast.TokenIndex,
     ast_node: ?std.zig.Ast.Node.Index,
@@ -1547,7 +1540,7 @@ fn appendDecl(
     kind: DeclKind,
 ) DeclId {
     const decl_id: DeclId = .fromIndex(self.decls.len);
-    self.decls.append(gpa, .{
+    self.decls.append(self.arena, .{
         .name_token = name_token,
         .ast_node = ast_node,
         .type_node = type_node,
@@ -1557,7 +1550,7 @@ fn appendDecl(
     }) catch @panic("OOM");
     if (ast_node) |node| {
         self.decl_id_by_ast_node.putNoClobber(
-            gpa,
+            self.arena,
             .init(file_id, node),
             decl_id,
         ) catch @panic("OOM");
@@ -1568,7 +1561,6 @@ fn appendDecl(
 /// Inserts a named declaration into a scope unless the name is ignored or already present.
 fn putDecl(
     self: *DeclStore,
-    gpa: std.mem.Allocator,
     tree: std.zig.Ast,
     file_id: FileStore.FileId,
     scope_id: ScopeId,
@@ -1582,7 +1574,6 @@ fn putDecl(
     if (self.scopeDecl(scope_id, name) != null) return null;
 
     const decl_id = self.appendDecl(
-        gpa,
         file_id,
         name_token,
         ast_node,
@@ -1591,7 +1582,7 @@ fn putDecl(
         kind,
     );
     self.scopes.items(.decl_id_by_name)[scope_id.toIndex()].putNoClobber(
-        gpa,
+        self.arena,
         name,
         decl_id,
     ) catch @panic("OOM");
@@ -1602,7 +1593,6 @@ fn putDecl(
 /// Extracts a declaration name from an AST node and inserts it into a scope.
 fn putNodeDecl(
     self: *DeclStore,
-    gpa: std.mem.Allocator,
     tree: std.zig.Ast,
     file_id: FileStore.FileId,
     scope_id: ScopeId,
@@ -1610,7 +1600,6 @@ fn putNodeDecl(
     kind: DeclKind,
 ) ?DeclId {
     return self.putDecl(
-        gpa,
         tree,
         file_id,
         scope_id,
@@ -1624,7 +1613,6 @@ fn putNodeDecl(
 /// Walks a node and dispatches to the handler that owns its scope semantics.
 fn walkNode(
     self: *DeclStore,
-    gpa: std.mem.Allocator,
     tree: std.zig.Ast,
     file_id: FileStore.FileId,
     scope_id: ScopeId,
@@ -1647,14 +1635,12 @@ fn walkNode(
         .tagged_union_two_trailing,
         => {
             const container_scope_id = self.appendScope(
-                gpa,
                 file_id,
                 node,
                 scope_id,
                 null,
             );
             self.walkContainer(
-                gpa,
                 tree,
                 file_id,
                 container_scope_id,
@@ -1668,7 +1654,6 @@ fn walkNode(
         .fn_proto_simple,
         .fn_proto_multi,
         => self.walkFn(
-            gpa,
             tree,
             file_id,
             scope_id,
@@ -1680,7 +1665,6 @@ fn walkNode(
         .block_two,
         .block_two_semicolon,
         => self.walkBlock(
-            gpa,
             tree,
             file_id,
             scope_id,
@@ -1688,7 +1672,6 @@ fn walkNode(
         ),
 
         else => self.walkChildren(
-            gpa,
             tree,
             file_id,
             scope_id,
@@ -1700,7 +1683,6 @@ fn walkNode(
 /// Walks a container-like node and registers its direct member declarations.
 fn walkContainer(
     self: *DeclStore,
-    gpa: std.mem.Allocator,
     tree: std.zig.Ast,
     file_id: FileStore.FileId,
     scope_id: ScopeId,
@@ -1712,7 +1694,6 @@ fn walkContainer(
 
     for (container_decl.ast.members) |member| {
         self.walkNode(
-            gpa,
             tree,
             file_id,
             scope_id,
@@ -1732,7 +1713,6 @@ fn walkContainer(
                 const name_token = field.ast.main_token;
                 if (tree.tokenTag(name_token) == .identifier) {
                     _ = self.putDecl(
-                        gpa,
                         tree,
                         file_id,
                         scope_id,
@@ -1753,7 +1733,13 @@ fn walkContainer(
             .local_var_decl,
             .simple_var_decl,
             .aligned_var_decl,
-            => _ = self.putNodeDecl(gpa, tree, file_id, scope_id, member, .declaration),
+            => _ = self.putNodeDecl(
+                tree,
+                file_id,
+                scope_id,
+                member,
+                .declaration,
+            ),
 
             else => {},
         }
@@ -1763,7 +1749,6 @@ fn walkContainer(
 /// Walks a function prototype or declaration in its own function scope.
 fn walkFn(
     self: *DeclStore,
-    gpa: std.mem.Allocator,
     tree: std.zig.Ast,
     file_id: FileStore.FileId,
     parent_scope_id: ScopeId,
@@ -1772,7 +1757,6 @@ fn walkFn(
     var buffer: [1]std.zig.Ast.Node.Index = undefined;
     const fn_proto = tree.fullFnProto(&buffer, node).?;
     const fn_scope_id = self.appendScope(
-        gpa,
         file_id,
         node,
         parent_scope_id,
@@ -1783,7 +1767,6 @@ fn walkFn(
     while (it.next()) |param| {
         if (param.name_token) |name_token|
             _ = self.putDecl(
-                gpa,
                 tree,
                 file_id,
                 fn_scope_id,
@@ -1795,7 +1778,6 @@ fn walkFn(
 
         if (param.type_expr) |type_expr|
             self.walkNode(
-                gpa,
                 tree,
                 file_id,
                 fn_scope_id,
@@ -1805,7 +1787,6 @@ fn walkFn(
 
     if (fn_proto.ast.return_type.unwrap()) |return_type|
         self.walkNode(
-            gpa,
             tree,
             file_id,
             fn_scope_id,
@@ -1815,7 +1796,6 @@ fn walkFn(
     if (tree.nodeTag(node) == .fn_decl) {
         _, const block = tree.nodeData(node).node_and_node;
         self.walkNode(
-            gpa,
             tree,
             file_id,
             fn_scope_id,
@@ -1827,14 +1807,12 @@ fn walkFn(
 /// Walks a block in its own block scope and registers statement-local declarations.
 fn walkBlock(
     self: *DeclStore,
-    gpa: std.mem.Allocator,
     tree: std.zig.Ast,
     file_id: FileStore.FileId,
     parent_scope_id: ScopeId,
     node: std.zig.Ast.Node.Index,
 ) void {
     const block_scope_id = self.appendScope(
-        gpa,
         file_id,
         node,
         parent_scope_id,
@@ -1842,7 +1820,6 @@ fn walkBlock(
     );
     if (blockLabel(tree, node)) |label_token| {
         _ = self.putDecl(
-            gpa,
             tree,
             file_id,
             block_scope_id,
@@ -1858,7 +1835,6 @@ fn walkBlock(
 
     for (statements) |statement| {
         self.walkNode(
-            gpa,
             tree,
             file_id,
             block_scope_id,
@@ -1871,7 +1847,6 @@ fn walkBlock(
             .aligned_var_decl,
             .simple_var_decl,
             => _ = self.putNodeDecl(
-                gpa,
                 tree,
                 file_id,
                 block_scope_id,
@@ -1883,7 +1858,6 @@ fn walkBlock(
                 const assign_destructure = tree.assignDestructure(statement);
                 for (assign_destructure.ast.variables) |variable|
                     _ = self.putNodeDecl(
-                        gpa,
                         tree,
                         file_id,
                         block_scope_id,
@@ -1900,7 +1874,6 @@ fn walkBlock(
 /// Walks direct AST children using the shared child iterator.
 fn walkChildren(
     self: *DeclStore,
-    gpa: std.mem.Allocator,
     tree: std.zig.Ast,
     file_id: FileStore.FileId,
     scope_id: ScopeId,
@@ -1909,7 +1882,6 @@ fn walkChildren(
     var it = ast.ChildIterator.init(tree, node);
     while (it.next(tree)) |child|
         self.walkNode(
-            gpa,
             tree,
             file_id,
             scope_id,

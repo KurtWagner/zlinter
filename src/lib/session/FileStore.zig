@@ -31,39 +31,25 @@ pub const File = struct {
 /// Use `fileTree(...)`, `fileSource(...)` and `fileAbsPath(...)` to
 /// access the underlying data associated with a file resolved using
 /// `resolve(...)`.
-files: std.MultiArrayList(File),
+files: std.MultiArrayList(File) = .empty,
 
 /// Normalized absolute path strings to file id. Don't access this
 /// directly, instead use `resolve(...)` and use the returned index with
 /// `ast(index)` and `source(index)`.
-file_id_by_path: std.StringHashMapUnmanaged(FileId),
+file_id_by_path: std.StringHashMapUnmanaged(FileId) = .empty,
 
-pub const empty: FileStore = .{
-    .files = .empty,
-    .file_id_by_path = .empty,
-};
+arena: std.mem.Allocator,
 
-pub fn deinit(self: *FileStore, gpa: std.mem.Allocator) void {
-    var slice = self.files.slice();
-    for (
-        slice.items(.abs_path),
-        slice.items(.source),
-        slice.items(.tree),
-    ) |abs_path, source, *tree| {
-        gpa.free(abs_path);
-        gpa.free(source);
-        tree.deinit(gpa);
-    }
-
-    self.files.deinit(gpa);
-    self.file_id_by_path.deinit(gpa); // Paths owned by File.
+pub fn init(arena: std.mem.Allocator) FileStore {
+    return .{
+        .arena = arena,
+    };
 }
 
 pub fn resolve(
     self: *FileStore,
     input_path: []const u8,
     io: std.Io,
-    gpa: std.mem.Allocator,
     cwd: []const u8,
 ) !FileId {
     const zone = tracy.traceNamed(@src(), "FileStore.resolve");
@@ -81,30 +67,23 @@ pub fn resolve(
     const source: [:0]const u8 = try std.Io.Dir.cwd().readFileAllocOptions(
         io,
         normal_path,
-        gpa,
+        self.arena,
         .limited(max_zig_file_size_bytes),
         .of(u8),
         0,
     );
-    errdefer gpa.free(source);
 
-    var tree = try std.zig.Ast.parse(gpa, source, .zig);
-    errdefer tree.deinit(gpa);
-
-    const abs_path = try gpa.dupe(u8, normal_path);
-    errdefer gpa.free(abs_path);
-
+    const tree = try std.zig.Ast.parse(self.arena, source, .zig);
+    const abs_path = try self.arena.dupe(u8, normal_path);
     const id: FileId = .fromIndex(self.files.len);
 
-    try self.files.append(gpa, .{
+    try self.files.append(self.arena, .{
         .tree = tree,
         .abs_path = abs_path,
         .source = source,
     });
-    errdefer _ = self.files.swapRemove(id.toIndex());
 
-    try self.file_id_by_path.putNoClobber(gpa, abs_path, id);
-    errdefer _ = self.file_id_by_path.remove(abs_path);
+    try self.file_id_by_path.putNoClobber(self.arena, abs_path, id);
 
     std.log.info("Resolving '{s}' to '{s}'", .{ cwd, input_path });
     std.log.info(" - adding '{s}", .{abs_path});
@@ -115,19 +94,17 @@ pub fn resolve(
 pub fn resolveStdlib(
     self: *FileStore,
     io: std.Io,
-    gpa: std.mem.Allocator,
     zig_lib_directory: []const u8,
 ) !FileId {
-    return self.resolve("std/std.zig", io, gpa, zig_lib_directory);
+    return self.resolve("std/std.zig", io, zig_lib_directory);
 }
 
 pub fn resolveStdLib(
     self: *FileStore,
     io: std.Io,
-    gpa: std.mem.Allocator,
     zig_lib_directory: []const u8,
 ) !FileId {
-    return self.resolveStdlib(io, gpa, zig_lib_directory);
+    return self.resolveStdlib(io, zig_lib_directory);
 }
 
 pub fn fileTree(self: *const FileStore, id: FileId) std.zig.Ast {

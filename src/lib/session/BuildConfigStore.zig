@@ -18,32 +18,23 @@ pub const Config = struct {
 
     /// Build root path used to load this config.
     build_root_path: []const u8,
-
-    /// Arena associated with the allocated configuration. Used to clean up data
-    /// associated with this configuration.
-    arena: std.heap.ArenaAllocator,
 };
 
 /// All evaluated build configurations. Use `buildConfig(...)` and
 /// `buildRootPath(...)` to look these up using a resolved configuration id.
-configs: std.MultiArrayList(Config),
+configs: std.MultiArrayList(Config) = .empty,
 
 /// An index for efficiently looking up what configuration is associated with
 /// a given source path or build root path. This is used internally by `resolve`
 /// and should never be used externally.
-config_id_by_path: std.StringHashMapUnmanaged(ConfigId),
+config_id_by_path: std.StringHashMapUnmanaged(ConfigId) = .empty,
 
-pub const empty: BuildConfigStore = .{
-    .configs = .empty,
-    .config_id_by_path = .empty,
-};
+arena: std.mem.Allocator,
 
-pub fn deinit(self: *BuildConfigStore, gpa: std.mem.Allocator) void {
-    for (self.configs.items(.arena)) |arena|
-        arena.deinit();
-
-    self.configs.deinit(gpa);
-    self.config_id_by_path.deinit(gpa);
+pub fn init(arena: std.mem.Allocator) BuildConfigStore {
+    return .{
+        .arena = arena,
+    };
 }
 
 /// Resolves a given directory or source path to the current or ancestor
@@ -55,7 +46,6 @@ pub fn deinit(self: *BuildConfigStore, gpa: std.mem.Allocator) void {
 pub fn resolve(
     self: *BuildConfigStore,
     io: std.Io,
-    gpa: std.mem.Allocator,
     zig_exe: []const u8,
     cwd: []const u8,
     input_path: []const u8,
@@ -78,7 +68,7 @@ pub fn resolve(
 
     const build_root_path = switch (build_root) {
         .config_id => |cached| {
-            try self.cacheResolvedConfigPaths(gpa, normal_path, cached.path, cached.index);
+            try self.cacheResolvedConfigPaths(normal_path, cached.path, cached.index);
             return cached.index;
         },
         .path => |path| path,
@@ -88,11 +78,12 @@ pub fn resolve(
     // TODO: #147 - catch and report build errors appropriately otherwise it appears as missing build config...
     const config_path = try files.resolveBuildConfigurationPath(
         io,
-        gpa,
+        self.arena,
         zig_exe,
         build_root_path,
     );
-    defer gpa.free(config_path);
+    // TODO: #149 - use fba with max path (find way to share this for paths)
+    defer self.arena.free(config_path);
 
     var file = std.Io.Dir.cwd().openFile(
         io,
@@ -109,30 +100,22 @@ pub fn resolve(
     };
     defer file.close(io);
 
-    var arena: std.heap.ArenaAllocator = .init(gpa);
     const config = try std.Build.Configuration.loadFile(
-        arena.allocator(),
+        self.arena,
         io,
         file,
     );
-    errdefer arena.deinit();
 
-    const build_root_key = try arena.allocator().dupe(u8, build_root_path);
-    errdefer arena.allocator().free(build_root_key);
-
+    const build_root_key = try self.arena.dupe(u8, build_root_path);
     const config_id: ConfigId = .fromIndex(self.configs.len);
 
-    try self.configs.append(gpa, .{
+    try self.configs.append(self.arena, .{
         .build_config = config,
         .build_root_path = build_root_key,
-        .arena = arena,
     });
-    errdefer _ = self.configs.swapRemove(config_id.toIndex());
 
-    try self.config_id_by_path.putNoClobber(gpa, build_root_key, config_id);
-    errdefer _ = self.config_id_by_path.remove(build_root_key);
-
-    try self.cacheResolvedConfigPaths(gpa, normal_path, build_root_key, config_id);
+    try self.config_id_by_path.putNoClobber(self.arena, build_root_key, config_id);
+    try self.cacheResolvedConfigPaths(normal_path, build_root_key, config_id);
 
     return config_id;
 }
@@ -215,7 +198,6 @@ fn findBuildRoot(
 /// ancestor instead of probing every parent directory for `build.zig`.
 fn cacheResolvedConfigPaths(
     self: *BuildConfigStore,
-    gpa: std.mem.Allocator,
     src_path: []const u8,
     cached_ancestor_path: []const u8,
     config_id: ConfigId,
@@ -227,14 +209,11 @@ fn cacheResolvedConfigPaths(
     std.debug.assert(config_index < self.configs.len);
 
     var path = src_path;
-    const arena = self.configs.items(.arena)[config_index].allocator();
 
     while (!std.mem.eql(u8, path, cached_ancestor_path)) {
         if (!self.config_id_by_path.contains(path)) {
-            const key = try arena.dupe(u8, path);
-            errdefer arena.free(key);
-
-            try self.config_id_by_path.putNoClobber(gpa, key, config_id);
+            const key = try self.arena.dupe(u8, path);
+            try self.config_id_by_path.putNoClobber(self.arena, key, config_id);
         }
 
         const parent = std.fs.path.dirname(path) orelse cached_ancestor_path;

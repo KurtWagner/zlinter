@@ -3,7 +3,8 @@
 const LintContext = @This();
 
 gpa: std.mem.Allocator,
-arena: std.mem.Allocator,
+session_arena: *std.heap.ArenaAllocator = undefined,
+arena_allocator: *PanicAllocator = undefined,
 io: std.Io,
 
 /// Externally owned slice to zig executable path
@@ -16,22 +17,35 @@ zig_lib_directory: []const u8,
 cwd: []const u8,
 
 compile_contexts: std.MultiArrayList(CompileContext) = .empty,
-file_store: FileStore = .empty,
-module_store: ModuleStore = .empty,
+file_store: FileStore = undefined, // zlinter-disable-current-line no_undefined - set in init
+module_store: ModuleStore = undefined, // zlinter-disable-current-line no_undefined - set in init
 decl_store: DeclStore = undefined, // zlinter-disable-current-line no_undefined - set in init
-type_store: TypeStore = .empty,
-build_config_store: BuildConfigStore = .empty,
+type_store: TypeStore = undefined, // zlinter-disable-current-line no_undefined - set in init
+build_config_store: BuildConfigStore = undefined, // zlinter-disable-current-line no_undefined - set in init
 
 pub fn init(self: *LintContext) !void {
     const zone = tracy.traceNamed(@src(), "LintContext.init");
     defer zone.end();
 
+    self.session_arena = self.gpa.create(std.heap.ArenaAllocator) catch @panic("OOM");
+    self.session_arena.* = .init(self.gpa);
+    self.arena_allocator = self.gpa.create(PanicAllocator) catch @panic("OOM");
+    self.arena_allocator.* = .init(self.session_arena.allocator());
+    errdefer self.deinit();
+
+    const arena = self.arena_allocator.allocator();
+
+    self.file_store = .init(arena);
+    self.module_store = .init(arena);
+    self.build_config_store = .init(arena);
+    self.type_store = .init(arena);
+
     // TODO: #149 - refactor to not do this
-    self.decl_store = .{
-        .gpa = self.gpa,
-        .zig_lib_directory = self.zig_lib_directory,
-        .io = self.io,
-    };
+    self.decl_store = .init(
+        arena,
+        self.io,
+        self.zig_lib_directory,
+    );
 
     // Maybe one day we will care enough to use a fake for tests but for now
     // it's fine to ignore...
@@ -39,12 +53,9 @@ pub fn init(self: *LintContext) !void {
 }
 
 pub fn deinit(self: *LintContext) void {
-    self.build_config_store.deinit(self.gpa);
-    self.file_store.deinit(self.gpa);
-    self.compile_contexts.deinit(self.gpa);
-    self.module_store.deinit(self.gpa);
-    self.decl_store.deinit(self.gpa);
-    self.type_store.deinit(self.gpa);
+    self.session_arena.deinit();
+    self.gpa.destroy(self.arena_allocator);
+    self.gpa.destroy(self.session_arena);
 }
 
 fn initBuildConfig(self: *LintContext) !void {
@@ -53,7 +64,6 @@ fn initBuildConfig(self: *LintContext) !void {
 
     const config_id = try self.build_config_store.resolve(
         self.io,
-        self.gpa,
         self.zig_exe,
         self.cwd,
         ".",
@@ -75,6 +85,8 @@ fn consumeBuildConfigStep(
     const zone = tracy.traceNamed(@src(), "LintContext.consumeBuildConfigStep");
     defer zone.end();
 
+    const arena = self.arena_allocator.allocator();
+
     const build_config = self.build_config_store.buildConfig(config_id);
     const step = build_config.steps[@intFromEnum(step_index)];
 
@@ -94,12 +106,10 @@ fn consumeBuildConfigStep(
         return;
     };
 
-    const compile_context_id: CompileContext.Id = .fromIndex(self.compile_contexts.len);
-    try self.compile_contexts.append(self.gpa, .{
+    self.compile_contexts.append(arena, .{
         .step_index = step_index,
         .root_module = root_module_id,
-    });
-    errdefer _ = self.compile_contexts.swapRemove(compile_context_id.toIndex());
+    }) catch unreachable;
 
     // TODO: #149 - decide whether compile contexts should eagerly populate
     // declarations for module descendants.
@@ -113,24 +123,26 @@ fn resolveBuildModule(
     const zone = tracy.traceNamed(@src(), "LintContext.resolveBuildModule");
     defer zone.end();
 
+    const arena = self.arena_allocator.allocator();
+
     const build_config = self.build_config_store.buildConfig(config_id);
 
     var module_id_by_build_module_index: std.AutoHashMapUnmanaged(
         std.Build.Configuration.Module.Index,
         ModuleStore.ModuleId,
     ) = .empty;
-    defer module_id_by_build_module_index.deinit(self.gpa);
+    defer module_id_by_build_module_index.deinit(arena);
 
     var queue: std.ArrayList(std.Build.Configuration.Module.Index) = .empty;
-    defer queue.deinit(self.gpa);
+    defer queue.deinit(arena);
 
     const root_module_id = try self.resolveBuildModuleShallow(
         config_id,
         build_module_index,
     ) orelse return null;
 
-    try module_id_by_build_module_index.put(self.gpa, build_module_index, root_module_id);
-    try queue.append(self.gpa, build_module_index);
+    module_id_by_build_module_index.put(arena, build_module_index, root_module_id) catch unreachable;
+    queue.append(arena, build_module_index) catch unreachable;
 
     while (queue.pop()) |current_build_module_index| {
         const current_module_id = module_id_by_build_module_index.get(current_build_module_index).?;
@@ -146,11 +158,11 @@ fn resolveBuildModule(
         var module_id_by_import_name: std.StringHashMapUnmanaged(ModuleStore.ModuleId) = .empty;
         errdefer {
             var it = module_id_by_import_name.keyIterator();
-            while (it.next()) |key| self.gpa.free(key.*);
-            module_id_by_import_name.deinit(self.gpa);
+            while (it.next()) |key| arena.free(key.*);
+            module_id_by_import_name.deinit(arena);
         }
 
-        try module_id_by_import_name.ensureTotalCapacity(self.gpa, @intCast(imports.len));
+        module_id_by_import_name.ensureTotalCapacity(arena, @intCast(imports.len)) catch unreachable;
         for (imports.items(.name), imports.items(.module)) |
             build_import_name_id,
             build_import_module_index,
@@ -163,14 +175,14 @@ fn resolveBuildModule(
                     build_import_module_index,
                 )) orelse continue;
 
-                try module_id_by_build_module_index.put(self.gpa, build_import_module_index, resolved);
-                try queue.append(self.gpa, build_import_module_index);
+                module_id_by_build_module_index.put(arena, build_import_module_index, resolved) catch unreachable;
+                queue.append(arena, build_import_module_index) catch unreachable;
 
                 break :child resolved;
             };
 
             module_id_by_import_name.putAssumeCapacity(
-                try self.gpa.dupe(u8, import_name_slice),
+                arena.dupe(u8, import_name_slice) catch unreachable,
                 import_module_id,
             );
         }
@@ -191,6 +203,8 @@ fn resolveBuildModuleShallow(
     const zone = tracy.traceNamed(@src(), "LintContext.resolveBuildModuleShallow");
     defer zone.end();
 
+    const arena = self.arena_allocator.allocator();
+
     const build_root_path = self.build_config_store.buildRootPath(config_id);
     const build_config = self.build_config_store.buildConfig(config_id);
 
@@ -200,16 +214,15 @@ fn resolveBuildModuleShallow(
     const root_path = try files.resolveLazyPath(
         root_source_file,
         build_config,
-        self.gpa,
+        arena,
         build_root_path,
     ) orelse return null;
-    defer self.gpa.free(root_path);
+    defer arena.free(root_path);
 
-    return try self.module_store.resolve(self.gpa, .{
+    return self.module_store.resolve(.{
         .root_file = try self.file_store.resolve(
             root_path,
             self.io,
-            self.gpa,
             self.cwd,
         ),
         .build_config = config_id,
@@ -225,7 +238,6 @@ pub fn resolveFile(self: *LintContext, input_path: []const u8) !FileStore.FileId
     const id = try self.file_store.resolve(
         input_path,
         self.io,
-        self.gpa,
         self.cwd,
     );
     self.decl_store.resolveFileTypes(
@@ -233,7 +245,6 @@ pub fn resolveFile(self: *LintContext, input_path: []const u8) !FileStore.FileId
         &self.file_store,
         &self.module_store,
         &self.type_store,
-        self.gpa,
     );
     return id;
 }
@@ -1143,14 +1154,13 @@ fn resolveImportRootDecl(
         &self.file_store,
         &self.module_store,
         self.io,
-        self.gpa,
         self.zig_lib_directory,
         parent_file_id,
         import_path,
     ) catch return null;
 
     const file_id = maybe_file_id orelse return null;
-    _ = self.decl_store.store(file_id, &self.file_store, self.gpa);
+    _ = self.decl_store.store(file_id, &self.file_store);
     return self.decl_store.rootDecl(file_id);
 }
 
@@ -1757,7 +1767,7 @@ test "LintContext.resolveTypeKind" {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
 
-        var context = testing.initFakeContext(std.testing.allocator, arena.allocator(), std.testing.io);
+        var context = testing.initFakeContext(std.testing.allocator, std.testing.io);
         defer context.deinit();
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
@@ -1832,6 +1842,7 @@ const DeclStore = @import("DeclStore.zig");
 const FileStore = @import("FileStore.zig");
 const LintDocument = @import("LintDocument.zig");
 const ModuleStore = @import("ModuleStore.zig");
+const PanicAllocator = @import("PanicAllocator.zig");
 const TypeStore = @import("TypeStore.zig");
 const Ast = std.zig.Ast;
 

@@ -1,12 +1,20 @@
 const ModuleStore = @This();
 
-modules: std.MultiArrayList(ModuleEntry),
+modules: std.MultiArrayList(ModuleEntry) = .empty,
 module_id_by_key: std.HashMapUnmanaged(
     ModuleKey,
     ModuleId,
     ModuleKeyContext,
     std.hash_map.default_max_load_percentage,
-),
+) = .empty,
+
+arena: std.mem.Allocator,
+
+pub fn init(arena: std.mem.Allocator) ModuleStore {
+    return .{
+        .arena = arena,
+    };
+}
 
 pub const ModuleEntry = struct {
     root_file: FileId,
@@ -76,22 +84,7 @@ pub const ModuleSeed = struct {
     module_id_by_import_name: std.StringHashMapUnmanaged(ModuleId),
 };
 
-pub const empty: ModuleStore = .{
-    .modules = .empty,
-    .module_id_by_key = .empty,
-};
-
-pub fn deinit(self: *ModuleStore, gpa: std.mem.Allocator) void {
-    for (self.modules.items(.module_id_by_import_name)) |*module_id_by_import_name| {
-        var it = module_id_by_import_name.keyIterator();
-        while (it.next()) |key| gpa.free(key.*);
-        module_id_by_import_name.deinit(gpa);
-    }
-    self.modules.deinit(gpa);
-    self.module_id_by_key.deinit(gpa);
-}
-
-pub fn resolve(self: *ModuleStore, gpa: std.mem.Allocator, seed: ModuleSeed) !ModuleId {
+pub fn resolve(self: *ModuleStore, seed: ModuleSeed) ModuleId {
     const zone = tracy.traceNamed(@src(), "ModuleStore.resolve");
     defer zone.end();
 
@@ -100,14 +93,12 @@ pub fn resolve(self: *ModuleStore, gpa: std.mem.Allocator, seed: ModuleSeed) !Mo
         return id;
 
     const id: ModuleId = .fromIndex(self.modules.len);
-    try self.modules.append(gpa, .{
+    self.modules.append(self.arena, .{
         .root_file = seed.root_file,
         .module_id_by_import_name = seed.module_id_by_import_name,
-    });
-    errdefer _ = self.modules.swapRemove(id.toIndex());
+    }) catch unreachable;
 
-    try self.module_id_by_key.put(gpa, key, id);
-    errdefer _ = self.module_id_by_key.remove(key);
+    self.module_id_by_key.put(self.arena, key, id) catch unreachable;
 
     return id;
 }

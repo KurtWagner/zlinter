@@ -281,7 +281,6 @@ fn runLinterRules(
     var context: zlinter.session.LintContext = .{
         .io = io,
         .gpa = gpa,
-        .arena = arena.allocator(),
         .zig_exe = zig_exe,
         .zig_lib_directory = zig_lib_directory,
         .cwd = cwd,

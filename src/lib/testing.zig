@@ -51,14 +51,12 @@ pub fn writeFile(dir: std.Io.Dir, file_name: []const u8, contents: []const u8) !
 
 pub fn initFakeContext(
     gpa: std.mem.Allocator,
-    arena: std.mem.Allocator,
     io: std.Io,
 ) LintContext {
     assertTestOnly();
 
     var context: LintContext = .{
         .gpa = gpa,
-        .arena = arena,
         .io = io,
         // TODO: If we really ever need to we can pass zig exe through a build
         // config and evaluate lib dir from `zig env` but I think overkill for
@@ -253,7 +251,7 @@ fn runRule(
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var context = initFakeContext(std.testing.allocator, arena.allocator(), std.testing.io);
+    var context = initFakeContext(std.testing.allocator, std.testing.io);
     defer context.deinit();
 
     var tmp = std.testing.tmpDir(.{});

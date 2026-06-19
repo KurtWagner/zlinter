@@ -1,17 +1,20 @@
 const TypeStore = @This();
 
-summaries: std.ArrayList(TypeSummary),
+summaries: std.ArrayList(TypeSummary) = .empty,
 type_id_by_summary: std.HashMapUnmanaged(
     TypeSummary,
     TypeId,
     TypeSummaryContext,
     std.hash_map.default_max_load_percentage,
-),
+) = .empty,
 
-pub const empty: TypeStore = .{
-    .summaries = .empty,
-    .type_id_by_summary = .empty,
-};
+arena: std.mem.Allocator,
+
+pub fn init(arena: std.mem.Allocator) TypeStore {
+    return .{
+        .arena = arena,
+    };
+}
 
 pub const TypeId = enum(u32) {
     _,
@@ -349,14 +352,8 @@ pub const Primitive = union(enum) {
     }
 };
 
-pub fn deinit(self: *TypeStore, gpa: std.mem.Allocator) void {
-    self.summaries.deinit(gpa);
-    self.type_id_by_summary.deinit(gpa);
-}
-
 pub fn store(
     self: *TypeStore,
-    gpa: std.mem.Allocator,
     type_summary: TypeSummary,
 ) TypeId {
     const zone = tracy.traceNamed(@src(), "TypeStore.store");
@@ -365,8 +362,8 @@ pub fn store(
     if (self.type_id_by_summary.get(type_summary)) |type_id| return type_id;
 
     const type_id: TypeId = .fromIndex(self.summaries.items.len);
-    self.summaries.append(gpa, type_summary) catch @panic("OOM");
-    self.type_id_by_summary.put(gpa, type_summary, type_id) catch @panic("OOM");
+    self.summaries.append(self.arena, type_summary) catch @panic("OOM");
+    self.type_id_by_summary.put(self.arena, type_summary, type_id) catch @panic("OOM");
     return type_id;
 }
 
@@ -765,24 +762,27 @@ fn parsePrimitiveIntBits(text: []const u8) ?u16 {
 }
 
 test "TypeStore.store deduplicates equivalent summaries" {
-    var type_store: TypeStore = .empty;
-    defer type_store.deinit(std.testing.allocator);
+    var type_store: TypeStore = .{
+        .arena = std.testing.allocator,
+    };
+    defer type_store.summaries.deinit(std.testing.allocator);
+    defer type_store.type_id_by_summary.deinit(std.testing.allocator);
 
-    const first = type_store.store(std.testing.allocator, .{ .primitive = .{
+    const first = type_store.store(.{ .primitive = .{
         .number = .{
             .name = "u32",
             .kind = .unsigned_int,
             .bits = 32,
         },
     } });
-    const second = type_store.store(std.testing.allocator, .{ .primitive = .{
+    const second = type_store.store(.{ .primitive = .{
         .number = .{
             .name = "u32",
             .kind = .unsigned_int,
             .bits = 32,
         },
     } });
-    const third = type_store.store(std.testing.allocator, .{ .primitive = .{
+    const third = type_store.store(.{ .primitive = .{
         .number = .{
             .name = "u64",
             .kind = .unsigned_int,
