@@ -139,8 +139,6 @@ fn run(
         null;
 }
 
-// TODO(#52): Write unit tests for helpers and consider whether some should be moved to ast
-
 const ImportsQueueLinesAscending = std.PriorityDequeue(
     ImportDecl,
     void,
@@ -346,6 +344,7 @@ fn resolveScopedImports(
     gpa: std.mem.Allocator,
 ) !std.array_hash_map.Auto(Ast.Node.Index, ImportsQueueLinesAscending) {
     const tree = doc.tree(session);
+    var import_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
 
     const root: Ast.Node.Index = .root;
     var node_it = try doc.nodeLineageIterator(root, gpa);
@@ -358,7 +357,11 @@ fn resolveScopedImports(
         const var_decl = tree.fullVarDecl(node) orelse continue;
 
         const init_node = var_decl.ast.init_node.unwrap() orelse continue;
-        const import_path = isImportCall(tree, init_node) orelse continue;
+        const import_path = import_utils.writeImportPath(
+            tree,
+            init_node,
+            &import_path_buffer,
+        ) orelse continue;
         const parent = connections.parent orelse continue;
 
         const decl_name = tree.tokenSlice(var_decl.ast.mut_token + 1);
@@ -389,29 +392,6 @@ fn resolveScopedImports(
         }
     }
     return scoped_imports;
-}
-
-/// Returns the import path if `@import` built in call.
-fn isImportCall(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
-    switch (tree.nodeTag(node)) {
-        .builtin_call_two,
-        .builtin_call_two_comma,
-        => {
-            const main_token = tree.nodeMainToken(node);
-            if (!std.mem.eql(u8, "@import", tree.tokenSlice(main_token))) return null;
-
-            const data = tree.nodeData(node);
-            const lhs_node = data.opt_node_and_opt_node[0].unwrap() orelse return null;
-
-            if (tree.nodeTag(lhs_node) != .string_literal) return null;
-
-            const lhs_content = tree.tokenSlice(tree.nodeMainToken(lhs_node));
-            if (lhs_content.len <= 2) return null;
-
-            return lhs_content[1 .. lhs_content.len - 1];
-        },
-        else => return null,
-    }
 }
 
 fn classifyImportKind(kind: import_utils.Kind) ImportDecl.Classification {
@@ -513,12 +493,9 @@ test "order" {
             ,
             .message = "Import 'b' is not in alphabetical order",
             .disabled_by_comment = false,
-            .fix = .{
-                .start = 25,
-                .end = 74,
-                .text =
-                \\ const b = @import("b"); const c = @import("c");
-                \\
+            .fix = .{ .start = 25, .end = 74, .text =
+            \\ const b = @import("b"); const c = @import("c");
+            \\
             },
         }},
     );

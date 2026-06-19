@@ -1232,7 +1232,7 @@ fn typeSummaryFromValueNode(
         .unwrap_optional_unwrap = false,
     });
 
-    if (import_utils.isImportBuiltinCall(tree, node)) {
+    if (ast.isBuiltinCallNamed(tree, node, "@import")) {
         const target_decl_id = self.resolveImportRootDecl(
             self.decl_store.declFileId(context_decl_id),
             node,
@@ -1366,27 +1366,11 @@ fn valueExprIsTypeInfoProjection(
     tree: Ast,
     node: Ast.Node.Index,
 ) bool {
-    const tag = tree.nodeTag(node);
-    switch (tag) {
-        .unwrap_optional => {
-            const target_node = tree.nodeData(node).node_and_token[0];
-            return valueExprIsTypeInfoProjection(tree, target_node);
-        },
-        .field_access => {
-            const target_node, _ = tree.nodeData(node).node_and_token;
-            return valueExprIsTypeInfoProjection(tree, target_node);
-        },
-        .builtin_call,
-        .builtin_call_comma,
-        .builtin_call_two,
-        .builtin_call_two_comma,
-        => return std.mem.eql(
-            u8,
-            tree.tokenSlice(tree.nodeMainToken(node)),
-            "@typeInfo",
-        ),
-        else => return false,
-    }
+    return switch (tree.nodeTag(node)) {
+        .unwrap_optional => valueExprIsTypeInfoProjection(tree, tree.nodeData(node).node_and_token[0]),
+        .field_access => valueExprIsTypeInfoProjection(tree, tree.nodeData(node).node_and_token[0]),
+        else => ast.isBuiltinCallNamed(tree, node, "@typeInfo"),
+    };
 }
 
 fn containerDeclTypeSummary(

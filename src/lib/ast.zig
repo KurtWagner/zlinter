@@ -111,6 +111,63 @@ pub fn isIdentiferKind(
     };
 }
 
+/// Returns true if the node is a builtin call.
+pub fn isBuiltinCall(tree: Ast, node: Ast.Node.Index) bool {
+    return switch (tree.nodeTag(node)) {
+        .builtin_call,
+        .builtin_call_comma,
+        .builtin_call_two,
+        .builtin_call_two_comma,
+        => true,
+        else => false,
+    };
+}
+
+/// Returns true if the node is a builtin call with the given name.
+pub fn isBuiltinCallNamed(tree: Ast, node: Ast.Node.Index, name: []const u8) bool {
+    return isBuiltinCall(tree, node) and
+        std.mem.eql(u8, tree.tokenSlice(tree.nodeMainToken(node)), name);
+}
+
+test "isBuiltinCall - matches builtin call node kinds" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        \\const value = @import("std");
+    ,
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const node = try testing.expectSingleNodeOfTag(tree, &.{.builtin_call_two});
+    try std.testing.expect(isBuiltinCall(tree, node));
+}
+
+test "isBuiltinCallNamed - matches builtin call name" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        \\const value = @typeInfo(u8);
+    ,
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const node = try testing.expectSingleNodeOfTag(tree, &.{.builtin_call_two});
+    try std.testing.expect(isBuiltinCallNamed(tree, node, "@typeInfo"));
+}
+
+test "isBuiltinCallNamed - rejects other builtin names" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        \\const value = @sizeOf(u8);
+    ,
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const node = try testing.expectSingleNodeOfTag(tree, &.{.builtin_call_two});
+    try std.testing.expect(!isBuiltinCallNamed(tree, node, "@typeInfo"));
+}
+
 /// Unwraps pointers and optional nodes to the underlying node, this is useful
 /// when linting based on the underlying type of a field or argument.
 ///

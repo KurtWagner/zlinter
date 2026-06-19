@@ -70,57 +70,12 @@ test "Kind.init - absolute or other is module" {
     );
 }
 
-pub fn isImportBuiltinCall(tree: Ast, node: Ast.Node.Index) bool {
-    return switch (tree.nodeTag(node)) {
-        .builtin_call,
-        .builtin_call_comma,
-        .builtin_call_two,
-        .builtin_call_two_comma,
-        => std.mem.eql(
-            u8,
-            tree.tokenSlice(tree.nodeMainToken(node)),
-            "@import",
-        ),
-        else => false,
-    };
-}
-
-test "isImportBuiltinCall - matches @import" {
-    const source: [:0]const u8 =
-        \\const value = @import("std");
-    ;
-
-    var tree = try Ast.parse(std.testing.allocator, source, .zig);
-    defer tree.deinit(std.testing.allocator);
-
-    const node = try testing.expectSingleNodeOfTag(
-        tree,
-        &.{.builtin_call_two},
-    );
-    try std.testing.expect(isImportBuiltinCall(tree, node));
-}
-
-test "isImportBuiltinCall - rejects other builtin calls" {
-    const source: [:0]const u8 =
-        \\const value = @sizeOf(u8);
-    ;
-
-    var tree = try Ast.parse(std.testing.allocator, source, .zig);
-    defer tree.deinit(std.testing.allocator);
-
-    const node = try testing.expectSingleNodeOfTag(
-        tree,
-        &.{.builtin_call_two},
-    );
-    try std.testing.expect(!isImportBuiltinCall(tree, node));
-}
-
 pub fn writeImportPath(
     tree: Ast,
     node: Ast.Node.Index,
     buffer: *[std.fs.max_path_bytes]u8,
 ) ?[]const u8 {
-    if (!isImportBuiltinCall(tree, node)) return null;
+    if (!ast.isBuiltinCallNamed(tree, node, "@import")) return null;
 
     var params_buffer: [2]Ast.Node.Index = undefined;
     const params = tree.builtinCallParams(&params_buffer, node) orelse return null;
@@ -153,6 +108,24 @@ test "writeImportPath - parses string literal import path" {
     const node = try testing.expectSingleNodeOfTag(
         tree,
         &.{.builtin_call_two},
+    );
+    const path = writeImportPath(tree, node, &buffer);
+    try std.testing.expect(path != null);
+    try std.testing.expectEqualStrings("pkg/module.zig", path.?);
+}
+
+test "writeImportPath - parses trailing comma builtin call" {
+    const source: [:0]const u8 =
+        \\const value = @import("pkg/module.zig",);
+    ;
+
+    var tree = try Ast.parse(std.testing.allocator, source, .zig);
+    defer tree.deinit(std.testing.allocator);
+
+    var buffer: [std.fs.max_path_bytes]u8 = undefined;
+    const node = try testing.expectSingleNodeOfTag(
+        tree,
+        &.{.builtin_call_two_comma},
     );
     const path = writeImportPath(tree, node, &buffer);
     try std.testing.expect(path != null);
@@ -288,6 +261,7 @@ const Ast = std.zig.Ast;
 const FileStore = @import("FileStore.zig");
 const LintRuntime = @import("LintRuntime.zig");
 const ModuleStore = @import("ModuleStore.zig");
+const ast = @import("../ast.zig");
 const testing = @import("../testing.zig");
 const std = @import("std");
 
