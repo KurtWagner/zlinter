@@ -81,7 +81,7 @@ fn run(
                         .severity = config.severity,
                         .start = .startOfNode(tree, import.decl_node),
                         .end = .endOfNode(tree, import.decl_node),
-                        .message = try std.fmt.allocPrint(gpa, "Import '{s}' should grouped with other imports", .{import.decl_name}),
+                        .message = try std.fmt.allocPrint(gpa, "Import '{s}' should be grouped with other imports", .{import.decl_name}),
                         .fix = try swapNodesFix(doc, session, p.decl_node, import.decl_node, gpa),
                     });
                     continue :scopes;
@@ -567,7 +567,7 @@ test "allow_line_separated_chunks" {
                 .slice =
                 \\const a = @import("a")
                 ,
-                .message = "Import 'a' should grouped with other imports",
+                .message = "Import 'a' should be grouped with other imports",
                 .fix = .{
                     .start = 0,
                     .end = 58,
@@ -598,7 +598,7 @@ test "allow_line_separated_chunks" {
                 .slice =
                 \\const b = @import("b")
                 ,
-                .message = "Import 'b' should grouped with other imports",
+                .message = "Import 'b' should be grouped with other imports",
                 .fix = .{
                     .start = 0,
                     .end = 51,
