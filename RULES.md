@@ -328,7 +328,7 @@ declaration name in Zig source files.
 Maintaining a standardized import order improves readability and reduces
 merge conflicts.
 
-`import_ordering` supports auto fixes with the `--fix` flag. It may take multiple runs with `--fix` to fix all places.
+`import_ordering` supports auto fixes with the `--fix` flag. It may take multiple runs with `--fix` to fix all places. Fixes may be omitted when imports have attached comments.
 
 **Auto fixing is an experimental feature so only use it if you use source control - always back up your code first!**
 

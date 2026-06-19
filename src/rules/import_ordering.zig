@@ -11,7 +11,7 @@
 //! Maintaining a standardized import order improves readability and reduces
 //! merge conflicts.
 //!
-//! `import_ordering` supports auto fixes with the `--fix` flag. It may take multiple runs with `--fix` to fix all places.
+//! `import_ordering` supports auto fixes with the `--fix` flag. It may take multiple runs with `--fix` to fix all places. Fixes may be omitted when comments are attached to imports.
 //!
 //! **Auto fixing is an experimental feature so only use it if you use source control - always back up your code first!**
 
@@ -89,7 +89,7 @@ fn run(
                         .start = .startOfNode(tree, import.decl_node),
                         .end = .endOfNode(tree, import.decl_node),
                         .message = try std.fmt.allocPrint(gpa, "Import '{s}' should be grouped with other imports", .{import.decl_name}),
-                        .fix = if (same_line) null else try swapNodesFix(doc, session, p.decl_node, import.decl_node, gpa),
+                        .fix = if (same_line) null else try swapImportBlocksFix(doc, session, p.decl_node, import.decl_node, gpa),
                     });
                     continue :scopes;
                 }
@@ -105,7 +105,7 @@ fn run(
                             .start = .startOfNode(tree, import.decl_node),
                             .end = .endOfNode(tree, import.decl_node),
                             .message = try std.fmt.allocPrint(gpa, "Import '{s}' is not in {s} order", .{ import.decl_name, config.order.name() }),
-                            .fix = if (same_line) null else try swapNodesFix(doc, session, p.decl_node, import.decl_node, gpa),
+                            .fix = if (same_line) null else try swapImportBlocksFix(doc, session, p.decl_node, import.decl_node, gpa),
                         });
                         continue :scopes;
                     }
@@ -158,37 +158,171 @@ fn deinitScopedImports(gpa: std.mem.Allocator, scoped_imports: *std.array_hash_m
     scoped_imports.deinit(gpa);
 }
 
-fn swapNodesFix(
+const ImportSwapRange = struct {
+    start_line: usize,
+    end_line: usize,
+    start_offset: usize,
+    end_offset: usize,
+};
+
+fn swapImportBlocksFix(
     doc: *const zlinter.session.LintDocument,
     session: *const zlinter.session.LintSession,
     first: Ast.Node.Index,
     second: Ast.Node.Index,
     gpa: std.mem.Allocator,
-) error{OutOfMemory}!zlinter.results.LintProblemFix {
+) error{OutOfMemory}!?zlinter.results.LintProblemFix {
     const tree = doc.tree(session);
     const source = tree.source;
 
-    const first_line_start = tree.tokenLocation(0, tree.firstToken(first)).line_start;
-    const second_line_start = tree.tokenLocation(0, tree.firstToken(second)).line_start;
-    const second_line_end = tree.tokenLocation(0, tree.lastToken(second)).line_end;
+    const first_range = importSwapRange(
+        doc,
+        session,
+        first,
+    ) orelse return null;
+    const second_range = importSwapRange(
+        doc,
+        session,
+        second,
+    ) orelse return null;
 
-    var text = try std.ArrayList(u8).initCapacity(gpa, second_line_start - first_line_start);
+    if (first_range.start_offset >= second_range.start_offset) return null;
+    if (!sourceRangeIsBlankOnly(
+        doc.comments.line_starts,
+        source,
+        first_range.end_line + 1,
+        second_range.start_line,
+    ))
+        return null;
+
+    var text = try std.ArrayList(u8).initCapacity(
+        gpa,
+        second_range.end_offset - first_range.start_offset,
+    );
     errdefer text.deinit(gpa);
 
-    if (source[second_line_end] == 0) {
-        try text.appendSlice(gpa, source[second_line_start..second_line_end]);
-        try text.append(gpa, '\n');
-        try text.appendSlice(gpa, source[first_line_start .. second_line_start - 1]);
-    } else {
-        try text.appendSlice(gpa, source[second_line_start .. second_line_end + 1]);
-        try text.appendSlice(gpa, source[first_line_start..second_line_start]);
-    }
+    try text.appendSlice(
+        gpa,
+        source[second_range.start_offset..second_range.end_offset],
+    );
+    try text.appendSlice(
+        gpa,
+        source[first_range.end_offset..second_range.start_offset],
+    );
+    try text.appendSlice(
+        gpa,
+        source[first_range.start_offset..first_range.end_offset],
+    );
 
     return .{
         .text = try text.toOwnedSlice(gpa),
-        .start = first_line_start,
-        .end = second_line_end + 1,
+        .start = first_range.start_offset,
+        .end = second_range.end_offset,
     };
+}
+
+fn importSwapRange(
+    doc: *const zlinter.session.LintDocument,
+    session: *const zlinter.session.LintSession,
+    node: Ast.Node.Index,
+) ?ImportSwapRange {
+    const tree = doc.tree(session);
+    const source = tree.source;
+    const line_starts = doc.comments.line_starts;
+
+    const first_token = tree.firstToken(node);
+    const last_token = tree.lastToken(node);
+    const start_line = tree.tokenLocation(0, first_token).line;
+    const end_line = tree.tokenLocation(0, last_token).line;
+
+    var block_start_line = start_line;
+    while (block_start_line > 0) {
+        const prev_line = block_start_line - 1;
+        const line = lineSlice(
+            source,
+            line_starts,
+            prev_line,
+        );
+
+        if (isBlankLine(line)) break;
+        if (!isAttachableImportCommentLine(line)) break;
+
+        block_start_line = prev_line;
+    }
+
+    return .{
+        .start_line = block_start_line,
+        .end_line = end_line,
+        .start_offset = line_starts[block_start_line],
+        .end_offset = lineEndExclusive(
+            source,
+            line_starts,
+            end_line,
+        ),
+    };
+}
+
+fn sourceRangeIsBlankOnly(
+    line_starts: []const usize,
+    source: [:0]const u8,
+    start_line: usize,
+    end_line: usize,
+) bool {
+    if (start_line >= end_line) return true;
+    var line = start_line;
+    while (line < end_line) : (line += 1) {
+        if (!isBlankLine(lineSlice(
+            source,
+            line_starts,
+            line,
+        ))) return false;
+    }
+    return true;
+}
+
+fn lineSlice(
+    source: [:0]const u8,
+    line_starts: []const usize,
+    line: usize,
+) []const u8 {
+    const start = line_starts[line];
+    const end = lineEndExclusive(
+        source,
+        line_starts,
+        line,
+    );
+    return source[start..end];
+}
+
+fn lineEndExclusive(
+    source: [:0]const u8,
+    line_starts: []const usize,
+    line: usize,
+) usize {
+    return if (line + 1 < line_starts.len) line_starts[line + 1] else source.len;
+}
+
+fn isBlankLine(line: []const u8) bool {
+    for (line) |c| {
+        switch (c) {
+            ' ', '\t', '\r', '\n' => {},
+            else => return false,
+        }
+    }
+    return true;
+}
+
+fn isAttachableImportCommentLine(line: []const u8) bool {
+    var i: usize = 0;
+    while (i < line.len) : (i += 1) {
+        switch (line[i]) {
+            ' ', '\t', '\r' => continue,
+            else => break,
+        }
+    }
+    const trimmed = line[i..];
+    return std.mem.startsWith(u8, trimmed, "//") and
+        !std.mem.startsWith(u8, trimmed, "//!");
 }
 
 /// Returns declarations initialised as imports grouped by their parent (i.e., their scope).

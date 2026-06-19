@@ -1,0 +1,3 @@
+.{
+    .allow_line_separated_chunks = false,
+}
