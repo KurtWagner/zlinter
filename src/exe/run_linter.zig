@@ -286,7 +286,7 @@ fn runLinterRules(
             zig_lib_directory,
         ),
     };
-    try context.init();
+    try context.init(args.compile_names);
 
     var enabled_rules = enabledRules(args.rules);
 
@@ -457,6 +457,9 @@ fn runLinterRules(
                         }
                     } else {
                         for (compile_context_ids) |compile_context_id| {
+                            if (!context.focused_compiled_contexts.contains(compile_context_id))
+                                continue;
+
                             const compile_root_file_id = context.compileRootFileId(compile_context_id);
                             context.setCompileRootFileId(compile_root_file_id);
                             context.resolveFileTypes(file_id);

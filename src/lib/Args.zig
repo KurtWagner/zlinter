@@ -54,6 +54,9 @@ rules: ?[][]const u8,
 /// Whether to write additional information out to stdout.
 verbose: bool,
 
+/// Compile unit names to lint when resolving compile context from build.zig.
+compile_names: ?[][]const u8,
+
 /// Contains rule id to path names for overriding the build time config for
 /// a rule. This is typically just useful for internal testing.
 rule_config_overrides: ?*std.BufMap,
@@ -85,6 +88,7 @@ pub fn deinit(self: Args, allocator: std.mem.Allocator) void {
         "filter_paths",
         "unknown_args",
         "rules",
+        "compile_names",
     }) |field_name| {
         if (@field(self, field_name)) |v| {
             for (v) |s| allocator.free(s);
@@ -148,6 +152,10 @@ pub fn allocParse(
     defer rules.deinit(gpa);
     errdefer for (rules.items) |r| gpa.free(r);
 
+    var compile_names = std.ArrayList([]const u8).empty;
+    defer compile_names.deinit(gpa);
+    errdefer for (compile_names.items) |r| gpa.free(r);
+
     const rule_config_overrides = try gpa.create(std.BufMap);
     rule_config_overrides.* = std.BufMap.init(gpa);
     errdefer {
@@ -168,6 +176,7 @@ pub fn allocParse(
         unknown_arg,
         format_arg,
         rule_arg,
+        compile_arg,
         filter_path_arg,
         include_path_arg,
         exclude_path_arg,
@@ -183,6 +192,7 @@ pub fn allocParse(
         .{ "--quiet", .quiet_arg },
         .{ "--verbose", .verbose_arg },
         .{ "--rule", .rule_arg },
+        .{ "--compile", .compile_arg },
         .{ "--include", .include_path_arg },
         .{ "--exclude", .exclude_path_arg },
         .{ "--filter", .filter_path_arg },
@@ -249,6 +259,15 @@ pub fn allocParse(
 
             try rules.append(gpa, try gpa.dupe(u8, args[index]));
             continue :state if (index + 1 < args.len and notArgKey(args[index + 1])) State.rule_arg else State.parsing;
+        },
+        .compile_arg => {
+            index += 1;
+            if (index == args.len) {
+                rendering.process_printer.println(.err, "--compile missing compile unit name", .{});
+                return error.InvalidArgs;
+            }
+            try compile_names.append(gpa, try gpa.dupe(u8, args[index]));
+            continue :state if (index + 1 < args.len and notArgKey(args[index + 1])) State.compile_arg else State.parsing;
         },
         .include_path_arg => {
             index += 1;
@@ -422,6 +441,7 @@ pub fn allocParse(
         .unknown_args = if (unknown_args.items.len > 0) try unknown_args.toOwnedSlice(gpa) else null,
         .rules = if (rules.items.len > 0) try rules.toOwnedSlice(gpa) else null,
         .verbose = verbose,
+        .compile_names = if (compile_names.items.len > 0) try compile_names.toOwnedSlice(gpa) else null,
         .rule_config_overrides = rule_config_overrides: {
             if (rule_config_overrides.count() > 0) break :rule_config_overrides rule_config_overrides;
             rule_config_overrides.deinit();
@@ -439,6 +459,7 @@ pub fn printHelp(printer: *rendering.Printer) void {
         .{ "-h, --help", "Show help text" },
         .{ "--verbose", "Print extra linting information" },
         .{ "--rule", "Run only the specified rules" },
+        .{ "--compile", "Run only the specified compile units" },
         .{ "--include", "Only lint these paths, ignoring build.zig includes/excludes" },
         .{ "--exclude", "Skip linting for these paths" },
         .{ "--filter", "Limit linting to the specified resolved paths" },
@@ -923,9 +944,11 @@ test "allocParse with rule arg" {
             testing.cliArgs(raw_args),
             &.{ .{
                 .rule_id = "my_rule_a",
+                .execution = .syntax_only,
                 .run = undefined,
             }, .{
                 .rule_id = "my_rule_b",
+                .execution = .syntax_only,
                 .run = undefined,
             } },
             std.testing.allocator,
@@ -950,6 +973,7 @@ test "allocParse with invalid rule arg" {
         testing.cliArgs(&.{ "--rule", "not_found_rule" }),
         &.{.{
             .rule_id = "my_rule",
+            .execution = .syntax_only,
             .run = undefined,
         }},
         std.testing.allocator,
@@ -1071,6 +1095,7 @@ test "allocParse with rule_config arg" {
         testing.cliArgs(&.{ "--rule-config", "my_rule", "./path/rule_config.zon" }),
         &.{.{
             .rule_id = "my_rule",
+            .execution = .syntax_only,
             .run = undefined,
         }},
         std.testing.allocator,
@@ -1093,6 +1118,7 @@ test "allocParse with invalid rule config rule id arg" {
         testing.cliArgs(&.{ "--rule-config", "my_rule", "./path/rule_config.zon" }),
         &.{.{
             .rule_id = "another_rule",
+            .execution = .syntax_only,
             .run = undefined,
         }},
         std.testing.allocator,
@@ -1130,6 +1156,7 @@ test "allocParse with with missing rule config rule config path" {
         testing.cliArgs(&.{ "--rule-config", "my_rule" }),
         &.{.{
             .rule_id = "my_rule",
+            .execution = .syntax_only,
             .run = undefined,
         }},
         std.testing.allocator,
@@ -1249,6 +1276,7 @@ const testing = struct {
             .unknown_args = null,
             .rules = null,
             .verbose = false,
+            .compile_names = null,
             .rule_config_overrides = null,
             .build_info = .default,
             .help = false,

@@ -16,24 +16,67 @@ cwd: []const u8,
 /// Lives for the full linter invocation.
 session_arena: std.mem.Allocator,
 compile_contexts: std.MultiArrayList(CompileContext) = .empty,
+compile_context_ids_by_file: std.AutoHashMapUnmanaged(FileStore.FileId, std.ArrayList(CompileContext.Id)) = .empty,
+compile_file_index_built: bool = false,
 file_store: FileStore,
 module_store: ModuleStore,
 decl_store: DeclStore,
 type_store: TypeStore,
 build_config_store: BuildConfigStore,
+focused_compiled_contexts: std.AutoHashMapUnmanaged(CompileContext.Id, void) = .empty,
 /// Root source file for the active compile context, when known.
 compile_root_file_id: ?FileStore.FileId = null,
 
-pub fn init(self: *LintContext) !void {
+pub fn init(self: *LintContext, focus_compiled_names: ?[]const []const u8) !void {
     const zone = tracy.traceNamed(@src(), "LintContext.init");
     defer zone.end();
 
     // Maybe one day we will care enough to use a fake for tests but for now
     // it's fine to ignore...
-    if (!builtin.is_test) try self.initBuildConfig();
+    if (!builtin.is_test) {
+        const config_id = try self.initBuildConfig(); // populated compile contexts
+        const build_config = self.build_config_store.buildConfig(config_id);
+
+        if (focus_compiled_names) |l| {
+            for (l) |focus_compiled_name| {
+                const maybe_focus_id: ?CompileContext.Id = focus_id: {
+                    for (0..self.compile_contexts.len) |i| {
+                        const name = self.compile_contexts
+                            .get(i)
+                            .stepName(build_config);
+                        if (std.mem.eql(u8, name, focus_compiled_name))
+                            break :focus_id .fromIndex(i);
+                    }
+                    break :focus_id null;
+                };
+                if (maybe_focus_id) |focus_id|
+                    oom(self.focused_compiled_contexts.put(
+                        self.session_arena,
+                        focus_id,
+                        {},
+                    ))
+                else
+                    std.log.err("Could not find compiled unit: '{s}'", .{focus_compiled_name});
+            }
+        } else if (selectedCompilePriority(build_config)) |selected_priority| {
+            for (0..self.compile_contexts.len) |i| {
+                const kind = self.compile_contexts
+                    .get(i)
+                    .stepKind(build_config);
+
+                if (compilePriority(kind) == selected_priority) {
+                    oom(self.focused_compiled_contexts.put(
+                        self.session_arena,
+                        .fromIndex(i),
+                        {},
+                    ));
+                }
+            }
+        }
+    }
 }
 
-fn initBuildConfig(self: *LintContext) !void {
+fn initBuildConfig(self: *LintContext) !BuildConfigStore.ConfigId {
     const zone = tracy.traceNamed(@src(), "LintContext.initBuildConfig");
     defer zone.end();
 
@@ -50,7 +93,44 @@ fn initBuildConfig(self: *LintContext) !void {
             config_id,
             @enumFromInt(step_index),
         );
+    return config_id;
 }
+
+fn selectedCompilePriority(build_config: *const std.Build.Configuration) ?CompilePriority {
+    var selected_priority: ?CompilePriority = null;
+
+    for (build_config.steps) |step| {
+        const compile = step.extended.cast(
+            build_config,
+            std.Build.Configuration.Step.Compile,
+        ) orelse continue;
+
+        const priority = compilePriority(compile.flags3.kind);
+        if (selected_priority == null or
+            @intFromEnum(priority) < @intFromEnum(selected_priority.?))
+            selected_priority = priority;
+    }
+
+    return selected_priority;
+}
+
+fn compilePriority(kind: std.Build.Configuration.Step.Compile.Kind) CompilePriority {
+    return switch (kind) {
+        .exe => .exe,
+        .lib => .lib,
+        .obj => .obj,
+        .@"test", .test_obj => .@"test",
+    };
+}
+
+/// When no compiled units are provided by the user we look at all from the build
+/// configuration in this order. e.g., if there's an exe, we only use exe's.
+const CompilePriority = enum(u3) {
+    exe = 0,
+    lib = 1,
+    obj = 2,
+    @"test" = 3,
+};
 
 fn consumeBuildConfigStep(
     self: *LintContext,
@@ -239,22 +319,41 @@ pub fn compileContextIdsForFile(
     file_id: FileStore.FileId,
     gpa: std.mem.Allocator,
 ) ![]CompileContext.Id {
-    var ids = std.ArrayList(CompileContext.Id).empty;
-    errdefer ids.deinit(gpa);
+    self.ensureCompileContextIdsByFile(gpa);
 
-    // TODO: #149 - Optimise this
+    const cached = self.compile_context_ids_by_file.get(file_id) orelse
+        return gpa.dupe(CompileContext.Id, &.{});
+
+    return gpa.dupe(CompileContext.Id, cached.items);
+}
+
+fn ensureCompileContextIdsByFile(
+    self: *LintContext,
+    gpa: std.mem.Allocator,
+) void {
+    if (self.compile_file_index_built) return;
+
     for (0..self.compile_contexts.len) |index| {
         const compile_context_id: CompileContext.Id = .fromIndex(index);
-        if (try self.compileContextContainsFile(
-            compile_context_id,
-            file_id,
-            gpa,
-        )) {
-            try ids.append(gpa, compile_context_id);
-        }
+        self.indexCompileContextFiles(compile_context_id, gpa);
     }
 
-    return ids.toOwnedSlice(gpa);
+    self.compile_file_index_built = true;
+}
+
+fn appendCompileContextForFile(
+    self: *LintContext,
+    file_id: FileStore.FileId,
+    compile_context_id: CompileContext.Id,
+) void {
+    const entry = oom(self.compile_context_ids_by_file.getOrPut(
+        self.session_arena,
+        file_id,
+    ));
+    if (!entry.found_existing)
+        entry.value_ptr.* = .empty;
+
+    oom(entry.value_ptr.append(self.session_arena, compile_context_id));
 }
 
 const ReachKey = enum(u64) {
@@ -271,31 +370,36 @@ const ReachQueueItem = struct {
     module_id: ModuleStore.ModuleId,
 };
 
-fn compileContextContainsFile(
+fn indexCompileContextFiles(
     self: *LintContext,
     compile_context_id: CompileContext.Id,
-    target_file_id: FileStore.FileId,
     gpa: std.mem.Allocator,
-) !bool {
+) void {
     const root_module_id = self.compile_contexts.items(.root_module)[compile_context_id.toIndex()];
     const compile_root_file_id = self.module_store.rootFileId(root_module_id);
-    if (compile_root_file_id == target_file_id) return true;
 
     var visited = std.AutoHashMapUnmanaged(ReachKey, void).empty;
     defer visited.deinit(gpa);
 
+    var indexed_files = std.AutoHashMapUnmanaged(FileStore.FileId, void).empty;
+    defer indexed_files.deinit(gpa);
+
     var queue = std.ArrayList(ReachQueueItem).empty;
     defer queue.deinit(gpa);
 
-    try queue.append(gpa, .{
+    oom(queue.append(gpa, .{
         .file_id = compile_root_file_id,
         .module_id = root_module_id,
-    });
+    }));
 
     while (queue.pop()) |item| {
         const key = ReachKey.init(item.file_id, item.module_id);
-        const visited_entry = try visited.getOrPut(gpa, key);
+        const visited_entry = oom(visited.getOrPut(gpa, key));
         if (visited_entry.found_existing) continue;
+
+        const indexed_entry = oom(indexed_files.getOrPut(gpa, item.file_id));
+        if (!indexed_entry.found_existing)
+            self.appendCompileContextForFile(item.file_id, compile_context_id);
 
         const tree = self.file_store.fileTree(item.file_id);
         var node_index: u32 = @intFromEnum(Ast.Node.Index.root);
@@ -352,12 +456,9 @@ fn compileContextContainsFile(
             };
 
             const next = resolved orelse continue;
-            if (next.file_id == target_file_id) return true;
-            try queue.append(gpa, next);
+            oom(queue.append(gpa, next));
         }
     }
-
-    return false;
 }
 
 pub fn debugPrintFileDecls(self: *const LintContext, file_id: FileStore.FileId) void {
@@ -1966,6 +2067,7 @@ const std = @import("std");
 const testing = @import("../testing.zig");
 const tracy = @import("tracy");
 const zls = @import("zls");
+const BuildInfo = @import("../BuildInfo.zig");
 const BuildConfigStore = @import("BuildConfigStore.zig");
 const CompileContext = @import("CompileContext.zig");
 const DeclStore = @import("DeclStore.zig");

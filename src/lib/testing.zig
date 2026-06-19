@@ -74,7 +74,7 @@ pub fn initFakeContext(
             ".",
         ),
     };
-    context.init() catch @panic("failed to initialize fake lint context");
+    context.init(null) catch @panic("failed to initialize fake lint context");
     return context;
 }
 

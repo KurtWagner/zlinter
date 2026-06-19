@@ -1,5 +1,7 @@
 const BuildConfigStore = @This();
 
+// TODO: #149 - for now dont allow absolute paths in include paths from args
+// until we can support loading more contexts.
 pub const ConfigId = enum(u32) {
     _,
 
