@@ -2066,7 +2066,6 @@ const import_utils = @import("imports.zig");
 const std = @import("std");
 const testing = @import("../testing.zig");
 const tracy = @import("tracy");
-const zls = @import("zls");
 const BuildInfo = @import("../BuildInfo.zig");
 const BuildConfigStore = @import("BuildConfigStore.zig");
 const CompileContext = @import("CompileContext.zig");

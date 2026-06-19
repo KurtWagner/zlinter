@@ -355,7 +355,7 @@ This may change once zig hits `1.x`.
 I'm opening it up incase it's more generally useful, and happy to let it
 organically evolve around needs, if there's value in doing so.
 
-It uses [`zls`](https://github.com/zigtools/zls) (an awesome project, go check it out if you haven't already) and `std.zig` to build and analyze zig source files.
+It uses `std.zig` and `std.Build.Configuration` to build and analyze zig source files.
 
 ### Current limitations
 
@@ -395,11 +395,6 @@ If you notice breaking changes in `zig` that will not be picked up by a `Depreca
 
 Zlinter avoids dependencies. It's just too much of a burden right now to depend
 on something written for Zig when Zig isn't 1.x.
-
-The one exception is ZLS, as it's well maintained and doesn't appear to be
-going anywhere. More often than not I've wasted hours implementing a method to
-find a very similar method already exists in ZLS, which makes sense, as ZLS
-analyses Zig code using the AST like this linter currently does.
 
 The AST Explorer provided with Zlinter will be similar and aims to be minimal.
 Ideally no build system, no dependencies, just plain JS and CSS targetting

@@ -60,13 +60,6 @@ pub const NodeLineageIterator = struct {
     }
 };
 
-/// Compatible decl-literal resolution across ZLS versions.
-/// Newer ZLS asserts when called on non-type values, so keep old behavior by
-/// returning the input unchanged unless it is a type value.
-pub fn resolveDeclLiteralResultTypeSafe(t: zls.Analyser.Type) zls.Analyser.Type {
-    return if (t.is_type_val) t.resolveDeclLiteralResultType() else t;
-}
-
 /// `errdefer` and `defer` calls
 pub const DeferBlock = struct {
     children: []const Ast.Node.Index,
@@ -560,58 +553,6 @@ pub const EnumInfo = struct {
         self.* = undefined;
     }
 };
-
-/// Returns enum tag info for a resolved enum type. Returns null if the type
-/// is not a container-backed enum or cannot be resolved.
-pub fn getEnumInfoFromType(enum_type: zls.Analyser.Type, gpa: std.mem.Allocator) !?EnumInfo {
-    const zone = tracy.traceNamed(@src(), "ast.getEnumInfoFromType");
-    defer zone.end();
-
-    const container = switch (enum_type.data) {
-        .container => |info| info,
-        else => return null,
-    };
-
-    const handle = container.scope_handle.handle;
-    const node = container.scope_handle.toNode();
-    const enum_tree = handle.tree;
-
-    var container_decl_buffer: [2]Ast.Node.Index = undefined;
-    const container_decl = enum_tree.fullContainerDecl(
-        &container_decl_buffer,
-        node,
-    ) orelse return null;
-
-    var tags: std.ArrayList([]const u8) = try .initCapacity(
-        gpa,
-        container_decl.ast.members.len,
-    );
-    errdefer tags.deinit(gpa);
-
-    members: for (container_decl.ast.members) |member| {
-        const name_token = switch (enum_tree.nodeTag(member)) {
-            .container_field_init,
-            .container_field_align,
-            .container_field,
-            => enum_tree.nodeMainToken(member),
-            else => continue :members,
-        };
-        tags.appendAssumeCapacity(enum_tree.tokenSlice(name_token));
-    }
-
-    var is_non_exhaustive = false;
-    if (tags.items.len > 0 and
-        std.mem.eql(u8, tags.items[tags.items.len - 1], "_"))
-    {
-        is_non_exhaustive = true;
-        _ = tags.pop();
-    }
-
-    return .{
-        .tags = try tags.toOwnedSlice(gpa),
-        .is_non_exhaustive = is_non_exhaustive,
-    };
-}
 
 test "isEnumLiteral" {
     inline for (&.{
@@ -1224,26 +1165,9 @@ const session = @import("session.zig");
 const std = @import("std");
 const testing = @import("testing.zig");
 const tracy = @import("tracy");
-const zls = @import("zls");
 const Ast = std.zig.Ast;
 const FileStore = @import("session/FileStore.zig");
 
 test {
-    refAllDeclsExcept(@This(), &.{
-        "getEnumInfoFromType",
-        "resolveDeclLiteralResultTypeSafe",
-    });
-}
-
-fn refAllDeclsExcept(comptime T: type, comptime excluded_declarations: []const []const u8) void {
-    if (!@import("builtin").is_test) return;
-    inline for (comptime std.meta.declarations(T)) |decl_name| {
-        comptime {
-            for (excluded_declarations) |excluded_declaration| {
-                if (std.mem.eql(u8, decl_name, excluded_declaration)) break;
-            } else {
-                _ = &@field(T, decl_name);
-            }
-        }
-    }
+    std.testing.refAllDecls(@This());
 }
