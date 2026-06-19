@@ -109,7 +109,7 @@ fn run(
 
         var is_problem: bool = false;
         for (config.detect_allocators) |allocator_kind| {
-            if (!std.mem.endsWith(u8, decl_abs_path, allocator_kind.file_ends_with)) continue;
+            if (!pathEndsWith(decl_abs_path, allocator_kind.file_ends_with)) continue;
             if (!std.mem.eql(u8, decl_name, allocator_kind.decl_name)) continue;
 
             is_problem = true;
@@ -183,6 +183,34 @@ fn resolveDeclAlias(
     }
 
     return current_decl_id;
+}
+
+fn pathEndsWith(path: []const u8, suffix: []const u8) bool {
+    if (suffix.len > path.len) return false;
+
+    const offset = path.len - suffix.len;
+    for (suffix, 0..) |suffix_char, i| {
+        const path_char = path[offset + i];
+
+        if (isPathSep(path_char) and isPathSep(suffix_char)) continue;
+        if (path_char != suffix_char) return false;
+    }
+
+    return true;
+}
+
+fn isPathSep(char: u8) bool {
+    return char == std.fs.path.sep_posix or char == std.fs.path.sep_windows;
+}
+
+test pathEndsWith {
+    try std.testing.expect(pathEndsWith("/opt/zig/lib/std/heap.zig", "/std/heap.zig"));
+    try std.testing.expect(pathEndsWith("/opt/zig/lib/std/heap.zig", "heap.zig"));
+    try std.testing.expect(pathEndsWith("D:\\zig\\lib\\std\\heap.zig", "/std/heap.zig"));
+    try std.testing.expect(pathEndsWith("/opt/zig/lib/std/heap.zig", "\\std\\heap.zig"));
+    try std.testing.expect(!pathEndsWith("/opt/zig/lib/std/mem.zig", "/std/heap.zig"));
+    try std.testing.expect(!pathEndsWith("/opt/zig/lib/my_std/heap.zig", "/std/heap.zig"));
+    try std.testing.expect(!pathEndsWith("/lib/my_std/heap.zig", "/opt/zig/lib/my_std/heap.zig"));
 }
 
 test {
