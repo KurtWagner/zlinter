@@ -12,43 +12,6 @@ include_paths: ?[]const []const u8 = null,
 /// piped into the zlinter execution.
 exclude_paths: ?[]const []const u8 = null,
 
-/// Compile contexts from the build runner.
-///
-/// These describe the Zig module graph that was available to each compile
-/// step. Lint rules can use this to resolve named imports in the same context
-/// as the compiler.
-compiles: ?[]const Compile = null,
-
-pub const ModuleIndex = u32;
-
-pub const Compile = struct {
-    name: []const u8,
-    step_name: []const u8,
-    kind: std.Build.Step.Compile.Kind,
-    modules: []const Module,
-
-    /// Index in Compile.modules[].
-    root_module: ModuleIndex,
-};
-
-pub const Module = struct {
-    /// Name used to reach this module from the compile graph. The root module
-    /// is always named "root".
-    name: []const u8,
-    /// Absolute path to the module root source file, or null when the module
-    /// does not have a source file that can be opened by the lint process,
-    /// e.g. generated code that has not been materialized yet.
-    root_source_file: ?[]const u8,
-    imports: []const Import,
-};
-
-pub const Import = struct {
-    name: []const u8,
-
-    /// Index in Compile.modules[]
-    module: ModuleIndex,
-};
-
 pub const default: BuildInfo = .{};
 
 pub fn deinit(self: BuildInfo, gpa: std.mem.Allocator) void {
@@ -60,27 +23,6 @@ pub fn deinit(self: BuildInfo, gpa: std.mem.Allocator) void {
     if (self.include_paths) |paths| {
         for (paths) |p| gpa.free(p);
         gpa.free(paths);
-    }
-
-    if (self.compiles) |compiles| {
-        for (compiles) |compile| {
-            gpa.free(compile.name);
-            gpa.free(compile.step_name);
-
-            for (compile.modules) |module| {
-                gpa.free(module.name);
-                if (module.root_source_file) |root_source_file| {
-                    gpa.free(root_source_file);
-                }
-
-                for (module.imports) |import| {
-                    gpa.free(import.name);
-                }
-                gpa.free(module.imports);
-            }
-            gpa.free(compile.modules);
-        }
-        gpa.free(compiles);
     }
 }
 

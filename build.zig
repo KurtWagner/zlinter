@@ -605,14 +605,8 @@ fn buildStep(
         }
     }
 
-    var compile_info = std.ArrayList(BuildInfo.Compile).empty;
-    defer compile_info.deinit(b.allocator);
-
     for (compiled) |compile|
-        compile_info.append(
-            b.allocator,
-            resolveBuildInfo(b, compile),
-        ) catch @panic("OOM");
+        run.addArg(compile.name);
 
     run.addArg("--stdin");
 
@@ -622,7 +616,6 @@ fn buildStep(
     std.zon.stringify.serialize(BuildInfo{
         .include_paths = if (include_paths.items.len > 0) include_paths.items else null,
         .exclude_paths = if (exclude_paths.items.len > 0) exclude_paths.items else null,
-        .compiles = if (compile_info.items.len > 0) compile_info.items else null,
     }, .{}, &buff.writer) catch @panic("Invalid build info");
 
     const stdin_bytes = buff.written();
@@ -882,87 +875,6 @@ fn readHtmlTemplate(b: *std.Build, path: []const u8) ![]const u8 {
     }
 
     return try out.toOwnedSlice();
-}
-
-fn resolveBuildInfo(b: *std.Build, compile: *std.Build.Step.Compile) BuildInfo.Compile {
-    const arena = b.allocator;
-    const graph = compile.root_module.getGraph();
-
-    const modules = arena.alloc(
-        BuildInfo.Module,
-        graph.modules.len,
-    ) catch @panic("OOM");
-
-    for (graph.modules, graph.names, modules) |
-        module,
-        module_name,
-        *build_info_module,
-    | {
-        const imports = arena.alloc(
-            BuildInfo.Import,
-            module.import_table.count(),
-        ) catch @panic("OOM");
-
-        for (module.import_table.keys(), module.import_table.values(), imports) |
-            import_name,
-            imported_module,
-            *build_info_import,
-        | {
-            build_info_import.* = .{
-                .name = b.dupe(import_name),
-                .module = resolveModuleIndex(graph.modules, imported_module),
-            };
-        }
-
-        build_info_module.* = .{
-            .name = b.dupe(module_name),
-            .root_source_file = if (module.root_source_file) |root_source_file|
-                resolvePath(b, root_source_file)
-            else
-                null,
-            .imports = imports,
-        };
-    }
-
-    return .{
-        .name = b.dupe(compile.name),
-        .step_name = b.dupe(compile.step.name),
-        .kind = compile.kind,
-        .root_module = 0,
-        .modules = modules,
-    };
-}
-
-fn resolvePath(b: *std.Build, lazy_path: std.Build.LazyPath) ?[]const u8 {
-    const arena = b.allocator;
-
-    return switch (lazy_path) {
-        .src_path => |src_path| src_path.owner.root.joinString(
-            arena,
-            src_path.sub_path,
-        ) catch @panic("OOM"),
-        .dependency => |dependency| dependency.dependency.builder.root.joinString(
-            arena,
-            dependency.sub_path,
-        ) catch @panic("OOM"),
-        .cwd_relative => |path| std.fs.path.resolve(arena, &.{path}) catch @panic("OOM"),
-        .relative => |relative| switch (relative.base) {
-            .cwd => std.fs.path.resolve(arena, &.{relative.sub_path}) catch @panic("OOM"),
-            .build_root => b.root.joinString(
-                arena,
-                relative.sub_path,
-            ) catch @panic("OOM"),
-            else => null,
-        },
-        .generated => null,
-    };
-}
-
-fn resolveModuleIndex(modules: []const *std.Build.Module, module: *std.Build.Module) BuildInfo.ModuleIndex {
-    for (modules, 0..) |candidate, index| {
-        if (candidate == module) return @intCast(index);
-    }
-    @panic("module import target was not found in compile module graph");
 }
 
 const BuildInfo = @import("src/lib/BuildInfo.zig");
