@@ -19,6 +19,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.require_labeled_continue),
+        .execution = .syntax_only,
         .run = &run,
     };
 }
@@ -26,7 +27,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the require_labeled_continue rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    _: *zlinter.session.LintContext,
+    context: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
@@ -37,7 +38,7 @@ fn run(
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
-    const tree = doc.handle.tree;
+    const tree = doc.tree(context);
 
     const root: Ast.Node.Index = .root;
     var it = try doc.nodeLineageIterator(root, gpa);
@@ -51,7 +52,7 @@ fn run(
 
         if (hasContinueLabel(tree, node)) continue;
 
-        const depth = loopDepth(doc, node);
+        const depth = loopDepth(doc, tree, node);
         if (depth <= config.max_unlabeled_depth) continue;
 
         const continue_token = tree.nodeMainToken(node);
@@ -70,19 +71,19 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.path,
+            doc.absPath(context),
             try lint_problems.toOwnedSlice(gpa),
         )
     else
         null;
 }
 
-fn loopDepth(doc: *const zlinter.session.LintDocument, node: Ast.Node.Index) u32 {
+fn loopDepth(doc: *const zlinter.session.LintDocument, tree: Ast, node: Ast.Node.Index) u32 {
     var depth: u32 = 0;
     var it = doc.nodeAncestorIterator(node);
     while (it.next()) |ancestor| {
         if (ancestor == .root) break;
-        if (isLoopNode(doc.handle.tree, ancestor)) depth += 1;
+        if (isLoopNode(tree, ancestor)) depth += 1;
     }
     return depth;
 }

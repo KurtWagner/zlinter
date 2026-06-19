@@ -22,6 +22,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.file_naming),
+        .execution = .syntax_only,
         .run = &run,
     };
 }
@@ -29,16 +30,17 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the file_naming rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    _: *zlinter.session.LintContext,
+    context: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+    const tree = doc.tree(context);
 
     const message, const severity = msg: {
-        const basename = std.fs.path.basename(doc.path);
-        if (ast.isRootImplicitStruct(doc.handle.tree)) {
+        const basename = std.fs.path.basename(doc.absPath(context));
+        if (ast.isRootImplicitStruct(tree)) {
             if (config.file_struct.severity != .off and !config.file_struct.style.check(basename)) {
                 break :msg .{
                     try std.fmt.allocPrint(gpa, "File is struct so name should be {s}", .{config.file_struct.style.name()}),
@@ -64,7 +66,7 @@ fn run(
     };
     return try zlinter.results.LintResult.init(
         gpa,
-        doc.path,
+        doc.absPath(context),
         lint_problems,
     );
 }

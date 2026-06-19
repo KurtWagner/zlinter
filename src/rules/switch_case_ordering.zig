@@ -12,6 +12,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.switch_case_ordering),
+        .execution = .syntax_only,
         .run = &run,
     };
 }
@@ -19,7 +20,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the switch_case_ordering rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    _: *zlinter.session.LintContext,
+    context: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
@@ -28,7 +29,7 @@ fn run(
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
-    const tree = doc.handle.tree;
+    const tree = doc.tree(context);
 
     var index: u32 = @intFromEnum(Ast.Node.Index.root);
     while (index < tree.nodes.len) : (index += 1) {
@@ -56,7 +57,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.path,
+            doc.absPath(context),
             try lint_problems.toOwnedSlice(gpa),
         )
     else

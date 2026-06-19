@@ -134,6 +134,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.field_naming),
+        .execution = .compile_context,
         .run = &run,
     };
 }
@@ -151,7 +152,7 @@ fn run(
     var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
     defer lint_problems.deinit(gpa);
 
-    const tree = doc.handle.tree;
+    const tree = doc.tree(context);
     var buffer: [2]Ast.Node.Index = undefined;
 
     var index: u32 = @intFromEnum(Ast.Node.Index.root);
@@ -217,28 +218,33 @@ fn run(
 
             fields: for (container_decl.ast.members) |member| {
                 if (tree.fullContainerField(member)) |container_field| {
-                    const type_kind = try context.resolveTypeKind(doc, .{ .container_field = container_field });
-                    const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const container_kind: zlinter.session.LintContext.TypeKind = tuple: {
+                    const type_summary = if (context.decl_store.declIdByNode(doc.file_id, member)) |decl_id|
+                        context.resolveDeclValueSummary(decl_id)
+                    else
+                        null;
+                    const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const field_desc: []const u8 = tuple: {
                         break :tuple switch (container_tag) {
-                            .keyword_struct => if (type_kind) |kind|
-                                switch (kind) {
-                                    .fn_returns_type => .{ config.struct_field_that_is_type_fn, kind },
-                                    .@"fn" => .{ config.struct_field_that_is_fn, kind },
-                                    .namespace_type => .{ config.struct_field_that_is_namespace, kind },
-                                    .fn_type, .fn_type_returns_type => .{ config.struct_field_that_is_type, .fn_type },
-                                    .type => .{ config.struct_field_that_is_type, kind },
-                                    else => .{ config.struct_field, .struct_type },
+                            .keyword_struct => if (type_summary) |summary|
+                                switch (summary) {
+                                    .fn_returns_type => .{ config.struct_field_that_is_type_fn, "Type function" },
+                                    .@"fn" => .{ config.struct_field_that_is_fn, "Function" },
+                                    .type => |type_value| switch (type_value.kind) {
+                                        .namespace => .{ config.struct_field_that_is_namespace, "Namespace" },
+                                        .@"fn", .fn_returns_type => .{ config.struct_field_that_is_type, "Type" },
+                                        else => .{ config.struct_field_that_is_type, "Type" },
+                                    },
+                                    else => .{ config.struct_field, "Struct" },
                                 }
                             else
-                                .{ config.struct_field, .struct_type },
-                            .keyword_union => .{ config.union_field, .union_type },
-                            .keyword_enum => .{ config.enum_field, .enum_type },
+                                .{ config.struct_field, "Struct" },
+                            .keyword_union => .{ config.union_field, "Union" },
+                            .keyword_enum => .{ config.enum_field, "Enum" },
                             else => continue :fields,
                         };
                     };
 
                     // Ignore struct tuples as they don't have names, just types
-                    if (container_kind == .struct_type and container_field.ast.tuple_like) continue :fields;
+                    if (container_tag == .keyword_struct and container_field.ast.tuple_like) continue :fields;
 
                     const name_token = container_field.ast.main_token;
                     const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
@@ -252,6 +258,12 @@ fn run(
                         // the tuple may become way too noisy and less cohesive
                         else => unreachable,
                     };
+                    const container_name: []const u8 = switch (container_tag) {
+                        .keyword_struct => "Struct",
+                        .keyword_enum => "Enum",
+                        .keyword_union => "Union",
+                        else => unreachable,
+                    };
 
                     if (min_len.severity != .off and name_len < min_len.len) {
                         for (exclude_len) |exclude_name| {
@@ -263,7 +275,7 @@ fn run(
                             .severity = min_len.severity,
                             .start = .startOfToken(tree, name_token),
                             .end = .endOfToken(tree, name_token),
-                            .message = try std.fmt.allocPrint(gpa, "{s} field names should have a length greater or equal to {d}", .{ container_kind.name(), min_len.len }),
+                            .message = try std.fmt.allocPrint(gpa, "{s} field names should have a length greater or equal to {d}", .{ container_name, min_len.len }),
                         });
                     } else if (max_len.severity != .off and name_len > max_len.len) {
                         for (exclude_len) |exclude_name| {
@@ -275,7 +287,7 @@ fn run(
                             .severity = max_len.severity,
                             .start = .startOfToken(tree, name_token),
                             .end = .endOfToken(tree, name_token),
-                            .message = try std.fmt.allocPrint(gpa, "{s} field names should have a length less or equal to {d}", .{ container_kind.name(), max_len.len }),
+                            .message = try std.fmt.allocPrint(gpa, "{s} field names should have a length less or equal to {d}", .{ container_name, max_len.len }),
                         });
                     }
 
@@ -285,7 +297,7 @@ fn run(
                             .severity = style_with_severity.severity,
                             .start = .startOfToken(tree, name_token),
                             .end = .endOfToken(tree, name_token),
-                            .message = try std.fmt.allocPrint(gpa, "{s} fields should be {s}", .{ container_kind.name(), style_with_severity.style.name() }),
+                            .message = try std.fmt.allocPrint(gpa, "{s} fields should be {s}", .{ field_desc, style_with_severity.style.name() }),
                         });
                     }
                 }
@@ -296,7 +308,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.path,
+            doc.absPath(context),
             try lint_problems.toOwnedSlice(gpa),
         )
     else
@@ -339,6 +351,43 @@ test "run - implicit struct (root struct)" {
                 .severity = .@"error",
                 .slice = "notGood",
                 .message = "Struct fields should be snake_case",
+            },
+        },
+    );
+}
+
+test "run - struct fields classify values, not annotated concrete types" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\
+        \\const Token = enum(u32) { alpha };
+        \\const namespace = struct { const value = 1; };
+        \\const Struct = struct {
+        \\    first: Token,
+        \\    last: ?Token,
+        \\    namespace_value: namespace,
+        \\    TypeField: type,
+        \\    bad_type: type,
+        \\    FnField: *const fn () type,
+        \\    bad_fn: *const fn () void,
+        \\};
+        \\
+        \\const problem: ?struct { first: Token, last: Token } = null;
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "field_naming",
+                .severity = .@"error",
+                .slice = "bad_type",
+                .message = "Type fields should be TitleCase",
+            },
+            .{
+                .rule_id = "field_naming",
+                .severity = .@"error",
+                .slice = "bad_fn",
+                .message = "Function fields should be camelCase",
             },
         },
     );

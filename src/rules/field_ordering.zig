@@ -41,6 +41,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
     _ = options;
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.field_ordering),
+        .execution = .syntax_only,
         .run = &run,
     };
 }
@@ -48,7 +49,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the field_ordering rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    _: *zlinter.session.LintContext,
+    context: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
@@ -58,7 +59,7 @@ fn run(
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
-    const tree = doc.handle.tree;
+    const tree = doc.tree(context);
 
     const root: Ast.Node.Index = .root;
     var it = try doc.nodeLineageIterator(root, gpa);
@@ -174,7 +175,7 @@ fn run(
                 );
                 const is_multiline = is_multiline: {
                     for (expected_start.byte_offset..expected_end.byte_offset + 1) |byte| {
-                        if (doc.handle.tree.source[byte] == '\n') break :is_multiline true;
+                        if (tree.source[byte] == '\n') break :is_multiline true;
                     }
                     break :is_multiline false;
                 };
@@ -206,7 +207,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.path,
+            doc.absPath(context),
             try lint_problems.toOwnedSlice(gpa),
         )
     else

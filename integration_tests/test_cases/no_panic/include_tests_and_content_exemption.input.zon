@@ -1,4 +1,4 @@
 .{
     .exclude_tests = false,
-    .exclude_panic_with_content = .{ "OOM" },
+    .exclude_panic_with_content = .{"OOM"},
 }

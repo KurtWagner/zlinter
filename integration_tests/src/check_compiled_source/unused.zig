@@ -1,1 +1,0 @@
-pub const cats = "cats";

@@ -47,16 +47,16 @@ pub fn jsonTree(
         indent: u32 = 0,
         node_children: *std.json.Array,
 
-        fn callback(self: @This(), context_tree: *const Ast, child_node: Ast.Node.Index) error{OutOfMemory}!void {
+        fn callback(self: @This(), context_tree: Ast, child_node: Ast.Node.Index) error{OutOfMemory}!void {
             if (child_node == .root) return;
 
             var node_object = std.json.ObjectMap.empty;
             try node_object.put(self.arena, "tag", .{
-                .string = @tagName(context_tree.*.nodeTag(child_node)),
+                .string = @tagName(context_tree.nodeTag(child_node)),
             });
 
             try node_object.put(self.arena, "main_token", .{
-                .integer = context_tree.*.nodeMainToken(child_node),
+                .integer = context_tree.nodeMainToken(child_node),
             });
             try node_object.put(self.arena, "first_token", .{
                 .integer = context_tree.firstToken(child_node),
@@ -100,7 +100,7 @@ pub fn jsonTree(
 
     if (tree.errors.len == 0) {
         try iterateChildren(
-            &tree,
+            tree,
             .root,
             Context{
                 .arena = arena,
@@ -118,13 +118,13 @@ pub fn jsonTree(
 }
 
 fn iterateChildren(
-    tree: *const Ast,
+    tree: Ast,
     node: Ast.Node.Index,
     context: anytype,
     comptime Error: type,
-    comptime callback: fn (@TypeOf(context), *const Ast, Ast.Node.Index) Error!void,
+    comptime callback: fn (@TypeOf(context), Ast, Ast.Node.Index) Error!void,
 ) Error!void {
-    var it = zls.ast.Iterator.init(tree, node);
+    var it = ast.ChildIterator.init(tree, node);
     while (it.next(tree)) |child_node| {
         try callback(context, tree, child_node);
     }
@@ -181,8 +181,8 @@ fn tokensToJson(tree: Ast, arena: std.mem.Allocator) !std.json.Array {
 }
 
 const std = @import("std");
+const ast = @import("ast.zig");
 const Ast = std.zig.Ast;
-const zls = @import("zls");
 
 test {
     std.testing.refAllDecls(@This());

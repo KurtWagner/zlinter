@@ -16,6 +16,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.no_unused),
+        .execution = .compile_context,
         .run = &run,
     };
 }
@@ -35,7 +36,7 @@ fn run(
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
-    const tree = doc.handle.tree;
+    const tree = doc.tree(context);
     const token_tags = tree.tokens.items(.tag);
 
     // Store an index of referenced identifiers and field accesses on the
@@ -126,7 +127,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.path,
+            doc.absPath(context),
             try lint_problems.toOwnedSlice(gpa),
         )
     else
@@ -156,25 +157,19 @@ fn isFieldAccessOfRootContainer(
     doc: *const zlinter.session.LintDocument,
     node: Ast.Node.Index,
 ) !bool {
-    std.debug.assert(doc.handle.tree.nodeTag(node) == .field_access);
-
-    const tree = doc.handle.tree;
+    const tree = doc.tree(context);
+    std.debug.assert(tree.nodeTag(node) == .field_access);
 
     const node_data = tree.nodeData(node);
     const lhs = node_data.node_and_token.@"0";
 
-    if (try context.resolveTypeOfNode(doc, lhs)) |t| {
-        const resolved = zlinter.ast.resolveDeclLiteralResultTypeSafe(t);
-        switch (resolved.data) {
-            .container => |scope_handle| return isContainerRoot(scope_handle),
-            else => {},
-        }
+    if (context.resolveTypeOfNode(doc, lhs)) |resolved| {
+        return if (context.decl_store.rootDecl(doc.file_id)) |root_decl_id|
+            resolved.decl_id == root_decl_id
+        else
+            false;
     }
     return false;
-}
-
-fn isContainerRoot(container: anytype) bool {
-    return container.scope_handle.toNode() == .root;
 }
 
 test "no_unused" {
@@ -255,6 +250,35 @@ test "no_unused" {
         source,
         .{},
         Config{ .container_declaration = .off },
+        &.{},
+    );
+
+    // Root through @This()
+    try zlinter.testing.testRunRule(
+        rule,
+        \\const used_by_root_field = 123;
+        \\
+        \\pub fn main() void {
+        \\    _ = @This().used_by_root_field;
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{},
+    );
+
+    // Root through reference
+    try zlinter.testing.testRunRule(
+        rule,
+        \\const Self = @This();
+        \\const used_by_root_field = 123;
+        \\
+        \\pub fn main() void {
+        \\    _ = Self.used_by_root_field;
+        \\}
+    ,
+        .{},
+        Config{},
         &.{},
     );
 }

@@ -17,6 +17,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.no_deprecated),
+        .execution = .compile_context,
         .run = &run,
     };
 }
@@ -35,17 +36,15 @@ fn run(
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
-    const handle = doc.handle;
-    const tree = doc.handle.tree;
-
     var arena_allocator = std.heap.ArenaAllocator.init(gpa);
     defer arena_allocator.deinit();
     const arena = arena_allocator.allocator();
 
     var index: u32 = @intFromEnum(Ast.Node.Index.root);
-    while (index < handle.tree.nodes.len) : (index += 1) {
+    while (index < doc.tree(context).nodes.len) : (index += 1) {
         defer _ = arena_allocator.reset(.retain_capacity);
 
+        const tree = doc.tree(context);
         const node: Ast.Node.Index = @enumFromInt(index);
         const tag = tree.nodeTag(node);
         switch (tag) {
@@ -93,7 +92,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.path,
+            doc.absPath(context),
             try lint_problems.toOwnedSlice(gpa),
         )
     else
@@ -111,46 +110,31 @@ fn handleIdentifierAccess(
     lint_problems: *std.ArrayList(zlinter.results.LintProblem),
     config: Config,
 ) !void {
-    const handle = doc.handle;
-    const tree = doc.handle.tree;
+    const tree = doc.tree(context);
 
-    const source_index = handle.tree.tokens.items(.start)[identifier_token];
-
-    const decl_with_handle = (try context.analyser.lookupSymbolGlobal(
-        handle,
-        tree.tokenSlice(identifier_token),
-        source_index,
-    )) orelse return;
+    const decl_id = context.resolveDeclOfNode(doc, node_index) orelse return;
 
     // Check whether the identifier is itself the declaration, in which case
     // we should skip as its not the usage but the declaration of it and we
     // dont want to list the declaration as deprecated only its usages
-    if (std.mem.eql(u8, decl_with_handle.handle.uri.raw, handle.uri.raw)) {
-        const is_identifier = switch (decl_with_handle.decl) {
-            .ast_node => |decl_node| switch (decl_with_handle.handle.tree.nodeTag(decl_node)) {
-                .container_field_init,
-                .container_field_align,
-                .container_field,
-                => decl_with_handle.handle.tree.nodeMainToken(decl_node) == identifier_token,
-                else => false,
-            },
-            .error_token => |err_token| err_token == identifier_token,
-            else => false,
-        };
-        if (is_identifier) return;
-    }
-
-    if (try decl_with_handle.docComments(arena)) |comment| {
-        if (getDeprecationFromDoc(comment)) |message| {
-            try lint_problems.append(gpa, .{
-                .start = .startOfNode(doc.handle.tree, node_index),
-                .end = .endOfNode(doc.handle.tree, node_index),
-                .message = try std.fmt.allocPrint(gpa, "Deprecated - {s}", .{message}),
-                .rule_id = rule.rule_id,
-                .severity = config.severity,
-            });
+    if (context.decl_store.declFileId(decl_id) == doc.file_id) {
+        if (context.decl_store.declNameToken(decl_id)) |name_token| {
+            if (name_token == identifier_token) return;
         }
     }
+
+    try appendDeprecatedProblem(
+        rule,
+        gpa,
+        arena,
+        context,
+        tree,
+        node_index,
+        decl_id,
+        "Deprecated - {s}",
+        lint_problems,
+        config,
+    );
 }
 
 fn handleEnumLiteral(
@@ -164,59 +148,26 @@ fn handleEnumLiteral(
     lint_problems: *std.ArrayList(zlinter.results.LintProblem),
     config: Config,
 ) !void {
-    const doc_comment = try getSymbolEnumLiteralDocComment(
+    const tree = doc.tree(context);
+    const decl_id = resolveEnumLiteralDecl(
         context,
         doc,
         node_index,
-        doc.handle.tree.tokenSlice(identifier_token),
-        arena,
+        tree.tokenSlice(identifier_token),
     ) orelse return;
-    const deprecated_message = getDeprecationFromDoc(doc_comment) orelse return;
 
-    try lint_problems.append(gpa, .{
-        .start = .startOfNode(doc.handle.tree, node_index),
-        .end = .endOfNode(doc.handle.tree, node_index),
-        .message = try std.fmt.allocPrint(gpa, "Deprecated: {s}", .{deprecated_message}),
-        .rule_id = rule.rule_id,
-        .severity = config.severity,
-    });
-}
-
-fn getSymbolEnumLiteralDocComment(
-    context: *zlinter.session.LintContext,
-    doc: *const zlinter.session.LintDocument,
-    node: Ast.Node.Index,
-    name: []const u8,
-    arena: std.mem.Allocator,
-) !?[]const u8 {
-    std.debug.assert(doc.handle.tree.nodeTag(node) == .enum_literal);
-
-    var ancestors = std.ArrayList(Ast.Node.Index).empty;
-    defer ancestors.deinit(arena);
-
-    var current = node;
-    try ancestors.append(arena, current);
-
-    var it = doc.nodeAncestorIterator(current);
-    while (it.next()) |ancestor| {
-        if (ancestor == .root) break;
-        if (ast.isNodeOverlapping(doc.handle.tree, current, ancestor)) {
-            try ancestors.append(arena, ancestor);
-            current = ancestor;
-        } else {
-            break;
-        }
-    }
-
-    const decl_with_type = try context.analyser.lookupSymbolFieldInit(
-        doc.handle,
-        name,
-        ancestors.items[0],
-        ancestors.items[1..],
-    ) orelse return null;
-
-    const decl_with_handle = decl_with_type.@"0";
-    return try decl_with_handle.docComments(arena);
+    try appendDeprecatedProblem(
+        rule,
+        gpa,
+        arena,
+        context,
+        tree,
+        node_index,
+        decl_id,
+        "Deprecated: {s}",
+        lint_problems,
+        config,
+    );
 }
 
 fn handleFieldAccess(
@@ -230,40 +181,140 @@ fn handleFieldAccess(
     lint_problems: *std.ArrayList(zlinter.results.LintProblem),
     config: Config,
 ) !void {
-    const handle = doc.handle;
-    const tree = doc.handle.tree;
-    const token_starts = handle.tree.tokens.items(.start);
+    const tree = doc.tree(context);
+    _ = identifier_token;
 
-    const held_loc: std.zig.Token.Loc = loc: {
-        const first_token = tree.firstToken(node_index);
-        const last_token = tree.lastToken(node_index);
-
-        break :loc .{
-            .start = token_starts[first_token],
-            .end = token_starts[last_token] + tree.tokenSlice(last_token).len,
-        };
-    };
-
-    if (try context.analyser.getSymbolFieldAccesses(
+    const decl_id = context.resolveDeclOfNode(doc, node_index) orelse return;
+    try appendDeprecatedProblem(
+        rule,
+        gpa,
         arena,
-        handle,
-        token_starts[identifier_token],
-        held_loc,
-        tree.tokenSlice(identifier_token),
-    )) |decls| {
-        for (decls) |decl| {
-            const doc_comment = try decl.docComments(arena) orelse continue;
-            const deprecated_message = getDeprecationFromDoc(doc_comment) orelse continue;
+        context,
+        tree,
+        node_index,
+        decl_id,
+        "Deprecated: {s}",
+        lint_problems,
+        config,
+    );
+}
 
-            try lint_problems.append(gpa, .{
-                .start = .startOfNode(doc.handle.tree, node_index),
-                .end = .endOfNode(doc.handle.tree, node_index),
-                .message = try std.fmt.allocPrint(gpa, "Deprecated: {s}", .{deprecated_message}),
-                .rule_id = rule.rule_id,
-                .severity = config.severity,
-            });
+fn appendDeprecatedProblem(
+    rule: zlinter.rules.LintRule,
+    gpa: std.mem.Allocator,
+    arena: std.mem.Allocator,
+    context: *zlinter.session.LintContext,
+    tree: Ast,
+    node_index: Ast.Node.Index,
+    decl_id: zlinter.session.DeclStore.DeclId,
+    comptime message_fmt: []const u8,
+    lint_problems: *std.ArrayList(zlinter.results.LintProblem),
+    config: Config,
+) !void {
+    const doc_comment = try context.allocDeclDocComments(arena, decl_id) orelse return;
+    const deprecated_message = getDeprecationFromDoc(doc_comment) orelse return;
+
+    try lint_problems.append(gpa, .{
+        .start = .startOfNode(tree, node_index),
+        .end = .endOfNode(tree, node_index),
+        .message = try std.fmt.allocPrint(gpa, message_fmt, .{deprecated_message}),
+        .rule_id = rule.rule_id,
+        .severity = config.severity,
+    });
+}
+
+fn resolveEnumLiteralDecl(
+    context: *zlinter.session.LintContext,
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+    name: []const u8,
+) ?zlinter.session.DeclStore.DeclId {
+    const enum_decl_id = resolveEnumLiteralContextTypeDecl(
+        context,
+        doc,
+        node,
+    ) orelse return null;
+
+    return context.resolveDeclMember(enum_decl_id, name);
+}
+
+fn resolveEnumLiteralContextTypeDecl(
+    context: *zlinter.session.LintContext,
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+) ?zlinter.session.DeclStore.DeclId {
+    const tree = doc.tree(context);
+
+    var struct_init_buffer: [2]Ast.Node.Index = undefined;
+    var current = node;
+    var it = doc.nodeAncestorIterator(current);
+    while (it.next()) |ancestor| {
+        if (ancestor == .root) break;
+
+        if (tree.fullStructInit(&struct_init_buffer, ancestor)) |struct_init| {
+            if (structInitFieldNameToken(tree, struct_init, current)) |field_name_token| {
+                const struct_decl_id = if (struct_init.ast.type_expr.unwrap()) |type_expr|
+                    context.resolveDeclOfNode(doc, type_expr)
+                else
+                    resolveEnumLiteralContextTypeDecl(context, doc, ancestor);
+
+                const field_decl_id = context.resolveDeclMember(
+                    struct_decl_id orelse return null,
+                    tree.tokenSlice(field_name_token),
+                ) orelse return null;
+
+                return context.resolveDeclTypeDecl(field_decl_id);
+            }
         }
+
+        if (tree.fullVarDecl(ancestor)) |var_decl| {
+            const init_node = var_decl.ast.init_node.unwrap() orelse {
+                current = ancestor;
+                continue;
+            };
+            if (nodeWithin(tree, init_node, current)) {
+                const decl_id = context.decl_store.declIdByNode(doc.file_id, ancestor) orelse return null;
+                return context.resolveDeclTypeDecl(decl_id);
+            }
+        }
+
+        if (tree.fullContainerField(ancestor)) |field| {
+            const value_node = field.ast.value_expr.unwrap() orelse {
+                current = ancestor;
+                continue;
+            };
+            if (nodeWithin(tree, value_node, current)) {
+                const decl_id = context.decl_store.declIdByNode(doc.file_id, ancestor) orelse return null;
+                return context.resolveDeclTypeDecl(decl_id);
+            }
+        }
+
+        current = ancestor;
     }
+
+    return null;
+}
+
+fn structInitFieldNameToken(
+    tree: Ast,
+    struct_init: Ast.full.StructInit,
+    node: Ast.Node.Index,
+) ?Ast.TokenIndex {
+    for (struct_init.ast.fields) |field_node| {
+        if (!nodeWithin(tree, field_node, node)) continue;
+
+        const field_first_token = tree.firstToken(field_node);
+        if (field_first_token < 2) return null;
+
+        const field_name_token = field_first_token - 2;
+        if (tree.tokenTag(field_name_token) != .identifier) return null;
+        return field_name_token;
+    }
+    return null;
+}
+
+fn nodeWithin(tree: Ast, container: Ast.Node.Index, node: Ast.Node.Index) bool {
+    return container == node or ast.isNodeOverlapping(tree, container, node);
 }
 
 /// Returns a slice of a deprecation notice if one was found.

@@ -1,5 +1,5 @@
 > [!WARNING]
->  Latest on master / 0.17.x branch will be broken until we (and dependencies) migrate to the reworked build system [#149](https://github.com/KurtWagner/zlinter/issues/149). 0.16, 0.15 and 0.14 branches are still ok.
+> Latest on master / 0.17.x has had significant changes and may not work as intended while bugs are worked through.
 
 <div align=center>
 
@@ -13,7 +13,7 @@
 [![Coverage Status](https://img.shields.io/coveralls/github/KurtWagner/zlinter/master?style=flat)](https://coveralls.io/github/KurtWagner/zlinter?branch=master)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat)](https://opensource.org/licenses/MIT)
 
-An extendable and customizable **Zig linter** (with [AST explorer](https://kurtwagner.github.io/zlinter/explorer/)) that is integrated from source into your`build.zig`.
+An extendable and customizable **Zig linter** (with [AST explorer](https://kurtwagner.github.io/zlinter/explorer/)) that is integrated from source into your `build.zig`.
 
 A **linter** is a tool that automatically checks source code for style issues, bugs, or patterns that may lead to errors,<br/> helping developers write cleaner and more reliable code.
 
@@ -71,8 +71,8 @@ A **linter** is a tool that automatically checks source code for style issues, b
 
 ## Getting started
 
-`zlinter` is not a standalone binary - it's built into your projects `build.zig`.
-This makes it flexible to each projects needs. Simply add the dependency and
+`zlinter` is not a standalone binary - it's built into your project's `build.zig`.
+This makes it flexible to each project's needs. Simply add the dependency and
 hook it up to a build step, like `zig build lint`:
 
 **1. Save dependency to your zig project:**
@@ -149,8 +149,8 @@ so this is not recommended outside of testing zlinters rules for your project:
   const lint_cmd = b.step("lint", "Lint source code.");
   lint_cmd.dependOn(step: {
       var builder = zlinter.builder(b, .{});
-      inline for (@typeInfo(zlinter.BuiltinLintRule).@"enum".fields) |f| {
-          builder.addRule(.{ .builtin = @enumFromInt(f.value) }, .{});
+      inline for (@typeInfo(zlinter.BuiltinLintRule).@"enum".field_values) |field_value| {
+          builder.addRule(.{ .builtin = @enumFromInt(field_value) }, .{});
       }
       break :step builder.build();
   });
@@ -186,11 +186,11 @@ It can sometimes require a multiple runs to completely resolve all fixable issue
 Bespoke rules can be added to your project. For example, maybe you really don't like cats, and refuse to let any `cats` exist in any identifier. See example rule [`no_cats`](./integration_tests/src/no_cats.zig), which is then integrated like builtin rules in your `build.zig`:
 
 ```zig
-builder.addRule(b, .{ 
-  .custom = .{
-    .name = "no_cats",
-    .path = "src/no_cats.zig",
-  },
+builder.addRule(.{
+    .custom = .{
+        .name = "no_cats",
+        .path = "src/no_cats.zig",
+    },
 }, .{});
 ```
 
@@ -201,12 +201,13 @@ Alternatively, take a look at <https://github.com/KurtWagner/zlinter-custom-rule
 ### Configure paths
 
 The builder used in `build.zig` has a method `addPaths`, which can be used to
-add included and excluded paths. For example,
+add included and excluded files and directories. For example,
 
 ```zig
 builder.addPaths(.{
-    .include = &.{ b.path("engine-src/"), b.path("src/") },
-    .exclude = &.{ b.path("src/android/"), b.path("engine-src/generated.zig") },
+    .include_dirs = &.{ b.path("engine-src"), b.path("src") },
+    .exclude_dirs = &.{ b.path("src/android") },
+    .exclude_files = &.{ b.path("engine-src/generated.zig") },
 });
 ```
 
@@ -228,7 +229,7 @@ builder.addRule(.{ .builtin = .no_deprecated }, .{
 });
 ```
 
-where `Config` struct are found in the rule source files [`no_deprecated.Config`](./src/rules/no_deprecated.zig) and [`field_naming.Config`](./src/rules/field_naming.zig).
+where the `Config` structs are defined in the rule source files [`no_deprecated.Config`](./src/rules/no_deprecated.zig) and [`field_naming.Config`](./src/rules/field_naming.zig).
 
 ### Disable with comments
 
@@ -239,7 +240,7 @@ Disable all rules or an explicit set of rules for the next source code line.
 Syntax:
 
 ```shell
-zlinter-disable-next-line [rule_1] [rule_n] [- comment]`
+zlinter-disable-next-line [rule_1] [rule_n] [- comment]
 ```
 
 For example,
@@ -302,12 +303,12 @@ If you omit `zlinter-enable`, all lines until EOF will be disabled.
 zig build lint -- [--include <path> ...] [--exclude <path> ...] [--filter <path> ...] [--rule <name> ...] [--fix] [--quiet] [--max-warnings <u32>]
 ```
 
-- `--include` run the linter on these path ignoring the includes and excludes defined in the `build.zig` forcing these paths to be resolved and linted (if they exist).
+- `--include` run the linter on these paths ignoring the includes and excludes defined in the `build.zig`, forcing these paths to be resolved and linted (if they exist).
 - `--exclude` exclude these paths from linting. This argument will be used in conjunction with the excludes defined in the `build.zig` unless used with `--include`.
-- `--filter` used to filter the run to a specific set of already resolved paths. Unlike `--include` this leaves the includes and excludes defined in the `build.zig` as is.
+- `--filter` used to filter the run to a specific set of already resolved paths. Unlike `--include`, this leaves the includes and excludes defined in the `build.zig` as is.
 - `--quiet` only report errors (not warnings).
 - `--max-warnings` fail if there are more than this number of warnings.
-- `--fix` used to automatically fix some issues (e.g., removal of unused container declarations) - **Only use this feature if you use source control as it can result loss of code!**
+- `--fix` used to automatically fix some issues (e.g., removal of unused container declarations) - **Only use this feature if you use source control as it can result in loss of code!**
 
 For example
 
@@ -316,7 +317,7 @@ zig build lint -- --include src/ android/ --exclude src/generated.zig --rule no_
 ```
 
 - Will resolve all zig files under `src/` and `android/` but will exclude linting `src/generated.zig`; and
-- Only rules `no_deprecated` and `no_unused` will be ran.
+- Only rules `no_deprecated` and `no_unused` will be run.
 
 ### Configure Optimization
 
@@ -328,7 +329,7 @@ var builder = zlinter.builder(b, .{.optimize = .ReleaseFast });
 
 If your project is large it may be worth setting optimize to `.ReleaseFast`. Just keep in mind the first run may be slower as it builds the modules for the first time with the new optimisation.
 
-Since 0.16.x `.Debug` is significantly slower to run as it uses the debug allocator. Unless working on zlinter or a custom rule it should be avoided
+Since 0.16.x, `.Debug` is significantly slower to run as it uses the debug allocator. Unless you're working on zlinter or a custom rule, it should be avoided.
 
 ## Supported zig versions
 
@@ -347,7 +348,7 @@ This may change once zig hits `1.x`.
 `zlinter` was written to be used across my personal projects. The main motivation was to have it integrated from source through a build step so that it can be
 
 1. customized at build time (e.g., byo rules); and
-2. versioned with your projects source control (no separate binary to juggle)
+2. versioned with your project's source control (no separate binary to juggle)
 
 I'm opening it up incase it's more generally useful, and happy to let it
 organically evolve around needs, if there's value in doing so.

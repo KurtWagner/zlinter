@@ -83,6 +83,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.declaration_naming),
+        .execution = .compile_context,
         .run = &run,
     };
 }
@@ -100,7 +101,7 @@ fn run(
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
-    const tree = doc.handle.tree;
+    const tree = doc.tree(context);
 
     var index: u32 = 1; // Skip root node at 0
     nodes: while (index < tree.nodes.len) : (index += 1) {
@@ -118,7 +119,15 @@ fn run(
             if (token_tag == .keyword_export) continue :nodes;
         }
 
-        const type_kind = try context.resolveTypeKind(doc, .{ .var_decl = var_decl }) orelse continue :nodes;
+        const decl_id = context.decl_store.declIdByNode(
+            doc.file_id,
+            node,
+        ) orelse continue :nodes;
+        if (var_decl.ast.init_node.unwrap()) |init_node| {
+            if (isThisBuiltinCall(tree, init_node)) continue :nodes;
+        }
+
+        const type_summary = context.resolveDeclValueSummary(decl_id) orelse .other;
         const name_token = var_decl.ast.mut_token + 1;
         const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
 
@@ -161,22 +170,25 @@ fn run(
 
         // Check name style:
         const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const var_desc: []const u8 =
-            switch (type_kind) {
+            switch (type_summary) {
                 .fn_returns_type => .{ config.decl_that_is_type_fn, "Type function" },
                 .@"fn" => .{ config.decl_that_is_fn, "Function" },
-                .namespace_type => .{ config.decl_that_is_namespace, "Namespace" },
-                .type => .{ config.decl_that_is_type, "Type" },
-                .fn_type, .fn_type_returns_type => .{ config.decl_that_is_type, "Function type" },
-                .struct_type => .{ config.decl_that_is_type, "Struct" },
-                .enum_type => .{ config.decl_that_is_type, "Enum" },
-                .union_type => .{ config.decl_that_is_type, "Union" },
-                .opaque_type => .{ config.decl_that_is_type, "Opaque" },
-                .error_type => .{ config.decl_that_is_type, "Error" },
+                .type => |type_value| switch (type_value.kind) {
+                    .namespace => .{ config.decl_that_is_namespace, "Namespace" },
+                    .@"fn", .fn_returns_type => .{ config.decl_that_is_type, "Function type" },
+                    .@"struct" => .{ config.decl_that_is_type, "Struct" },
+                    .@"enum" => .{ config.decl_that_is_type, "Enum" },
+                    .@"union" => .{ config.decl_that_is_type, "Union" },
+                    .@"opaque" => .{ config.decl_that_is_type, "Opaque" },
+                    .error_set => .{ config.decl_that_is_type, "Error" },
+                    .unknown, .primitive => .{ config.decl_that_is_type, "Type" },
+                },
+                .unknown,
                 .other,
-                .struct_instance,
-                .union_instance,
-                .enum_instance,
-                .opaque_instance,
+                .primitive,
+                .instance,
+                .slice,
+                .array,
                 => switch (tree.tokens.items(.tag)[var_decl.ast.mut_token]) {
                     .keyword_const => .{ config.const_decl, "Constant" },
                     .keyword_var => .{ config.var_decl, "Variable" },
@@ -198,11 +210,26 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.path,
+            doc.absPath(context),
             try lint_problems.toOwnedSlice(gpa),
         )
     else
         null;
+}
+
+fn isThisBuiltinCall(tree: Ast, node: Ast.Node.Index) bool {
+    const expr = zlinter.ast.unwrapNode(tree, node, .{
+        .unwrap_optional_unwrap = false,
+    });
+
+    return switch (tree.nodeTag(expr)) {
+        .builtin_call,
+        .builtin_call_comma,
+        .builtin_call_two,
+        .builtin_call_two_comma,
+        => std.mem.eql(u8, tree.tokenSlice(tree.nodeMainToken(expr)), "@This"),
+        else => false,
+    };
 }
 
 test {
@@ -268,6 +295,76 @@ test "declaration_naming" {
                 .rule_id = "declaration_naming",
                 .severity = .@"error",
                 .slice = "thisNotOk",
+                .message = "Type function declaration should be TitleCase",
+            },
+        },
+    );
+}
+
+test "declaration_naming classifies declaration values, not annotated instance types" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\
+        \\const Thing = struct {
+        \\    const Self = @This();
+        \\    field: u32,
+        \\};
+        \\const Choice = enum { a, b };
+        \\
+        \\const BadInstance: Thing = .{ .field = 1 };
+        \\var badInstance: Thing = .{ .field = 2 };
+        \\const BadChoice: Choice = .a;
+        \\var badChoice: Choice = .b;
+        \\const BadType: type = Thing;
+        \\const bad_type: type = Thing;
+        \\
+        \\fn TypeFunc() type {
+        \\    return Thing;
+        \\}
+        \\const goodTypeFunc: *const fn () type = TypeFunc;
+        \\
+        \\fn run() void {
+        \\    var output: Thing = .{ .field = 3 };
+        \\    _ = output;
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "BadInstance",
+                .message = "Constant declaration should be snake_case",
+            },
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "badInstance",
+                .message = "Variable declaration should be snake_case",
+            },
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "BadChoice",
+                .message = "Constant declaration should be snake_case",
+            },
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "badChoice",
+                .message = "Variable declaration should be snake_case",
+            },
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "bad_type",
+                .message = "Type declaration should be TitleCase",
+            },
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "goodTypeFunc",
                 .message = "Type function declaration should be TitleCase",
             },
         },

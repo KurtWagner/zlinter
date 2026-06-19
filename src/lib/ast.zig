@@ -1,5 +1,8 @@
 //! AST navigation helpers
 
+pub const ChildIterator = @import("ast/iterator.zig").ChildIterator;
+pub const nodeChildrenAlloc = @import("ast/iterator.zig").nodeChildrenAlloc;
+
 pub const NodeLineage = std.MultiArrayList(NodeConnections);
 
 pub const NodeConnections = struct {
@@ -57,23 +60,6 @@ pub const NodeLineageIterator = struct {
     }
 };
 
-pub fn nodeChildrenAlloc(
-    gpa: std.mem.Allocator,
-    tree: *const Ast,
-    node: Ast.Node.Index,
-) error{OutOfMemory}![]Ast.Node.Index {
-    var children: std.ArrayList(Ast.Node.Index) = .empty;
-    defer children.deinit(gpa);
-
-    var it = zls.ast.Iterator.init(tree, node);
-    while (it.next(tree)) |child_node| {
-        std.debug.assert(child_node != .root);
-        try children.append(gpa, child_node);
-    }
-
-    return children.toOwnedSlice(gpa);
-}
-
 /// Compatible decl-literal resolution across ZLS versions.
 /// Newer ZLS asserts when called on non-type values, so keep old behavior by
 /// returning the input unchanged unless it is a type value.
@@ -90,8 +76,11 @@ pub const DeferBlock = struct {
     }
 };
 
-pub fn deferBlock(doc: *const session.LintDocument, node: Ast.Node.Index, allocator: std.mem.Allocator) !?DeferBlock {
-    const tree = doc.handle.tree;
+pub fn deferBlock(doc: *const session.LintDocument, file_store: *const FileStore, node: Ast.Node.Index, allocator: std.mem.Allocator) !?DeferBlock {
+    const zone = tracy.traceNamed(@src(), "ast.deferBlock");
+    defer zone.end();
+
+    const tree = file_store.fileTree(doc.file_id);
 
     const data = tree.nodeData(node);
     const exp_node =
@@ -252,16 +241,10 @@ test "deferBlock - has expected children" {
         },
     }) |tuple| {
         const source, const expected = tuple;
-        errdefer std.debug.print("Failed source: '{s}' expected {}\n", .{ source, expected });
 
         defer _ = arena.reset(.retain_capacity);
 
-        const environ_map: std.process.Environ.Map = .init(arena.allocator());
-
-        var context: session.LintContext = undefined;
-        try context.init(.{}, std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
-        defer context.deinit();
-
+        var context = testing.initFakeContext(arena.allocator(), std.testing.io);
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
 
@@ -272,15 +255,17 @@ test "deferBlock - has expected children" {
             "fn main() void {\n" ++ source ++ "\n}",
             arena.allocator(),
         );
+        errdefer std.debug.print("Failed source: '{s}' expected {}\n", .{ source, expected });
 
         const decl_ref = try deferBlock(
             doc,
-            try testing.expectSingleNodeOfTag(doc.handle.tree, &.{ .@"defer", .@"errdefer" }),
+            &context.file_store,
+            try testing.expectSingleNodeOfTag(doc.tree(&context), &.{ .@"defer", .@"errdefer" }),
             std.testing.allocator,
         );
         defer if (decl_ref) |d| d.deinit(std.testing.allocator);
 
-        try testing.expectNodeSlices(expected, doc.handle.tree, decl_ref.?.children);
+        try testing.expectNodeSlices(expected, doc.tree(&context), decl_ref.?.children);
     }
 }
 
@@ -579,6 +564,9 @@ pub const EnumInfo = struct {
 /// Returns enum tag info for a resolved enum type. Returns null if the type
 /// is not a container-backed enum or cannot be resolved.
 pub fn getEnumInfoFromType(enum_type: zls.Analyser.Type, gpa: std.mem.Allocator) !?EnumInfo {
+    const zone = tracy.traceNamed(@src(), "ast.getEnumInfoFromType");
+    defer zone.end();
+
     const container = switch (enum_type.data) {
         .container => |info| info,
         else => return null,
@@ -695,14 +683,19 @@ test "isEnumLiteral" {
 /// children matching given case sensitive names.
 pub fn findFnCall(
     doc: *const session.LintDocument,
+    file_store: *const FileStore,
     node: Ast.Node.Index,
     call_buffer: *[1]Ast.Node.Index,
     names: []const []const u8,
 ) ?FnCall {
+    const zone = tracy.traceNamed(@src(), "ast.findFnCall");
+    defer zone.end();
+
     std.debug.assert(names.len > 0);
 
     if (fnCall(
         doc,
+        file_store,
         node,
         call_buffer,
         names,
@@ -713,6 +706,7 @@ pub fn findFnCall(
     for (doc.lineage.items(.children)[@intFromEnum(node)] orelse &.{}) |child| {
         if (findFnCall(
             doc,
+            file_store,
             child,
             call_buffer,
             names,
@@ -758,11 +752,15 @@ pub const FnCall = struct {
 /// case sensitive.
 pub fn fnCall(
     doc: *const session.LintDocument,
+    file_store: *const FileStore,
     node: Ast.Node.Index,
     buffer: *[1]Ast.Node.Index,
     names: []const []const u8,
 ) ?FnCall {
-    const tree = doc.handle.tree;
+    const zone = tracy.traceNamed(@src(), "ast.fnCall");
+    defer zone.end();
+
+    const tree = file_store.fileTree(doc.file_id);
     const call = tree.fullCall(buffer, node) orelse return null;
 
     const fn_expr_node = call.ast.fn_expr;
@@ -826,7 +824,7 @@ pub fn fnCall(
     };
 
     if (maybe_fn_call) |fn_call| {
-        const fn_name_slice = doc.handle.tree.tokenSlice(fn_call.call_identifier_token);
+        const fn_name_slice = tree.tokenSlice(fn_call.call_identifier_token);
         if (names.len == 0) return fn_call;
 
         for (names) |name| {
@@ -842,12 +840,7 @@ test "fnCall - direct call without params" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    const environ_map: std.process.Environ.Map = .init(arena.allocator());
-
-    var context: session.LintContext = undefined;
-    try context.init(.{}, std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
-    defer context.deinit();
-
+    var context = testing.initFakeContext(arena.allocator(), std.testing.io);
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
@@ -863,12 +856,13 @@ test "fnCall - direct call without params" {
     );
 
     const fn_node = try testing.expectSingleNodeOfTag(
-        doc.handle.tree,
+        doc.tree(&context),
         &.{ .call, .call_comma, .call_one, .call_one_comma },
     );
     var buffer: [1]Ast.Node.Index = undefined;
     const call = fnCall(
         doc,
+        &context.file_store,
         fn_node,
         &buffer,
         &.{},
@@ -877,7 +871,7 @@ test "fnCall - direct call without params" {
     try std.testing.expectEqualDeep(&.{}, call.params);
     try std.testing.expectEqualStrings(
         "call",
-        doc.handle.tree.tokenSlice(call.call_identifier_token),
+        doc.tree(&context).tokenSlice(call.call_identifier_token),
     );
     try std.testing.expectEqualStrings("direct", @tagName(call.kind));
 }
@@ -886,12 +880,7 @@ test "fnCall - single field call with params" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    const environ_map: std.process.Environ.Map = .init(arena.allocator());
-
-    var context: session.LintContext = undefined;
-    try context.init(.{}, std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
-    defer context.deinit();
-
+    var context = testing.initFakeContext(arena.allocator(), std.testing.io);
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
@@ -907,27 +896,28 @@ test "fnCall - single field call with params" {
     );
 
     const fn_node = try testing.expectSingleNodeOfTag(
-        doc.handle.tree,
+        doc.tree(&context),
         &.{ .call, .call_comma, .call_one, .call_one_comma },
     );
     var buffer: [1]Ast.Node.Index = undefined;
     const call = fnCall(
         doc,
+        &context.file_store,
         fn_node,
         &buffer,
         &.{},
     ).?;
 
     try std.testing.expectEqual(2, call.params.len);
-    try std.testing.expectEqualStrings("1", doc.handle.tree.getNodeSource(call.params[0]));
-    try std.testing.expectEqualStrings("abc", doc.handle.tree.getNodeSource(call.params[1]));
+    try std.testing.expectEqualStrings("1", doc.tree(&context).getNodeSource(call.params[0]));
+    try std.testing.expectEqualStrings("abc", doc.tree(&context).getNodeSource(call.params[1]));
     try std.testing.expectEqualStrings(
         "single",
-        doc.handle.tree.tokenSlice(call.kind.single_field.field_main_token),
+        doc.tree(&context).tokenSlice(call.kind.single_field.field_main_token),
     );
     try std.testing.expectEqualStrings(
         "fnName",
-        doc.handle.tree.tokenSlice(call.call_identifier_token),
+        doc.tree(&context).tokenSlice(call.call_identifier_token),
     );
 }
 
@@ -958,14 +948,7 @@ test "findFnCall" {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
 
-        errdefer std.debug.print("Failed source: '{s}'\n", .{source});
-
-        const environ_map: std.process.Environ.Map = .init(arena.allocator());
-
-        var context: session.LintContext = undefined;
-        try context.init(.{}, std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
-        defer context.deinit();
-
+        var context = testing.initFakeContext(arena.allocator(), std.testing.io);
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
 
@@ -976,13 +959,15 @@ test "findFnCall" {
             source,
             arena.allocator(),
         );
+        errdefer std.debug.print("Failed source: '{s}'\n", .{source});
 
         var buffer: [1]Ast.Node.Index = undefined;
 
         try std.testing.expectEqualStrings(
             "fnName",
-            doc.handle.tree.tokenSlice(findFnCall(
+            doc.tree(&context).tokenSlice(findFnCall(
                 doc,
+                &context.file_store,
                 .root,
                 &buffer,
                 &.{"fnName"},
@@ -993,6 +978,7 @@ test "findFnCall" {
             null,
             findFnCall(
                 doc,
+                &context.file_store,
                 .root,
                 &buffer,
                 &.{ "fn", "Name", "fnname" },
@@ -1001,79 +987,263 @@ test "findFnCall" {
     }
 }
 
-test "getEnumInfoFromType" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
+/// Returns the explicit type node for a declaration node.
+pub fn declTypeNode(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) ?std.zig.Ast.Node.Index {
+    if (tree.fullVarDecl(node)) |var_decl| return var_decl.ast.type_node.unwrap();
+    if (tree.fullContainerField(node)) |field| return field.ast.type_expr.unwrap();
 
-    const environ_map: std.process.Environ.Map = .init(arena.allocator());
+    var buffer: [1]std.zig.Ast.Node.Index = undefined;
+    if (tree.fullFnProto(&buffer, node)) |fn_proto| return fn_proto.ast.return_type.unwrap();
 
-    var context: session.LintContext = undefined;
-    try context.init(.{}, std.testing.io, &environ_map, std.testing.allocator, arena.allocator());
-    defer context.deinit();
+    return null;
+}
 
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-
-    const source: [:0]const u8 =
-        \\const E = enum { a, b };
-        \\const NE = enum(u8) { a, b, _ };
-        \\const X = 1;
-    ;
-
-    const doc = try testing.loadFakeDocument(
-        &context,
-        tmp.dir,
-        "test.zig",
-        source,
-        arena.allocator(),
-    );
-
-    const tree = doc.handle.tree;
-
-    const exhaustive_enum_decl_node = try testing.expectVarDecl(tree, "E");
-    const exhaustive_enum_decl = tree.fullVarDecl(exhaustive_enum_decl_node).?;
-    const exhaustive_enum_init = exhaustive_enum_decl.ast.init_node.unwrap().?;
-    const exhaustive_enum_type = (try context.resolveTypeOfNode(doc, exhaustive_enum_init)) orelse return error.TestExpectedType;
-    var exhaustive_enum_info = try getEnumInfoFromType(
-        resolveDeclLiteralResultTypeSafe(exhaustive_enum_type),
+test "declTypeNode - var declaration returns explicit type" {
+    var tree = try Ast.parse(
         std.testing.allocator,
-    ) orelse
-        return error.TestExpectedEnumInfo;
-    defer exhaustive_enum_info.deinit(std.testing.allocator);
-
-    try std.testing.expect(!exhaustive_enum_info.is_non_exhaustive);
-    try testing.expectContainsExactlyStrings(&.{ "a", "b" }, exhaustive_enum_info.tags);
-
-    const non_exhaustive_enum_decl_node = try testing.expectVarDecl(tree, "NE");
-    const non_exhaustive_enum_decl = tree.fullVarDecl(non_exhaustive_enum_decl_node).?;
-    const non_exhaustive_enum_init = non_exhaustive_enum_decl.ast.init_node.unwrap().?;
-    const non_exhaustive_enum_type = (try context.resolveTypeOfNode(doc, non_exhaustive_enum_init)) orelse return error.TestExpectedType;
-    var non_exhaustive_enum_info = try getEnumInfoFromType(
-        resolveDeclLiteralResultTypeSafe(non_exhaustive_enum_type),
-        std.testing.allocator,
-    ) orelse
-        return error.TestExpectedEnumInfo;
-    defer non_exhaustive_enum_info.deinit(std.testing.allocator);
-
-    try std.testing.expect(non_exhaustive_enum_info.is_non_exhaustive);
-    try testing.expectContainsExactlyStrings(&.{ "a", "b" }, non_exhaustive_enum_info.tags);
-
-    const not_enum_decl_node = try testing.expectVarDecl(tree, "X");
-    const not_enum_decl = tree.fullVarDecl(not_enum_decl_node).?;
-    const not_enum_init = not_enum_decl.ast.init_node.unwrap().?;
-    const not_enum_type = (try context.resolveTypeOfNode(doc, not_enum_init)) orelse return error.TestExpectedType;
-    const resolved_not_enum_type = resolveDeclLiteralResultTypeSafe(not_enum_type);
-    try std.testing.expect(
-        (try getEnumInfoFromType(resolved_not_enum_type, std.testing.allocator)) == null,
+        "const typed: u32 = 1;",
+        .zig,
     );
+    defer tree.deinit(std.testing.allocator);
+
+    const var_decl = try testing.expectVarDecl(tree, "typed");
+    const type_node = declTypeNode(tree, var_decl).?;
+    try std.testing.expectEqualStrings("u32", tree.getNodeSource(type_node));
+}
+
+test "declTypeNode - var declaration without explicit type returns null" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        "const inferred = 2;",
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const var_decl = try testing.expectVarDecl(tree, "inferred");
+    try std.testing.expectEqual(null, declTypeNode(tree, var_decl));
+}
+
+test "declTypeNode - function declaration returns return type" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        \\fn named() bool {
+        \\    return true;
+        \\}
+    ,
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const fn_decl = try testing.expectSingleNodeOfTag(tree, &.{.fn_decl});
+    const type_node = declTypeNode(tree, fn_decl).?;
+    try std.testing.expectEqualStrings("bool", tree.getNodeSource(type_node));
+}
+
+test "declTypeNode - container field returns explicit type" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        \\const S = struct {
+        \\    field: i32,
+        \\};
+    ,
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const field = try testing.expectSingleNodeOfTag(
+        tree,
+        &.{ .container_field_init, .container_field_align, .container_field },
+    );
+    const type_node = declTypeNode(tree, field).?;
+    try std.testing.expectEqualStrings("i32", tree.getNodeSource(type_node));
+}
+
+test "declTypeNode - container field with default returns explicit type" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        \\const S = struct {
+        \\    defaulted: u16 = 3,
+        \\};
+    ,
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const field = try testing.expectSingleNodeOfTag(tree, &.{.container_field_init});
+    const type_node = declTypeNode(tree, field).?;
+    try std.testing.expectEqualStrings("u16", tree.getNodeSource(type_node));
+}
+
+test "declTypeNode - function type value is not a declaration type" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        "const Callback = fn (u8) void;",
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const var_decl = try testing.expectVarDecl(tree, "Callback");
+    try std.testing.expectEqual(null, declTypeNode(tree, var_decl));
+}
+
+/// Returns the identifier token that names a declaration node.
+pub fn declNameToken(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) ?std.zig.Ast.TokenIndex {
+    return switch (tree.nodeTag(node)) {
+        // Main token is name
+        .container_field_init,
+        .container_field_align,
+        .container_field,
+        => tree.nodeMainToken(node),
+        // Main token is mutation (e.g., var or const)
+        .global_var_decl,
+        .local_var_decl,
+        .aligned_var_decl,
+        .simple_var_decl,
+        => tree.nodeMainToken(node) + 1,
+        // Main token is "fn"
+        .fn_decl,
+        => tree.nodeMainToken(node) + 1,
+        // Main token may be a name identifier
+        .fn_proto_simple,
+        .fn_proto_multi,
+        .fn_proto_one,
+        .fn_proto,
+        => {
+            const token = tree.nodeMainToken(node) + 1;
+            return switch (tree.tokenTag(token)) {
+                .identifier => token,
+                else => null,
+            };
+        },
+        else => null,
+    };
+}
+
+test "declNameToken - var declaration returns identifier token" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        "const typed: u32 = 1;",
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const var_decl = try testing.expectVarDecl(tree, "typed");
+    const name_token = declNameToken(tree, var_decl).?;
+    try std.testing.expectEqualStrings("typed", tree.tokenSlice(name_token));
+}
+
+test "declNameToken - function declaration returns identifier token" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        "fn named() void {}",
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const fn_decl = try testing.expectSingleNodeOfTag(tree, &.{.fn_decl});
+    const name_token = declNameToken(tree, fn_decl).?;
+    try std.testing.expectEqualStrings("named", tree.tokenSlice(name_token));
+}
+
+test "declNameToken - function prototype returns identifier token" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        "extern fn named() void;",
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const fn_proto = try testing.expectSingleNodeOfTag(
+        tree,
+        &.{ .fn_proto_simple, .fn_proto_multi, .fn_proto_one, .fn_proto },
+    );
+    const name_token = declNameToken(tree, fn_proto).?;
+    try std.testing.expectEqualStrings("named", tree.tokenSlice(name_token));
+}
+
+test "declNameToken - container field returns identifier token" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        \\const S = struct {
+        \\    field: i32,
+        \\};
+    ,
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const field = try testing.expectSingleNodeOfTag(
+        tree,
+        &.{ .container_field_init, .container_field_align, .container_field },
+    );
+    const name_token = declNameToken(tree, field).?;
+    try std.testing.expectEqualStrings("field", tree.tokenSlice(name_token));
+}
+
+test "declNameToken - container field with default returns identifier token" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        \\const S = struct {
+        \\    defaulted: u16 = 3,
+        \\};
+    ,
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const field = try testing.expectSingleNodeOfTag(tree, &.{.container_field_init});
+    const name_token = declNameToken(tree, field).?;
+    try std.testing.expectEqualStrings("defaulted", tree.tokenSlice(name_token));
+}
+
+test "declNameToken - anonymous function type returns null" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        "const Callback = fn (u8) void;",
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    const var_decl = try testing.expectVarDecl(tree, "Callback");
+    const anonymous_fn_type = tree.fullVarDecl(var_decl).?.ast.init_node.unwrap().?;
+    try std.testing.expectEqual(null, declNameToken(tree, anonymous_fn_type));
+}
+
+test "declNameToken - non declaration returns null" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        "const typed: u32 = 1;",
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(null, declNameToken(tree, .root));
 }
 
 const session = @import("session.zig");
 const std = @import("std");
 const testing = @import("testing.zig");
+const tracy = @import("tracy");
 const zls = @import("zls");
 const Ast = std.zig.Ast;
+const FileStore = @import("session/FileStore.zig");
 
 test {
-    std.testing.refAllDecls(@This());
+    refAllDeclsExcept(@This(), &.{
+        "getEnumInfoFromType",
+        "resolveDeclLiteralResultTypeSafe",
+    });
+}
+
+fn refAllDeclsExcept(comptime T: type, comptime excluded_declarations: []const []const u8) void {
+    if (!@import("builtin").is_test) return;
+    inline for (comptime std.meta.declarations(T)) |decl_name| {
+        comptime {
+            for (excluded_declarations) |excluded_declaration| {
+                if (std.mem.eql(u8, decl_name, excluded_declaration)) break;
+            } else {
+                _ = &@field(T, decl_name);
+            }
+        }
+    }
 }

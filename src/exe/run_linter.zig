@@ -1,31 +1,25 @@
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 const default_formatter = zlinter.formatters.DefaultFormatter{};
 
-pub const std_options: std.Options = .{ .log_level = .err };
+pub const std_options: std.Options = .{
+    .log_level = if (@import("zlinter_build_config").verbose)
+        .info
+    else
+        .err,
+};
 
-pub fn main(init: std.process.Init.Minimal) !u8 {
-    var threaded: std.Io.Threaded = .init_single_threaded;
+pub fn main(init: std.process.Init) !u8 {
+    const gpa = std.heap.smp_allocator;
+
+    var session_arena_allocator: std.heap.ArenaAllocator = .init(gpa);
+    defer session_arena_allocator.deinit();
+    const session_arena = init.arena.allocator();
+
+    var threaded = std.Io.Threaded.init(gpa, .{
+        .environ = init.minimal.environ,
+    });
+    defer threaded.deinit();
     const io = threaded.io();
-
-    // TODO: Work out whether this should swap to the "juicy" main allocators
-    const gpa, const is_debug = switch (builtin.mode) {
-        // Debug allocator has become significantly slower (since 0.16) so
-        // unless explicitly a debug build (defaults to release fast) don't
-        // use it.
-        .Debug,
-        => .{ debug_allocator.allocator(), true },
-
-        .ReleaseSafe,
-        .ReleaseFast,
-        .ReleaseSmall,
-        => .{ std.heap.smp_allocator, false },
-    };
-    defer if (is_debug) {
-        if (debug_allocator.deinit() == .leak) @panic("Memory leak");
-    };
-
-    var environ_map = try init.environ.createMap(gpa);
-    defer environ_map.deinit();
 
     var stdout_buffer: [1024]u8 = undefined;
     var stderr_buffer: [1024]u8 = undefined;
@@ -39,7 +33,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     printer.init(
         &stdout_writer.interface,
         &stderr_writer.interface,
-        try .init(io, std.Io.File.stdout(), &environ_map),
+        try .init(io, std.Io.File.stdout(), init.environ_map),
         false,
     );
 
@@ -47,22 +41,20 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         var arena: std.heap.ArenaAllocator = .init(gpa);
         defer arena.deinit();
 
-        const raw_args = try init.args.toSlice(arena.allocator());
-
         break :args zlinter.Args.allocParse(
-            raw_args,
+            try init.minimal.args.toSlice(arena.allocator()),
             &rules,
-            gpa,
+            session_arena,
             &stdin_reader.interface,
         ) catch |e| switch (e) {
             error.InvalidArgs => {
                 zlinter.Args.printHelp(printer);
                 return ExitCode.usage_error.int();
             },
-            error.OutOfMemory => return e,
+            error.InvalidBuildConfig => return ExitCode.tool_error.int(),
+            error.OutOfMemory => @panic("OOM"),
         };
     };
-    defer args.deinit(gpa);
 
     // Technically a chicken and egg problem as you can't rely on verbose stdout
     // while parsing args, so this would probably be better as a build option
@@ -85,7 +77,13 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     const result = result: {
         var remaining_fix_passes = @max(1, args.fix_passes);
         while (remaining_fix_passes > 0) {
-            if (run(io, &environ_map, gpa, args, printer)) |r| {
+            if (run(
+                io,
+                gpa,
+                session_arena,
+                args,
+                printer,
+            )) |r| {
                 total_fixes += r.fixes_applied;
                 if (r.fixes_applied == 0 or remaining_fix_passes == 1) {
                     break :result r;
@@ -126,8 +124,8 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
 
 fn run(
     io: std.Io,
-    environ_map: *const std.process.Environ.Map,
     gpa: std.mem.Allocator,
+    session_arena: std.mem.Allocator,
     args: zlinter.Args,
     printer: *zlinter.rendering.Printer,
 ) !RunResult {
@@ -139,13 +137,6 @@ fn run(
         u32,
         []zlinter.results.LintResult,
     ).empty;
-    defer {
-        for (file_lint_problems.values()) |results| {
-            for (results) |*result| result.deinit(gpa);
-            gpa.free(results);
-        }
-        file_lint_problems.deinit(gpa);
-    }
 
     // ------------------------------------------------------------------------
     // Resolve files then apply excludes and filters
@@ -154,8 +145,7 @@ fn run(
     var dir = try std.Io.Dir.cwd().openDir(io, "./", .{ .iterate = true });
     defer dir.close(io);
 
-    const cwd = try std.process.currentPathAlloc(io, gpa);
-    defer gpa.free(cwd);
+    const cwd = try std.process.currentPathAlloc(io, session_arena);
 
     const lint_files = try zlinter.files.allocLintFiles(
         io,
@@ -163,38 +153,46 @@ fn run(
         dir,
         // `--include` argument supersedes build defined includes and excludes
         args.include_paths orelse args.build_info.include_paths orelse null,
-        gpa,
+        session_arena,
     );
-    defer {
-        for (lint_files) |*lint_file| lint_file.deinit(gpa);
-        gpa.free(lint_files);
-    }
 
-    if (try buildExcludesIndex(io, cwd, gpa, dir, args)) |*index| {
+    if (try buildExcludesIndex(
+        io,
+        cwd,
+        session_arena,
+        dir,
+        args,
+    )) |*index| {
         defer @constCast(index).deinit();
 
         for (lint_files) |*file|
-            file.excluded = index.contains(file.pathname);
+            file.excluded = index.contains(file.abs_path);
     }
 
-    if (try buildFilterIndex(io, cwd, gpa, dir, args)) |*index| {
+    if (try buildFilterIndex(
+        io,
+        cwd,
+        session_arena,
+        dir,
+        args,
+    )) |*index| {
         defer @constCast(index).deinit();
 
         for (lint_files) |*file|
-            file.excluded = !index.contains(file.pathname);
+            file.excluded = !index.contains(file.abs_path);
     }
 
     printer.println(.verbose, "Resolving {d} files took: {d}ms", .{ lint_files.len, timer.lapMilliseconds() });
 
     try runLinterRules(
         io,
-        environ_map,
-        gpa,
+        session_arena,
         lint_files,
         printer,
         &timer,
         &file_lint_problems,
         args,
+        cwd,
     );
 
     printer.printBanner(.verbose);
@@ -209,8 +207,9 @@ fn run(
     return if (args.fix)
         try runFixes(
             io,
+            session_arena,
             gpa,
-            dir,
+            cwd,
             lint_files,
             file_lint_problems,
             printer,
@@ -218,8 +217,8 @@ fn run(
     else
         try runFormatter(
             io,
-            gpa,
-            dir,
+            session_arena,
+            cwd,
             file_lint_problems,
             printer.stdout.?,
             printer.tty,
@@ -233,29 +232,33 @@ fn run(
 
 fn runLinterRules(
     io: std.Io,
-    environ_map: *const std.process.Environ.Map,
-    gpa: std.mem.Allocator,
+    session_arena: std.mem.Allocator,
     lint_files: []zlinter.files.LintFile,
     printer: *zlinter.rendering.Printer,
     timer: *Timer,
     file_lint_problems: *std.array_hash_map.Auto(u32, []zlinter.results.LintResult),
     args: zlinter.Args,
+    cwd: []const u8,
 ) !void {
-    var maybe_slowest_files = if (args.verbose) SlowestItemQueue.init(gpa) else null;
+    const zig_exe = args.zig_exe;
+    const zig_lib_directory = args.zig_lib_directory;
+
+    var maybe_slowest_files = if (args.verbose) SlowestItemQueue.init(session_arena) else null;
     defer if (maybe_slowest_files) |*slowest_files| {
         defer slowest_files.deinit();
         slowest_files.unloadAndPrint("Files", printer);
     };
 
-    var arena = std.heap.ArenaAllocator.init(gpa);
-    defer arena.deinit();
+    var file_arena_allocator = std.heap.ArenaAllocator.init(session_arena);
+    defer file_arena_allocator.deinit();
+    const file_arena = file_arena_allocator.allocator();
 
     var maybe_rule_elapsed_times: ?[rules.len]usize = if (args.verbose)
         @splat(0)
     else
         null;
     defer if (maybe_rule_elapsed_times) |*rule_elapsed_times| {
-        var item_timers = SlowestItemQueue.init(gpa);
+        var item_timers = SlowestItemQueue.init(session_arena);
         defer item_timers.deinit();
 
         for (rule_elapsed_times, 0..) |elapsed_ns, rule_id| {
@@ -267,24 +270,25 @@ fn runLinterRules(
         item_timers.unloadAndPrint("Rules", printer);
     };
 
-    var context: zlinter.session.LintContext = undefined;
-    try context.init(
-        .{
-            .zig_exe_path = args.zig_exe,
-            .zig_lib_path = args.zig_lib_directory,
-            .global_cache_path = args.global_cache_root,
-        },
-        io,
-        environ_map,
-        gpa,
-        arena.allocator(),
-    );
-    defer context.deinit();
+    var context: zlinter.session.LintContext = .{
+        .io = io,
+        .session_arena = session_arena,
+        .zig_exe = zig_exe,
+        .zig_lib_directory = zig_lib_directory,
+        .cwd = cwd,
+        .file_store = .init(session_arena),
+        .module_store = .init(session_arena),
+        .build_config_store = .init(session_arena),
+        .type_store = .init(session_arena),
+        .decl_store = .init(
+            session_arena,
+            io,
+            zig_lib_directory,
+        ),
+    };
+    try context.init(args.compile_names);
 
     var enabled_rules = enabledRules(args.rules);
-
-    var config_overrides_arena = std.heap.ArenaAllocator.init(gpa);
-    defer config_overrides_arena.deinit();
 
     var rule_configs: [rules.len]*anyopaque = undefined;
     {
@@ -295,9 +299,7 @@ fn runLinterRules(
                     if (rule_config_overrides.get(rules[rule_index].rule_id)) |zon_path| {
                         inline for (0..rules_configs_types.len) |i| {
                             if (i == rule_index) {
-                                const config_arena = config_overrides_arena.allocator();
-                                const config = try config_arena.create(rules_configs_types[i]);
-                                errdefer config_arena.destroy(config);
+                                const config = try session_arena.create(rules_configs_types[i]);
 
                                 var diagnostics: zlinter.zon.Diagnostics = .{};
 
@@ -307,7 +309,7 @@ fn runLinterRules(
                                     zon_path,
                                     &diagnostics,
                                     io,
-                                    config_arena,
+                                    session_arena,
                                 ) catch |e| {
                                     switch (e) {
                                         error.ParseZon => {
@@ -329,11 +331,25 @@ fn runLinterRules(
     }
 
     files: for (lint_files, 0..) |lint_file, i| {
+        defer _ = file_arena_allocator.reset(.retain_capacity);
+
+        const cwd_rel_path = try allocCwdRelPath(
+            file_arena,
+            cwd,
+            lint_file.abs_path,
+        );
+
         if (lint_file.excluded) {
-            printer.println(.verbose, "[{d}/{d}] Excluding: {s}", .{ i + 1, lint_files.len, lint_file.pathname });
+            printer.println(.verbose, "[{d}/{d}] Excluding: {s}", .{ i + 1, lint_files.len, cwd_rel_path });
             continue :files;
         }
-        printer.println(.verbose, "[{d}/{d}] Linting: {s}", .{ i + 1, lint_files.len, lint_file.pathname });
+        printer.println(.verbose, "[{d}/{d}] Linting: {s}", .{ i + 1, lint_files.len, cwd_rel_path });
+
+        const file_id = context.resolveFile(lint_file.abs_path) catch |e| {
+            printer.println(.err, "Unable to open file: {s} ({s})", .{ cwd_rel_path, @errorName(e) });
+            continue :files;
+        };
+        const file_abs_path = context.file_store.fileAbsPath(file_id);
 
         var rule_timer = Timer.createStarted(io);
         defer {
@@ -341,74 +357,133 @@ fn runLinterRules(
             printer.println(.verbose, "  - Total elapsed {d}ms", .{ns / std.time.ns_per_ms});
             if (maybe_slowest_files) |*slowest_files| {
                 slowest_files.add(.{
-                    .name = lint_file.pathname,
+                    .name = cwd_rel_path,
                     .elapsed_ns = ns,
                 });
             }
         }
 
         var doc: zlinter.session.LintDocument = undefined;
-        context.initDocument(
-            lint_file.pathname,
-            context.gpa,
-            &doc,
-        ) catch |e| {
-            printer.println(.err, "Unable to open file: {s} ({s})", .{ lint_file.pathname, @errorName(e) });
+        context.initDocument(file_id, file_arena, &doc) catch |e| {
+            printer.println(.err, "Unable to open file: {s} ({s})", .{ cwd_rel_path, @errorName(e) });
             continue :files;
         };
-        defer doc.deinit(context.gpa);
 
         printer.println(.verbose, "  - Load document: {d}ms", .{timer.lapMilliseconds()});
-        printer.println(.verbose, "    - {d} bytes", .{doc.handle.tree.source.len});
-        printer.println(.verbose, "    - {d} nodes", .{doc.handle.tree.nodes.len});
-        printer.println(.verbose, "    - {d} tokens", .{doc.handle.tree.tokens.len});
+        const tree = doc.tree(&context);
+        printer.println(.verbose, "    - {d} bytes", .{tree.source.len});
+        printer.println(.verbose, "    - {d} nodes", .{tree.nodes.len});
+        printer.println(.verbose, "    - {d} tokens", .{tree.tokens.len});
 
         var results = std.ArrayList(zlinter.results.LintResult).empty;
-        defer results.deinit(gpa);
+        errdefer results.deinit(session_arena);
 
-        const tree = doc.handle.tree;
         for (tree.errors) |err| {
             const position = tree.tokenLocation(
                 0,
                 err.token,
             );
 
-            try results.append(
-                gpa,
-                zlinter.results.LintResult{
-                    .file_path = try gpa.dupe(u8, lint_file.pathname),
-                    .problems = try gpa.dupe(zlinter.results.LintProblem, &[1]zlinter.results.LintProblem{.{
-                        .rule_id = "syntax_error",
-                        .severity = .@"error",
-                        .start = .{
-                            .byte_offset = position.line_start + position.column,
-                        },
-                        .end = .{
-                            .byte_offset = position.line_start + position.column + tree.tokenSlice(err.token).len - 1,
-                        },
-                        .message = try allocAstErrorMsg(tree, err, gpa),
-                    }}),
+            const problem = zlinter.results.LintProblem{
+                .rule_id = "syntax_error",
+                .severity = .@"error",
+                .start = .{
+                    .byte_offset = position.line_start + position.column,
                 },
-            );
+                .end = .{
+                    .byte_offset = position.line_start + position.column + tree.tokenSlice(err.token).len - 1,
+                },
+                .message = try allocAstErrorMsg(tree, err, session_arena),
+            };
+
+            const problems = oom(session_arena.alloc(zlinter.results.LintProblem, 1));
+            problems[0] = problem;
+
+            const result = oom(zlinter.results.LintResult.init(
+                session_arena,
+                file_abs_path,
+                problems,
+            ));
+
+            oom(results.append(session_arena, result));
         }
         printer.println(.verbose, "  - Process syntax errors: {d}ms", .{timer.lapMilliseconds()});
+
+        const compile_context_ids = try context.compileContextIdsForFile(
+            file_id,
+            file_arena,
+        );
 
         printer.println(.verbose, "  - Rules", .{});
 
         var rule_it = enabled_rules.iterator(.{ .direction = .forward, .kind = .set });
         while (rule_it.next()) |rule_index| {
             const rule = rules[rule_index];
-            if (try rule.run(
-                rule,
-                &context,
-                &doc,
-                gpa,
-                .{ .config = rule_configs[rule_index] },
-            )) |result| {
-                for (result.problems) |*err| {
-                    err.disabled_by_comment = try doc.shouldSkipProblem(err.*);
-                }
-                try results.append(gpa, result);
+            switch (rule.execution) {
+                .syntax_only => {
+                    context.setCompileRootFileId(null);
+                    if (try rule.run(
+                        rule,
+                        &context,
+                        &doc,
+                        session_arena,
+                        .{ .config = rule_configs[rule_index] },
+                    )) |result| {
+                        try appendDedupedResult(
+                            session_arena,
+                            &results,
+                            &doc,
+                            result,
+                        );
+                    }
+                },
+                .compile_context => {
+                    if (compile_context_ids.len == 0) {
+                        context.setCompileRootFileId(null);
+                        context.resolveFileTypes(file_id);
+                        if (try rule.run(
+                            rule,
+                            &context,
+                            &doc,
+                            session_arena,
+                            .{ .config = rule_configs[rule_index] },
+                        )) |result| {
+                            try appendDedupedResult(
+                                session_arena,
+                                &results,
+                                &doc,
+                                result,
+                            );
+                        }
+                    } else {
+                        for (compile_context_ids) |compile_context_id| {
+                            if (!context.focused_compiled_contexts.contains(compile_context_id))
+                                continue;
+
+                            const compile_root_file_id = context.compileRootFileId(compile_context_id);
+                            context.setCompileRootFileId(compile_root_file_id);
+                            context.resolveFileTypes(file_id);
+                            if (try rule.run(
+                                rule,
+                                &context,
+                                &doc,
+                                session_arena,
+                                .{
+                                    .config = rule_configs[rule_index],
+                                    .compile_context_id = compile_context_id,
+                                    .compile_root_file_id = compile_root_file_id,
+                                },
+                            )) |result| {
+                                try appendDedupedResult(
+                                    session_arena,
+                                    &results,
+                                    &doc,
+                                    result,
+                                );
+                            }
+                        }
+                    }
+                },
             }
 
             const ns = timer.lapNanoseconds();
@@ -419,19 +494,79 @@ fn runLinterRules(
         }
 
         if (results.items.len > 0) {
-            try file_lint_problems.putNoClobber(
-                gpa,
+            oom(file_lint_problems.putNoClobber(
+                session_arena,
                 std.math.cast(u32, i) orelse @panic("Too many files"),
-                try results.toOwnedSlice(gpa),
-            );
+                oom(results.toOwnedSlice(session_arena)),
+            ));
         }
     }
 }
 
+fn sameProblem(
+    lhs: zlinter.results.LintProblem,
+    rhs: zlinter.results.LintProblem,
+) bool {
+    return std.mem.eql(u8, lhs.rule_id, rhs.rule_id) and
+        lhs.severity == rhs.severity and
+        lhs.start.byte_offset == rhs.start.byte_offset and
+        lhs.end.byte_offset == rhs.end.byte_offset and
+        std.mem.eql(u8, lhs.message, rhs.message);
+}
+
+fn containsProblem(
+    results: []const zlinter.results.LintResult,
+    problem: zlinter.results.LintProblem,
+) bool {
+    for (results) |result| {
+        for (result.problems) |existing_problem| {
+            if (sameProblem(existing_problem, problem)) return true;
+        }
+    }
+    return false;
+}
+
+fn containsProblemInSlice(
+    problems: []const zlinter.results.LintProblem,
+    problem: zlinter.results.LintProblem,
+) bool {
+    for (problems) |existing_problem| {
+        if (sameProblem(existing_problem, problem)) return true;
+    }
+    return false;
+}
+
+fn appendDedupedResult(
+    session_arena: std.mem.Allocator,
+    results: *std.ArrayList(zlinter.results.LintResult),
+    doc: *zlinter.session.LintDocument,
+    result: zlinter.results.LintResult,
+) error{OutOfMemory}!void {
+    var deduped_problems = std.ArrayList(zlinter.results.LintProblem).empty;
+    errdefer deduped_problems.deinit(session_arena);
+
+    for (result.problems) |problem| {
+        var deduped_problem = problem;
+        deduped_problem.disabled_by_comment = try doc.shouldSkipProblem(deduped_problem);
+
+        if (containsProblem(results.items, deduped_problem)) continue;
+        if (containsProblemInSlice(deduped_problems.items, deduped_problem)) continue;
+
+        try deduped_problems.append(session_arena, deduped_problem);
+    }
+
+    if (deduped_problems.items.len == 0) return;
+
+    try results.append(session_arena, .{
+        .abs_path = result.abs_path,
+        .problems = try deduped_problems.toOwnedSlice(session_arena),
+    });
+}
+
 fn runFormatter(
     io: std.Io,
-    gpa: std.mem.Allocator,
-    dir: std.Io.Dir,
+    session_arena: std.mem.Allocator,
+    cwd: []const u8,
     file_lint_problems: std.array_hash_map.Auto(u32, []zlinter.results.LintResult),
     output_writer: *std.Io.Writer,
     output_tty: zlinter.ansi.Tty,
@@ -439,10 +574,6 @@ fn runFormatter(
     quiet: bool,
     max_warnings: ?u32,
 ) !RunResult {
-    var arena = std.heap.ArenaAllocator.init(gpa);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
-
     var run_result: RunResult = .success;
     var warning_count: usize = 0;
     var results_count: usize = 0;
@@ -466,7 +597,7 @@ fn runFormatter(
     }
 
     var flattened = try std.ArrayList(zlinter.results.LintResult).initCapacity(
-        arena_allocator,
+        session_arena,
         results_count,
     );
     for (file_lint_problems.values()) |results| {
@@ -474,9 +605,9 @@ fn runFormatter(
     }
 
     try formatter.format(.{
-        .results = try flattened.toOwnedSlice(arena_allocator),
-        .dir = dir,
-        .arena = arena_allocator,
+        .results = try flattened.toOwnedSlice(session_arena),
+        .cwd = cwd,
+        .arena = session_arena,
         .tty = output_tty,
         .min_severity = if (quiet) .@"error" else .warning,
         .io = io,
@@ -485,14 +616,19 @@ fn runFormatter(
     return run_result;
 }
 
+fn allocCwdRelPath(gpa: std.mem.Allocator, cwd: []const u8, abs_path: []const u8) ![]const u8 {
+    return std.fs.path.relative(gpa, cwd, null, cwd, abs_path);
+}
+
 fn cmpFix(context: void, a: zlinter.results.LintProblemFix, b: zlinter.results.LintProblemFix) bool {
     return std.sort.asc(@TypeOf(a.start))(context, a.start, b.start);
 }
 
 fn runFixes(
     io: std.Io,
+    session_arena: std.mem.Allocator,
     gpa: std.mem.Allocator,
-    dir: std.Io.Dir,
+    cwd: []const u8,
     lint_files: []zlinter.files.LintFile,
     file_lint_problems: std.array_hash_map.Auto(u32, []zlinter.results.LintResult),
     printer: *zlinter.rendering.Printer,
@@ -500,10 +636,15 @@ fn runFixes(
     var total_fixes: usize = 0;
     var total_disabled_by_comment: usize = 0;
 
+    var file_arena_allocator: std.heap.ArenaAllocator = .init(gpa);
+    defer file_arena_allocator.deinit();
+    const file_arena = file_arena_allocator.allocator();
+
     var it = file_lint_problems.iterator();
     while (it.next()) |entry| {
+        defer _ = file_arena_allocator.reset(.retain_capacity);
+
         var lint_fixes = std.ArrayList(zlinter.results.LintProblemFix).empty;
-        defer lint_fixes.deinit(gpa);
 
         const results = entry.value_ptr.*;
         for (results) |result| {
@@ -514,7 +655,7 @@ fn runFixes(
                 }
 
                 if (err.fix) |fix| {
-                    try lint_fixes.append(gpa, fix);
+                    try lint_fixes.append(session_arena, fix);
                 }
             }
         }
@@ -528,8 +669,13 @@ fn runFixes(
             cmpFix,
         );
 
-        const file_path = lint_files[entry.key_ptr.*].pathname;
-        const file = try dir.openFile(io, file_path, .{
+        const abs_path = lint_files[entry.key_ptr.*].abs_path;
+
+        var file_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+        var fba: std.heap.FixedBufferAllocator = .init(&file_path_buffer);
+        const cwd_rel_path = try allocCwdRelPath(fba.allocator(), cwd, abs_path);
+
+        const file = try std.Io.Dir.openFileAbsolute(io, abs_path, .{
             .mode = .read_only,
         });
         defer file.close(io);
@@ -538,23 +684,21 @@ fn runFixes(
             var file_reader_buffer: [1024]u8 = undefined;
             var file_reader = file.readerStreaming(io, &file_reader_buffer);
 
-            var buffer: std.Io.Writer.Allocating = .init(gpa);
+            var buffer: std.Io.Writer.Allocating = .init(file_arena);
             defer buffer.deinit();
 
             if (file_reader.getSize()) |size| {
                 const casted_size = std.math.cast(u32, size) orelse return error.StreamTooLong;
-                try buffer.ensureTotalCapacity(casted_size);
+                oom(buffer.ensureTotalCapacity(casted_size));
             } else |_| {
                 // Do nothing.
             }
 
             _ = try file_reader.interface.streamRemaining(&buffer.writer);
-            break :file_content try buffer.toOwnedSlice();
+            break :file_content oom(buffer.toOwnedSlice());
         };
-        defer gpa.free(file_content);
 
         var output_slices = std.ArrayList([]const u8).empty;
-        defer output_slices.deinit(gpa);
 
         var file_fixes: usize = 0;
         var content_index: usize = 0;
@@ -569,27 +713,27 @@ fn runFixes(
             }
             previous_fix = fix;
 
-            try output_slices.append(gpa, file_content[content_index..fix.start]);
+            oom(output_slices.append(file_arena, file_content[content_index..fix.start]));
             if (fix.text.len > 0) {
-                try output_slices.append(gpa, fix.text);
+                oom(output_slices.append(file_arena, fix.text));
             }
             content_index = fix.end;
             total_fixes += 1;
             file_fixes += 1;
         }
         if (content_index < file_content.len - 1) {
-            try output_slices.append(gpa, file_content[content_index..file_content.len]);
+            oom(output_slices.append(file_arena, file_content[content_index..file_content.len]));
         }
 
         printer.print(.out, "{s}{d} fixes{s} applied to: {s}\n", .{
             printer.tty.ansiOrEmpty(&.{.bold}),
             file_fixes,
             printer.tty.ansiOrEmpty(&.{.reset}),
-            file_path,
+            cwd_rel_path,
         });
 
         if (output_slices.items.len > 0) {
-            const new_file = try dir.createFile(io, file_path, .{
+            const new_file = try std.Io.Dir.createFileAbsolute(io, abs_path, .{
                 .truncate = true,
             });
             defer new_file.close(io);
@@ -672,11 +816,11 @@ fn buildExcludesIndex(io: std.Io, cwd: []const u8, gpa: std.mem.Allocator, dir: 
     errdefer index.deinit();
 
     if (exclude_lint_paths) |files| {
-        for (files) |file| try index.insert(file.pathname);
+        for (files) |file| try index.insert(file.abs_path);
     }
 
     if (build_exclude_lint_paths) |files| {
-        for (files) |file| try index.insert(file.pathname);
+        for (files) |file| try index.insert(file.abs_path);
     }
 
     return index;
@@ -698,7 +842,7 @@ fn buildFilterIndex(io: std.Io, cwd: []const u8, gpa: std.mem.Allocator, dir: st
     var index = std.BufSet.init(gpa);
     errdefer index.deinit();
 
-    for (filter_paths) |file| try index.insert(file.pathname);
+    for (filter_paths) |file| try index.insert(file.abs_path);
     return index;
 }
 
@@ -799,18 +943,27 @@ const SlowestItemQueue = struct {
     }
 
     fn deinit(self: *SlowestItemQueue) void {
+        for (self.queue.items) |item| {
+            self.gpa.free(item.name);
+        }
         self.queue.deinit(self.gpa);
         self.* = undefined;
     }
 
     fn add(self: *SlowestItemQueue, item: Item) void {
-        if (self.queue.push(self.gpa, item)) {
+        const owned_name = self.gpa.dupe(u8, item.name) catch return;
+        const owned_item: Item = .{
+            .name = owned_name,
+            .elapsed_ns = item.elapsed_ns,
+        };
+
+        if (self.queue.push(self.gpa, owned_item)) {
             if (self.queue.count() > self.max) {
-                _ = self.queue.popMin();
+                if (self.queue.popMin()) |removed| {
+                    self.gpa.free(removed.name);
+                }
             }
-        } else |_| {
-            // Ignore.
-        }
+        } else |_| self.gpa.free(owned_name);
     }
 
     fn unloadAndPrint(self: *SlowestItemQueue, name: []const u8, printer: *zlinter.rendering.Printer) void {
@@ -825,6 +978,8 @@ const SlowestItemQueue = struct {
 
         var i: usize = 0;
         while (self.queue.popMax()) |item| {
+            defer self.gpa.free(item.name);
+
             printer.println(.verbose, "  {d:02} -  {s}[{d}ms]{s} {s}", .{
                 i,
                 printer.tty.ansiOrEmpty(&.{.bold}),
@@ -848,3 +1003,4 @@ const rules = @import("rules").rules; // Generated in build_rules.zig
 const rules_configs = @import("rules").rules_configs; // Generated in build_rules.zig
 const rules_configs_types = @import("rules").rules_configs_types; // Generated in build_rules.zig
 const Ast = std.zig.Ast;
+const oom = zlinter.allocations.oom;

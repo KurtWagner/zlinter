@@ -1,12 +1,5 @@
 const @"build.zig" = @This();
 
-const zls_version: []const u8 = switch (version.zig) {
-    .@"0.17" => "0.17.0-dev",
-    .@"0.16" => "0.16.0",
-    .@"0.15" => "0.15.0",
-    .@"0.14" => "0.14.0",
-};
-
 pub const BuiltinLintRule = enum {
     field_naming,
     field_ordering,
@@ -57,6 +50,10 @@ const BuiltRule = struct {
 const BuildOptions = struct {
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
+    tracy: bool = false,
+    tracy_callstack: bool = false,
+    tracy_allocation: bool = false,
+    tracy_callstack_depth: u32 = 10,
 };
 
 pub const BuilderOptions = struct {
@@ -70,17 +67,28 @@ pub const BuilderOptions = struct {
     ///
     /// For enormous projects consider using `.ReleaseFast`.
     optimize: std.builtin.OptimizeMode = .ReleaseSafe,
+
+    /// Enable Tracy integration using the pinned Tracy 0.13.1 dependency.
+    tracy: bool = false,
+    tracy_callstack: bool = false,
+    tracy_allocation: bool = false,
+    tracy_callstack_depth: u32 = 10,
 };
 
 /// Create a step builder for zlinter
 pub fn builder(b: *std.Build, options: BuilderOptions) StepBuilder {
     return .{
         .rules = .empty,
+        .focus_compiled_names = .empty,
         .exclude = .empty,
         .include = .empty,
         .options = .{
             .optimize = options.optimize,
             .target = options.target orelse b.graph.host,
+            .tracy = options.tracy,
+            .tracy_callstack = options.tracy_callstack,
+            .tracy_allocation = options.tracy_allocation,
+            .tracy_callstack_depth = options.tracy_callstack_depth,
         },
         .b = b,
     };
@@ -88,28 +96,19 @@ pub fn builder(b: *std.Build, options: BuilderOptions) StepBuilder {
 
 /// Represents something that should be linted.
 const LintIncludeSource = union(enum) {
-    /// e.g., library or executable.
-    compiled_unit: struct {
-        compile_step: *std.Build.Step.Compile,
-    },
-    path: std.Build.LazyPath,
-
-    pub fn compiled(compile: *std.Build.Step.Compile) LintIncludeSource {
-        return .{
-            .compiled_unit = .{
-                .compile_step = compile,
-            },
-        };
-    }
+    file_path: std.Build.LazyPath,
+    dir_path: std.Build.LazyPath,
 };
 
 /// Represents something that should be excluded from linting.
 const LintExcludeSource = union(enum) {
-    path: std.Build.LazyPath,
+    file_path: std.Build.LazyPath,
+    dir_path: std.Build.LazyPath,
 };
 
 const StepBuilder = struct {
     rules: std.ArrayList(BuiltRule),
+    focus_compiled_names: std.ArrayList([]const u8),
     include: std.ArrayList(LintIncludeSource),
     exclude: std.ArrayList(LintExcludeSource),
     options: BuildOptions,
@@ -136,8 +135,19 @@ const StepBuilder = struct {
         ) catch @panic("OOM");
     }
 
-    /// Adds a source to be linted (e.g., library, executable or path). Only
-    /// inputs resolved to this source within the projects path will be linted.
+    /// Adds a Zig compile step to use when linting files with rules that are
+    /// context based (e.g., rely on declaration types).
+    ///
+    /// If no compile steps are added, zlinter falls back to examining all
+    /// compiled units for the project. It'll then select based on kind in the
+    /// following order: exe > lib > obj > test. e.g., if an exe is found, it
+    /// will only use executables for context resolution.
+    pub fn addCompile(self: *StepBuilder, compile: *std.Build.Step.Compile) void {
+        const arena = self.b.allocator;
+        self.focus_compiled_names.append(arena, self.b.dupe(compile.name)) catch @panic("OOM");
+    }
+
+    /// Adds a source path to be linted.
     ///
     /// If no paths are given or resolved then it falls back to linting all
     /// zig source files under the current working directory.
@@ -159,16 +169,37 @@ const StepBuilder = struct {
     pub fn addPaths(
         self: *StepBuilder,
         paths: struct {
-            include: ?[]const std.Build.LazyPath = null,
-            exclude: ?[]const std.Build.LazyPath = null,
+            include_dirs: ?[]const std.Build.LazyPath = null,
+            include_files: ?[]const std.Build.LazyPath = null,
+            exclude_dirs: ?[]const std.Build.LazyPath = null,
+            exclude_files: ?[]const std.Build.LazyPath = null,
         },
     ) void {
         const arena = self.b.allocator;
 
-        if (paths.include) |includes|
-            for (includes) |path| self.include.append(arena, .{ .path = path }) catch @panic("OOM");
-        if (paths.exclude) |excludes|
-            for (excludes) |path| self.exclude.append(arena, .{ .path = path }) catch @panic("OOM");
+        if (paths.include_dirs) |includes|
+            for (includes) |path| self.include.append(
+                arena,
+                .{ .dir_path = path },
+            ) catch @panic("OOM");
+
+        if (paths.include_files) |includes|
+            for (includes) |path| self.include.append(
+                arena,
+                .{ .file_path = path },
+            ) catch @panic("OOM");
+
+        if (paths.exclude_dirs) |excludes|
+            for (excludes) |path| self.exclude.append(
+                arena,
+                .{ .dir_path = path },
+            ) catch @panic("OOM");
+
+        if (paths.exclude_files) |excludes|
+            for (excludes) |path| self.exclude.append(
+                arena,
+                .{ .file_path = path },
+            ) catch @panic("OOM");
     }
 
     pub fn build(self: *StepBuilder) *std.Build.Step {
@@ -183,6 +214,7 @@ const StepBuilder = struct {
                     .{},
                 ),
             },
+            self.focus_compiled_names.items,
             self.include.items,
             self.exclude.items,
             self.options,
@@ -195,21 +227,30 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const test_coverage = b.option(bool, "coverage", "Generate a coverage report with kcov");
-    const test_focus_on_rule = b.option([]const u8, "test_focus_on_rule", "Only run integration tests for this rule");
-    const io = b.graph.io;
+    const test_focus_on_rule = b.option([]const u8, "test_focus_on_rule", "Only run tests for this rule");
+    const tracy = b.option(bool, "tracy", "Enable Tracy integration using the pinned Tracy 0.13.1 dependency") orelse false;
+    const tracy_callstack = b.option(bool, "tracy-callstack", "Include callstack information with Tracy data. Does nothing if -Dtracy is not provided. Default: false") orelse false;
+    const tracy_allocation = b.option(bool, "tracy-allocation", "Include allocation information with Tracy data. Does nothing if -Dtracy is not provided. Default: false") orelse false;
+    const tracy_callstack_depth = b.option(u32, "tracy-callstack-depth", "Declare callstack depth for Tracy data. Does nothing if -Dtracy-callstack is not provided. Default: 10") orelse 10;
+    const tracy_module = createTracyModule(b, .{
+        .target = target,
+        .optimize = optimize,
+        .tracy = tracy,
+        .tracy_callstack = tracy_callstack,
+        .tracy_allocation = tracy_allocation,
+        .tracy_callstack_depth = tracy_callstack_depth,
+    });
 
     const zlinter_lib_module = b.addModule("zlinter", .{
         .root_source_file = b.path("src/lib/zlinter.zig"),
         .target = target,
         .optimize = optimize,
-        .imports = &.{.{
-            .name = "zls",
-            .module = b.dependency("zls", .{
-                .target = target,
-                .optimize = optimize,
-                .@"version-string" = zls_version,
-            }).module("zls"),
-        }},
+        .imports = &.{
+            .{
+                .name = "tracy",
+                .module = tracy_module,
+            },
+        },
     });
 
     const zlinter_import = std.Build.Module.Import{
@@ -225,14 +266,15 @@ pub fn build(b: *std.Build) void {
     // --------------------------------------------------------------------
     // Generate dynamic rules list and configs
     // --------------------------------------------------------------------
+    const builtin_rule_names = comptime std.meta.fieldNames(BuiltinLintRule);
     // zlinter-disable-next-line no_undefined - immediately set in inline loop
-    var rules: [@typeInfo(BuiltinLintRule).@"enum".fields.len]BuiltRule = undefined;
+    var rules: [builtin_rule_names.len]BuiltRule = undefined;
     // zlinter-disable-next-line no_undefined - immediately set in inline loop
-    var rule_imports: [@typeInfo(BuiltinLintRule).@"enum".fields.len]std.Build.Module.Import = undefined;
+    var rule_imports: [builtin_rule_names.len]std.Build.Module.Import = undefined;
 
-    inline for (std.meta.fields(BuiltinLintRule), 0..) |enum_type, i| {
+    inline for (builtin_rule_names, 0..) |enum_type_name, i| {
         const rule_module = b.createModule(.{
-            .root_source_file = b.path("src/rules/" ++ enum_type.name ++ ".zig"),
+            .root_source_file = b.path("src/rules/" ++ enum_type_name ++ ".zig"),
             .target = target,
             .optimize = optimize,
             .imports = &.{zlinter_import},
@@ -240,7 +282,7 @@ pub fn build(b: *std.Build) void {
 
         // Rule as import:
         rule_imports[i] = .{
-            .name = enum_type.name,
+            .name = enum_type_name,
             .module = rule_module,
         };
         rules[i] = .{
@@ -252,7 +294,9 @@ pub fn build(b: *std.Build) void {
     // ------------------------------------------------------------------------
     // zig build test
     // ------------------------------------------------------------------------
-    const kcov_bin = b.findProgram(&.{"kcov"}, &.{}) catch "kcov";
+    const kcov_bin = b.findProgram(
+        .{ .names = &.{"kcov"} },
+    ) orelse "kcov";
     const merge_coverage = std.Build.Step.Run.create(b, "Unit test coverage");
     merge_coverage.rename_step_with_output_arg = false;
     merge_coverage.addArgs(&.{ kcov_bin, "--merge" });
@@ -265,6 +309,11 @@ pub fn build(b: *std.Build) void {
     });
     install_coverage.step.dependOn(&merge_coverage.step);
 
+    // This intentionally shells out to the nested integration_tests build so
+    // the tests exercise zlinter the way an external project consumes it. The
+    // parent build cannot observe the nested build graph, so use
+    // `cd integration_tests && zig build test --watch` when watching
+    // integration test inputs.
     const run_integration_tests = b.addSystemCommand(&.{ b.graph.zig_exe, "build", "test" });
     if (test_focus_on_rule) |r| {
         run_integration_tests.addArg(b.fmt("-Dtest_focus_on_rule={s}", .{r}));
@@ -272,35 +321,8 @@ pub fn build(b: *std.Build) void {
     run_integration_tests.setCwd(b.path("./integration_tests"));
     run_integration_tests.has_side_effects = true;
 
-    // Add directory and file inputs to ensure that we can watch and re-run tests
-    // as these can't be resolved magicaly through the system call.
-    addWatchInput(b, &run_integration_tests.step, b.path("./integration_tests/src"), .none) catch @panic("OOM");
-    addWatchInput(b, &run_integration_tests.step, b.path("./integration_tests/test_cases"), .none) catch @panic("OOM");
-    addWatchInput(b, &run_integration_tests.step, b.path("./src"), .none) catch @panic("OOM");
-    addWatchInput(b, &run_integration_tests.step, b.path("./integration_tests/build.zig"), .none) catch @panic("OOM");
-    addWatchInput(b, &run_integration_tests.step, b.path("./build_rules.zig"), .none) catch @panic("OOM");
-
     const integration_test_step = b.step("integration-test", "Run integration tests");
     integration_test_step.dependOn(&run_integration_tests.step);
-
-    const run_integration_check = b.addSystemCommand(&.{ b.graph.zig_exe, "build", "check-compiled-source" });
-    run_integration_check.has_side_effects = true;
-    run_integration_check.setCwd(b.path("./integration_tests"));
-    run_integration_check.color = .disable;
-    run_integration_check.expectExitCode(0);
-    run_integration_check.expectStdOutEqual(std.fmt.comptimePrint(
-        \\warning `@panic` forcibly stops the program at runtime and should be avoided [{s}:4:5] no_panic
-        \\
-        \\ 4 |     @panic("whoops");
-        \\   |     ^^^^^^^^^^^^^^^^
-        \\
-        \\x 1 warnings
-        \\
-    , .{"src" ++ std.fs.path.sep_str ++ "check_compiled_source" ++ std.fs.path.sep_str ++ "used.zig"}));
-    addWatchInput(b, &run_integration_check.step, b.path("./integration_tests/src/check_compiled_source"), .none) catch @panic("OOM");
-
-    const integration_check_step = b.step("integration-check", "Run integration checks");
-    integration_check_step.dependOn(&run_integration_check.step);
 
     const unit_test_step = b.step("unit-test", "Run unit tests");
     if (test_coverage orelse false) {
@@ -317,6 +339,10 @@ pub fn build(b: *std.Build) void {
     }
 
     for (rule_imports) |rule_import| {
+        if (test_focus_on_rule) |r| {
+            if (!std.mem.eql(u8, rule_import.name, r)) continue;
+        }
+
         const test_rule_exe = b.addTest(.{
             .name = b.fmt("{s}_unit_test_coverage", .{rule_import.name}),
             .root_module = rule_import.module,
@@ -340,7 +366,6 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run all tests");
     test_step.dependOn(unit_test_step);
     test_step.dependOn(integration_test_step);
-    test_step.dependOn(integration_check_step);
 
     // ------------------------------------------------------------------------
     // zig build website
@@ -373,7 +398,7 @@ pub fn build(b: *std.Build) void {
     const write_file = b.addWriteFiles();
     const write_index_html = write_file.add(
         "website/explorer/index.html",
-        readHtmlTemplate(b, b.path("website/explorer/index.template.html")) catch @panic("OOM"),
+        readHtmlTemplate(b, "website/explorer/index.template.html") catch @panic("OOM"),
     );
     const install_index_html = b.addInstallFile(
         write_index_html,
@@ -390,17 +415,11 @@ pub fn build(b: *std.Build) void {
     const lint_cmd = b.step("lint", "Lint the linters own source code.");
     lint_cmd.dependOn(step: {
         var include = std.ArrayList(LintIncludeSource).empty;
-        include.append(b.allocator, .compiled(b.addLibrary(.{
-            .name = "zlinter",
-            .root_module = zlinter_lib_module,
-        }))) catch @panic("OOM");
-
         var exclude = std.ArrayList(LintExcludeSource).empty;
 
-        // Also lint all files within project, not just those resolved to our compiled source.
-        include.append(b.allocator, .{ .path = b.path("./") }) catch @panic("OOM");
-        exclude.append(b.allocator, .{ .path = b.path("integration_tests/test_cases") }) catch @panic("OOM");
-        exclude.append(b.allocator, .{ .path = b.path("integration_tests/src/test_case_references.zig") }) catch @panic("OOM");
+        include.append(b.allocator, .{ .dir_path = b.path("./") }) catch @panic("OOM");
+        exclude.append(b.allocator, .{ .dir_path = b.path("integration_tests/test_cases") }) catch @panic("OOM");
+        exclude.append(b.allocator, .{ .file_path = b.path("integration_tests/src/test_case_references.zig") }) catch @panic("OOM");
 
         break :step buildStep(
             b,
@@ -458,11 +477,16 @@ pub fn build(b: *std.Build) void {
                 ),
             },
             .{ .module = zlinter_lib_module },
+            &.{},
             include.items,
             exclude.items,
             .{
                 .target = target,
-                .optimize = .Debug,
+                .optimize = if (tracy) .ReleaseSafe else .Debug,
+                .tracy = tracy,
+                .tracy_callstack = tracy_callstack,
+                .tracy_allocation = tracy_allocation,
+                .tracy_callstack_depth = tracy_callstack_depth,
             },
         );
     });
@@ -480,7 +504,9 @@ pub fn build(b: *std.Build) void {
                 .optimize = .Debug,
             }),
         }));
-        var step = &doc_build_run.step;
+        doc_build_run.addDirectoryArg(b.path("src/rules"));
+
+        const step = &doc_build_run.step;
 
         var install_step = b.addInstallFileWithDir(
             doc_build_run.addOutputFileArg("RULES.md"),
@@ -488,20 +514,6 @@ pub fn build(b: *std.Build) void {
             "RULES.md",
         );
         install_step.step.dependOn(step);
-
-        const rules_lazy_path = b.path("src/rules");
-        const rules_path = rules_lazy_path.getPath3(b, step);
-        _ = step.addDirectoryWatchInput(rules_lazy_path) catch @panic("OOM");
-
-        var rules_dir = rules_path.root_dir.handle.openDir(io, rules_path.subPathOrDot(), .{ .iterate = true }) catch @panic("unable to open rules/ directory");
-        defer rules_dir.close(io);
-        {
-            var it = rules_dir.walk(b.allocator) catch @panic("OOM");
-            while (it.next(io) catch @panic("OOM")) |entry| {
-                if (!std.mem.endsWith(u8, entry.basename, ".zig")) continue;
-                doc_build_run.addFileArg(b.path(b.pathJoin(&.{ "src/rules", entry.path })));
-            }
-        }
 
         break :step &install_step.step;
     });
@@ -522,6 +534,7 @@ fn buildStep(
         dependency: *std.Build.Dependency,
         module: *std.Build.Module,
     },
+    focus_compiled_names: []const []const u8,
     include: []const LintIncludeSource,
     exclude: []const LintExcludeSource,
     options: BuildOptions,
@@ -542,6 +555,10 @@ fn buildStep(
         .optimize = options.optimize,
         .imports = &.{zlinter_import},
     });
+
+    const zlinter_build_config = b.addOptions();
+    zlinter_build_config.addOption(bool, "verbose", b.graph.verbose);
+    exe_module.addImport("zlinter_build_config", zlinter_build_config.createModule());
 
     // --------------------------------------------------------------------
     // Generate dynamic rules and rules config
@@ -568,14 +585,116 @@ fn buildStep(
         .use_llvm = true,
     });
 
-    const zlinter_run = ZlinterRun.create(
-        b,
-        zlinter_exe,
-        include,
-        exclude,
-    );
+    var run = b.addRunArtifact(zlinter_exe);
+    run.addPassthruArgs();
 
-    return &zlinter_run.step;
+    run.addArg("--zig_exe");
+    run.addFileArg(.zig_exe);
+
+    run.addArg("--zig_lib_directory");
+    run.addFileArg(.zig_lib);
+
+    if (b.graph.verbose) run.addArg("--verbose");
+
+    // TODO: #149 - we may want to separate "build config" include and exclude
+    // from runtime include and exclude to reflect the previous BuildInfo logic
+    if (include.len > 0) {
+        run.addArg("--include");
+        for (include) |source| {
+            switch (source) {
+                .file_path => |path| run.addFileArg(path),
+                .dir_path => |path| run.addDirectoryArg(path),
+            }
+        }
+    }
+
+    if (exclude.len > 0) {
+        run.addArg("--exclude");
+        for (exclude) |source| {
+            switch (source) {
+                .file_path => |path| run.addFileArg(path),
+                .dir_path => |path| run.addDirectoryArg(path),
+            }
+        }
+    }
+
+    // i.e., only consider these compiled units when compiling
+    for (focus_compiled_names) |compiled_name|
+        run.addArg(compiled_name);
+
+    run.addArg("--stdin");
+
+    var buff = std.Io.Writer.Allocating.init(b.allocator);
+
+    buff.writer.writeInt(u32, 0, .little) catch @panic("stdin write failed");
+    std.zon.stringify.serialize(BuildInfo{
+        // TODO: #149 - decide whether we want this to hang around for anything
+        // ideally we use addFileArg and addDirectoryArg so that the build
+        // dependency graph is correct.
+        .include_paths = null,
+        .exclude_paths = null,
+    }, .{}, &buff.writer) catch @panic("Invalid build info");
+
+    const stdin_bytes = buff.written();
+    const zon_len = stdin_bytes.len - @sizeOf(u32);
+    std.mem.writeInt(u32, stdin_bytes[0..@sizeOf(u32)], @intCast(zon_len), .little);
+
+    run.setStdIn(.{ .bytes = stdin_bytes });
+
+    return &run.step;
+}
+
+fn createTracyModule(
+    b: *std.Build,
+    options: struct {
+        target: std.Build.ResolvedTarget,
+        optimize: std.builtin.OptimizeMode,
+        tracy: bool,
+        tracy_callstack: bool,
+        tracy_allocation: bool,
+        tracy_callstack_depth: u32,
+    },
+) *std.Build.Module {
+    const tracy_options = b.addOptions();
+    tracy_options.addOption(bool, "enable_tracy", options.tracy);
+    tracy_options.addOption(bool, "enable_tracy_callstack", options.tracy and options.tracy_callstack);
+    tracy_options.addOption(bool, "enable_tracy_allocation", options.tracy and options.tracy_allocation);
+    tracy_options.addOption(u32, "tracy_callstack_depth", options.tracy_callstack_depth);
+
+    const tracy_module = b.createModule(.{
+        .root_source_file = b.path("src/lib/tracy.zig"),
+        .target = options.target,
+        .optimize = options.optimize,
+        .imports = &.{
+            .{ .name = "build_options", .module = tracy_options.createModule() },
+        },
+        .link_libc = options.tracy,
+        .link_libcpp = options.tracy,
+        .sanitize_c = .off,
+    });
+
+    if (!options.tracy) return tracy_module;
+
+    const tracy_dependency = b.lazyDependency("tracy", .{
+        .target = options.target,
+        .optimize = .ReleaseFast,
+    }) orelse return tracy_module;
+
+    tracy_module.addCMacro("TRACY_ENABLE", "1");
+    if (!options.tracy_callstack) {
+        tracy_module.addCMacro("TRACY_NO_CALLSTACK", "1");
+    }
+    tracy_module.addIncludePath(tracy_dependency.path(""));
+    tracy_module.addCSourceFile(.{
+        .file = tracy_dependency.path("public/TracyClient.cpp"),
+    });
+
+    if (options.target.result.os.tag == .windows) {
+        tracy_module.linkSystemLibrary("dbghelp", .{});
+        tracy_module.linkSystemLibrary("ws2_32", .{});
+    }
+
+    return tracy_module;
 }
 
 fn checkNoNameCollision(comptime name: []const u8) []const u8 {
@@ -587,52 +706,6 @@ fn checkNoNameCollision(comptime name: []const u8) []const u8 {
         }
     }
     return name;
-}
-
-fn addWatchInput(
-    b: *std.Build,
-    step: *std.Build.Step,
-    file_or_dir: std.Build.LazyPath,
-    kind: enum { none, lintable_file },
-) !void {
-    const src_dir_path = file_or_dir.getPath3(b, step);
-
-    const io = b.graph.io;
-    var src_dir = src_dir_path.root_dir.handle.openDir(
-        io,
-        src_dir_path.subPathOrDot(),
-        .{ .iterate = true },
-    ) catch |e| switch (e) {
-        error.NotDir => {
-            try step.addWatchInput(file_or_dir);
-            return;
-        },
-        else => @panic(b.fmt("Unable to open directory '{f}': {t}", .{ src_dir_path, e })),
-    };
-    defer src_dir.close(io);
-
-    const needs_dir_derived = try step.addDirectoryWatchInput(file_or_dir);
-
-    var it = try src_dir.walk(b.allocator);
-    defer it.deinit();
-
-    while (try it.next(io)) |entry| {
-        switch (entry.kind) {
-            .directory => if (needs_dir_derived) {
-                const entry_path = try src_dir_path.join(b.allocator, entry.path);
-                try step.addDirectoryWatchInputFromPath(entry_path);
-            },
-            .file => {
-                const entry_path = try src_dir_path.joinString(b.allocator, entry.path);
-                defer b.allocator.free(entry_path);
-
-                if (kind != .lintable_file or isLintableFilePath(entry_path) catch false) {
-                    try step.addWatchInput(try file_or_dir.join(b.allocator, entry.path));
-                }
-            },
-            else => continue,
-        }
-    }
 }
 
 fn buildRule(
@@ -766,327 +839,8 @@ fn createRulesModule(
     return module;
 }
 
-const ZlinterRun = struct {
-    step: std.Build.Step,
-
-    /// CLI arguments to be passed to zlinter when executed
-    argv: std.ArrayList(Arg),
-
-    /// Exclude paths confiured within the build file.
-    exclude: []const LintExcludeSource,
-
-    /// The sources to lint (e.g., an executable or library).
-    include: []const LintIncludeSource,
-
-    const Arg = union(enum) {
-        artifact: *std.Build.Step.Compile,
-        bytes: []const u8,
-    };
-
-    pub fn create(
-        owner: *std.Build,
-        exe: *std.Build.Step.Compile,
-        include: []const LintIncludeSource,
-        exclude: []const LintExcludeSource,
-    ) *ZlinterRun {
-        const arena = owner.allocator;
-
-        const self = arena.create(ZlinterRun) catch @panic("OOM");
-        self.* = .{
-            .step = std.Build.Step.init(.{
-                .id = .custom,
-                .name = "Run zlinter",
-                .owner = owner,
-                .makeFn = make,
-            }),
-            .argv = .empty,
-            .exclude = exclude,
-            .include = include,
-        };
-
-        self.argv.append(arena, .{ .artifact = exe }) catch @panic("OOM");
-
-        if (owner.args) |args| self.addArgs(args);
-        if (owner.verbose) self.addArgs(&.{"--verbose"});
-
-        self.addArgs(&.{ "--zig_exe", owner.graph.zig_exe });
-        if (owner.graph.global_cache_root.path) |p|
-            self.addArgs(&.{ "--global_cache_root", p });
-
-        if (owner.graph.zig_lib_directory.path) |p|
-            self.addArgs(&.{ "--zig_lib_directory", p });
-
-        const bin_file = exe.getEmittedBin();
-        bin_file.addStepDependencies(&self.step);
-
-        for (include) |s| {
-            switch (s) {
-                .compiled_unit => |info| self.step.dependOn(
-                    &info.compile_step.step,
-                ),
-                .path => |path| addWatchInput(
-                    owner,
-                    &self.step,
-                    path,
-                    .lintable_file,
-                ) catch @panic("OOM"),
-            }
-        }
-
-        return self;
-    }
-
-    fn addArgs(run: *ZlinterRun, args: []const []const u8) void {
-        const b = run.step.owner;
-        for (args) |arg|
-            run.argv.append(b.allocator, .{ .bytes = b.dupe(arg) }) catch @panic("OOM");
-    }
-
-    fn subPaths(
-        step: *std.Build.Step,
-        paths: []const std.Build.LazyPath,
-    ) error{OutOfMemory}!?[]const []const u8 {
-        if (paths.len == 0) return null;
-
-        const b = step.owner;
-
-        var list: std.ArrayList([]const u8) = try .initCapacity(
-            b.allocator,
-            paths.len,
-        );
-        defer list.deinit(b.allocator);
-
-        for (paths) |path| {
-            list.appendAssumeCapacity(
-                path.getPath3(b, step).subPathOrDot(),
-            );
-        }
-
-        return try list.toOwnedSlice(b.allocator);
-    }
-
-    fn make(step: *std.Build.Step, _: std.Build.Step.MakeOptions) !void {
-        const run: *ZlinterRun = @alignCast(@fieldParentPtr("step", step));
-        const b = run.step.owner;
-        const io = b.graph.io;
-        const arena = b.allocator;
-
-        var cwd_buff: [std.fs.max_path_bytes]u8 = undefined;
-        const cwd: BuildCwd = .init(io, &cwd_buff);
-
-        var includes: std.ArrayList(std.Build.LazyPath) = try .initCapacity(
-            b.allocator,
-            @max(1, run.include.len),
-        );
-        defer includes.deinit(b.allocator);
-
-        for (run.include) |source| {
-            switch (source) {
-                .compiled_unit => |info| {
-                    var exe = info.compile_step;
-
-                    // TODO: Use graph for import map.
-                    const graph = exe.root_module.getGraph();
-                    _ = graph;
-
-                    var inputs = exe.step.inputs;
-                    std.debug.assert(inputs.populated());
-
-                    var it = inputs.table.iterator();
-                    while (it.next()) |entry| {
-                        const p = entry.key_ptr.*;
-                        sub_paths: for (entry.value_ptr.items) |sub_path| {
-                            var buf: [std.fs.max_path_bytes]u8 = undefined;
-                            const joined_path = if (p.sub_path.len == 0) sub_path else p: {
-                                const fmt = "{s}" ++ std.fs.path.sep_str ++ "{s}";
-                                break :p std.fmt.bufPrint(
-                                    &buf,
-                                    fmt,
-                                    .{ p.sub_path, sub_path },
-                                ) catch {
-                                    std.debug.print(
-                                        "Warning: Name too long - " ++ fmt,
-                                        .{ p.sub_path, sub_path },
-                                    );
-                                    continue :sub_paths;
-                                };
-                            };
-                            std.debug.assert(joined_path.len > 0);
-
-                            if (!try isLintableFilePath(joined_path)) continue :sub_paths;
-
-                            if (cwd.relativePath(b, joined_path)) |path| {
-                                try includes.append(b.allocator, path);
-                            }
-                        }
-                    }
-                },
-                .path => |path| try includes.append(
-                    b.allocator,
-                    path,
-                ),
-            }
-        }
-        if (includes.items.len == 0) {
-            includes.appendAssumeCapacity(b.path("./"));
-        }
-
-        var excludes: std.ArrayList(std.Build.LazyPath) = try .initCapacity(b.allocator, run.exclude.len);
-        defer excludes.deinit(b.allocator);
-        for (run.exclude) |exclude| {
-            switch (exclude) {
-                .path => |path| excludes.appendAssumeCapacity(path),
-            }
-        }
-
-        const build_info_zon_bytes: []const u8 = toZonString(BuildInfo{
-            .include_paths = try subPaths(&run.step, includes.items),
-            .exclude_paths = try subPaths(&run.step, excludes.items),
-        }, b.allocator);
-
-        var environ_map = b.graph.environ_map;
-
-        var argv_list = std.ArrayList([]const u8).initCapacity(
-            arena,
-            run.argv.items.len + 1,
-        ) catch @panic("OOM");
-
-        for (run.argv.items) |arg| {
-            switch (arg) {
-                .bytes => |bytes| {
-                    try argv_list.append(arena, bytes);
-                },
-                .artifact => |artifact| {
-                    if (artifact.rootModuleTarget().os.tag == .windows) {
-                        // Windows doesn't have rpaths so add .dll search paths to PATH environment variable
-                        const chase_dynamics = true;
-                        const compiles = artifact.getCompileDependencies(chase_dynamics);
-                        for (compiles) |compile| {
-                            if (compile.root_module.resolved_target.?.result.os.tag == .windows) continue;
-                            if (compile.isDynamicLibrary()) continue;
-
-                            const bin_path = compile.getEmittedBin().getPath3(b, &run.step);
-                            const search_path = std.fs.path.dirname(b.pathResolve(&.{ bin_path.root_dir.path orelse ".", bin_path.sub_path })).?;
-                            const key = "PATH";
-                            if (environ_map.get(key)) |prev_path| {
-                                environ_map.put(key, b.fmt("{s}{c}{s}", .{
-                                    prev_path,
-                                    std.fs.path.delimiter,
-                                    search_path,
-                                })) catch @panic("OOM");
-                            } else {
-                                environ_map.put(key, b.dupePath(search_path)) catch @panic("OOM");
-                            }
-                        }
-                    }
-                    const file_path = artifact.installed_path orelse artifact.generated_bin.?.path.?;
-                    try argv_list.append(arena, b.dupe(file_path));
-                },
-            }
-        }
-
-        // We're always sending "build_info_zon_bytes" in stdin
-        argv_list.append(arena, "--stdin") catch @panic("OOM");
-
-        if (!std.process.can_spawn) {
-            return run.step.fail("Host cannot spawn zlinter:\n\t{s}", .{
-                std.Build.Step.allocPrintCmd(
-                    arena,
-                    b.build_root.path,
-                    argv_list.items,
-                ) catch @panic("OOM"),
-            });
-        }
-
-        if (b.verbose) {
-            std.debug.print("zlinter command:\n\t{s}\n", .{
-                std.Build.Step.allocPrintCmd(
-                    arena,
-                    .inherit,
-                    null,
-                    argv_list.items,
-                ) catch @panic("OOM"),
-            });
-        }
-
-        const start_time = std.Io.Clock.awake.now(io);
-
-        _ = std.debug.lockStderr(&.{});
-        defer std.debug.unlockStderr();
-
-        var child = std.process.spawn(io, .{
-            .argv = argv_list.items,
-            .cwd = .{ .dir = b.build_root.handle },
-            .environ_map = &environ_map,
-            // As we're using stdout and stderr inherit we don't want to update
-            // parent of childs progress (i.e commented out as deliberately not set)
-            // .progress_node = options.progress_node,
-            .request_resource_usage_statistics = true,
-            .stdout = .inherit,
-            .stderr = .inherit,
-            .stdin = .pipe, // Otherwise, `.Ignore` if not sending stdin
-        }) catch |err| {
-            return run.step.fail("Unable to spawn zlinter: {s}", .{@errorName(err)});
-        };
-
-        errdefer child.kill(io);
-
-        {
-            if (b.verbose)
-                std.debug.print("Writing stdin: '{s}'\n", .{build_info_zon_bytes});
-
-            var stdin_file = child.stdin.?;
-
-            var buffer: [1024]u8 = undefined;
-            var writer = stdin_file.writer(io, &buffer);
-            writer.interface.writeInt(usize, build_info_zon_bytes.len, .little) catch @panic("stdin write failed");
-            writer.interface.writeAll(build_info_zon_bytes) catch @panic("stdin write failed");
-            writer.interface.flush() catch @panic("Flush failed");
-        }
-
-        const term = try child.wait(io);
-
-        step.result_duration_ns = @intCast(start_time.untilNow(io, .awake).toNanoseconds());
-        step.result_peak_rss = child.resource_usage_statistics.getMaxRss() orelse 0;
-        step.test_results = .{};
-
-        switch (term) {
-            .exited => |code| {
-                // These codes are defined in run_linter.zig
-                const success = 0;
-                const lint_error = 2;
-                const usage_error = 3;
-                if (code == lint_error) {
-                    return step.fail("zlinter detected issues", .{});
-                } else if (code == usage_error) {
-                    return step.fail("zlinter usage error", .{});
-                } else if (code != success) {
-                    return step.fail("zlinter command crashed:\n\t{s}", .{
-                        std.Build.Step.allocPrintCmd(
-                            arena,
-                            .inherit,
-                            null,
-                            argv_list.items,
-                        ) catch @panic("OOM"),
-                    });
-                }
-            },
-            .signal, .stopped, .unknown => {
-                return step.fail("zlinter was terminated unexpectedly:\n\t{s}", .{
-                    std.Build.Step.allocPrintCmd(
-                        arena,
-                        .inherit,
-                        null,
-                        argv_list.items,
-                    ) catch @panic("OOM"),
-                });
-            },
-        }
-    }
-};
-
-fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
-    const rules_path = path.getPath3(b, null);
+fn readHtmlTemplate(b: *std.Build, path: []const u8) ![]const u8 {
+    const rules_path = try b.root.join(b.allocator, path);
 
     const io = b.graph.io;
     var file = try rules_path.root_dir.handle.openFile(io, rules_path.subPathOrDot(), .{});
@@ -1139,69 +893,6 @@ fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
 
     return try out.toOwnedSlice();
 }
-
-/// Normalised representation of the current working directory
-const BuildCwd = struct {
-    path: []const u8,
-    dir: std.Io.Dir,
-
-    pub fn init(io: std.Io, buff: *[std.fs.max_path_bytes]u8) BuildCwd {
-        const size = std.process.currentPath(io, buff) catch unreachable;
-        return .{
-            .dir = std.Io.Dir.cwd(),
-            .path = buff[0..size],
-        };
-    }
-
-    /// Returns a path relative to the current working directory or null if the
-    /// path is not relative to the current working directory.
-    ///
-    /// If the path is a relative path, we check whether it exists with the
-    /// current working directory.
-    ///
-    /// If the path is absolute, we check whether it resolves to a readable
-    /// file within the current working directory.
-    pub fn relativePath(
-        self: *const BuildCwd,
-        b: *std.Build,
-        to: []const u8,
-    ) ?std.Build.LazyPath {
-        if (std.fs.path.isAbsolute(to)) {
-            const relative = std.fs.path.relative(
-                b.allocator,
-                b.graph.cache.cwd,
-                &b.graph.environ_map,
-                self.path,
-                to,
-            ) catch |e|
-                switch (e) {
-                    error.OutOfMemory => @panic("OOM"),
-                };
-            errdefer b.allocator.free(relative);
-
-            if (relative.len != 0 and isReadable(b, &self.dir, relative)) {
-                return b.path(relative);
-            } else {
-                b.allocator.free(relative);
-                return null;
-            }
-        } else {
-            if (isReadable(b, &self.dir, to)) {
-                return b.path(b.dupe(to));
-            }
-        }
-        return null;
-    }
-
-    fn isReadable(b: *std.Build, from: *const std.Io.Dir, sub_path: []const u8) bool {
-        _ = from.access(
-            b.graph.io,
-            sub_path,
-            .{ .read = true },
-        ) catch return false;
-        return true;
-    }
-};
 
 const BuildInfo = @import("src/lib/BuildInfo.zig");
 const std = @import("std");

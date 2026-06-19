@@ -2,52 +2,65 @@
 
 /// Location of a source file to lint
 pub const LintFile = struct {
-    /// Path to the file relative to the execution of the linter. This memory
-    /// is owned and free'd in `deinit`.
-    pathname: []const u8,
+    /// Absolute normalized path used for identity and filesystem operations.
+    /// This memory is owned and free'd in `deinit`.
+    abs_path: []const u8,
 
     /// Whether or not the path was resolved but subsequently excluded by
     /// an exclude path argument. If this is true, the file should NOT be linted
     excluded: bool = false,
 
     pub fn deinit(self: *LintFile, allocator: std.mem.Allocator) void {
-        allocator.free(self.pathname);
+        allocator.free(self.abs_path);
         self.* = undefined;
     }
 };
 
-/// Returns a list of relative zig source files that should be linted.
+/// Returns a list of zig source files that should be linted.
 ///
 /// If an explicit list of file paths was provided in the args, this will be
 /// used, otherwise it'll walk relative to working path.
 pub fn allocLintFiles(io: std.Io, cwd: []const u8, dir: std.Io.Dir, maybe_files: ?[]const []const u8, gpa: std.mem.Allocator) ![]zlinter.files.LintFile {
+    _ = cwd;
+
     var file_paths = std.StringHashMap(void).init(gpa);
     defer file_paths.deinit();
+    errdefer {
+        var cleanup_it = file_paths.keyIterator();
+        while (cleanup_it.next()) |abs_path| gpa.free(abs_path.*);
+    }
+
+    var root_abs_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    const root_abs_path = root_abs_path_buffer[0..try dir.realPath(io, &root_abs_path_buffer)];
 
     if (maybe_files) |files| {
         for (files) |file_or_dir| {
+            const abs_path = try std.fs.path.resolve(gpa, &.{
+                root_abs_path,
+                file_or_dir,
+            });
+
             const sub_dir = dir.openDir(io, file_or_dir, .{ .iterate = true }) catch {
                 // Assume file if we can't open as directory:
                 // No validation is done at this point on whether the file
                 // even exists and can be opened as it'll be done when
                 // opening the file for parsing so don't double up...
-                const relative = try std.fs.path.relative(gpa, cwd, null, cwd, file_or_dir);
-                errdefer gpa.free(relative);
-
-                if (file_paths.contains(relative)) {
-                    gpa.free(relative);
-                } else {
-                    try file_paths.putNoClobber(relative, {});
-                }
+                try putLintFilePath(gpa, &file_paths, abs_path);
                 continue;
             };
-            try walkDirectory(
+            defer sub_dir.close(io);
+
+            walkDirectory(
                 io,
                 gpa,
                 sub_dir,
                 &file_paths,
-                file_or_dir,
-            );
+                abs_path,
+            ) catch |err| {
+                gpa.free(abs_path);
+                return err;
+            };
+            gpa.free(abs_path);
         }
     } else {
         try walkDirectory(
@@ -55,7 +68,7 @@ pub fn allocLintFiles(io: std.Io, cwd: []const u8, dir: std.Io.Dir, maybe_files:
             gpa,
             dir,
             &file_paths,
-            "./",
+            root_abs_path,
         );
     }
 
@@ -64,23 +77,27 @@ pub fn allocLintFiles(io: std.Io, cwd: []const u8, dir: std.Io.Dir, maybe_files:
 
     var i: usize = 0;
     var it = file_paths.keyIterator();
-    while (it.next()) |f| {
-        lint_files[i] = .{ .pathname = f.* };
+    while (it.next()) |abs_path| {
+        lint_files[i] = .{
+            .abs_path = abs_path.*,
+        };
         i += 1;
     }
 
     return lint_files;
 }
 
-/// Walks a directory and its sub directories adding any zig relative file
+/// Walks a directory and its sub directories adding any zig source file
 /// paths that should be linted to the given `file_paths` set.
 fn walkDirectory(
     io: std.Io,
     allocator: std.mem.Allocator,
     dir: std.Io.Dir,
     file_paths: *std.StringHashMap(void),
-    parent_path: []const u8,
+    parent_abs_path: []const u8,
 ) !void {
+    std.debug.assert(std.fs.path.isAbsolute(parent_abs_path));
+
     var walker = try dir.walk(allocator);
     defer walker.deinit();
 
@@ -91,20 +108,29 @@ fn walkDirectory(
         const resolved = try std.fs.path.resolve(
             allocator,
             &.{
-                parent_path,
+                parent_abs_path,
                 item.path,
             },
         );
         errdefer allocator.free(resolved);
 
-        if (file_paths.contains(resolved)) {
-            allocator.free(resolved);
-        } else {
-            try file_paths.putNoClobber(
-                resolved,
-                {},
-            );
-        }
+        try putLintFilePath(allocator, file_paths, resolved);
+    }
+}
+
+fn putLintFilePath(
+    allocator: std.mem.Allocator,
+    file_paths: *std.StringHashMap(void),
+    abs_path: []const u8,
+) !void {
+    std.debug.assert(std.fs.path.isAbsolute(abs_path));
+
+    errdefer allocator.free(abs_path);
+
+    if (file_paths.contains(abs_path)) {
+        allocator.free(abs_path);
+    } else {
+        try file_paths.putNoClobber(abs_path, {});
     }
 }
 
@@ -168,9 +194,6 @@ test "allocLintFiles - with default args" {
     var tmp_dir = std.testing.tmpDir(.{ .iterate = true });
     defer tmp_dir.cleanup();
 
-    const cwd = try std.process.currentPathAlloc(std.testing.io, std.testing.allocator);
-    defer std.testing.allocator.free(cwd);
-
     try testing.createFiles(tmp_dir.dir, @constCast(&[_][]const u8{
         testing.paths.posix("a.zig"),
         testing.paths.posix("zig"),
@@ -183,6 +206,9 @@ test "allocLintFiles - with default args" {
         testing.paths.posix("zig-out/a.zig"),
     }));
 
+    var cwd_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    const cwd = cwd_buffer[0..try tmp_dir.dir.realPath(std.testing.io, &cwd_buffer)];
+
     const lint_files = try allocLintFiles(std.testing.io, cwd, tmp_dir.dir, null, std.testing.allocator);
     defer {
         for (lint_files) |*file| file.deinit(std.testing.allocator);
@@ -190,18 +216,23 @@ test "allocLintFiles - with default args" {
     }
 
     try std.testing.expectEqual(2, lint_files.len);
+    const cwd_rel_path_0 = try std.fs.path.relative(std.testing.allocator, cwd, null, cwd, lint_files[0].abs_path);
+    defer std.testing.allocator.free(cwd_rel_path_0);
+
+    const cwd_rel_path_1 = try std.fs.path.relative(std.testing.allocator, cwd, null, cwd, lint_files[1].abs_path);
+    defer std.testing.allocator.free(cwd_rel_path_1);
+
     try testing.expectContainsExactlyStrings(&.{
         testing.paths.posix("a.zig"),
         testing.paths.posix("src/A.zig"),
-    }, &.{ lint_files[0].pathname, lint_files[1].pathname });
+    }, &.{ cwd_rel_path_0, cwd_rel_path_1 });
+    try std.testing.expect(std.fs.path.isAbsolute(lint_files[0].abs_path));
+    try std.testing.expect(std.fs.path.isAbsolute(lint_files[1].abs_path));
 }
 
 test "allocLintFiles - with arg files" {
     var tmp_dir = std.testing.tmpDir(.{ .iterate = true });
     defer tmp_dir.cleanup();
-
-    const cwd = try std.process.currentPathAlloc(std.testing.io, std.testing.allocator);
-    defer std.testing.allocator.free(cwd);
 
     try testing.createFiles(tmp_dir.dir, @constCast(&[_][]const u8{
         testing.paths.posix("a.zig"),
@@ -218,6 +249,9 @@ test "allocLintFiles - with arg files" {
         testing.paths.posix("zig-out/a.zig"),
     }));
 
+    var cwd_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    const cwd = cwd_buffer[0..try tmp_dir.dir.realPath(std.testing.io, &cwd_buffer)];
+
     const lint_files = try allocLintFiles(std.testing.io, cwd, tmp_dir.dir, &.{
         testing.paths.posix("a.zig"),
         testing.paths.posix("src/"),
@@ -230,10 +264,139 @@ test "allocLintFiles - with arg files" {
     }
 
     try std.testing.expectEqual(2, lint_files.len);
+    const cwd_rel_path_0 = try std.fs.path.relative(std.testing.allocator, cwd, null, cwd, lint_files[0].abs_path);
+    defer std.testing.allocator.free(cwd_rel_path_0);
+
+    const cwd_rel_path_1 = try std.fs.path.relative(std.testing.allocator, cwd, null, cwd, lint_files[1].abs_path);
+    defer std.testing.allocator.free(cwd_rel_path_1);
+
     try testing.expectContainsExactlyStrings(&.{
         testing.paths.posix("a.zig"),
         testing.paths.posix("src/A.zig"),
-    }, &.{ lint_files[0].pathname, lint_files[1].pathname });
+    }, &.{ cwd_rel_path_0, cwd_rel_path_1 });
+    try std.testing.expect(std.fs.path.isAbsolute(lint_files[0].abs_path));
+    try std.testing.expect(std.fs.path.isAbsolute(lint_files[1].abs_path));
+}
+
+/// Returns true if the directory contains a "build.zig" file.
+pub fn hasBuildZig(io: std.Io, dir: std.Io.Dir) !bool {
+    const stat = dir.statFile(io, "build.zig", .{}) catch |err|
+        switch (err) {
+            error.FileNotFound => return false,
+            else => |e| return e,
+        };
+    return stat.kind == .file;
+}
+
+test "hasBuildZig - with build.zig" {
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    (try tmp_dir.dir.createFile(std.testing.io, "build.zig", .{})).close(std.testing.io);
+    try std.testing.expect(try hasBuildZig(std.testing.io, tmp_dir.dir));
+}
+
+test "hasBuildZig - without build.zig" {
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    try std.testing.expect(!try hasBuildZig(std.testing.io, tmp_dir.dir));
+}
+
+test "hasBuildZig - build.zig is not a file" {
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    try tmp_dir.dir.createDirPath(std.testing.io, "build.zig");
+
+    try std.testing.expect(!try hasBuildZig(std.testing.io, tmp_dir.dir));
+}
+
+pub fn resolveBuildConfigurationPath(
+    io: std.Io,
+    gpa: std.mem.Allocator,
+    zig_exe: []const u8,
+    build_root_path: []const u8,
+) ![]const u8 {
+    const config_path_result = try std.process.run(gpa, io, .{
+        .argv = &.{
+            zig_exe,
+            "build",
+            "--print-configuration-path",
+        },
+        .cwd = .{ .path = build_root_path },
+        .stdout_limit = .limited(std.fs.max_path_bytes + 1),
+        .stderr_limit = .limited(128 * 1024),
+    });
+
+    defer {
+        gpa.free(config_path_result.stderr);
+        gpa.free(config_path_result.stdout);
+    }
+    switch (config_path_result.term) {
+        .exited => |code| if (code != 0) {
+            std.log.err("{s}", .{config_path_result.stderr});
+            return error.ConfigurationLookupFailed;
+        },
+        else => {
+            std.log.err("{s}", .{config_path_result.stderr});
+            return error.ConfigurationLookupFailed;
+        },
+    }
+
+    return try resolveConfigurationPath(
+        gpa,
+        build_root_path,
+        std.mem.trim(u8, config_path_result.stdout, " \t\r\n"),
+    );
+}
+
+fn resolveConfigurationPath(
+    gpa: std.mem.Allocator,
+    build_root: []const u8,
+    config_path: []const u8,
+) ![]const u8 {
+    if (std.fs.path.isAbsolute(config_path)) return gpa.dupe(u8, config_path);
+    return std.fs.path.join(gpa, &.{ build_root, config_path });
+}
+
+pub fn resolveLazyPath(
+    path: std.Build.Configuration.LazyPath,
+    config: *const std.Build.Configuration,
+    gpa: std.mem.Allocator,
+    build_root_path: []const u8,
+) !?[]const u8 {
+    switch (path) {
+        .source_path => |source_path| {
+            const root = if (source_path.owner.get(config)) |pkg|
+                pkg.root_path.slice(config)
+            else
+                build_root_path;
+
+            return try std.fs.path.resolve(gpa, &.{
+                root,
+                source_path.sub_path.slice(config),
+            });
+        },
+        .relative => |rel| {
+            const sub_path = rel.sub_path.slice(config);
+
+            const root = switch (rel.flags.base) {
+                .cwd, .build_root => build_root_path,
+                .local_cache,
+                .global_cache,
+                .zig_exe,
+                .zig_lib,
+                .install_prefix,
+                .install_lib,
+                .install_bin,
+                .install_include,
+                => return null,
+            };
+            return try std.fs.path.resolve(gpa, &.{ root, sub_path });
+        },
+        .generated => return null,
+    }
 }
 
 const std = @import("std");

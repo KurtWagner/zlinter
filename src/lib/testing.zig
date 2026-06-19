@@ -27,8 +27,10 @@ pub fn loadFakeDocument(
     try file_writer.interface.writeAll(contents);
     try file_writer.interface.flush();
 
+    const file_id = try context.resolveFile(real_path);
+
     const doc = try arena.create(LintDocument);
-    try context.initDocument(real_path, arena, doc);
+    try context.initDocument(file_id, arena, doc);
     return doc;
 }
 
@@ -45,6 +47,35 @@ pub fn writeFile(dir: std.Io.Dir, file_name: []const u8, contents: []const u8) !
 
     try file_writer.interface.writeAll(contents);
     try file_writer.interface.flush();
+}
+
+pub fn initFakeContext(
+    arena: std.mem.Allocator,
+    io: std.Io,
+) LintContext {
+    assertTestOnly();
+
+    var context: LintContext = .{
+        .io = io,
+        .session_arena = arena,
+        // TODO: If we really ever need to we can pass zig exe through a build
+        // config and evaluate lib dir from `zig env` but I think overkill for
+        // our unit tests, so leaving as this for now...
+        .zig_exe = "zig",
+        .zig_lib_directory = ".",
+        .cwd = ".",
+        .file_store = .init(arena),
+        .module_store = .init(arena),
+        .build_config_store = .init(arena),
+        .type_store = .init(arena),
+        .decl_store = .init(
+            arena,
+            io,
+            ".",
+        ),
+    };
+    context.init(null) catch @panic("failed to initialize fake lint context");
+    return context;
 }
 
 pub const paths = struct {
@@ -191,16 +222,21 @@ pub fn expectSingleNodeOfTag(tree: Ast, comptime tags: []const Ast.Node.Tag) !As
 }
 
 /// Expects at least one node and returns it matching a set of tags
-pub fn expectNodeOfTagFirst(doc: *const LintDocument, comptime tags: []const Ast.Node.Tag) !Ast.Node.Index {
+pub fn expectNodeOfTagFirst(
+    context: *const LintContext,
+    doc: *const LintDocument,
+    comptime tags: []const Ast.Node.Tag,
+) !Ast.Node.Index {
     assertTestOnly();
 
+    const tree = doc.tree(context);
     var it = try doc.nodeLineageIterator(.root, std.testing.allocator);
     defer it.deinit();
 
     while (try it.next()) |node_and_children| {
         const node = node_and_children[0];
         inline for (tags) |tag| {
-            if (doc.handle.tree.nodeTag(node) == tag) {
+            if (tree.nodeTag(node) == tag) {
                 return node;
             }
         }
@@ -214,7 +250,9 @@ fn runRule(
     rule: LintRule,
     file_name: []const u8,
     contents: [:0]const u8,
-    options: RunOptions,
+    options: struct {
+        config: ?*anyopaque = null,
+    },
 ) !?LintResult {
     assertTestOnly();
     const io = std.testing.io;
@@ -222,17 +260,7 @@ fn runRule(
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    const environ_map: std.process.Environ.Map = .init(arena.allocator());
-
-    var context: LintContext = undefined;
-    try context.init(
-        .{},
-        std.testing.io,
-        &environ_map,
-        std.testing.allocator,
-        arena.allocator(),
-    );
-    defer context.deinit();
+    var context = initFakeContext(arena.allocator(), std.testing.io);
 
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -245,7 +273,7 @@ fn runRule(
         arena.allocator(),
     );
 
-    const tree = doc.handle.tree;
+    const tree = doc.tree(&context);
     std.testing.expectEqual(tree.errors.len, 0) catch |err| {
         std.debug.print("Failed to parse AST:\n{s}\n", .{contents});
         for (tree.errors) |ast_err| {
@@ -262,7 +290,7 @@ fn runRule(
         &context,
         doc,
         std.testing.allocator,
-        options,
+        .{ .config = options.config },
     );
 }
 
@@ -401,7 +429,6 @@ const LintProblemSeverity = @import("rules.zig").LintProblemSeverity;
 const LintProblem = @import("results.zig").LintProblem;
 const LintResult = @import("results.zig").LintResult;
 const LintProblemFix = @import("results.zig").LintProblemFix;
-const RunOptions = @import("rules.zig").RunOptions;
 const strings = @import("strings.zig");
 const Ast = std.zig.Ast;
 

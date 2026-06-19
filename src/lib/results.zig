@@ -4,17 +4,21 @@
 pub const LintResult = struct {
     const Self = @This();
 
-    file_path: []const u8,
+    abs_path: []const u8,
     problems: []LintProblem,
 
     /// Initializes a result. Caller must call deinit once done to free memory.
     pub fn init(
         allocator: std.mem.Allocator,
-        file_path: []const u8,
+        abs_path: []const u8,
         problems: []LintProblem,
     ) error{OutOfMemory}!Self {
+        std.debug.assert(std.fs.path.isAbsolute(abs_path));
+
+        const owned_abs_path = try allocator.dupe(u8, abs_path);
+
         return .{
-            .file_path = try allocator.dupe(u8, file_path),
+            .abs_path = owned_abs_path,
             .problems = problems,
         };
     }
@@ -24,7 +28,7 @@ pub const LintResult = struct {
             err.deinit(allocator);
         }
         allocator.free(self.problems);
-        allocator.free(self.file_path);
+        allocator.free(self.abs_path);
     }
 };
 

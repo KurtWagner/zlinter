@@ -48,59 +48,59 @@ warning Callable returning `type` should be TitleCase [test_cases/function_namin
  37 |     fn badFnType() type {
     |        ^^^^^^^^^
 
-error Function argument should be snake_case [test_cases/function_naming/function_naming.input.zig:43:28] function_naming
+error Function argument should be snake_case [test_cases/function_naming/function_naming.input.zig:58:28] function_naming
 
- 43 | fn exampleA(good_int: u32, BadInt: u32, badInt: u32) void {
+ 58 | fn exampleA(good_int: u32, BadInt: u32, badInt: u32) void {
     |                            ^^^^^^
 
-error Function argument should be snake_case [test_cases/function_naming/function_naming.input.zig:43:41] function_naming
+error Function argument should be snake_case [test_cases/function_naming/function_naming.input.zig:58:41] function_naming
 
- 43 | fn exampleA(good_int: u32, BadInt: u32, badInt: u32) void {
+ 58 | fn exampleA(good_int: u32, BadInt: u32, badInt: u32) void {
     |                                         ^^^^^^
 
-error Function argument of type should be TitleCase [test_cases/function_naming/function_naming.input.zig:50:29] function_naming
+error Function argument of type should be TitleCase [test_cases/function_naming/function_naming.input.zig:65:29] function_naming
 
- 50 | fn exampleB(GoodType: type, bad_type: type, badType: @TypeOf(int_val)) void {
+ 65 | fn exampleB(GoodType: type, bad_type: type, badType: @TypeOf(int_val)) void {
     |                             ^^^^^^^^
 
-error Function argument should be snake_case [test_cases/function_naming/function_naming.input.zig:50:45] function_naming
+error Function argument should be snake_case [test_cases/function_naming/function_naming.input.zig:65:45] function_naming
 
- 50 | fn exampleB(GoodType: type, bad_type: type, badType: @TypeOf(int_val)) void {
+ 65 | fn exampleB(GoodType: type, bad_type: type, badType: @TypeOf(int_val)) void {
     |                                             ^^^^^^^
 
-error Function argument of function should be camelCase [test_cases/function_naming/function_naming.input.zig:57:40] function_naming
+error Function argument of function should be camelCase [test_cases/function_naming/function_naming.input.zig:72:40] function_naming
 
- 57 | fn exampleC(goodFn: *const fn () void, bad_fn: fn () void, BadFn: goodFn) void {
+ 72 | fn exampleC(goodFn: *const fn () void, bad_fn: fn () void, BadFn: goodFn) void {
     |                                        ^^^^^^
 
-error Function argument of function should be camelCase [test_cases/function_naming/function_naming.input.zig:57:60] function_naming
+error Function argument of function should be camelCase [test_cases/function_naming/function_naming.input.zig:72:60] function_naming
 
- 57 | fn exampleC(goodFn: *const fn () void, bad_fn: fn () void, BadFn: goodFn) void {
+ 72 | fn exampleC(goodFn: *const fn () void, bad_fn: fn () void, BadFn: goodFn) void {
     |                                                            ^^^^^
 
-error Function argument of type function should be TitleCase [test_cases/function_naming/function_naming.input.zig:64:40] function_naming
+error Function argument of type function should be TitleCase [test_cases/function_naming/function_naming.input.zig:79:40] function_naming
 
- 64 | fn exampleD(GoodFn: *const fn () type, bad_fn: fn () type, badFn: goodFnType) void {
+ 79 | fn exampleD(GoodFn: *const fn () type, bad_fn: fn () type, badFn: goodFnType) void {
     |                                        ^^^^^^
 
-error Function argument of type function should be TitleCase [test_cases/function_naming/function_naming.input.zig:64:60] function_naming
+error Function argument of type function should be TitleCase [test_cases/function_naming/function_naming.input.zig:79:60] function_naming
 
- 64 | fn exampleD(GoodFn: *const fn () type, bad_fn: fn () type, badFn: goodFnType) void {
+ 79 | fn exampleD(GoodFn: *const fn () type, bad_fn: fn () type, badFn: goodFnType) void {
     |                                                            ^^^^^
 
-error Function argument should be snake_case [test_cases/function_naming/function_naming.input.zig:75:27] function_naming
+error Function argument should be snake_case [test_cases/function_naming/function_naming.input.zig:90:27] function_naming
 
- 75 | fn exampleG(_: *const fn (badInt: u32, bad_type: type, BadFn: fn () void) void) void {}
+ 90 | fn exampleG(_: *const fn (badInt: u32, bad_type: type, BadFn: fn () void) void) void {}
     |                           ^^^^^^
 
-error Function argument of type should be TitleCase [test_cases/function_naming/function_naming.input.zig:75:40] function_naming
+error Function argument of type should be TitleCase [test_cases/function_naming/function_naming.input.zig:90:40] function_naming
 
- 75 | fn exampleG(_: *const fn (badInt: u32, bad_type: type, BadFn: fn () void) void) void {}
+ 90 | fn exampleG(_: *const fn (badInt: u32, bad_type: type, BadFn: fn () void) void) void {}
     |                                        ^^^^^^^^
 
-error Function argument of function should be camelCase [test_cases/function_naming/function_naming.input.zig:75:56] function_naming
+error Function argument of function should be camelCase [test_cases/function_naming/function_naming.input.zig:90:56] function_naming
 
- 75 | fn exampleG(_: *const fn (badInt: u32, bad_type: type, BadFn: fn () void) void) void {}
+ 90 | fn exampleG(_: *const fn (badInt: u32, bad_type: type, BadFn: fn () void) void) void {}
     |                                                        ^^^^^
 
 x 17 errors

@@ -54,7 +54,7 @@ pub const Config = struct {
 
 const ParamKind = struct {
     name: []const u8,
-    kind: zlinter.session.LintContext.TypeKind,
+    kind: zlinter.session.TypeStore.TypeSummary,
 };
 
 /// Builds and returns the function_naming rule.
@@ -63,6 +63,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.function_naming),
+        .execution = .compile_context,
         .run = &run,
     };
 }
@@ -80,7 +81,7 @@ fn run(
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
-    const tree = doc.handle.tree;
+    const tree = doc.tree(context);
 
     var index: u32 = 1; // Skip root node at 0
     nodes: while (index < tree.nodes.len) : (index += 1) {
@@ -99,13 +100,13 @@ fn run(
             const fn_name_token = fn_proto.name_token.?;
             const fn_name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(fn_name_token));
 
-            const return_type = (try context.resolveTypeOfTypeNode(
-                doc,
-                fn_proto.ast.return_type.unwrap().?,
-            )) orelse continue :nodes;
+            const return_type = functionReturnTypeSummary(
+                tree,
+                fn_proto,
+            ) orelse continue :nodes;
 
             const error_message: ?[]const u8, const severity: ?zlinter.rules.LintProblemSeverity = msg: {
-                if (return_type.isMetaType()) {
+                if (functionReturnsType(return_type)) {
                     if (!config.function_that_returns_type.style.check(fn_name)) {
                         break :msg .{
                             try std.fmt.allocPrint(gpa, "Callable returning `type` should be {s}", .{config.function_that_returns_type.style.name()}),
@@ -161,7 +162,7 @@ fn run(
 
                 if (identifier.len == 1 and identifier[0] == '_') continue;
 
-                const type_kind = try classifyParamTypeKind(
+                const type_kind = classifyParamTypeKind(
                     context,
                     doc,
                     tree,
@@ -171,11 +172,18 @@ fn run(
 
                 if (type_kind) |kind| {
                     switch (kind) {
-                        .@"fn", .fn_type, .fn_returns_type, .fn_type_returns_type => {
+                        .@"fn", .fn_returns_type => {
                             try param_kinds.append(gpa, .{
                                 .name = identifier,
                                 .kind = kind,
                             });
+                        },
+                        .type => |type_value| switch (type_value.kind) {
+                            .@"fn", .fn_returns_type => try param_kinds.append(gpa, .{
+                                .name = identifier,
+                                .kind = kind,
+                            }),
+                            else => {},
                         },
                         else => {},
                     }
@@ -183,9 +191,13 @@ fn run(
 
                 const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const desc: []const u8 = style: {
                     break :style switch (type_kind orelse .other) {
-                        .fn_type, .@"fn" => .{ config.function_arg_that_is_fn, "Function argument of function" },
-                        .fn_type_returns_type, .fn_returns_type => .{ config.function_arg_that_is_type_fn, "Function argument of type function" },
-                        .type => .{ config.function_arg_that_is_type, "Function argument of type" },
+                        .@"fn" => .{ config.function_arg_that_is_fn, "Function argument of function" },
+                        .fn_returns_type => .{ config.function_arg_that_is_type_fn, "Function argument of type function" },
+                        .type => |type_value| switch (type_value.kind) {
+                            .@"fn" => .{ config.function_arg_that_is_fn, "Function argument of function" },
+                            .fn_returns_type => .{ config.function_arg_that_is_type_fn, "Function argument of type function" },
+                            else => .{ config.function_arg_that_is_type, "Function argument of type" },
+                        },
                         else => .{ config.function_arg, "Function argument" },
                     };
                 };
@@ -206,11 +218,29 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.path,
+            doc.absPath(context),
             try lint_problems.toOwnedSlice(gpa),
         )
     else
         null;
+}
+
+fn functionReturnTypeSummary(
+    tree: Ast,
+    fn_proto: Ast.full.FnProto,
+) ?zlinter.session.TypeStore.TypeSummary {
+    const return_type_node = fn_proto.ast.return_type.unwrap() orelse return null;
+    return zlinter.session.TypeStore.summarizeTypeNode(
+        tree,
+        return_type_node,
+    );
+}
+
+fn functionReturnsType(return_type: zlinter.session.TypeStore.TypeSummary) bool {
+    return switch (return_type) {
+        .type => |type_value| type_value.kind == .unknown,
+        else => false,
+    };
 }
 
 // TODO: Move this classification into a shared helper (e.g., in session/context)
@@ -221,73 +251,76 @@ fn classifyParamTypeKind(
     tree: Ast,
     param: Ast.Node.Index,
     seen_param_kinds: []const ParamKind,
-) !?zlinter.session.LintContext.TypeKind {
+) ?zlinter.session.TypeStore.TypeSummary {
     const param_type_node = zlinter.ast.unwrapNode(
         tree,
         param,
         .{},
     );
 
-    var type_kind = try context.resolveTypeKind(
-        doc,
-        .{ .type_node = param },
-    );
-    if ((type_kind orelse .other) != .other) {
-        if (type_kind == .type) {
-            const is_type_literal = tree.nodeTag(param_type_node) == .identifier and
-                std.mem.eql(u8, tree.getNodeSource(param_type_node), "type");
-            if (!is_type_literal) return .other;
-        }
-        return type_kind;
-    }
+    var type_summary: ?zlinter.session.TypeStore.TypeSummary =
+        zlinter.session.TypeStore.summarizeTypeNode(tree, param);
+    if (paramValueKindFromTypeAnnotation(
+        tree,
+        param_type_node,
+        type_summary,
+    )) |param_value_kind|
+        return param_value_kind;
 
-    if (tree.nodeTag(param_type_node) != .identifier) return type_kind;
+    if (tree.nodeTag(param_type_node) != .identifier) return type_summary;
 
     const type_name = tree.getNodeSource(param_type_node);
 
     for (seen_param_kinds) |param_kind| {
         if (std.mem.eql(u8, param_kind.name, type_name)) {
             return switch (param_kind.kind) {
-                .fn_type => .@"fn",
-                .fn_type_returns_type => .fn_returns_type,
+                .type => |type_value| switch (type_value.kind) {
+                    .@"fn" => .@"fn",
+                    .fn_returns_type => .fn_returns_type,
+                    else => param_kind.kind,
+                },
                 else => param_kind.kind,
             };
         }
     }
 
-    const type_name_token = tree.firstToken(param_type_node);
-    const source_index = tree.tokens.items(.start)[type_name_token];
-    if (try context.analyser.lookupSymbolGlobal(
-        doc.handle,
-        type_name,
-        source_index,
-    )) |decl_with_handle| {
-        if (decl_with_handle.decl == .ast_node) {
-            if (decl_with_handle.handle.tree.fullVarDecl(
-                decl_with_handle.decl.ast_node,
-            )) |var_decl| {
-                type_kind = try context.resolveTypeKind(
-                    doc,
-                    .{ .var_decl = var_decl },
-                );
-            }
+    if (context.resolveDeclOfNode(doc, param_type_node)) |decl_id| {
+        if (context.decl_store.declResolvedType(decl_id)) |type_id| {
+            type_summary = context.type_store.summary(type_id);
         }
     }
-    if ((type_kind orelse .other) != .other) return type_kind;
+    if (paramValueKindFromTypeAnnotation(
+        tree,
+        param_type_node,
+        type_summary,
+    )) |param_value_kind|
+        return param_value_kind;
 
-    if (try context.resolveTypeOfTypeNode(doc, param)) |param_type| {
-        if (param_type.isTypeFunc()) return .fn_type_returns_type;
-        if (param_type.isFunc()) return .fn_type;
-    }
+    if (std.mem.endsWith(u8, type_name, "FnType")) return .{ .type = .{ .kind = .fn_returns_type } };
 
-    if (std.mem.endsWith(u8, type_name, "FnType")) return .fn_type_returns_type;
-    if (std.mem.endsWith(u8, type_name, "Type")) return .type;
+    return type_summary;
+}
 
-    return type_kind;
+fn paramValueKindFromTypeAnnotation(
+    tree: Ast,
+    param_type_node: Ast.Node.Index,
+    maybe_type_summary: ?zlinter.session.TypeStore.TypeSummary,
+) ?zlinter.session.TypeStore.TypeSummary {
+    const type_summary = maybe_type_summary orelse return null;
+    return switch (type_summary) {
+        .unknown, .other, .primitive => null,
+        .@"fn", .fn_returns_type => type_summary,
+        .type => {
+            const is_type_literal = tree.nodeTag(param_type_node) == .identifier and
+                std.mem.eql(u8, tree.getNodeSource(param_type_node), "type");
+            return if (is_type_literal) type_summary else .other;
+        },
+        .instance, .slice, .array => .other,
+    };
 }
 
 /// Returns fn proto if node is fn proto and has a name token.
-pub fn namedFnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?Ast.full.FnProto {
+fn namedFnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?Ast.full.FnProto {
     if (fnProto(tree, buffer, node)) |fn_proto| {
         if (fn_proto.name_token != null) return fn_proto;
     }
@@ -295,7 +328,7 @@ pub fn namedFnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index)
 }
 
 /// Returns fn proto if node is fn proto and has a name token.
-pub fn fnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?Ast.full.FnProto {
+fn fnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?Ast.full.FnProto {
     if (switch (tree.nodeTag(node)) {
         .fn_proto => tree.fnProto(node),
         .fn_proto_multi => tree.fnProtoMulti(node),
@@ -450,6 +483,80 @@ test "general" {
                 .message = "Function argument should be snake_case",
             },
         },
+    );
+}
+
+test "function parameters named after value instances remain snake_case" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\
+        \\const Ast = struct {
+        \\    const Node = struct {
+        \\        const Index = u32;
+        \\    };
+        \\};
+        \\const Thing = struct {};
+        \\
+        \\fn takesNamedTypes(tree: Ast, node: Ast.Node.Index, thing: Thing) void {
+        \\    _ = tree;
+        \\    _ = node;
+        \\    _ = thing;
+        \\}
+        \\
+        \\fn takesGeneric(T: type, value: T, BadValue: T) void {
+        \\    _ = T;
+        \\    _ = value;
+        \\    _ = BadValue;
+        \\}
+        \\
+        \\fn takesTypes(GoodType: type, bad_type: type) void {
+        \\    _ = GoodType;
+        \\    _ = bad_type;
+        \\}
+        \\
+        \\fn takesFunctions(goodFn: *const fn () void, bad_fn: *const fn () void) void {
+        \\    _ = goodFn;
+        \\    _ = bad_fn;
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "BadValue",
+                .message = "Function argument should be snake_case",
+            },
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "bad_type",
+                .message = "Function argument of type should be TitleCase",
+            },
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "bad_fn",
+                .message = "Function argument of function should be camelCase",
+            },
+        },
+    );
+}
+
+test "function returning error set is not treated as returning type" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\
+        \\fn logAndReturnWriteFailure(comptime suffix: []const u8, err: anyerror) error{WriteFailure} {
+        \\    _ = suffix;
+        \\    _ = err;
+        \\    return error.WriteFailure;
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{},
     );
 }
 

@@ -18,9 +18,9 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: *st
     for (input.results) |file_result| {
         defer _ = file_arena.reset(.retain_capacity);
 
-        var file = input.dir.openFile(
+        var file = std.Io.Dir.openFileAbsolute(
             input.io,
-            file_result.file_path,
+            file_result.abs_path,
             .{ .mode = .read_only },
         ) catch |e| return logAndReturnWriteFailure("Open file", e);
         defer file.close(input.io);
@@ -31,6 +31,14 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: *st
             file_arena.allocator(),
             &file_reader.interface,
         ) catch |e| return logAndReturnWriteFailure("Render", e);
+
+        const cwd_rel_path = std.fs.path.relative(
+            file_arena.allocator(),
+            input.cwd,
+            null,
+            input.cwd,
+            file_result.abs_path,
+        ) catch return error.OutOfMemory;
 
         for (file_result.problems) |problem| {
             if (@intFromEnum(problem.severity) < @intFromEnum(input.min_severity)) {
@@ -58,7 +66,7 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: *st
                 problem.message,
 
                 input.tty.ansiOrEmpty(&.{.underline}),
-                file_result.file_path,
+                cwd_rel_path,
                 // "+ 1" because line and column are zero indexed but
                 // when printing a link to a file it starts at 1.
                 start_line + 1,
