@@ -332,6 +332,24 @@ merge conflicts.
 
 **Auto fixing is an experimental feature so only use it if you use source control - always back up your code first!**
 
+### Import chunks
+
+An import chunk is a consecutive group of import declarations in the same scope.
+
+When `allow_line_separated_chunks` is `true`, imports separated by one or more blank lines are treated as separate chunks, and each chunk is checked independently.
+
+```zig
+const a = @import("a");
+const b = @import("b");
+
+const d = @import("d");
+const c = @import("c");
+```
+
+In this example, `a`/`b` and `d`/`c` are checked as separate chunks.
+
+Comments do not split chunks. A `//` comment directly attached to an import is treated as part of that import's chunk. A `//!` doc comment is not treated as an attachable import comment.
+
 **Config options:**
 
 * `severity`

@@ -13,6 +13,19 @@
 //!
 //! `import_ordering` supports auto fixes with the `--fix` flag. It may take multiple runs with `--fix` to fix all places. Fixes may be omitted when comments are attached to imports.
 //!
+//! ### Import chunks
+//!
+//! An import chunk is a consecutive group of import declarations in the same
+//! scope.
+//!
+//! When `allow_line_separated_chunks` is `true`, imports separated by one or
+//! more blank lines are treated as separate chunks, and each chunk is checked
+//! independently.
+//!
+//! Comments do not split chunks. A `//` comment directly attached to an import
+//! is treated as part of that import's chunk. A `//!` doc comment is not treated
+//! as an attachable import comment.
+//!
 //! **Auto fixing is an experimental feature so only use it if you use source control - always back up your code first!**
 
 /// Config for import_ordering rule.
@@ -24,9 +37,10 @@ pub const Config = struct {
     /// name.
     order: zlinter.rules.LintTextOrder = .alphabetical_ascending,
 
-    /// Whether or not the linter allows imports to be separated by blank
-    /// lines (i.e., separate blocks), where each chunk needs to follow the
-    /// linter rules or whether they must all follow as a single chunk.
+    /// Whether imports separated by blank lines are treated as independent
+    /// chunks.
+    /// When false, all imports in the same scope must form one contiguous
+    /// chunk.
     allow_line_separated_chunks: bool = true,
 
     // TODO(#52): Decide whether or not to implement this:
@@ -197,7 +211,7 @@ fn swapImportBlocksFix(
 
     var text = try std.ArrayList(u8).initCapacity(
         gpa,
-        second_range.end_offset - first_range.start_offset,
+        second_range.end_offset + 1 - first_range.start_offset,
     );
     errdefer text.deinit(gpa);
 
