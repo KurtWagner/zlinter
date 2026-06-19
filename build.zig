@@ -596,6 +596,8 @@ fn buildStep(
 
     if (b.graph.verbose) run.addArg("--verbose");
 
+    // TODO: #149 - we may want to separate "build config" include and exclude
+    // from runtime include and exclude to reflect the previous BuildInfo logic
     if (include.len > 0) {
         run.addArg("--include");
         for (include) |source| {
