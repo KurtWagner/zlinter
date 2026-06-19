@@ -23,6 +23,8 @@ pub const ModuleEntry = struct {
     module_id_by_import_name: std.StringHashMapUnmanaged(ModuleId),
 };
 
+// TODO: #149 - Need to think about this one some more:
+// zlinter-disable-next-line declaration_naming
 const ModuleKeyContext = struct {
     pub fn eql(self: ModuleKeyContext, a: ModuleKey, b: ModuleKey) bool {
         _ = self;

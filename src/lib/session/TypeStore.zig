@@ -127,6 +127,8 @@ pub const TypeSummary = union(Type) {
     }
 };
 
+// TODO: #149 - Need to think about this one some more:
+// zlinter-disable-next-line declaration_naming
 const TypeSummaryContext = struct {
     pub fn eql(self: TypeSummaryContext, a: TypeSummary, b: TypeSummary) bool {
         _ = self;
