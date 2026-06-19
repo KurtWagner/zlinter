@@ -53,7 +53,8 @@ pub fn resolve(
     const zone = tracy.traceNamed(@src(), "BuildConfigStore.resolve");
     defer zone.end();
 
-    var fba_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    // 2x as we use it for generating two paths.
+    var fba_buffer: [std.fs.max_path_bytes * 2]u8 = undefined;
     var fba: std.heap.FixedBufferAllocator = .init(&fba_buffer);
 
     const normal_path = std.fs.path.resolve(
@@ -85,10 +86,10 @@ pub fn resolve(
     };
     std.log.info(" = Root: {s}", .{build_root_path});
 
-    // TODO: #147 - catch and report build errors appropriately otherwise it appears as missing build config...
+    // TODO: #149 - catch and report build errors appropriately otherwise it appears as missing build config...
     const config_path = files.resolveBuildConfigurationPath(
         io,
-        self.arena,
+        fba.allocator(),
         zig_exe,
         build_root_path,
     ) catch |e| {
@@ -99,8 +100,6 @@ pub fn resolve(
         });
         return error.ResolutionError;
     };
-    // TODO: #149 - use fba with max path (find way to share this for paths)
-    defer self.arena.free(config_path);
 
     var file = std.Io.Dir.cwd().openFile(
         io,
