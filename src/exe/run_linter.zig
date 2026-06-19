@@ -280,13 +280,21 @@ fn runLinterRules(
 
     var context: zlinter.session.LintContext = .{
         .io = io,
-        .gpa = gpa,
+        .arena = arena.allocator(),
         .zig_exe = zig_exe,
         .zig_lib_directory = zig_lib_directory,
         .cwd = cwd,
+        .file_store = .init(arena.allocator()),
+        .module_store = .init(arena.allocator()),
+        .build_config_store = .init(arena.allocator()),
+        .type_store = .init(arena.allocator()),
+        .decl_store = .init(
+            arena.allocator(),
+            io,
+            zig_lib_directory,
+        ),
     };
     try context.init();
-    defer context.deinit();
 
     var enabled_rules = enabledRules(args.rules);
 
@@ -364,11 +372,12 @@ fn runLinterRules(
         }
 
         var doc: zlinter.session.LintDocument = undefined;
-        context.initDocument(file_id, context.gpa, &doc) catch |e| {
+        context.initDocument(file_id, arena.allocator(), &doc) catch |e| {
             printer.println(.err, "Unable to open file: {s} ({s})", .{ cwd_rel_path, @errorName(e) });
             continue :files;
         };
-        defer doc.deinit(context.gpa);
+        // TODO: #149 - should use a dedicated arena and no need to deinit.
+        defer doc.deinit(arena.allocator());
 
         printer.println(.verbose, "  - Load document: {d}ms", .{timer.lapMilliseconds()});
         const tree = doc.tree(&context);

@@ -394,8 +394,7 @@ test "hasNonFreeingAllocatorParam" {
 
         defer _ = arena.reset(.retain_capacity);
 
-        var context = zlinter.testing.initFakeContext(std.testing.allocator, std.testing.io);
-        defer context.deinit();
+        var context = zlinter.testing.initFakeContext(arena.allocator(), std.testing.io);
 
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();

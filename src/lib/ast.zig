@@ -730,8 +730,7 @@ test "deferBlock - has expected children" {
 
         defer _ = arena.reset(.retain_capacity);
 
-        var context = testing.initFakeContext(std.testing.allocator, std.testing.io);
-        defer context.deinit();
+        var context = testing.initFakeContext(arena.allocator(), std.testing.io);
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
 
@@ -1327,8 +1326,7 @@ test "fnCall - direct call without params" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var context = testing.initFakeContext(std.testing.allocator, std.testing.io);
-    defer context.deinit();
+    var context = testing.initFakeContext(arena.allocator(), std.testing.io);
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
@@ -1368,8 +1366,7 @@ test "fnCall - single field call with params" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var context = testing.initFakeContext(std.testing.allocator, std.testing.io);
-    defer context.deinit();
+    var context = testing.initFakeContext(arena.allocator(), std.testing.io);
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
@@ -1437,8 +1434,7 @@ test "findFnCall" {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
 
-        var context = testing.initFakeContext(std.testing.allocator, std.testing.io);
-        defer context.deinit();
+        var context = testing.initFakeContext(arena.allocator(), std.testing.io);
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
 

@@ -2,9 +2,6 @@
 //! of linting all zig source files.
 const LintContext = @This();
 
-gpa: std.mem.Allocator,
-session_arena: *std.heap.ArenaAllocator = undefined,
-arena_allocator: *PanicAllocator = undefined,
 io: std.Io,
 
 /// Externally owned slice to zig executable path
@@ -16,6 +13,7 @@ zig_lib_directory: []const u8,
 /// Externally owned slice to current working directory
 cwd: []const u8,
 
+arena: std.mem.Allocator,
 compile_contexts: std.MultiArrayList(CompileContext) = .empty,
 file_store: FileStore = undefined, // zlinter-disable-current-line no_undefined - set in init
 module_store: ModuleStore = undefined, // zlinter-disable-current-line no_undefined - set in init
@@ -27,35 +25,9 @@ pub fn init(self: *LintContext) !void {
     const zone = tracy.traceNamed(@src(), "LintContext.init");
     defer zone.end();
 
-    self.session_arena = self.gpa.create(std.heap.ArenaAllocator) catch @panic("OOM");
-    self.session_arena.* = .init(self.gpa);
-    self.arena_allocator = self.gpa.create(PanicAllocator) catch @panic("OOM");
-    self.arena_allocator.* = .init(self.session_arena.allocator());
-    errdefer self.deinit();
-
-    const arena = self.arena_allocator.allocator();
-
-    self.file_store = .init(arena);
-    self.module_store = .init(arena);
-    self.build_config_store = .init(arena);
-    self.type_store = .init(arena);
-
-    // TODO: #149 - refactor to not do this
-    self.decl_store = .init(
-        arena,
-        self.io,
-        self.zig_lib_directory,
-    );
-
     // Maybe one day we will care enough to use a fake for tests but for now
     // it's fine to ignore...
     if (!builtin.is_test) try self.initBuildConfig();
-}
-
-pub fn deinit(self: *LintContext) void {
-    self.session_arena.deinit();
-    self.gpa.destroy(self.arena_allocator);
-    self.gpa.destroy(self.session_arena);
 }
 
 fn initBuildConfig(self: *LintContext) !void {
@@ -85,8 +57,6 @@ fn consumeBuildConfigStep(
     const zone = tracy.traceNamed(@src(), "LintContext.consumeBuildConfigStep");
     defer zone.end();
 
-    const arena = self.arena_allocator.allocator();
-
     const build_config = self.build_config_store.buildConfig(config_id);
     const step = build_config.steps[@intFromEnum(step_index)];
 
@@ -106,7 +76,7 @@ fn consumeBuildConfigStep(
         return;
     };
 
-    self.compile_contexts.append(arena, .{
+    self.compile_contexts.append(self.arena, .{
         .step_index = step_index,
         .root_module = root_module_id,
     }) catch unreachable;
@@ -123,26 +93,24 @@ fn resolveBuildModule(
     const zone = tracy.traceNamed(@src(), "LintContext.resolveBuildModule");
     defer zone.end();
 
-    const arena = self.arena_allocator.allocator();
-
     const build_config = self.build_config_store.buildConfig(config_id);
 
     var module_id_by_build_module_index: std.AutoHashMapUnmanaged(
         std.Build.Configuration.Module.Index,
         ModuleStore.ModuleId,
     ) = .empty;
-    defer module_id_by_build_module_index.deinit(arena);
+    defer module_id_by_build_module_index.deinit(self.arena);
 
     var queue: std.ArrayList(std.Build.Configuration.Module.Index) = .empty;
-    defer queue.deinit(arena);
+    defer queue.deinit(self.arena);
 
     const root_module_id = try self.resolveBuildModuleShallow(
         config_id,
         build_module_index,
     ) orelse return null;
 
-    module_id_by_build_module_index.put(arena, build_module_index, root_module_id) catch unreachable;
-    queue.append(arena, build_module_index) catch unreachable;
+    module_id_by_build_module_index.put(self.arena, build_module_index, root_module_id) catch unreachable;
+    queue.append(self.arena, build_module_index) catch unreachable;
 
     while (queue.pop()) |current_build_module_index| {
         const current_module_id = module_id_by_build_module_index.get(current_build_module_index).?;
@@ -158,11 +126,11 @@ fn resolveBuildModule(
         var module_id_by_import_name: std.StringHashMapUnmanaged(ModuleStore.ModuleId) = .empty;
         errdefer {
             var it = module_id_by_import_name.keyIterator();
-            while (it.next()) |key| arena.free(key.*);
-            module_id_by_import_name.deinit(arena);
+            while (it.next()) |key| self.arena.free(key.*);
+            module_id_by_import_name.deinit(self.arena);
         }
 
-        module_id_by_import_name.ensureTotalCapacity(arena, @intCast(imports.len)) catch unreachable;
+        module_id_by_import_name.ensureTotalCapacity(self.arena, @intCast(imports.len)) catch unreachable;
         for (imports.items(.name), imports.items(.module)) |
             build_import_name_id,
             build_import_module_index,
@@ -175,14 +143,14 @@ fn resolveBuildModule(
                     build_import_module_index,
                 )) orelse continue;
 
-                module_id_by_build_module_index.put(arena, build_import_module_index, resolved) catch unreachable;
-                queue.append(arena, build_import_module_index) catch unreachable;
+                module_id_by_build_module_index.put(self.arena, build_import_module_index, resolved) catch unreachable;
+                queue.append(self.arena, build_import_module_index) catch unreachable;
 
                 break :child resolved;
             };
 
             module_id_by_import_name.putAssumeCapacity(
-                arena.dupe(u8, import_name_slice) catch unreachable,
+                self.arena.dupe(u8, import_name_slice) catch unreachable,
                 import_module_id,
             );
         }
@@ -203,8 +171,6 @@ fn resolveBuildModuleShallow(
     const zone = tracy.traceNamed(@src(), "LintContext.resolveBuildModuleShallow");
     defer zone.end();
 
-    const arena = self.arena_allocator.allocator();
-
     const build_root_path = self.build_config_store.buildRootPath(config_id);
     const build_config = self.build_config_store.buildConfig(config_id);
 
@@ -214,10 +180,10 @@ fn resolveBuildModuleShallow(
     const root_path = try files.resolveLazyPath(
         root_source_file,
         build_config,
-        arena,
+        self.arena,
         build_root_path,
     ) orelse return null;
-    defer arena.free(root_path);
+    defer self.arena.free(root_path);
 
     return self.module_store.resolve(.{
         .root_file = try self.file_store.resolve(
@@ -1229,7 +1195,6 @@ fn resolveFnDecl(
     self: *LintContext,
     handle: *zls.DocumentStore.Handle,
     call_node: Ast.Node.Index,
-    arena: std.mem.Allocator,
 ) !?zls.Analyser.DeclWithHandle {
     // Return null if not even a function call node.
     var call_buffer: [1]Ast.Node.Index = undefined;
@@ -1240,7 +1205,7 @@ fn resolveFnDecl(
     var child: zls.Analyser.DeclWithHandle = (try self.resolveDecl(
         handle,
         call.ast.fn_expr,
-        arena,
+        self.arena,
     )) orelse return null;
 
     walking: while (true) {
@@ -1251,7 +1216,7 @@ fn resolveFnDecl(
                 child = try self.resolveDecl(
                     child.handle,
                     init_node,
-                    arena,
+                    self.arena,
                 ) orelse break :walking;
                 continue :walking;
             }
@@ -1282,7 +1247,6 @@ fn resolveDecl(
     self: *LintContext,
     handle: *zls.DocumentStore.Handle,
     node: Ast.Node.Index,
-    arena: std.mem.Allocator,
 ) !?zls.Analyser.DeclWithHandle {
     const tree = handle.tree;
 
@@ -1306,7 +1270,7 @@ fn resolveDecl(
                 break :field_access null;
 
             if (try self.deprecated.analyser.getSymbolFieldAccesses(
-                arena,
+                self.arena,
                 handle,
                 tree.tokenStart(identifier_token),
                 held_loc,
@@ -1767,8 +1731,7 @@ test "LintContext.resolveTypeKind" {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
 
-        var context = testing.initFakeContext(std.testing.allocator, std.testing.io);
-        defer context.deinit();
+        var context = testing.initFakeContext(arena.allocator(), std.testing.io);
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
 

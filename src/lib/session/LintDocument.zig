@@ -119,8 +119,7 @@ test "LintDocument.isEnclosedInTestBlock" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var context = testing.initFakeContext(std.testing.allocator, std.testing.io);
-    defer context.deinit();
+    var context = testing.initFakeContext(arena.allocator(), std.testing.io);
 
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();

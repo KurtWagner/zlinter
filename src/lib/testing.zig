@@ -50,20 +50,29 @@ pub fn writeFile(dir: std.Io.Dir, file_name: []const u8, contents: []const u8) !
 }
 
 pub fn initFakeContext(
-    gpa: std.mem.Allocator,
+    arena: std.mem.Allocator,
     io: std.Io,
 ) LintContext {
     assertTestOnly();
 
     var context: LintContext = .{
-        .gpa = gpa,
         .io = io,
+        .arena = arena,
         // TODO: If we really ever need to we can pass zig exe through a build
         // config and evaluate lib dir from `zig env` but I think overkill for
         // our unit tests, so leaving as this for now...
         .zig_exe = "zig",
         .zig_lib_directory = ".",
         .cwd = ".",
+        .file_store = .init(arena),
+        .module_store = .init(arena),
+        .build_config_store = .init(arena),
+        .type_store = .init(arena),
+        .decl_store = .init(
+            arena,
+            io,
+            ".",
+        ),
     };
     context.init() catch @panic("failed to initialize fake lint context");
     return context;
@@ -251,8 +260,7 @@ fn runRule(
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var context = initFakeContext(std.testing.allocator, std.testing.io);
-    defer context.deinit();
+    var context = initFakeContext(arena.allocator(), std.testing.io);
 
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
