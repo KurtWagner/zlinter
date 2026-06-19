@@ -2,12 +2,14 @@ pub const Diagnostics = std.zon.parse.Diagnostics;
 
 pub fn parseFileAlloc(
     T: type,
+    runtime: *const LintRuntime,
     dir: std.Io.Dir,
     cwd_file_path: []const u8,
     diagnostics: ?*Diagnostics,
-    io: std.Io,
-    gpa: std.mem.Allocator,
 ) !T {
+    const io = runtime.io;
+    const gpa = runtime.session_arena;
+
     const file = try dir.openFile(io, cwd_file_path, .{
         .mode = .read_only,
     });
@@ -57,6 +59,14 @@ test "parseFileAlloc" {
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
+    const runtime: LintRuntime = .{
+        .io = std.testing.io,
+        .verbose = false,
+        .session_arena = arena.allocator(),
+        .zig_exe = "zig",
+        .zig_lib_directory = ".",
+        .cwd = ".",
+    };
 
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
@@ -71,11 +81,10 @@ test "parseFileAlloc" {
         BasicStruct{},
         try parseFileAlloc(
             BasicStruct,
+            &runtime,
             tmp_dir.dir,
             "a.zon",
             null,
-            std.testing.io,
-            arena.allocator(),
         ),
     );
 
@@ -95,11 +104,10 @@ test "parseFileAlloc" {
         },
         try parseFileAlloc(
             BasicStruct,
+            &runtime,
             tmp_dir.dir,
             "b.zon",
             null,
-            std.testing.io,
-            arena.allocator(),
         ),
     );
 
@@ -112,11 +120,10 @@ test "parseFileAlloc" {
     );
     const actual = parseFileAlloc(
         BasicStruct,
+        &runtime,
         tmp_dir.dir,
         "b.zon",
         &diagnostics,
-        std.testing.io,
-        arena.allocator(),
     );
     try std.testing.expectError(
         error.ParseZon,
@@ -130,6 +137,7 @@ test "parseFileAlloc" {
 const session = @import("session.zig");
 const std = @import("std");
 const testing = @import("testing.zig");
+const LintRuntime = session.LintRuntime;
 
 test {
     std.testing.refAllDecls(@This());

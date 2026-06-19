@@ -190,8 +190,6 @@ pub const ResolveContext = struct {
 pub fn resolveFile(
     file_store: *FileStore,
     module_store: *const ModuleStore,
-    io: std.Io,
-    zig_lib_directory: []const u8,
     context: ResolveContext,
     import_path: []const u8,
 ) !?FileStore.FileId {
@@ -200,15 +198,11 @@ pub fn resolveFile(
     const parent_file_dir = std.fs.path.dirname(parent_abs_path) orelse ".";
 
     return switch (Kind.init(import_path)) {
-        .relative => try file_store.resolve(
+        .relative => try file_store.resolveFrom(
             import_path,
-            io,
             parent_file_dir,
         ),
-        .stdlib => try file_store.resolveStdlib(
-            io,
-            zig_lib_directory,
-        ),
+        .stdlib => try file_store.resolveStdlib(),
         // TODO: #149 - handle "builtin" imports.
         .builtin,
         => null,
@@ -249,25 +243,27 @@ test "resolveFile - root import uses supplied root file id" {
         &child_path_buffer,
     )];
 
-    var file_store: FileStore = .init(arena.allocator());
-    var module_store: ModuleStore = .init(arena.allocator());
+    var runtime: LintRuntime = .{
+        .io = std.testing.io,
+        .verbose = false,
+        .session_arena = arena.allocator(),
+        .zig_exe = "zig",
+        .zig_lib_directory = ".",
+        .cwd = ".",
+    };
+    var file_store: FileStore = .init(&runtime);
+    var module_store: ModuleStore = .init(&runtime);
 
     const compile_root_file_id = try file_store.resolve(
         root_path,
-        std.testing.io,
-        ".",
     );
     const child_file_id = try file_store.resolve(
         child_path,
-        std.testing.io,
-        ".",
     );
 
     const resolved_compile_root_file_id = try resolveFile(
         &file_store,
         &module_store,
-        std.testing.io,
-        ".",
         .{
             .parent_file_id = child_file_id,
             .compile_root_file_id = compile_root_file_id,
@@ -279,8 +275,6 @@ test "resolveFile - root import uses supplied root file id" {
     const unresolved_compile_root_file_id = try resolveFile(
         &file_store,
         &module_store,
-        std.testing.io,
-        ".",
         .{
             .parent_file_id = child_file_id,
             .compile_root_file_id = null,
@@ -292,6 +286,7 @@ test "resolveFile - root import uses supplied root file id" {
 
 const Ast = std.zig.Ast;
 const FileStore = @import("FileStore.zig");
+const LintRuntime = @import("LintRuntime.zig");
 const ModuleStore = @import("ModuleStore.zig");
 const testing = @import("../testing.zig");
 const std = @import("std");

@@ -55,8 +55,10 @@ pub fn initFakeContext(
 ) LintSession {
     assertTestOnly();
 
-    var runtime: LintRuntime = .{
+    const runtime = arena.create(LintRuntime) catch @panic("failed to allocate fake lint runtime");
+    runtime.* = .{
         .io = io,
+        .verbose = false,
         .session_arena = arena,
         // TODO: If we really ever need to we can pass zig exe through a build
         // config and evaluate lib dir from `zig env` but I think overkill for
@@ -67,16 +69,12 @@ pub fn initFakeContext(
     };
 
     var session: LintSession = .{
-        .runtime = &runtime,
-        .file_store = .init(arena),
-        .module_store = .init(arena),
-        .build_config_store = .init(arena),
-        .type_store = .init(arena),
-        .decl_store = .init(
-            arena,
-            io,
-            ".",
-        ),
+        .runtime = runtime,
+        .file_store = .init(runtime),
+        .module_store = .init(runtime),
+        .build_config_store = .init(runtime),
+        .type_store = .init(runtime),
+        .decl_store = .init(runtime),
     };
     session.init(null) catch @panic("failed to initialize fake lint session");
     return session;

@@ -5,14 +5,17 @@ const LintContext = LintSession;
 
 runtime: *const LintRuntime,
 
-compile_contexts: std.MultiArrayList(CompileContext) = .empty,
-compile_context_ids_by_file: std.AutoHashMapUnmanaged(FileStore.FileId, std.ArrayList(CompileContext.Id)) = .empty,
-compile_file_index_built: bool = false,
+// Stores:
 file_store: FileStore,
 module_store: ModuleStore,
 decl_store: DeclStore,
 type_store: TypeStore,
 build_config_store: BuildConfigStore,
+
+compile_contexts: std.MultiArrayList(CompileContext) = .empty,
+compile_context_ids_by_file: std.AutoHashMapUnmanaged(FileStore.FileId, std.ArrayList(CompileContext.Id)) = .empty,
+compile_file_index_built: bool = false,
+
 focused_compiled_contexts: std.AutoHashMapUnmanaged(CompileContext.Id, void) = .empty,
 /// Root source file for the active compile session, when known.
 compile_root_file_id: ?FileStore.FileId = null,
@@ -70,12 +73,7 @@ fn initBuildConfig(self: *LintContext) !BuildConfigStore.ConfigId {
     const zone = tracy.traceNamed(@src(), "LintContext.initBuildConfig");
     defer zone.end();
 
-    const config_id = try self.build_config_store.resolve(
-        self.runtime.io,
-        self.runtime.zig_exe,
-        self.runtime.cwd,
-        ".",
-    );
+    const config_id = try self.build_config_store.resolve(".");
 
     const build_config = self.build_config_store.buildConfig(config_id);
     for (0..build_config.steps.len) |step_index|
@@ -251,11 +249,7 @@ fn resolveBuildModuleShallow(
     defer self.runtime.session_arena.free(root_path);
 
     return self.module_store.resolve(.{
-        .root_file = try self.file_store.resolve(
-            root_path,
-            self.runtime.io,
-            self.runtime.cwd,
-        ),
+        .root_file = try self.file_store.resolve(root_path),
         .build_config = config_id,
         .build_config_module = build_module_index,
         .module_id_by_import_name = .empty,
@@ -266,11 +260,7 @@ pub fn resolveFile(self: *LintContext, input_path: []const u8) !FileStore.FileId
     const zone = tracy.traceNamed(@src(), "LintContext.resolveFile");
     defer zone.end();
 
-    const id = try self.file_store.resolve(
-        input_path,
-        self.runtime.io,
-        self.runtime.cwd,
-    );
+    const id = try self.file_store.resolve(input_path);
     self.decl_store.resolveFileTypes(
         id,
         &self.file_store,
@@ -408,8 +398,6 @@ fn indexCompileContextFiles(
                     const resolved_file_id = import_utils.resolveFile(
                         &self.file_store,
                         &self.module_store,
-                        self.runtime.io,
-                        self.runtime.zig_lib_directory,
                         .{
                             .parent_file_id = item.file_id,
                             .compile_root_file_id = compile_root_file_id,
@@ -1347,8 +1335,6 @@ fn resolveImportRootDecl(
     const maybe_file_id = import_utils.resolveFile(
         &self.file_store,
         &self.module_store,
-        self.runtime.io,
-        self.runtime.zig_lib_directory,
         .{
             .parent_file_id = parent_file_id,
             .compile_root_file_id = self.compile_root_file_id,
@@ -1966,10 +1952,10 @@ test "compileContextIdsForFile includes shared dependency children" {
         &dep_child_path_buffer,
     )];
 
-    const root1_file_id = try session.file_store.resolve(root1_path, std.testing.io, ".");
-    const root2_file_id = try session.file_store.resolve(root2_path, std.testing.io, ".");
-    const dep_root_file_id = try session.file_store.resolve(dep_root_path, std.testing.io, ".");
-    const dep_child_file_id = try session.file_store.resolve(dep_child_path, std.testing.io, ".");
+    const root1_file_id = try session.file_store.resolve(root1_path);
+    const root2_file_id = try session.file_store.resolve(root2_path);
+    const dep_root_file_id = try session.file_store.resolve(dep_root_path);
+    const dep_child_file_id = try session.file_store.resolve(dep_child_path);
 
     const build_config_id: BuildConfigStore.ConfigId = .fromIndex(0);
     const root1_build_module: std.Build.Configuration.Module.Index = @enumFromInt(0);
@@ -2034,8 +2020,6 @@ test "compileContextIdsForFile includes shared dependency children" {
         const resolved_root = try import_utils.resolveFile(
             &session.file_store,
             &session.module_store,
-            std.testing.io,
-            ".",
             .{
                 .parent_file_id = dep_child_file_id,
                 .compile_root_file_id = compile_root_file_id,

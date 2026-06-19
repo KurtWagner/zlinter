@@ -8,11 +8,11 @@ type_id_by_summary: std.HashMapUnmanaged(
     std.hash_map.default_max_load_percentage,
 ) = .empty,
 
-session_arena: std.mem.Allocator,
+runtime: *const LintRuntime,
 
-pub fn init(session_arena: std.mem.Allocator) TypeStore {
+pub fn init(runtime: *const LintRuntime) TypeStore {
     return .{
-        .session_arena = session_arena,
+        .runtime = runtime,
     };
 }
 
@@ -364,8 +364,9 @@ pub fn store(
     if (self.type_id_by_summary.get(type_summary)) |type_id| return type_id;
 
     const type_id: TypeId = .fromIndex(self.summaries.items.len);
-    oom(self.summaries.append(self.session_arena, type_summary));
-    oom(self.type_id_by_summary.put(self.session_arena, type_summary, type_id));
+    const session_arena = self.runtime.session_arena;
+    oom(self.summaries.append(session_arena, type_summary));
+    oom(self.type_id_by_summary.put(session_arena, type_summary, type_id));
     return type_id;
 }
 
@@ -748,9 +749,15 @@ fn parsePrimitiveIntBits(text: []const u8) ?u16 {
 }
 
 test "TypeStore.store deduplicates equivalent summaries" {
-    var type_store: TypeStore = .{
+    var runtime: LintRuntime = .{
+        .io = std.testing.io,
+        .verbose = false,
         .session_arena = std.testing.allocator,
+        .zig_exe = "zig",
+        .zig_lib_directory = ".",
+        .cwd = ".",
     };
+    var type_store: TypeStore = .init(&runtime);
     defer type_store.summaries.deinit(std.testing.allocator);
     defer type_store.type_id_by_summary.deinit(std.testing.allocator);
 
@@ -784,5 +791,6 @@ test "TypeStore.store deduplicates equivalent summaries" {
 const Ast = std.zig.Ast;
 const ast = @import("../ast.zig");
 const std = @import("std");
+const LintRuntime = @import("LintRuntime.zig");
 const tracy = @import("tracy");
 const oom = @import("../allocations.zig").oom;

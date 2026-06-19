@@ -38,22 +38,43 @@ files: std.MultiArrayList(File) = .empty,
 /// `ast(index)` and `source(index)`.
 file_id_by_path: std.StringHashMapUnmanaged(FileId) = .empty,
 
-session_arena: std.mem.Allocator,
+runtime: *const LintRuntime,
 
-pub fn init(session_arena: std.mem.Allocator) FileStore {
+pub fn init(runtime: *const LintRuntime) FileStore {
     return .{
-        .session_arena = session_arena,
+        .runtime = runtime,
     };
 }
 
 pub fn resolve(
     self: *FileStore,
     input_path: []const u8,
-    io: std.Io,
+) error{ResolutionError}!FileId {
+    return self.resolveFrom(input_path, self.runtime.cwd);
+}
+
+pub fn resolveStdlib(
+    self: *FileStore,
+) error{ResolutionError}!FileId {
+    return self.resolveFrom("std/std.zig", self.runtime.zig_lib_directory);
+}
+
+pub fn resolveStdLib(
+    self: *FileStore,
+) error{ResolutionError}!FileId {
+    return self.resolveStdlib();
+}
+
+pub fn resolveFrom(
+    self: *FileStore,
+    input_path: []const u8,
     cwd: []const u8,
 ) error{ResolutionError}!FileId {
-    const zone = tracy.traceNamed(@src(), "FileStore.resolve");
+    const zone = tracy.traceNamed(@src(), "FileStore.resolveFrom");
     defer zone.end();
+
+    const io = self.runtime.io;
+    const session_arena = self.runtime.session_arena;
 
     var fba_buffer: [std.fs.max_path_bytes]u8 = undefined;
     var fba: std.heap.FixedBufferAllocator = .init(&fba_buffer);
@@ -67,7 +88,7 @@ pub fn resolve(
     const source: [:0]const u8 = std.Io.Dir.cwd().readFileAllocOptions(
         io,
         normal_path,
-        self.session_arena,
+        session_arena,
         .limited(max_zig_file_size_bytes),
         .of(u8),
         0,
@@ -79,38 +100,22 @@ pub fn resolve(
         },
     };
 
-    const tree = oom(std.zig.Ast.parse(self.session_arena, source, .zig));
-    const abs_path = oom(self.session_arena.dupe(u8, normal_path));
+    const tree = oom(std.zig.Ast.parse(session_arena, source, .zig));
+    const abs_path = oom(session_arena.dupe(u8, normal_path));
     const id: FileId = .fromIndex(self.files.len);
 
-    oom(self.files.append(self.session_arena, .{
+    oom(self.files.append(session_arena, .{
         .tree = tree,
         .abs_path = abs_path,
         .source = source,
     }));
 
-    oom(self.file_id_by_path.putNoClobber(self.session_arena, abs_path, id));
+    oom(self.file_id_by_path.putNoClobber(session_arena, abs_path, id));
 
     std.log.info("Resolving '{s}' to '{s}'", .{ cwd, input_path });
     std.log.info(" - adding '{s}", .{abs_path});
 
     return id;
-}
-
-pub fn resolveStdlib(
-    self: *FileStore,
-    io: std.Io,
-    zig_lib_directory: []const u8,
-) error{ResolutionError}!FileId {
-    return self.resolve("std/std.zig", io, zig_lib_directory);
-}
-
-pub fn resolveStdLib(
-    self: *FileStore,
-    io: std.Io,
-    zig_lib_directory: []const u8,
-) error{ResolutionError}!FileId {
-    return self.resolveStdlib(io, zig_lib_directory);
 }
 
 pub fn fileTree(self: *const FileStore, id: FileId) std.zig.Ast {
@@ -126,5 +131,6 @@ pub fn fileAbsPath(self: *const FileStore, id: FileId) []const u8 {
 }
 
 const std = @import("std");
+const LintRuntime = @import("LintRuntime.zig");
 const tracy = @import("tracy");
 const oom = @import("../allocations.zig").oom;

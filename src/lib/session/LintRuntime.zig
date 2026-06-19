@@ -4,6 +4,8 @@ const LintRuntime = @This();
 
 io: std.Io,
 
+verbose: bool,
+
 /// Externally owned slice to zig executable path
 zig_exe: []const u8,
 

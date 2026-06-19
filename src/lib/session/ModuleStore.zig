@@ -8,11 +8,11 @@ module_id_by_key: std.HashMapUnmanaged(
     std.hash_map.default_max_load_percentage,
 ) = .empty,
 
-session_arena: std.mem.Allocator,
+runtime: *const LintRuntime,
 
-pub fn init(session_arena: std.mem.Allocator) ModuleStore {
+pub fn init(runtime: *const LintRuntime) ModuleStore {
     return .{
-        .session_arena = session_arena,
+        .runtime = runtime,
     };
 }
 
@@ -94,13 +94,14 @@ pub fn resolve(self: *ModuleStore, seed: ModuleSeed) ModuleId {
     if (self.module_id_by_key.get(key)) |id|
         return id;
 
+    const session_arena = self.runtime.session_arena;
     const id: ModuleId = .fromIndex(self.modules.len);
-    oom(self.modules.append(self.session_arena, .{
+    oom(self.modules.append(session_arena, .{
         .root_file = seed.root_file,
         .module_id_by_import_name = seed.module_id_by_import_name,
     }));
 
-    oom(self.module_id_by_key.put(self.session_arena, key, id));
+    oom(self.module_id_by_key.put(session_arena, key, id));
 
     return id;
 }
@@ -149,6 +150,7 @@ pub fn namedImport(
 
 const FileId = @import("FileStore.zig").FileId;
 const BuildConfigStore = @import("BuildConfigStore.zig");
+const LintRuntime = @import("LintRuntime.zig");
 const std = @import("std");
 const tracy = @import("tracy");
 const oom = @import("../allocations.zig").oom;

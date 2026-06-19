@@ -29,11 +29,11 @@ configs: std.MultiArrayList(Config) = .empty,
 /// and should never be used externally.
 config_id_by_path: std.StringHashMapUnmanaged(ConfigId) = .empty,
 
-session_arena: std.mem.Allocator,
+runtime: *const LintRuntime,
 
-pub fn init(session_arena: std.mem.Allocator) BuildConfigStore {
+pub fn init(runtime: *const LintRuntime) BuildConfigStore {
     return .{
-        .session_arena = session_arena,
+        .runtime = runtime,
     };
 }
 
@@ -45,13 +45,13 @@ pub fn init(session_arena: std.mem.Allocator) BuildConfigStore {
 /// to lookup resolved information.
 pub fn resolve(
     self: *BuildConfigStore,
-    io: std.Io,
-    zig_exe: []const u8,
-    cwd: []const u8,
     input_path: []const u8,
 ) error{ResolutionError}!ConfigId {
     const zone = tracy.traceNamed(@src(), "BuildConfigStore.resolve");
     defer zone.end();
+
+    const io = self.runtime.io;
+    const session_arena = self.runtime.session_arena;
 
     // 2x as we use it for generating two paths.
     var fba_buffer: [std.fs.max_path_bytes * 2]u8 = undefined;
@@ -59,7 +59,7 @@ pub fn resolve(
 
     const normal_path = std.fs.path.resolve(
         fba.allocator(),
-        &.{ cwd, input_path },
+        &.{ self.runtime.cwd, input_path },
     ) catch unreachable;
 
     if (self.config_id_by_path.get(normal_path)) |index|
@@ -89,14 +89,14 @@ pub fn resolve(
     const config_path = files.resolveBuildConfigurationPath(
         io,
         fba.allocator(),
-        zig_exe,
+        self.runtime.zig_exe,
         build_root_path,
     ) catch |e| switch (e) {
         error.OutOfMemory => @panic("OOM"),
         else => {
             std.log.err("Could not resolve build configuration path for '{s}' using '{s}' due to {t}", .{
                 build_root_path,
-                zig_exe,
+                self.runtime.zig_exe,
                 e,
             });
             return error.ResolutionError;
@@ -114,7 +114,7 @@ pub fn resolve(
     defer file.close(io);
 
     const config = std.Build.Configuration.loadFile(
-        self.session_arena,
+        session_arena,
         io,
         file,
     ) catch |e| switch (e) {
@@ -125,15 +125,15 @@ pub fn resolve(
         },
     };
 
-    const build_root_key = oom(self.session_arena.dupe(u8, build_root_path));
+    const build_root_key = oom(session_arena.dupe(u8, build_root_path));
     const config_id: ConfigId = .fromIndex(self.configs.len);
 
-    oom(self.configs.append(self.session_arena, .{
+    oom(self.configs.append(session_arena, .{
         .build_config = config,
         .build_root_path = build_root_key,
     }));
 
-    oom(self.config_id_by_path.putNoClobber(self.session_arena, build_root_key, config_id));
+    oom(self.config_id_by_path.putNoClobber(session_arena, build_root_key, config_id));
     self.cacheResolvedConfigPaths(normal_path, build_root_key, config_id);
 
     return config_id;
@@ -231,8 +231,8 @@ fn cacheResolvedConfigPaths(
 
     while (!std.mem.eql(u8, path, cached_ancestor_path)) {
         if (!self.config_id_by_path.contains(path)) {
-            const key = oom(self.session_arena.dupe(u8, path));
-            oom(self.config_id_by_path.putNoClobber(self.session_arena, key, config_id));
+            const key = oom(self.runtime.session_arena.dupe(u8, path));
+            oom(self.config_id_by_path.putNoClobber(self.runtime.session_arena, key, config_id));
         }
 
         const parent = std.fs.path.dirname(path) orelse cached_ancestor_path;
@@ -244,6 +244,7 @@ fn cacheResolvedConfigPaths(
 }
 
 const files = @import("../files.zig");
+const LintRuntime = @import("LintRuntime.zig");
 const std = @import("std");
 const tracy = @import("tracy");
 const oom = @import("../allocations.zig").oom;

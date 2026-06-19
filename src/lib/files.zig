@@ -20,8 +20,8 @@ pub const LintFile = struct {
 ///
 /// If an explicit list of file paths was provided in the args, this will be
 /// used, otherwise it'll walk relative to working path.
-pub fn allocLintFiles(io: std.Io, cwd: []const u8, dir: std.Io.Dir, maybe_files: ?[]const []const u8, gpa: std.mem.Allocator) ![]zlinter.files.LintFile {
-    _ = cwd;
+pub fn allocLintFiles(runtime: *const LintRuntime, dir: std.Io.Dir, maybe_files: ?[]const []const u8, gpa: std.mem.Allocator) ![]zlinter.files.LintFile {
+    const io = runtime.io;
 
     var file_paths = std.StringHashMap(void).init(gpa);
     defer file_paths.deinit();
@@ -209,7 +209,16 @@ test "allocLintFiles - with default args" {
     var cwd_buffer: [std.fs.max_path_bytes]u8 = undefined;
     const cwd = cwd_buffer[0..try tmp_dir.dir.realPath(std.testing.io, &cwd_buffer)];
 
-    const lint_files = try allocLintFiles(std.testing.io, cwd, tmp_dir.dir, null, std.testing.allocator);
+    const runtime: LintRuntime = .{
+        .io = std.testing.io,
+        .verbose = false,
+        .session_arena = std.testing.allocator,
+        .zig_exe = "zig",
+        .zig_lib_directory = ".",
+        .cwd = cwd,
+    };
+
+    const lint_files = try allocLintFiles(&runtime, tmp_dir.dir, null, std.testing.allocator);
     defer {
         for (lint_files) |*file| file.deinit(std.testing.allocator);
         std.testing.allocator.free(lint_files);
@@ -252,7 +261,16 @@ test "allocLintFiles - with arg files" {
     var cwd_buffer: [std.fs.max_path_bytes]u8 = undefined;
     const cwd = cwd_buffer[0..try tmp_dir.dir.realPath(std.testing.io, &cwd_buffer)];
 
-    const lint_files = try allocLintFiles(std.testing.io, cwd, tmp_dir.dir, &.{
+    const runtime: LintRuntime = .{
+        .io = std.testing.io,
+        .verbose = false,
+        .session_arena = std.testing.allocator,
+        .zig_exe = "zig",
+        .zig_lib_directory = ".",
+        .cwd = cwd,
+    };
+
+    const lint_files = try allocLintFiles(&runtime, tmp_dir.dir, &.{
         testing.paths.posix("a.zig"),
         testing.paths.posix("src/"),
         testing.paths.posix("a.zig"), // Duplicate should be ignored
@@ -402,6 +420,7 @@ pub fn resolveLazyPath(
 const std = @import("std");
 const testing = @import("testing.zig");
 const zlinter = @import("./zlinter.zig");
+const LintRuntime = @import("session/LintRuntime.zig");
 
 test {
     std.testing.refAllDecls(@This());

@@ -72,14 +72,22 @@ pub fn main(init: std.process.Init) !u8 {
         return ExitCode.usage_error.int();
     }
 
+    var runtime: LintRuntime = .{
+        .io = io,
+        .verbose = args.verbose,
+        .session_arena = session_arena,
+        .zig_exe = args.zig_exe,
+        .zig_lib_directory = args.zig_lib_directory,
+        .cwd = try std.process.currentPathAlloc(io, session_arena),
+    };
+
     var total_fixes: usize = 0;
     const result = result: {
         var remaining_fix_passes = @max(1, args.fix_passes);
         while (remaining_fix_passes > 0) {
             if (run(
-                io,
+                &runtime,
                 gpa,
-                session_arena,
                 args,
                 printer,
             )) |r| {
@@ -122,12 +130,13 @@ pub fn main(init: std.process.Init) !u8 {
 }
 
 fn run(
-    io: std.Io,
+    runtime: *const LintRuntime,
     gpa: std.mem.Allocator,
-    session_arena: std.mem.Allocator,
     args: zlinter.Args,
     printer: *zlinter.rendering.Printer,
 ) !RunResult {
+    const io = runtime.io;
+
     var timer = Timer.createStarted(io);
     var total_timer = Timer.createStarted(io);
 
@@ -144,21 +153,17 @@ fn run(
     var dir = try std.Io.Dir.cwd().openDir(io, "./", .{ .iterate = true });
     defer dir.close(io);
 
-    const cwd = try std.process.currentPathAlloc(io, session_arena);
-
     const lint_files = try zlinter.files.allocLintFiles(
-        io,
-        cwd,
+        runtime,
         dir,
         // `--include` argument supersedes build defined includes and excludes
         args.include_paths orelse args.build_info.include_paths orelse null,
-        session_arena,
+        gpa,
     );
 
     if (try buildExcludesIndex(
-        io,
-        cwd,
-        session_arena,
+        runtime,
+        gpa,
         dir,
         args,
     )) |*index| {
@@ -169,9 +174,7 @@ fn run(
     }
 
     if (try buildFilterIndex(
-        io,
-        cwd,
-        session_arena,
+        runtime,
         dir,
         args,
     )) |*index| {
@@ -184,14 +187,12 @@ fn run(
     printer.println(.verbose, "Resolving {d} files took: {d}ms", .{ lint_files.len, timer.lapMilliseconds() });
 
     try runLinterRules(
-        io,
-        session_arena,
+        runtime,
         lint_files,
         printer,
         &timer,
         &file_lint_problems,
         args,
-        cwd,
     );
 
     printer.printBanner(.verbose);
@@ -205,19 +206,15 @@ fn run(
 
     return if (args.fix)
         try runFixes(
-            io,
-            session_arena,
+            runtime,
             gpa,
-            cwd,
             lint_files,
             file_lint_problems,
             printer,
         )
     else
         try runFormatter(
-            io,
-            session_arena,
-            cwd,
+            runtime,
             file_lint_problems,
             printer.stdout.?,
             printer.tty,
@@ -230,34 +227,29 @@ fn run(
 }
 
 fn runLinterRules(
-    io: std.Io,
-    session_arena: std.mem.Allocator,
+    runtime: *const LintRuntime,
     lint_files: []zlinter.files.LintFile,
     printer: *zlinter.rendering.Printer,
     timer: *Timer,
     file_lint_problems: *std.array_hash_map.Auto(u32, []zlinter.results.LintResult),
     args: zlinter.Args,
-    cwd: []const u8,
 ) !void {
-    const zig_exe = args.zig_exe;
-    const zig_lib_directory = args.zig_lib_directory;
-
-    var maybe_slowest_files = if (args.verbose) SlowestItemQueue.init(session_arena) else null;
+    var maybe_slowest_files = if (runtime.verbose) SlowestItemQueue.init(runtime.session_arena) else null;
     defer if (maybe_slowest_files) |*slowest_files| {
         defer slowest_files.deinit();
         slowest_files.unloadAndPrint("Files", printer);
     };
 
-    var file_arena_allocator = std.heap.ArenaAllocator.init(session_arena);
+    var file_arena_allocator = std.heap.ArenaAllocator.init(runtime.session_arena);
     defer file_arena_allocator.deinit();
     const file_arena = file_arena_allocator.allocator();
 
-    var maybe_rule_elapsed_times: ?[rules.len]usize = if (args.verbose)
+    var maybe_rule_elapsed_times: ?[rules.len]usize = if (runtime.verbose)
         @splat(0)
     else
         null;
     defer if (maybe_rule_elapsed_times) |*rule_elapsed_times| {
-        var item_timers = SlowestItemQueue.init(session_arena);
+        var item_timers = SlowestItemQueue.init(runtime.session_arena);
         defer item_timers.deinit();
 
         for (rule_elapsed_times, 0..) |elapsed_ns, rule_id| {
@@ -269,25 +261,13 @@ fn runLinterRules(
         item_timers.unloadAndPrint("Rules", printer);
     };
 
-    var runtime: LintRuntime = .{
-        .io = io,
-        .session_arena = session_arena,
-        .zig_exe = zig_exe,
-        .zig_lib_directory = zig_lib_directory,
-        .cwd = cwd,
-    };
-
     var session: zlinter.session.LintSession = .{
-        .runtime = &runtime,
-        .file_store = .init(session_arena),
-        .module_store = .init(session_arena),
-        .build_config_store = .init(session_arena),
-        .type_store = .init(session_arena),
-        .decl_store = .init(
-            session_arena,
-            io,
-            zig_lib_directory,
-        ),
+        .runtime = runtime,
+        .file_store = .init(runtime),
+        .module_store = .init(runtime),
+        .build_config_store = .init(runtime),
+        .type_store = .init(runtime),
+        .decl_store = .init(runtime),
     };
     try session.init(args.compile_names);
 
@@ -302,17 +282,16 @@ fn runLinterRules(
                     if (rule_config_overrides.get(rules[rule_index].rule_id)) |zon_path| {
                         inline for (0..rules_configs_types.len) |i| {
                             if (i == rule_index) {
-                                const config = try session_arena.create(rules_configs_types[i]);
+                                const config = try runtime.session_arena.create(rules_configs_types[i]);
 
                                 var diagnostics: zlinter.zon.Diagnostics = .{};
 
                                 config.* = zlinter.zon.parseFileAlloc(
                                     rules_configs_types[i],
+                                    runtime,
                                     std.Io.Dir.cwd(),
                                     zon_path,
                                     &diagnostics,
-                                    io,
-                                    session_arena,
                                 ) catch |e| {
                                     switch (e) {
                                         error.ParseZon => {
@@ -338,7 +317,7 @@ fn runLinterRules(
 
         const cwd_rel_path = try allocCwdRelPath(
             file_arena,
-            cwd,
+            runtime.cwd,
             lint_file.abs_path,
         );
 
@@ -354,7 +333,7 @@ fn runLinterRules(
         };
         const file_abs_path = session.file_store.fileAbsPath(file_id);
 
-        var rule_timer = Timer.createStarted(io);
+        var rule_timer = Timer.createStarted(runtime.io);
         defer {
             const ns = rule_timer.lapNanoseconds();
             printer.println(.verbose, "  - Total elapsed {d}ms", .{ns / std.time.ns_per_ms});
@@ -379,7 +358,7 @@ fn runLinterRules(
         printer.println(.verbose, "    - {d} tokens", .{tree.tokens.len});
 
         var results = std.ArrayList(zlinter.results.LintResult).empty;
-        errdefer results.deinit(session_arena);
+        errdefer results.deinit(runtime.session_arena);
 
         for (tree.errors) |err| {
             const position = tree.tokenLocation(
@@ -396,19 +375,19 @@ fn runLinterRules(
                 .end = .{
                     .byte_offset = position.line_start + position.column + tree.tokenSlice(err.token).len - 1,
                 },
-                .message = try allocAstErrorMsg(tree, err, session_arena),
+                .message = try allocAstErrorMsg(tree, err, runtime.session_arena),
             };
 
-            const problems = oom(session_arena.alloc(zlinter.results.LintProblem, 1));
+            const problems = oom(runtime.session_arena.alloc(zlinter.results.LintProblem, 1));
             problems[0] = problem;
 
             const result = oom(zlinter.results.LintResult.init(
-                session_arena,
+                runtime.session_arena,
                 file_abs_path,
                 problems,
             ));
 
-            oom(results.append(session_arena, result));
+            oom(results.append(runtime.session_arena, result));
         }
         printer.println(.verbose, "  - Process syntax errors: {d}ms", .{timer.lapMilliseconds()});
 
@@ -429,11 +408,11 @@ fn runLinterRules(
                         rule,
                         &session,
                         &doc,
-                        session_arena,
+                        runtime.session_arena,
                         .{ .config = rule_configs[rule_index] },
                     )) |result| {
                         try appendDedupedResult(
-                            session_arena,
+                            runtime.session_arena,
                             &results,
                             &doc,
                             result,
@@ -448,11 +427,11 @@ fn runLinterRules(
                             rule,
                             &session,
                             &doc,
-                            session_arena,
+                            runtime.session_arena,
                             .{ .config = rule_configs[rule_index] },
                         )) |result| {
                             try appendDedupedResult(
-                                session_arena,
+                                runtime.session_arena,
                                 &results,
                                 &doc,
                                 result,
@@ -470,7 +449,7 @@ fn runLinterRules(
                                 rule,
                                 &session,
                                 &doc,
-                                session_arena,
+                                runtime.session_arena,
                                 .{
                                     .config = rule_configs[rule_index],
                                     .compile_context_id = compile_context_id,
@@ -478,7 +457,7 @@ fn runLinterRules(
                                 },
                             )) |result| {
                                 try appendDedupedResult(
-                                    session_arena,
+                                    runtime.session_arena,
                                     &results,
                                     &doc,
                                     result,
@@ -498,9 +477,9 @@ fn runLinterRules(
 
         if (results.items.len > 0) {
             oom(file_lint_problems.putNoClobber(
-                session_arena,
+                runtime.session_arena,
                 std.math.cast(u32, i) orelse @panic("Too many files"),
-                oom(results.toOwnedSlice(session_arena)),
+                oom(results.toOwnedSlice(runtime.session_arena)),
             ));
         }
     }
@@ -567,9 +546,7 @@ fn appendDedupedResult(
 }
 
 fn runFormatter(
-    io: std.Io,
-    session_arena: std.mem.Allocator,
-    cwd: []const u8,
+    runtime: *const LintRuntime,
     file_lint_problems: std.array_hash_map.Auto(u32, []zlinter.results.LintResult),
     output_writer: *std.Io.Writer,
     output_tty: zlinter.ansi.Tty,
@@ -577,6 +554,8 @@ fn runFormatter(
     quiet: bool,
     max_warnings: ?u32,
 ) !RunResult {
+    const session_arena = runtime.session_arena;
+
     var run_result: RunResult = .success;
     var warning_count: usize = 0;
     var results_count: usize = 0;
@@ -609,11 +588,11 @@ fn runFormatter(
 
     try formatter.format(.{
         .results = try flattened.toOwnedSlice(session_arena),
-        .cwd = cwd,
+        .cwd = runtime.cwd,
         .arena = session_arena,
         .tty = output_tty,
         .min_severity = if (quiet) .@"error" else .warning,
-        .io = io,
+        .io = runtime.io,
     }, output_writer);
 
     return run_result;
@@ -628,10 +607,8 @@ fn cmpFix(context: void, a: zlinter.results.LintProblemFix, b: zlinter.results.L
 }
 
 fn runFixes(
-    io: std.Io,
-    session_arena: std.mem.Allocator,
+    runtime: *const LintRuntime,
     gpa: std.mem.Allocator,
-    cwd: []const u8,
     lint_files: []zlinter.files.LintFile,
     file_lint_problems: std.array_hash_map.Auto(u32, []zlinter.results.LintResult),
     printer: *zlinter.rendering.Printer,
@@ -658,7 +635,7 @@ fn runFixes(
                 }
 
                 if (err.fix) |fix| {
-                    try lint_fixes.append(session_arena, fix);
+                    try lint_fixes.append(runtime.session_arena, fix);
                 }
             }
         }
@@ -676,16 +653,16 @@ fn runFixes(
 
         var file_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
         var fba: std.heap.FixedBufferAllocator = .init(&file_path_buffer);
-        const cwd_rel_path = try allocCwdRelPath(fba.allocator(), cwd, abs_path);
+        const cwd_rel_path = try allocCwdRelPath(fba.allocator(), runtime.cwd, abs_path);
 
-        const file = try std.Io.Dir.openFileAbsolute(io, abs_path, .{
+        const file = try std.Io.Dir.openFileAbsolute(runtime.io, abs_path, .{
             .mode = .read_only,
         });
-        defer file.close(io);
+        defer file.close(runtime.io);
 
         const file_content = file_content: {
             var file_reader_buffer: [1024]u8 = undefined;
-            var file_reader = file.readerStreaming(io, &file_reader_buffer);
+            var file_reader = file.readerStreaming(runtime.io, &file_reader_buffer);
 
             var buffer: std.Io.Writer.Allocating = .init(file_arena);
             defer buffer.deinit();
@@ -736,13 +713,13 @@ fn runFixes(
         });
 
         if (output_slices.items.len > 0) {
-            const new_file = try std.Io.Dir.createFileAbsolute(io, abs_path, .{
+            const new_file = try std.Io.Dir.createFileAbsolute(runtime.io, abs_path, .{
                 .truncate = true,
             });
-            defer new_file.close(io);
+            defer new_file.close(runtime.io);
 
             var buffer: [1024]u8 = undefined;
-            var writer = new_file.writer(io, &buffer);
+            var writer = new_file.writer(runtime.io, &buffer);
             for (output_slices.items) |output_slice| {
                 try writer.interface.writeAll(output_slice);
             }
@@ -783,13 +760,18 @@ fn allocAstErrorMsg(
 // TODO: Move buildExcludesIndex and buildFilterIndex to lib and write unit tests
 
 /// Returns an index of files to exclude if exclude configuration is found in args
-fn buildExcludesIndex(io: std.Io, cwd: []const u8, gpa: std.mem.Allocator, dir: std.Io.Dir, args: zlinter.Args) !?std.BufSet {
+fn buildExcludesIndex(
+    runtime: *const LintRuntime,
+    gpa: std.mem.Allocator,
+    dir: std.Io.Dir,
+    args: zlinter.Args,
+) !?std.BufSet {
     if (args.exclude_paths == null and args.build_info.exclude_paths == null) return null;
 
     const exclude_lint_paths: ?[]zlinter.files.LintFile = exclude: {
         if (args.exclude_paths) |p| {
             std.debug.assert(p.len > 0);
-            break :exclude try zlinter.files.allocLintFiles(io, cwd, dir, p, gpa);
+            break :exclude try zlinter.files.allocLintFiles(runtime, dir, p, gpa);
         } else break :exclude null;
     };
     defer {
@@ -805,7 +787,7 @@ fn buildExcludesIndex(io: std.Io, cwd: []const u8, gpa: std.mem.Allocator, dir: 
 
         if (args.build_info.exclude_paths) |p| {
             std.debug.assert(p.len > 0);
-            break :exclude try zlinter.files.allocLintFiles(io, cwd, dir, p, gpa);
+            break :exclude try zlinter.files.allocLintFiles(runtime, dir, p, gpa);
         } else break :exclude null;
     };
     defer {
@@ -830,19 +812,21 @@ fn buildExcludesIndex(io: std.Io, cwd: []const u8, gpa: std.mem.Allocator, dir: 
 }
 
 /// Returns an index of files to only include if filter configuration is found in args
-fn buildFilterIndex(io: std.Io, cwd: []const u8, gpa: std.mem.Allocator, dir: std.Io.Dir, args: zlinter.Args) !?std.BufSet {
+fn buildFilterIndex(runtime: *const LintRuntime, dir: std.Io.Dir, args: zlinter.Args) !?std.BufSet {
+    const session_arena = runtime.session_arena;
+
     const filter_paths: []zlinter.files.LintFile = exclude: {
         if (args.filter_paths) |p| {
             std.debug.assert(p.len > 0);
-            break :exclude try zlinter.files.allocLintFiles(io, cwd, dir, p, gpa);
+            break :exclude try zlinter.files.allocLintFiles(runtime, dir, p, session_arena);
         } else return null;
     };
     defer {
-        for (filter_paths) |*lint_file| lint_file.deinit(gpa);
-        gpa.free(filter_paths);
+        for (filter_paths) |*lint_file| lint_file.deinit(session_arena);
+        session_arena.free(filter_paths);
     }
 
-    var index = std.BufSet.init(gpa);
+    var index = std.BufSet.init(session_arena);
     errdefer index.deinit();
 
     for (filter_paths) |file| try index.insert(file.abs_path);
