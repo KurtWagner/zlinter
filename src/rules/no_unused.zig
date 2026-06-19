@@ -50,12 +50,8 @@ fn run(
             const node: Ast.Node.Index = @enumFromInt(index);
             switch (tree.nodeTag(node)) {
                 .identifier => try map.put(gpa, tree.tokenSlice(tree.nodeMainToken(node)), {}),
-                .field_access => if (try isFieldAccessOfRootContainer(context, doc, node)) {
-                    const node_data = tree.nodeData(node);
-                    try map.put(gpa, tree.tokenSlice(
-                        node_data.node_and_token.@"1",
-                    ), {});
-                },
+                .field_access => if (referencedDeclName(context, doc, node)) |name|
+                    try map.put(gpa, name, {}),
                 else => {},
             }
         }
@@ -152,24 +148,57 @@ fn namedFnDeclProto(
     return null;
 }
 
-fn isFieldAccessOfRootContainer(
+fn referencedDeclName(
     context: *zlinter.session.LintContext,
     doc: *const zlinter.session.LintDocument,
     node: Ast.Node.Index,
-) !bool {
+) ?[]const u8 {
     const tree = doc.tree(context);
     std.debug.assert(tree.nodeTag(node) == .field_access);
 
-    const node_data = tree.nodeData(node);
-    const lhs = node_data.node_and_token.@"0";
+    if (context.resolveDeclOfNode(doc, node)) |decl_id| {
+        if (context.decl_store.declFileId(decl_id) != doc.file_id)
+            return null;
+
+        const name_token = context.decl_store.declNameToken(decl_id) orelse return null;
+        return tree.tokenSlice(name_token);
+    }
+
+    const lhs, const member_token = tree.nodeData(node).node_and_token;
+    const member_name = tree.tokenSlice(member_token);
+
+    if (isCallCallee(tree, doc, node)) {
+        const root_decl_id = context.decl_store.rootDecl(doc.file_id) orelse return null;
+        if (context.resolveDeclMember(root_decl_id, member_name)) |decl_id| {
+            if (context.decl_store.declFileId(decl_id) != doc.file_id)
+                return null;
+
+            const name_token = context.decl_store.declNameToken(decl_id) orelse return null;
+            return tree.tokenSlice(name_token);
+        }
+    }
 
     if (context.resolveTypeOfNode(doc, lhs)) |resolved| {
-        return if (context.decl_store.rootDecl(doc.file_id)) |root_decl_id|
-            resolved.decl_id == root_decl_id
-        else
-            false;
+        if (context.decl_store.rootDecl(doc.file_id)) |root_decl_id| {
+            if (resolved.decl_id == root_decl_id)
+                return member_name;
+        }
     }
-    return false;
+    return null;
+}
+
+fn isCallCallee(
+    tree: Ast,
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+) bool {
+    var ancestors = doc.nodeAncestorIterator(node);
+    const parent = ancestors.next() orelse return false;
+
+    var call_buffer: [1]Ast.Node.Index = undefined;
+    const call = tree.fullCall(&call_buffer, parent) orelse
+        return false;
+    return call.ast.fn_expr == node;
 }
 
 test "no_unused" {
@@ -275,6 +304,24 @@ test "no_unused" {
         \\
         \\pub fn main() void {
         \\    _ = Self.used_by_root_field;
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{},
+    );
+
+    // Method-style field access on a same-file type.
+    try zlinter.testing.testRunRule(
+        rule,
+        \\const Store = @This();
+        \\
+        \\pub fn main(store: *Store) void {
+        \\    store.used();
+        \\}
+        \\
+        \\fn used(self: *Store) void {
+        \\    _ = self;
         \\}
     ,
         .{},
