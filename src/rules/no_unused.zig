@@ -24,7 +24,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the no_unused rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
@@ -36,7 +36,7 @@ fn run(
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
-    const tree = doc.tree(context);
+    const tree = doc.tree(session);
     const token_tags = tree.tokens.items(.tag);
 
     // Store an index of referenced identifiers and field accesses on the
@@ -50,7 +50,7 @@ fn run(
             const node: Ast.Node.Index = @enumFromInt(index);
             switch (tree.nodeTag(node)) {
                 .identifier => try map.put(gpa, tree.tokenSlice(tree.nodeMainToken(node)), {}),
-                .field_access => if (referencedDeclName(context, doc, node)) |name|
+                .field_access => if (referencedDeclName(session, doc, node)) |name|
                     try map.put(gpa, name, {}),
                 else => {},
             }
@@ -123,7 +123,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.absPath(context),
+            doc.absPath(session),
             try lint_problems.toOwnedSlice(gpa),
         )
     else
@@ -149,18 +149,18 @@ fn namedFnDeclProto(
 }
 
 fn referencedDeclName(
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     node: Ast.Node.Index,
 ) ?[]const u8 {
-    const tree = doc.tree(context);
+    const tree = doc.tree(session);
     std.debug.assert(tree.nodeTag(node) == .field_access);
 
-    if (context.resolveDeclOfNode(doc, node)) |decl_id| {
-        if (context.decl_store.declFileId(decl_id) != doc.file_id)
+    if (session.resolveDeclOfNode(doc, node)) |decl_id| {
+        if (session.decl_store.declFileId(decl_id) != doc.file_id)
             return null;
 
-        const name_token = context.decl_store.declNameToken(decl_id) orelse return null;
+        const name_token = session.decl_store.declNameToken(decl_id) orelse return null;
         return tree.tokenSlice(name_token);
     }
 
@@ -168,18 +168,18 @@ fn referencedDeclName(
     const member_name = tree.tokenSlice(member_token);
 
     if (isCallCallee(tree, doc, node)) {
-        const root_decl_id = context.decl_store.rootDecl(doc.file_id) orelse return null;
-        if (context.resolveDeclMember(root_decl_id, member_name)) |decl_id| {
-            if (context.decl_store.declFileId(decl_id) != doc.file_id)
+        const root_decl_id = session.decl_store.rootDecl(doc.file_id) orelse return null;
+        if (session.resolveDeclMember(root_decl_id, member_name)) |decl_id| {
+            if (session.decl_store.declFileId(decl_id) != doc.file_id)
                 return null;
 
-            const name_token = context.decl_store.declNameToken(decl_id) orelse return null;
+            const name_token = session.decl_store.declNameToken(decl_id) orelse return null;
             return tree.tokenSlice(name_token);
         }
     }
 
-    if (context.resolveTypeOfNode(doc, lhs)) |resolved| {
-        if (context.decl_store.rootDecl(doc.file_id)) |root_decl_id| {
+    if (session.resolveTypeOfNode(doc, lhs)) |resolved| {
+        if (session.decl_store.rootDecl(doc.file_id)) |root_decl_id| {
             if (resolved.decl_id == root_decl_id)
                 return member_name;
         }

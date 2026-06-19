@@ -51,7 +51,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the no_hidden_allocations rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
@@ -62,7 +62,7 @@ fn run(
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
-    const tree = doc.tree(context);
+    const tree = doc.tree(session);
 
     const root: Ast.Node.Index = .root;
     var it = try doc.nodeLineageIterator(root, gpa);
@@ -75,7 +75,7 @@ fn run(
         if (tree.nodeTag(node) != .field_access) continue :nodes;
 
         // if configured, skip if a parent is a test block
-        if (config.exclude_tests and doc.isEnclosedInTestBlock(context, node)) {
+        if (config.exclude_tests and doc.isEnclosedInTestBlock(session, node)) {
             continue :nodes;
         }
 
@@ -96,16 +96,16 @@ fn run(
         if (!is_allocator_method) continue :nodes;
 
         const decl_id = resolveAllocatorDecl(
-            context,
+            session,
             doc,
             lhs,
         ) orelse continue :nodes;
-        const decl_file_id = context.decl_store.declFileId(decl_id);
-        const decl_tree = context.file_store.fileTree(decl_file_id);
-        const decl_name_token = context.decl_store.declNameToken(decl_id) orelse
+        const decl_file_id = session.decl_store.declFileId(decl_id);
+        const decl_tree = session.file_store.fileTree(decl_file_id);
+        const decl_name_token = session.decl_store.declNameToken(decl_id) orelse
             continue :nodes;
         const decl_name = decl_tree.tokenSlice(decl_name_token);
-        const decl_abs_path = context.file_store.fileAbsPath(decl_file_id);
+        const decl_abs_path = session.file_store.fileAbsPath(decl_file_id);
 
         var is_problem: bool = false;
         for (config.detect_allocators) |allocator_kind| {
@@ -129,7 +129,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.absPath(context),
+            doc.absPath(session),
             try lint_problems.toOwnedSlice(gpa),
         )
     else
@@ -137,12 +137,12 @@ fn run(
 }
 
 fn resolveAllocatorDecl(
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     lhs: Ast.Node.Index,
 ) ?zlinter.session.DeclStore.DeclId {
-    const decl_id = context.resolveDeclOfNode(doc, lhs) orelse return null;
-    return resolveDeclAlias(context, decl_id);
+    const decl_id = session.resolveDeclOfNode(doc, lhs) orelse return null;
+    return resolveDeclAlias(session, decl_id);
 }
 
 /// Allocators are often reached through local aliases.
@@ -159,21 +159,21 @@ fn resolveAllocatorDecl(
 /// so detection is based on the original allocator declaration, not the
 /// alias declarations or their common `std.mem.Allocator` type.
 fn resolveDeclAlias(
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     decl_id: zlinter.session.DeclStore.DeclId,
 ) zlinter.session.DeclStore.DeclId {
     var current_decl_id = decl_id;
     var remaining_alias_depth: u8 = 16; // Cap to avoid getting caught in a loop.
 
     while (remaining_alias_depth > 0) : (remaining_alias_depth -= 1) {
-        const file_id = context.decl_store.declFileId(current_decl_id);
-        const tree = context.file_store.fileTree(file_id);
-        const decl_node = context.decl_store.declAstNode(current_decl_id) orelse return current_decl_id;
+        const file_id = session.decl_store.declFileId(current_decl_id);
+        const tree = session.file_store.fileTree(file_id);
+        const decl_node = session.decl_store.declAstNode(current_decl_id) orelse return current_decl_id;
         const var_decl = tree.fullVarDecl(decl_node) orelse return current_decl_id;
         const init_node = var_decl.ast.init_node.unwrap() orelse return current_decl_id;
-        const target_decl_id = context.decl_store.resolveNodeDecl(
-            &context.file_store,
-            &context.module_store,
+        const target_decl_id = session.decl_store.resolveNodeDecl(
+            &session.file_store,
+            &session.module_store,
             current_decl_id,
             init_node,
         ) orelse return current_decl_id;

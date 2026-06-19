@@ -25,7 +25,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the no_deprecated rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
@@ -41,10 +41,10 @@ fn run(
     const arena = arena_allocator.allocator();
 
     var index: u32 = @intFromEnum(Ast.Node.Index.root);
-    while (index < doc.tree(context).nodes.len) : (index += 1) {
+    while (index < doc.tree(session).nodes.len) : (index += 1) {
         defer _ = arena_allocator.reset(.retain_capacity);
 
-        const tree = doc.tree(context);
+        const tree = doc.tree(session);
         const node: Ast.Node.Index = @enumFromInt(index);
         const tag = tree.nodeTag(node);
         switch (tag) {
@@ -52,7 +52,7 @@ fn run(
                 rule,
                 gpa,
                 arena,
-                context,
+                session,
                 doc,
                 node,
                 tree.nodeMainToken(node),
@@ -63,7 +63,7 @@ fn run(
                 rule,
                 gpa,
                 arena,
-                context,
+                session,
                 doc,
                 node,
                 tree.nodeData(node).node_and_token.@"1",
@@ -74,7 +74,7 @@ fn run(
                 rule,
                 gpa,
                 arena,
-                context,
+                session,
                 doc,
                 node,
                 tree.nodeMainToken(node),
@@ -92,7 +92,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.absPath(context),
+            doc.absPath(session),
             try lint_problems.toOwnedSlice(gpa),
         )
     else
@@ -103,22 +103,22 @@ fn handleIdentifierAccess(
     rule: zlinter.rules.LintRule,
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     identifier_token: Ast.TokenIndex,
     lint_problems: *std.ArrayList(zlinter.results.LintProblem),
     config: Config,
 ) !void {
-    const tree = doc.tree(context);
+    const tree = doc.tree(session);
 
-    const decl_id = context.resolveDeclOfNode(doc, node_index) orelse return;
+    const decl_id = session.resolveDeclOfNode(doc, node_index) orelse return;
 
     // Check whether the identifier is itself the declaration, in which case
     // we should skip as its not the usage but the declaration of it and we
     // dont want to list the declaration as deprecated only its usages
-    if (context.decl_store.declFileId(decl_id) == doc.file_id) {
-        if (context.decl_store.declNameToken(decl_id)) |name_token| {
+    if (session.decl_store.declFileId(decl_id) == doc.file_id) {
+        if (session.decl_store.declNameToken(decl_id)) |name_token| {
             if (name_token == identifier_token) return;
         }
     }
@@ -127,7 +127,7 @@ fn handleIdentifierAccess(
         rule,
         gpa,
         arena,
-        context,
+        session,
         tree,
         node_index,
         decl_id,
@@ -141,16 +141,16 @@ fn handleEnumLiteral(
     rule: zlinter.rules.LintRule,
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     identifier_token: Ast.TokenIndex,
     lint_problems: *std.ArrayList(zlinter.results.LintProblem),
     config: Config,
 ) !void {
-    const tree = doc.tree(context);
+    const tree = doc.tree(session);
     const decl_id = resolveEnumLiteralDecl(
-        context,
+        session,
         doc,
         node_index,
         tree.tokenSlice(identifier_token),
@@ -160,7 +160,7 @@ fn handleEnumLiteral(
         rule,
         gpa,
         arena,
-        context,
+        session,
         tree,
         node_index,
         decl_id,
@@ -174,22 +174,22 @@ fn handleFieldAccess(
     rule: zlinter.rules.LintRule,
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     identifier_token: Ast.TokenIndex,
     lint_problems: *std.ArrayList(zlinter.results.LintProblem),
     config: Config,
 ) !void {
-    const tree = doc.tree(context);
+    const tree = doc.tree(session);
     _ = identifier_token;
 
-    const decl_id = context.resolveDeclOfNode(doc, node_index) orelse return;
+    const decl_id = session.resolveDeclOfNode(doc, node_index) orelse return;
     try appendDeprecatedProblem(
         rule,
         gpa,
         arena,
-        context,
+        session,
         tree,
         node_index,
         decl_id,
@@ -203,7 +203,7 @@ fn appendDeprecatedProblem(
     rule: zlinter.rules.LintRule,
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     tree: Ast,
     node_index: Ast.Node.Index,
     decl_id: zlinter.session.DeclStore.DeclId,
@@ -211,7 +211,7 @@ fn appendDeprecatedProblem(
     lint_problems: *std.ArrayList(zlinter.results.LintProblem),
     config: Config,
 ) !void {
-    const doc_comment = try context.allocDeclDocComments(arena, decl_id) orelse return;
+    const doc_comment = try session.allocDeclDocComments(arena, decl_id) orelse return;
     const deprecated_message = getDeprecationFromDoc(doc_comment) orelse return;
 
     try lint_problems.append(gpa, .{
@@ -224,26 +224,26 @@ fn appendDeprecatedProblem(
 }
 
 fn resolveEnumLiteralDecl(
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     node: Ast.Node.Index,
     name: []const u8,
 ) ?zlinter.session.DeclStore.DeclId {
     const enum_decl_id = resolveEnumLiteralContextTypeDecl(
-        context,
+        session,
         doc,
         node,
     ) orelse return null;
 
-    return context.resolveDeclMember(enum_decl_id, name);
+    return session.resolveDeclMember(enum_decl_id, name);
 }
 
 fn resolveEnumLiteralContextTypeDecl(
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     node: Ast.Node.Index,
 ) ?zlinter.session.DeclStore.DeclId {
-    const tree = doc.tree(context);
+    const tree = doc.tree(session);
 
     var struct_init_buffer: [2]Ast.Node.Index = undefined;
     var current = node;
@@ -254,16 +254,16 @@ fn resolveEnumLiteralContextTypeDecl(
         if (tree.fullStructInit(&struct_init_buffer, ancestor)) |struct_init| {
             if (structInitFieldNameToken(tree, struct_init, current)) |field_name_token| {
                 const struct_decl_id = if (struct_init.ast.type_expr.unwrap()) |type_expr|
-                    context.resolveDeclOfNode(doc, type_expr)
+                    session.resolveDeclOfNode(doc, type_expr)
                 else
-                    resolveEnumLiteralContextTypeDecl(context, doc, ancestor);
+                    resolveEnumLiteralContextTypeDecl(session, doc, ancestor);
 
-                const field_decl_id = context.resolveDeclMember(
+                const field_decl_id = session.resolveDeclMember(
                     struct_decl_id orelse return null,
                     tree.tokenSlice(field_name_token),
                 ) orelse return null;
 
-                return context.resolveDeclTypeDecl(field_decl_id);
+                return session.resolveDeclTypeDecl(field_decl_id);
             }
         }
 
@@ -273,8 +273,8 @@ fn resolveEnumLiteralContextTypeDecl(
                 continue;
             };
             if (nodeWithin(tree, init_node, current)) {
-                const decl_id = context.decl_store.declIdByNode(doc.file_id, ancestor) orelse return null;
-                return context.resolveDeclTypeDecl(decl_id);
+                const decl_id = session.decl_store.declIdByNode(doc.file_id, ancestor) orelse return null;
+                return session.resolveDeclTypeDecl(decl_id);
             }
         }
 
@@ -284,8 +284,8 @@ fn resolveEnumLiteralContextTypeDecl(
                 continue;
             };
             if (nodeWithin(tree, value_node, current)) {
-                const decl_id = context.decl_store.declIdByNode(doc.file_id, ancestor) orelse return null;
-                return context.resolveDeclTypeDecl(decl_id);
+                const decl_id = session.decl_store.declIdByNode(doc.file_id, ancestor) orelse return null;
+                return session.resolveDeclTypeDecl(decl_id);
             }
         }
 

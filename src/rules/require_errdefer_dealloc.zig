@@ -61,7 +61,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the require_errdefer_dealloc rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
@@ -69,7 +69,7 @@ fn run(
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
-    const tree = doc.tree(context);
+    const tree = doc.tree(session);
 
     var problem_nodes = std.ArrayList(Ast.Node.Index).empty;
     defer problem_nodes.deinit(gpa);
@@ -98,7 +98,7 @@ fn run(
             continue :nodes;
 
         try processBlock(
-            context,
+            session,
             doc,
             fn_decl.block,
             &problem_nodes,
@@ -125,7 +125,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.absPath(context),
+            doc.absPath(session),
             try lint_problems.toOwnedSlice(gpa),
         )
     else
@@ -133,14 +133,14 @@ fn run(
 }
 
 fn processBlock(
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     block_node: Ast.Node.Index,
     problems: *std.ArrayList(Ast.Node.Index),
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
 ) !void {
-    const tree = doc.tree(context);
+    const tree = doc.tree(session);
 
     // Populated with declarations that look like they should be cleaned up.
     var cleanup_symbols: std.StringHashMap(Ast.Node.Index) = .init(arena);
@@ -148,14 +148,14 @@ fn processBlock(
     var call_buffer: [1]Ast.Node.Index = undefined;
 
     for (doc.lineage.items(.children)[@intFromEnum(block_node)] orelse &.{}) |child_node| {
-        if (try declRequiringCleanup(context, doc, child_node)) |decl_ref| {
+        if (try declRequiringCleanup(session, doc, child_node)) |decl_ref| {
             try cleanup_symbols.put(
                 try arena.dupe(u8, tree.tokenSlice(decl_ref.decl_name_token)),
                 child_node,
             );
         } else if (try zlinter.ast.deferBlock(
             doc,
-            &context.file_store,
+            &session.file_store,
             child_node,
             arena,
         )) |defer_block| {
@@ -163,7 +163,7 @@ fn processBlock(
             for (defer_block.children) |defer_block_child| {
                 if (zlinter.ast.findFnCall(
                     doc,
-                    &context.file_store,
+                    &session.file_store,
                     defer_block_child,
                     &call_buffer,
                     &.{"deinit"},
@@ -178,7 +178,7 @@ fn processBlock(
             }
         } else if (zlinter.ast.isBlock(tree, child_node)) {
             try processBlock(
-                context,
+                session,
                 doc,
                 child_node,
                 problems,
@@ -201,11 +201,11 @@ const DeclRef = struct {
 /// Returns a declaration reference if the given node is a declaration node
 /// that looks like it needs to be cleaned up (e.g., if it has a `deinit` method)
 fn declRequiringCleanup(
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     maybe_var_decl_node: Ast.Node.Index,
 ) !?DeclRef {
-    const tree = doc.tree(context);
+    const tree = doc.tree(session);
     const var_decl = tree.fullVarDecl(maybe_var_decl_node) orelse return null;
     const init_node = var_decl.ast.init_node.unwrap() orelse return null;
     var call_buffer: [1]Ast.Node.Index = undefined;
@@ -229,7 +229,7 @@ fn declRequiringCleanup(
         ),
         else => if (zlinter.ast.fnCall(
             doc,
-            &context.file_store,
+            &session.file_store,
             init_node,
             &call_buffer,
             &.{ "init", "initCapacity" },
@@ -237,32 +237,32 @@ fn declRequiringCleanup(
             // Try and reduce some noise when using arenas although for anyone
             // using this rule being pedantic and calling deinit on errdefer
             // isnt the absolute worst...?
-            !hasNonFreeingAllocatorParam(doc, context, call.params)
+            !hasNonFreeingAllocatorParam(doc, session, call.params)
         else
             false,
     }) return null;
 
-    const var_decl_id = context.decl_store.declIdByNode(
+    const var_decl_id = session.decl_store.declIdByNode(
         doc.file_id,
         maybe_var_decl_node,
     ) orelse return null;
-    if (!declHasPublicDeinit(context, var_decl_id)) return null;
+    if (!declHasPublicDeinit(session, var_decl_id)) return null;
 
     return .{ .decl_name_token = var_decl.ast.mut_token + 1 };
 }
 
 fn declHasPublicDeinit(
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     decl_id: zlinter.session.DeclStore.DeclId,
 ) bool {
-    const deinit_decl_id = context.resolveDeclTypeMember(
+    const deinit_decl_id = session.resolveDeclTypeMember(
         decl_id,
         "deinit",
     ) orelse return false;
 
-    const file_id = context.decl_store.declFileId(deinit_decl_id);
-    const tree = context.file_store.fileTree(file_id);
-    const node = context.decl_store.declAstNode(deinit_decl_id) orelse return false;
+    const file_id = session.decl_store.declFileId(deinit_decl_id);
+    const tree = session.file_store.fileTree(file_id);
+    const node = session.decl_store.declAstNode(deinit_decl_id) orelse return false;
 
     var fn_proto_buffer: [1]Ast.Node.Index = undefined;
     const fn_proto = tree.fullFnProto(
@@ -285,10 +285,10 @@ fn declHasPublicDeinit(
 /// for stricter cleanup on error as it won't automatically clear itself.
 fn hasNonFreeingAllocatorParam(
     doc: *const zlinter.session.LintDocument,
-    context: *const zlinter.session.LintContext,
+    session: *const zlinter.session.LintSession,
     params: []const Ast.Node.Index,
 ) bool {
-    const tree = doc.tree(context);
+    const tree = doc.tree(session);
     const skip_var_and_field_names: []const []const u8 = &.{
         "arena",
         "fba",
@@ -308,7 +308,7 @@ fn hasNonFreeingAllocatorParam(
             .field_access => if (zlinter.ast.isFieldVarAccess(tree, param_node, skip_var_and_field_names)) return true,
             else => if (zlinter.ast.fnCall(
                 doc,
-                &context.file_store,
+                &session.file_store,
                 param_node,
                 &call_buffer,
                 &.{"allocator"},
@@ -395,13 +395,13 @@ test "hasNonFreeingAllocatorParam" {
 
         defer _ = arena.reset(.retain_capacity);
 
-        var context = zlinter.testing.initFakeContext(arena.allocator(), std.testing.io);
+        var session = zlinter.testing.initFakeContext(arena.allocator(), std.testing.io);
 
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
 
         const doc = try zlinter.testing.loadFakeDocument(
-            &context,
+            &session,
             tmp.dir,
             "test.zig",
             "fn main() void {\n" ++ source ++ "\n}",
@@ -409,12 +409,12 @@ test "hasNonFreeingAllocatorParam" {
         );
         errdefer std.debug.print("Failed source: '{s}' expected {}\n", .{ source, expected });
 
-        const tree = doc.tree(&context);
+        const tree = doc.tree(&session);
         const actual = hasNonFreeingAllocatorParam(
             doc,
-            &context,
+            &session,
             tree.fullCall(&buffer, try zlinter.testing.expectNodeOfTagFirst(
-                &context,
+                &session,
                 doc,
                 &.{
                     .call,

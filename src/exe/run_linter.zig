@@ -269,7 +269,7 @@ fn runLinterRules(
         item_timers.unloadAndPrint("Rules", printer);
     };
 
-    var context: zlinter.session.LintContext = .{
+    var context: zlinter.session.LintSession = .{
         .io = io,
         .session_arena = session_arena,
         .zig_exe = zig_exe,

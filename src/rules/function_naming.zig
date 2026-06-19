@@ -71,7 +71,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the function_naming rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
@@ -81,7 +81,7 @@ fn run(
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
-    const tree = doc.tree(context);
+    const tree = doc.tree(session);
 
     var index: u32 = 1; // Skip root node at 0
     nodes: while (index < tree.nodes.len) : (index += 1) {
@@ -163,7 +163,7 @@ fn run(
                 if (identifier.len == 1 and identifier[0] == '_') continue;
 
                 const type_kind = classifyParamTypeKind(
-                    context,
+                    session,
                     doc,
                     tree,
                     param,
@@ -218,7 +218,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.absPath(context),
+            doc.absPath(session),
             try lint_problems.toOwnedSlice(gpa),
         )
     else
@@ -243,10 +243,10 @@ fn functionReturnsType(return_type: zlinter.session.TypeStore.TypeSummary) bool 
     };
 }
 
-// TODO: Move this classification into a shared helper (e.g., in session/context)
+// TODO: Move this classification into a shared helper (e.g., in session/session)
 // so declaration_naming and field_naming can reuse the same logic.
 fn classifyParamTypeKind(
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     tree: Ast,
     param: Ast.Node.Index,
@@ -284,9 +284,9 @@ fn classifyParamTypeKind(
         }
     }
 
-    if (context.resolveDeclOfNode(doc, param_type_node)) |decl_id| {
-        if (context.decl_store.declResolvedType(decl_id)) |type_id| {
-            type_summary = context.type_store.summary(type_id);
+    if (session.resolveDeclOfNode(doc, param_type_node)) |decl_id| {
+        if (session.decl_store.declResolvedType(decl_id)) |type_id| {
+            type_summary = session.type_store.summary(type_id);
         }
     }
     if (paramValueKindFromTypeAnnotation(

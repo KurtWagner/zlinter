@@ -18,28 +18,28 @@ pub fn deinit(self: *LintDocument, gpa: std.mem.Allocator) void {
     self.skipper.deinit();
 }
 
-pub fn fileAbsPath(self: *const LintDocument, context: *const LintContext) []const u8 {
-    return context.file_store.fileAbsPath(self.file_id);
+pub fn fileAbsPath(self: *const LintDocument, session: *const LintSession) []const u8 {
+    return session.file_store.fileAbsPath(self.file_id);
 }
 
-pub fn fileSource(self: *const LintDocument, context: *const LintContext) [:0]const u8 {
-    return context.file_store.fileSource(self.file_id);
+pub fn fileSource(self: *const LintDocument, session: *const LintSession) [:0]const u8 {
+    return session.file_store.fileSource(self.file_id);
 }
 
-pub fn fileTree(self: *const LintDocument, context: *const LintContext) Ast {
-    return context.file_store.fileTree(self.file_id);
+pub fn fileTree(self: *const LintDocument, session: *const LintSession) Ast {
+    return session.file_store.fileTree(self.file_id);
 }
 
-pub fn tree(self: *const LintDocument, context: *const LintContext) Ast {
-    return self.fileTree(context);
+pub fn tree(self: *const LintDocument, session: *const LintSession) Ast {
+    return self.fileTree(session);
 }
 
-pub fn source(self: *const LintDocument, context: *const LintContext) [:0]const u8 {
-    return self.fileSource(context);
+pub fn source(self: *const LintDocument, session: *const LintSession) [:0]const u8 {
+    return self.fileSource(session);
 }
 
-pub fn absPath(self: *const LintDocument, context: *const LintContext) []const u8 {
-    return self.fileAbsPath(context);
+pub fn absPath(self: *const LintDocument, session: *const LintSession) []const u8 {
+    return self.fileAbsPath(session);
 }
 
 /// Returns true if the problem should be skipped based on line level
@@ -91,13 +91,13 @@ pub fn nodeLineageIterator(
 /// out of scope for this linter.
 pub fn isEnclosedInTestBlock(
     self: *const LintDocument,
-    context: *const LintContext,
+    session: *const LintSession,
     node: Ast.Node.Index,
 ) bool {
     const zone = tracy.traceNamed(@src(), "LintDocument.isEnclosedInTestBlock");
     defer zone.end();
 
-    const document_tree = self.tree(context);
+    const document_tree = self.tree(session);
     var next = node;
     while (self.lineage.items(.parent)[@intFromEnum(next)]) |parent| {
         switch (document_tree.nodeTag(parent)) {
@@ -119,7 +119,7 @@ test "LintDocument.isEnclosedInTestBlock" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var context = testing.initFakeContext(arena.allocator(), std.testing.io);
+    var session = testing.initFakeContext(arena.allocator(), std.testing.io);
 
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -164,7 +164,7 @@ test "LintDocument.isEnclosedInTestBlock" {
     ;
 
     const doc = try testing.loadFakeDocument(
-        &context,
+        &session,
         tmp.dir,
         "test.zig",
         test_source,
@@ -172,71 +172,71 @@ test "LintDocument.isEnclosedInTestBlock" {
     );
 
     try std.testing.expect(
-        !doc.isEnclosedInTestBlock(&context, try testing.expectVarDecl(
-            doc.tree(&context),
+        !doc.isEnclosedInTestBlock(&session, try testing.expectVarDecl(
+            doc.tree(&session),
             "is_not_in_test",
         )),
     );
 
     try std.testing.expect(
-        doc.isEnclosedInTestBlock(&context, try testing.expectVarDecl(
-            doc.tree(&context),
+        doc.isEnclosedInTestBlock(&session, try testing.expectVarDecl(
+            doc.tree(&session),
             "is_in_test_without_name",
         )),
     );
 
     try std.testing.expect(
-        doc.isEnclosedInTestBlock(&context, try testing.expectVarDecl(
-            doc.tree(&context),
+        doc.isEnclosedInTestBlock(&session, try testing.expectVarDecl(
+            doc.tree(&session),
             "is_in_test_if_condition_a",
         )),
     );
 
     try std.testing.expect(
-        doc.isEnclosedInTestBlock(&context, try testing.expectVarDecl(
-            doc.tree(&context),
+        doc.isEnclosedInTestBlock(&session, try testing.expectVarDecl(
+            doc.tree(&session),
             "is_in_test_if_condition_b",
         )),
     );
 
     try std.testing.expect(
-        doc.isEnclosedInTestBlock(&context, try testing.expectVarDecl(
-            doc.tree(&context),
+        doc.isEnclosedInTestBlock(&session, try testing.expectVarDecl(
+            doc.tree(&session),
             "is_in_test_if_condition_c",
         )),
     );
 
     try std.testing.expect(
-        !doc.isEnclosedInTestBlock(&context, try testing.expectVarDecl(
-            doc.tree(&context),
+        !doc.isEnclosedInTestBlock(&session, try testing.expectVarDecl(
+            doc.tree(&session),
             "is_not_in_test_if_condition",
         )),
     );
 
     try std.testing.expect(
-        doc.isEnclosedInTestBlock(&context, try testing.expectVarDecl(
-            doc.tree(&context),
+        doc.isEnclosedInTestBlock(&session, try testing.expectVarDecl(
+            doc.tree(&session),
             "is_in_test_nested_if_condition_a",
         )),
     );
 
     try std.testing.expect(
-        doc.isEnclosedInTestBlock(&context, try testing.expectVarDecl(
-            doc.tree(&context),
+        doc.isEnclosedInTestBlock(&session, try testing.expectVarDecl(
+            doc.tree(&session),
             "is_in_test_nested_if_condition_b",
         )),
     );
 
     try std.testing.expect(
-        doc.isEnclosedInTestBlock(&context, try testing.expectVarDecl(
-            doc.tree(&context),
+        doc.isEnclosedInTestBlock(&session, try testing.expectVarDecl(
+            doc.tree(&session),
             "is_in_test_nested_if_condition_c",
         )),
     );
 
     try std.testing.expect(
-        !doc.isEnclosedInTestBlock(&context, try testing.expectVarDecl(
-            doc.tree(&context),
+        !doc.isEnclosedInTestBlock(&session, try testing.expectVarDecl(
+            doc.tree(&session),
             "is_not_in_test_nested_if_condition_a",
         )),
     );
@@ -248,7 +248,7 @@ const common = @import("common.zig");
 const std = @import("std");
 const testing = @import("../testing.zig");
 const FileStore = @import("FileStore.zig");
-const LintContext = @import("LintContext.zig");
+const LintSession = @import("LintSession.zig");
 const LintProblem = @import("../results.zig").LintProblem;
 const Ast = std.zig.Ast;
 const tracy = @import("tracy");

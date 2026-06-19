@@ -1,6 +1,7 @@
-//! The context of all document and rule executions. It'll live the duration
+//! The session of all document and rule executions. It'll live the duration
 //! of linting all zig source files.
-const LintContext = @This();
+const LintSession = @This();
+const LintContext = LintSession;
 
 io: std.Io,
 
@@ -24,7 +25,7 @@ decl_store: DeclStore,
 type_store: TypeStore,
 build_config_store: BuildConfigStore,
 focused_compiled_contexts: std.AutoHashMapUnmanaged(CompileContext.Id, void) = .empty,
-/// Root source file for the active compile context, when known.
+/// Root source file for the active compile session, when known.
 compile_root_file_id: ?FileStore.FileId = null,
 
 pub fn init(self: *LintContext, focus_compiled_names: ?[]const []const u8) !void {
@@ -666,15 +667,15 @@ pub const EnumInfo = struct {
 
     pub fn containerDecl(
         self: EnumInfo,
-        context: *const LintContext,
+        session: *const LintContext,
         buffer: *[2]Ast.Node.Index,
     ) ?Ast.full.ContainerDecl {
-        const tree = context.file_store.fileTree(self.file_id);
+        const tree = session.file_store.fileTree(self.file_id);
         return tree.fullContainerDecl(buffer, self.container_node);
     }
 
-    pub fn tagName(self: EnumInfo, context: *const LintContext, member: Ast.Node.Index) ?[]const u8 {
-        return enumMemberTagName(context.file_store.fileTree(self.file_id), member);
+    pub fn tagName(self: EnumInfo, session: *const LintContext, member: Ast.Node.Index) ?[]const u8 {
+        return enumMemberTagName(session.file_store.fileTree(self.file_id), member);
     }
 };
 
@@ -1429,7 +1430,7 @@ fn containerDeclTypeSummary(
     };
 }
 
-test "LintContext.resolveTypeKind" {
+test "LintSession.resolveTypeKind" {
     const TestCase = struct {
         contents: [:0]const u8,
         summary: TypeStore.TypeSummary,
@@ -1873,33 +1874,33 @@ test "LintContext.resolveTypeKind" {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
 
-        var context = testing.initFakeContext(arena.allocator(), std.testing.io);
+        var session = testing.initFakeContext(arena.allocator(), std.testing.io);
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
 
         const doc = try testing.loadFakeDocument(
-            &context,
+            &session,
             tmp.dir,
             "test.zig",
             test_case.contents,
             arena.allocator(),
         );
-        std.testing.expectEqual(doc.tree(&context).errors.len, 0) catch |err| {
+        std.testing.expectEqual(doc.tree(&session).errors.len, 0) catch |err| {
             std.debug.print("Failed to parse AST:\n{s}\n", .{test_case.contents});
-            for (doc.tree(&context).errors) |ast_err| {
+            for (doc.tree(&session).errors) |ast_err| {
                 var buffer: [1024]u8 = undefined;
 
                 var writer = std.Io.File.stderr().writer(std.testing.io, &buffer).interface;
-                try doc.tree(&context).renderError(ast_err, &writer);
+                try doc.tree(&session).renderError(ast_err, &writer);
                 try writer.flush();
             }
             return err;
         };
 
-        const tree = doc.tree(&context);
+        const tree = doc.tree(&session);
         const node = tree.rootDecls()[0];
 
-        const maybe_resolved_type = context.resolveTypeOfNode(doc, node);
+        const maybe_resolved_type = session.resolveTypeOfNode(doc, node);
 
         if (maybe_resolved_type == null or !TypeStore.TypeSummary.eql(
             maybe_resolved_type.?.summary,
@@ -1909,7 +1910,7 @@ test "LintContext.resolveTypeKind" {
             std.debug.print("\n{s}\n{s}\n{s}\n{s}\n", .{
                 border,
                 border,
-                doc.tree(&context).getNodeSource(node),
+                doc.tree(&session).getNodeSource(node),
                 border,
             });
             std.debug.print("Expected: {t}\n", .{test_case.summary});
@@ -1946,7 +1947,7 @@ test "compileContextIdsForFile includes shared dependency children" {
     try testing.writeFile(tmp.dir, "dep/root.zig", "pub const child = @import(\"child.zig\");");
     try testing.writeFile(tmp.dir, "dep/child.zig", "const root = @import(\"root\");");
 
-    var context = testing.initFakeContext(
+    var session = testing.initFakeContext(
         arena.allocator(),
         std.testing.io,
     );
@@ -1976,17 +1977,17 @@ test "compileContextIdsForFile includes shared dependency children" {
         &dep_child_path_buffer,
     )];
 
-    const root1_file_id = try context.file_store.resolve(root1_path, std.testing.io, ".");
-    const root2_file_id = try context.file_store.resolve(root2_path, std.testing.io, ".");
-    const dep_root_file_id = try context.file_store.resolve(dep_root_path, std.testing.io, ".");
-    const dep_child_file_id = try context.file_store.resolve(dep_child_path, std.testing.io, ".");
+    const root1_file_id = try session.file_store.resolve(root1_path, std.testing.io, ".");
+    const root2_file_id = try session.file_store.resolve(root2_path, std.testing.io, ".");
+    const dep_root_file_id = try session.file_store.resolve(dep_root_path, std.testing.io, ".");
+    const dep_child_file_id = try session.file_store.resolve(dep_child_path, std.testing.io, ".");
 
     const build_config_id: BuildConfigStore.ConfigId = .fromIndex(0);
     const root1_build_module: std.Build.Configuration.Module.Index = @enumFromInt(0);
     const root2_build_module: std.Build.Configuration.Module.Index = @enumFromInt(1);
     const dep_build_module: std.Build.Configuration.Module.Index = @enumFromInt(2);
 
-    const dep_module_id = context.module_store.resolve(.{
+    const dep_module_id = session.module_store.resolve(.{
         .root_file = dep_root_file_id,
         .build_config = build_config_id,
         .build_config_module = dep_build_module,
@@ -1999,7 +2000,7 @@ test "compileContextIdsForFile includes shared dependency children" {
         try arena.allocator().dupe(u8, "dep"),
         dep_module_id,
     );
-    const root1_module_id = context.module_store.resolve(.{
+    const root1_module_id = session.module_store.resolve(.{
         .root_file = root1_file_id,
         .build_config = build_config_id,
         .build_config_module = root1_build_module,
@@ -2012,23 +2013,23 @@ test "compileContextIdsForFile includes shared dependency children" {
         try arena.allocator().dupe(u8, "dep"),
         dep_module_id,
     );
-    const root2_module_id = context.module_store.resolve(.{
+    const root2_module_id = session.module_store.resolve(.{
         .root_file = root2_file_id,
         .build_config = build_config_id,
         .build_config_module = root2_build_module,
         .module_id_by_import_name = root2_imports,
     });
 
-    try context.compile_contexts.append(arena.allocator(), .{
+    try session.compile_contexts.append(arena.allocator(), .{
         .step_index = @enumFromInt(0),
         .root_module = root1_module_id,
     });
-    try context.compile_contexts.append(arena.allocator(), .{
+    try session.compile_contexts.append(arena.allocator(), .{
         .step_index = @enumFromInt(1),
         .root_module = root2_module_id,
     });
 
-    const compile_context_ids = try context.compileContextIdsForFile(
+    const compile_context_ids = try session.compileContextIdsForFile(
         dep_child_file_id,
         arena.allocator(),
     );
@@ -2037,13 +2038,13 @@ test "compileContextIdsForFile includes shared dependency children" {
     var found_root1 = false;
     var found_root2 = false;
     for (compile_context_ids) |compile_context_id| {
-        const compile_root_file_id = context.compileRootFileId(compile_context_id);
+        const compile_root_file_id = session.compileRootFileId(compile_context_id);
         found_root1 = found_root1 or compile_root_file_id == root1_file_id;
         found_root2 = found_root2 or compile_root_file_id == root2_file_id;
 
         const resolved_root = try import_utils.resolveFile(
-            &context.file_store,
-            &context.module_store,
+            &session.file_store,
+            &session.module_store,
             std.testing.io,
             ".",
             .{

@@ -142,7 +142,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the field_naming rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
@@ -152,7 +152,7 @@ fn run(
     var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
     defer lint_problems.deinit(gpa);
 
-    const tree = doc.tree(context);
+    const tree = doc.tree(session);
     var buffer: [2]Ast.Node.Index = undefined;
 
     var index: u32 = @intFromEnum(Ast.Node.Index.root);
@@ -218,8 +218,8 @@ fn run(
 
             fields: for (container_decl.ast.members) |member| {
                 if (tree.fullContainerField(member)) |container_field| {
-                    const type_summary = if (context.decl_store.declIdByNode(doc.file_id, member)) |decl_id|
-                        context.resolveDeclValueSummary(decl_id)
+                    const type_summary = if (session.decl_store.declIdByNode(doc.file_id, member)) |decl_id|
+                        session.resolveDeclValueSummary(decl_id)
                     else
                         null;
                     const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const field_desc: []const u8 = tuple: {
@@ -308,7 +308,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.absPath(context),
+            doc.absPath(session),
             try lint_problems.toOwnedSlice(gpa),
         )
     else

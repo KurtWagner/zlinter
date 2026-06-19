@@ -43,7 +43,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the no_comment_out_code rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
@@ -51,7 +51,7 @@ fn run(
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
-    const source = doc.source(context);
+    const source = doc.source(session);
 
     var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
     defer lint_problems.deinit(gpa);
@@ -119,7 +119,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.absPath(context),
+            doc.absPath(session),
             try lint_problems.toOwnedSlice(gpa),
         )
     else

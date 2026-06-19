@@ -91,7 +91,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the declaration_naming rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
@@ -101,7 +101,7 @@ fn run(
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
-    const tree = doc.tree(context);
+    const tree = doc.tree(session);
 
     var index: u32 = 1; // Skip root node at 0
     nodes: while (index < tree.nodes.len) : (index += 1) {
@@ -119,7 +119,7 @@ fn run(
             if (token_tag == .keyword_export) continue :nodes;
         }
 
-        const decl_id = context.decl_store.declIdByNode(
+        const decl_id = session.decl_store.declIdByNode(
             doc.file_id,
             node,
         ) orelse continue :nodes;
@@ -127,7 +127,7 @@ fn run(
             if (isThisBuiltinCall(tree, init_node)) continue :nodes;
         }
 
-        const type_summary = context.resolveDeclValueSummary(decl_id) orelse .other;
+        const type_summary = session.resolveDeclValueSummary(decl_id) orelse .other;
         const name_token = var_decl.ast.mut_token + 1;
         const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
 
@@ -210,7 +210,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.absPath(context),
+            doc.absPath(session),
             try lint_problems.toOwnedSlice(gpa),
         )
     else

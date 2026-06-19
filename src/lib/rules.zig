@@ -4,8 +4,8 @@ pub const LintRule = struct {
     execution: ExecutionMode,
     run: *const fn (
         self: LintRule,
-        context: *session.LintContext,
-        doc: *const session.LintDocument,
+        session: *LintSession,
+        doc: *const LintDocument,
         gpa: std.mem.Allocator,
         options: RunOptions,
     ) RunError!?results.LintResult,
@@ -16,7 +16,7 @@ pub const ExecutionMode = enum {
     syntax_only,
 
     /// Rule results may depend on imports, types, declarations, or
-    /// `@import("root")`, so the rule must run with an active compile context
+    /// `@import("root")`, so the rule must run with an active compile session
     /// when one is known.
     compile_context,
 };
@@ -25,13 +25,13 @@ pub const RunOptions = struct {
     /// Configuration for the rule. See `getConfig`.
     config: ?*anyopaque = null,
 
-    /// Compile context currently used for semantic resolution. Null means the
-    /// rule is running without build context, such as tests, standalone files,
+    /// Compile session currently used for semantic resolution. Null means the
+    /// rule is running without build session, such as tests, standalone files,
     /// or a file not reachable from any known compile step.
-    compile_context_id: ?session.CompileContext.Id = null,
+    compile_context_id: ?CompileContext.Id = null,
 
     /// Root source file for `compile_context_id`, when known.
-    compile_root_file_id: ?session.FileStore.FileId = null,
+    compile_root_file_id: ?FileStore.FileId = null,
 
     pub inline fn getConfig(self: @This(), T: type) T {
         return if (self.config) |config| @as(*T, @ptrCast(@alignCast(config))).* else T{};
@@ -242,7 +242,10 @@ pub const LintProblemSeverity = enum(u8) {
 
 const ansi = @import("ansi.zig");
 const results = @import("results.zig");
-const session = @import("session.zig");
+const CompileContext = @import("session/CompileContext.zig");
+const FileStore = @import("session/FileStore.zig");
+const LintDocument = @import("session/LintDocument.zig");
+const LintSession = @import("session/LintSession.zig");
 const std = @import("std");
 const strings = @import("strings.zig");
 

@@ -59,7 +59,7 @@ const LiteralKind = enum { bool, string, number, char };
 /// Runs the no_literal_args rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
@@ -69,7 +69,7 @@ fn run(
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
-    const tree = doc.tree(context);
+    const tree = doc.tree(session);
     var call_buffer: [1]Ast.Node.Index = undefined;
 
     const root: Ast.Node.Index = .root;
@@ -103,7 +103,7 @@ fn run(
             } orelse continue;
 
             // if configured, skip if a parent is a test block
-            if (config.exclude_tests and doc.isEnclosedInTestBlock(context, node)) {
+            if (config.exclude_tests and doc.isEnclosedInTestBlock(session, node)) {
                 continue :nodes;
             }
 
@@ -152,7 +152,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.absPath(context),
+            doc.absPath(session),
             try lint_problems.toOwnedSlice(gpa),
         )
     else

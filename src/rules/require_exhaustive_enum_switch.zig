@@ -55,7 +55,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the require_exhaustive_enum_switch rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    context: *zlinter.session.LintContext,
+    session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
@@ -66,7 +66,7 @@ fn run(
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(gpa);
 
-    const tree = doc.tree(context);
+    const tree = doc.tree(session);
 
     const root: Ast.Node.Index = .root;
     var it = try doc.nodeLineageIterator(root, gpa);
@@ -89,20 +89,20 @@ fn run(
 
         const switch_info = tree.fullSwitch(node) orelse continue :nodes;
 
-        const switch_expr_enum_decl = context.resolveEnumDeclOfNode(doc, switch_info.ast.condition) orelse continue :nodes;
+        const switch_expr_enum_decl = session.resolveEnumDeclOfNode(doc, switch_info.ast.condition) orelse continue :nodes;
 
-        const switch_expr_enum = context.enumInfo(switch_expr_enum_decl) orelse continue :nodes;
+        const switch_expr_enum = session.enumInfo(switch_expr_enum_decl) orelse continue :nodes;
         if (switch_expr_enum.is_non_exhaustive) continue :nodes;
 
         var enum_member_buffer: [2]Ast.Node.Index = undefined;
-        const enum_container_decl = switch_expr_enum.containerDecl(context, &enum_member_buffer) orelse continue :nodes;
+        const enum_container_decl = switch_expr_enum.containerDecl(session, &enum_member_buffer) orelse continue :nodes;
         const enum_members = enum_container_decl.ast.members;
         if (enum_members.len == 0) continue :nodes;
 
         defer complete_tag_set.clearRetainingCapacity();
         try complete_tag_set.ensureTotalCapacity(@intCast(enum_members.len));
         for (enum_members) |member| {
-            if (switch_expr_enum.tagName(context, member)) |tag|
+            if (switch_expr_enum.tagName(session, member)) |tag|
                 complete_tag_set.putAssumeCapacity(tag, {});
         }
 
@@ -117,7 +117,7 @@ fn run(
                 if (else_case_node == null) else_case_node = case_node;
             } else {
                 case_values: for (switch_case.ast.values) |value_node| {
-                    const tag_name = context.resolveEnumTagNameOfNode(doc, value_node) orelse continue :case_values;
+                    const tag_name = session.resolveEnumTagNameOfNode(doc, value_node) orelse continue :case_values;
 
                     if (complete_tag_set.contains(tag_name))
                         try used_tag_set.put(tag_name, {});
@@ -129,7 +129,7 @@ fn run(
             missing_tags.clearRetainingCapacity();
 
             for (enum_members) |member| {
-                const tag = switch_expr_enum.tagName(context, member) orelse continue;
+                const tag = switch_expr_enum.tagName(session, member) orelse continue;
                 if (!used_tag_set.contains(tag)) try missing_tags.append(gpa, tag);
             }
 
@@ -146,7 +146,7 @@ fn run(
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
             gpa,
-            doc.absPath(context),
+            doc.absPath(session),
             try lint_problems.toOwnedSlice(gpa),
         )
     else
