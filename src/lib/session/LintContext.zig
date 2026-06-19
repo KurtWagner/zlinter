@@ -240,12 +240,12 @@ pub fn initDocument(
     doc.* = .{
         .file_id = file_id,
         .lineage = .empty,
-        .comments = try comments.allocParse(source, gpa),
+        .comments = oom(comments.allocParse(source, gpa)),
         .skipper = .init(doc.comments, source, gpa),
     };
 
     {
-        try doc.lineage.resize(gpa, tree.nodes.len);
+        oom(doc.lineage.resize(gpa, tree.nodes.len));
         for (0..tree.nodes.len) |i| {
             doc.lineage.set(i, .{});
         }
@@ -258,14 +258,14 @@ pub fn initDocument(
         var queue = std.ArrayList(QueueItem).empty;
         defer queue.deinit(gpa);
 
-        try queue.append(gpa, .{ .node = .root });
+        oom(queue.append(gpa, .{ .node = .root }));
 
         while (queue.pop()) |item| {
-            const children = try ast.nodeChildrenAlloc(
+            const children = oom(ast.nodeChildrenAlloc(
                 gpa,
                 tree,
                 item.node,
-            );
+            ));
 
             // Ideally this is never necessary as we should only be visiting
             // each node once while walking the tree and if we're not there's
@@ -281,10 +281,10 @@ pub fn initDocument(
             });
 
             for (children) |child| {
-                try queue.append(gpa, .{
+                oom(queue.append(gpa, .{
                     .parent = item.node,
                     .node = child,
-                });
+                }));
             }
         }
     }
@@ -719,7 +719,7 @@ pub fn allocDeclDocComments(
 
     var token = first_doc_token;
     while (token < first_token) : (token += 1) {
-        if (token != first_doc_token) try comments_text.append(allocator, '\n');
+        if (token != first_doc_token) oom(comments_text.append(allocator, '\n'));
 
         const raw = tree.tokenSlice(token);
         const without_marker = if (std.mem.startsWith(u8, raw, "///") or
@@ -727,10 +727,10 @@ pub fn allocDeclDocComments(
             raw[3..]
         else
             raw;
-        try comments_text.appendSlice(allocator, without_marker);
+        oom(comments_text.appendSlice(allocator, without_marker));
     }
 
-    return try comments_text.toOwnedSlice(allocator);
+    return oom(comments_text.toOwnedSlice(allocator));
 }
 
 /// Resolves `node` to the declaration it directly names.
@@ -1697,6 +1697,7 @@ const ModuleStore = @import("ModuleStore.zig");
 const PanicAllocator = @import("PanicAllocator.zig");
 const TypeStore = @import("TypeStore.zig");
 const Ast = std.zig.Ast;
+const oom = @import("../allocations.zig").oom;
 
 test {
     refAllDeclsExcept(@This(), &.{});
