@@ -484,7 +484,6 @@ pub const CommentsDocument = struct {
         return self.line_starts.len - 1;
     }
 
-    // TODO: Add unit tests for this new method:
     // Returns the slice containing the text content of the comment. For example
     // for a todo, this would be all text after the todo keyword.
     pub fn getCommentContent(self: @This(), comment: Comment, source: []const u8) []const u8 {

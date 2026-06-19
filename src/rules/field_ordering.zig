@@ -214,7 +214,6 @@ fn run(
         null;
 }
 
-// TODO: This needs unit tests
 /// Span between two nodes (or the same node) including comments and leading
 /// whitespace like newlines.
 fn nodeSpanIncludingComments(

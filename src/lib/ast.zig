@@ -152,7 +152,6 @@ pub fn unwrapNode(
     return current;
 }
 
-// TODO: Write unit tests for this
 /// Returns true if two non-root nodes are overlapping.
 ///
 /// This can be useful if you have a node and want to work out where it's
