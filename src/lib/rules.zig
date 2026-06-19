@@ -1,7 +1,7 @@
 /// A linter rule with a unique id and a run method.
 pub const LintRule = struct {
     rule_id: []const u8,
-    execution: ExecutionMode = .syntax_only,
+    execution: ExecutionMode,
     run: *const fn (
         self: LintRule,
         context: *session.LintContext,

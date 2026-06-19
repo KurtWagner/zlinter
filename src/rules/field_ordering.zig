@@ -41,6 +41,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
     _ = options;
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.field_ordering),
+        .execution = .syntax_only,
         .run = &run,
     };
 }
