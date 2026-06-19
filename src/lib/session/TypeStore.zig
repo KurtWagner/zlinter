@@ -463,22 +463,6 @@ pub fn summarizeTypeNode(
         .unknown;
 }
 
-fn summarizeDeclType(
-    tree: Ast,
-    maybe_type_node: ?Ast.Node.Index,
-    maybe_value_node: ?Ast.Node.Index,
-) ?TypeSummary {
-    if (maybe_type_node) |type_node| {
-        return summarizeTypeNode(tree, type_node);
-    }
-
-    if (maybe_value_node) |value_node| {
-        if (summarizeValueExpr(tree, value_node)) |summary_value| return summary_value;
-    }
-
-    return null;
-}
-
 fn summarizeTypeExpr(
     tree: Ast,
     type_node: Ast.Node.Index,
