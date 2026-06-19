@@ -348,7 +348,7 @@ fn resolveScopedImports(
         const parent = connections.parent orelse continue;
 
         const decl_name = tree.tokenSlice(var_decl.ast.mut_token + 1);
-        const classification = classifyImportPath(import_path);
+        const classification = classifyImportKind(.init(import_path));
 
         const first_loc = tree.tokenLocation(0, tree.firstToken(node));
         const last_loc = tree.tokenLocation(0, tree.lastToken(node));
@@ -400,12 +400,15 @@ fn isImportCall(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
     }
 }
 
-fn classifyImportPath(path: []const u8) ImportDecl.Classification {
-    std.debug.assert(path.len > 0);
-
-    if (std.mem.startsWith(u8, path, "./")) return .local;
-    if (std.mem.endsWith(u8, path, ".zig")) return .local;
-    return .external;
+fn classifyImportKind(kind: import_utils.Kind) ImportDecl.Classification {
+    return switch (kind) {
+        .relative => .local,
+        .stdlib,
+        .root,
+        .builtin,
+        .module,
+        => .external,
+    };
 }
 
 // TODO(#52): Move to ast module
@@ -824,4 +827,5 @@ test "allow_line_separated_chunks" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const import_utils = zlinter.session.imports;
 const Ast = std.zig.Ast;
