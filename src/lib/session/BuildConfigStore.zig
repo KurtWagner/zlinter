@@ -49,7 +49,7 @@ pub fn resolve(
     zig_exe: []const u8,
     cwd: []const u8,
     input_path: []const u8,
-) !ConfigId {
+) error{ResolutionError}!ConfigId {
     const zone = tracy.traceNamed(@src(), "BuildConfigStore.resolve");
     defer zone.end();
 
@@ -64,11 +64,21 @@ pub fn resolve(
     if (self.config_id_by_path.get(normal_path)) |index|
         return index;
 
-    const build_root = try self.findBuildRoot(io, normal_path);
+    const build_root = self.findBuildRoot(io, normal_path) catch |e| {
+        std.log.err("Could not find build root from '{s}' due to {t}", .{
+            normal_path,
+            e,
+        });
+        return error.ResolutionError;
+    };
 
     const build_root_path = switch (build_root) {
         .config_id => |cached| {
-            try self.cacheResolvedConfigPaths(normal_path, cached.path, cached.index);
+            self.cacheResolvedConfigPaths(
+                normal_path,
+                cached.path,
+                cached.index,
+            );
             return cached.index;
         },
         .path => |path| path,
@@ -76,12 +86,19 @@ pub fn resolve(
     std.log.info(" = Root: {s}", .{build_root_path});
 
     // TODO: #147 - catch and report build errors appropriately otherwise it appears as missing build config...
-    const config_path = try files.resolveBuildConfigurationPath(
+    const config_path = files.resolveBuildConfigurationPath(
         io,
         self.arena,
         zig_exe,
         build_root_path,
-    );
+    ) catch |e| {
+        std.log.err("Could not resolve build file '{s}' using '{s}' due to {t}", .{
+            build_root_path,
+            zig_exe,
+            e,
+        });
+        return error.ResolutionError;
+    };
     // TODO: #149 - use fba with max path (find way to share this for paths)
     defer self.arena.free(config_path);
 
@@ -90,32 +107,33 @@ pub fn resolve(
         config_path,
         .{},
     ) catch |e| {
-        switch (e) {
-            error.FileNotFound => {
-                std.log.err("Could not find config file '{s}'", .{config_path});
-                return e;
-            },
-            else => return e,
-        }
+        std.log.err("Could not find config file '{s}' due to {t}", .{ config_path, e });
+        return error.ResolutionError;
     };
     defer file.close(io);
 
-    const config = try std.Build.Configuration.loadFile(
+    const config = std.Build.Configuration.loadFile(
         self.arena,
         io,
         file,
-    );
+    ) catch |e| switch (e) {
+        error.OutOfMemory => @panic("OOM"),
+        else => {
+            std.log.err("Failed to load configuration file due to: {t}", .{e});
+            return error.ResolutionError;
+        },
+    };
 
-    const build_root_key = try self.arena.dupe(u8, build_root_path);
+    const build_root_key = oom(self.arena.dupe(u8, build_root_path));
     const config_id: ConfigId = .fromIndex(self.configs.len);
 
-    try self.configs.append(self.arena, .{
+    oom(self.configs.append(self.arena, .{
         .build_config = config,
         .build_root_path = build_root_key,
-    });
+    }));
 
-    try self.config_id_by_path.putNoClobber(self.arena, build_root_key, config_id);
-    try self.cacheResolvedConfigPaths(normal_path, build_root_key, config_id);
+    oom(self.config_id_by_path.putNoClobber(self.arena, build_root_key, config_id));
+    self.cacheResolvedConfigPaths(normal_path, build_root_key, config_id);
 
     return config_id;
 }
@@ -201,7 +219,7 @@ fn cacheResolvedConfigPaths(
     src_path: []const u8,
     cached_ancestor_path: []const u8,
     config_id: ConfigId,
-) !void {
+) void {
     const zone = tracy.traceNamed(@src(), "BuildConfigStore.cacheResolvedConfigPaths");
     defer zone.end();
 
@@ -212,8 +230,8 @@ fn cacheResolvedConfigPaths(
 
     while (!std.mem.eql(u8, path, cached_ancestor_path)) {
         if (!self.config_id_by_path.contains(path)) {
-            const key = try self.arena.dupe(u8, path);
-            try self.config_id_by_path.putNoClobber(self.arena, key, config_id);
+            const key = oom(self.arena.dupe(u8, path));
+            oom(self.config_id_by_path.putNoClobber(self.arena, key, config_id));
         }
 
         const parent = std.fs.path.dirname(path) orelse cached_ancestor_path;
@@ -227,3 +245,4 @@ fn cacheResolvedConfigPaths(
 const files = @import("../files.zig");
 const std = @import("std");
 const tracy = @import("tracy");
+const oom = @import("../allocations.zig").oom;
