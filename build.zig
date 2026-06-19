@@ -79,7 +79,7 @@ pub const BuilderOptions = struct {
 pub fn builder(b: *std.Build, options: BuilderOptions) StepBuilder {
     return .{
         .rules = .empty,
-        .compiled = .empty,
+        .focus_compiled_names = .empty,
         .exclude = .empty,
         .include = .empty,
         .options = .{
@@ -108,7 +108,7 @@ const LintExcludeSource = union(enum) {
 
 const StepBuilder = struct {
     rules: std.ArrayList(BuiltRule),
-    compiled: std.ArrayList(*std.Build.Step.Compile),
+    focus_compiled_names: std.ArrayList([]const u8),
     include: std.ArrayList(LintIncludeSource),
     exclude: std.ArrayList(LintExcludeSource),
     options: BuildOptions,
@@ -135,22 +135,16 @@ const StepBuilder = struct {
         ) catch @panic("OOM");
     }
 
-    // TODO: #149 - revisit this
-    /// Adds a Zig compile step to lint.
+    /// Adds a Zig compile step to use when linting files with rules that are
+    /// context based (e.g., rely on declaration types).
     ///
-    /// The compile step provides the root module, import table, target, and
-    /// builtin context needed to resolve imports the same way Zig does. Path
-    /// includes and excludes are applied as filters over files discovered from
-    /// the compile step.
-    ///
-    /// Multiple compile steps may be added; each is treated as its own lint
-    /// context.
-    ///
-    /// If no compile steps are added, zlinter falls back to path-based file
-    /// resolution.
+    /// If no compile steps are added, zlinter falls back to examining all
+    /// compiled units for the project. It'll then select based on kind in the
+    /// following order: exe > lib > obj > test. e.g., if an exe is found, it
+    /// will only use executables for context resolution.
     pub fn addCompile(self: *StepBuilder, compile: *std.Build.Step.Compile) void {
         const arena = self.b.allocator;
-        self.compiled.append(arena, compile) catch @panic("OOM");
+        self.focus_compiled_names.append(arena, self.b.dupe(compile.name)) catch @panic("OOM");
     }
 
     /// Adds a source path to be linted.
@@ -205,7 +199,7 @@ const StepBuilder = struct {
                     .{},
                 ),
             },
-            self.compiled.items,
+            self.focus_compiled_names.items,
             self.include.items,
             self.exclude.items,
             self.options,
@@ -525,7 +519,7 @@ fn buildStep(
         dependency: *std.Build.Dependency,
         module: *std.Build.Module,
     },
-    compiled: []const *std.Build.Step.Compile,
+    focus_compiled_names: []const []const u8,
     include: []const LintIncludeSource,
     exclude: []const LintExcludeSource,
     options: BuildOptions,
@@ -605,8 +599,9 @@ fn buildStep(
         }
     }
 
-    for (compiled) |compile|
-        run.addArg(compile.name);
+    // i.e., only consider these compiled units when compiling
+    for (focus_compiled_names) |compiled_name|
+        run.addArg(compiled_name);
 
     run.addArg("--stdin");
 
