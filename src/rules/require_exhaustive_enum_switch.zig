@@ -47,6 +47,7 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.require_exhaustive_enum_switch),
+        .execution = .compile_context,
         .run = &run,
     };
 }

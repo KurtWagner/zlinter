@@ -1,6 +1,7 @@
 /// A linter rule with a unique id and a run method.
 pub const LintRule = struct {
     rule_id: []const u8,
+    execution: ExecutionMode = .syntax_only,
     run: *const fn (
         self: LintRule,
         context: *session.LintContext,
@@ -10,9 +11,27 @@ pub const LintRule = struct {
     ) RunError!?results.LintResult,
 };
 
+pub const ExecutionMode = enum {
+    /// Rule results depend only on the parsed file.
+    syntax_only,
+
+    /// Rule results may depend on imports, types, declarations, or
+    /// `@import("root")`, so the rule must run with an active compile context
+    /// when one is known.
+    compile_context,
+};
+
 pub const RunOptions = struct {
     /// Configuration for the rule. See `getConfig`.
     config: ?*anyopaque = null,
+
+    /// Compile context currently used for semantic resolution. Null means the
+    /// rule is running without build context, such as tests, standalone files,
+    /// or a file not reachable from any known compile step.
+    compile_context_id: ?session.CompileContext.Id = null,
+
+    /// Root source file for `compile_context_id`, when known.
+    compile_root_file_id: ?session.FileStore.FileId = null,
 
     pub inline fn getConfig(self: @This(), T: type) T {
         return if (self.config) |config| @as(*T, @ptrCast(@alignCast(config))).* else T{};

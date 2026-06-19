@@ -175,14 +175,27 @@ test "writeImportPath - rejects non-string import arguments" {
     try std.testing.expect(writeImportPath(tree, node, &buffer) == null);
 }
 
+pub const ResolveContext = struct {
+    parent_file_id: FileStore.FileId,
+
+    /// Root source file for the active compile context.
+    compile_root_file_id: ?FileStore.FileId,
+};
+
+/// Resolves an `@import` path in the supplied context.
+///
+/// `@import("root")` resolves only when `context.compile_root_file_id` is known.
+/// Callers should pass the compile context root file directly instead of
+/// searching for it from `context.parent_file_id`.
 pub fn resolveFile(
     file_store: *FileStore,
     module_store: *const ModuleStore,
     io: std.Io,
     zig_lib_directory: []const u8,
-    parent_file_id: FileStore.FileId,
+    context: ResolveContext,
     import_path: []const u8,
 ) !?FileStore.FileId {
+    const parent_file_id = context.parent_file_id;
     const parent_abs_path = file_store.fileAbsPath(parent_file_id);
     const parent_file_dir = std.fs.path.dirname(parent_abs_path) orelse ".";
 
@@ -198,9 +211,9 @@ pub fn resolveFile(
         ),
         // TODO: #149 - handle "builtin" imports.
         .builtin,
-        // TODO: #149 - handle "root"  imports.
-        .root,
         => null,
+        .root,
+        => context.compile_root_file_id,
         .module => id: {
             const parent_module_id = module_store.moduleIdByRootFile(parent_file_id) orelse break :id null;
             const imported_module_id = module_store.moduleIdByImportName(
@@ -210,6 +223,71 @@ pub fn resolveFile(
             break :id module_store.rootFileId(imported_module_id);
         },
     };
+}
+
+test "resolveFile - root import uses supplied root file id" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try testing.writeFile(tmp.dir, "root.zig", "");
+    try testing.writeFile(tmp.dir, "child.zig", "");
+
+    var root_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    const root_path = root_path_buffer[0..try tmp.dir.realPathFile(
+        std.testing.io,
+        "root.zig",
+        &root_path_buffer,
+    )];
+
+    var child_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    const child_path = child_path_buffer[0..try tmp.dir.realPathFile(
+        std.testing.io,
+        "child.zig",
+        &child_path_buffer,
+    )];
+
+    var file_store: FileStore = .init(arena.allocator());
+    var module_store: ModuleStore = .init(arena.allocator());
+
+    const compile_root_file_id = try file_store.resolve(
+        root_path,
+        std.testing.io,
+        ".",
+    );
+    const child_file_id = try file_store.resolve(
+        child_path,
+        std.testing.io,
+        ".",
+    );
+
+    const resolved_compile_root_file_id = try resolveFile(
+        &file_store,
+        &module_store,
+        std.testing.io,
+        ".",
+        .{
+            .parent_file_id = child_file_id,
+            .compile_root_file_id = compile_root_file_id,
+        },
+        "root",
+    );
+    try std.testing.expectEqual(compile_root_file_id, resolved_compile_root_file_id.?);
+
+    const unresolved_compile_root_file_id = try resolveFile(
+        &file_store,
+        &module_store,
+        std.testing.io,
+        ".",
+        .{
+            .parent_file_id = child_file_id,
+            .compile_root_file_id = null,
+        },
+        "root",
+    );
+    try std.testing.expectEqual(@as(?FileStore.FileId, null), unresolved_compile_root_file_id);
 }
 
 const Ast = std.zig.Ast;

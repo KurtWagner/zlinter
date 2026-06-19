@@ -10,6 +10,8 @@ session_arena: std.mem.Allocator,
 io: std.Io,
 /// externally owned
 zig_lib_directory: []const u8,
+/// Root source file for the active compile context, when known.
+compile_root_file_id: ?FileStore.FileId = null,
 
 pub fn init(
     session_arena: std.mem.Allocator,
@@ -1378,7 +1380,10 @@ fn resolveImportMember(
         module_store,
         self.io,
         self.zig_lib_directory,
-        parent_file_id,
+        .{
+            .parent_file_id = parent_file_id,
+            .compile_root_file_id = self.compile_root_file_id,
+        },
         import_path,
     ) catch |e| {
         std.log.err("Failed to resolve import '{s}': {t}", .{ import_path, e });

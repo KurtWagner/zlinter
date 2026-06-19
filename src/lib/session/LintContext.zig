@@ -21,6 +21,8 @@ module_store: ModuleStore,
 decl_store: DeclStore,
 type_store: TypeStore,
 build_config_store: BuildConfigStore,
+/// Root source file for the active compile context, when known.
+compile_root_file_id: ?FileStore.FileId = null,
 
 pub fn init(self: *LintContext) !void {
     const zone = tracy.traceNamed(@src(), "LintContext.init");
@@ -206,6 +208,156 @@ pub fn resolveFile(self: *LintContext, input_path: []const u8) !FileStore.FileId
         &self.type_store,
     );
     return id;
+}
+
+pub fn resolveFileTypes(self: *LintContext, file_id: FileStore.FileId) void {
+    self.decl_store.resolveFileTypes(
+        file_id,
+        &self.file_store,
+        &self.module_store,
+        &self.type_store,
+    );
+}
+
+// TODO: #149 - avoid this shared state and instead pass through
+pub fn setCompileRootFileId(self: *LintContext, compile_root_file_id: ?FileStore.FileId) void {
+    self.compile_root_file_id = compile_root_file_id;
+    self.decl_store.compile_root_file_id = compile_root_file_id;
+}
+
+pub fn compileRootFileId(
+    self: *const LintContext,
+    compile_context_id: CompileContext.Id,
+) FileStore.FileId {
+    return self.module_store.rootFileId(
+        self.compile_contexts.items(.root_module)[compile_context_id.toIndex()],
+    );
+}
+
+pub fn compileContextIdsForFile(
+    self: *LintContext,
+    file_id: FileStore.FileId,
+    gpa: std.mem.Allocator,
+) ![]CompileContext.Id {
+    var ids = std.ArrayList(CompileContext.Id).empty;
+    errdefer ids.deinit(gpa);
+
+    // TODO: #149 - Optimise this
+    for (0..self.compile_contexts.len) |index| {
+        const compile_context_id: CompileContext.Id = .fromIndex(index);
+        if (try self.compileContextContainsFile(
+            compile_context_id,
+            file_id,
+            gpa,
+        )) {
+            try ids.append(gpa, compile_context_id);
+        }
+    }
+
+    return ids.toOwnedSlice(gpa);
+}
+
+const ReachKey = enum(u64) {
+    _,
+
+    fn init(file_id: FileStore.FileId, module_id: ModuleStore.ModuleId) ReachKey {
+        return @enumFromInt((@as(u64, @intFromEnum(file_id)) << 32) |
+            @as(u64, @intFromEnum(module_id)));
+    }
+};
+
+const ReachQueueItem = struct {
+    file_id: FileStore.FileId,
+    module_id: ModuleStore.ModuleId,
+};
+
+fn compileContextContainsFile(
+    self: *LintContext,
+    compile_context_id: CompileContext.Id,
+    target_file_id: FileStore.FileId,
+    gpa: std.mem.Allocator,
+) !bool {
+    const root_module_id = self.compile_contexts.items(.root_module)[compile_context_id.toIndex()];
+    const compile_root_file_id = self.module_store.rootFileId(root_module_id);
+    if (compile_root_file_id == target_file_id) return true;
+
+    var visited = std.AutoHashMapUnmanaged(ReachKey, void).empty;
+    defer visited.deinit(gpa);
+
+    var queue = std.ArrayList(ReachQueueItem).empty;
+    defer queue.deinit(gpa);
+
+    try queue.append(gpa, .{
+        .file_id = compile_root_file_id,
+        .module_id = root_module_id,
+    });
+
+    while (queue.pop()) |item| {
+        const key = ReachKey.init(item.file_id, item.module_id);
+        const visited_entry = try visited.getOrPut(gpa, key);
+        if (visited_entry.found_existing) continue;
+
+        const tree = self.file_store.fileTree(item.file_id);
+        var node_index: u32 = @intFromEnum(Ast.Node.Index.root);
+        while (node_index < tree.nodes.len) : (node_index += 1) {
+            const node: Ast.Node.Index = @enumFromInt(node_index);
+
+            var import_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+            const import_path = import_utils.writeImportPath(
+                tree,
+                node,
+                &import_path_buffer,
+            ) orelse continue;
+
+            const resolved: ?ReachQueueItem = switch (import_utils.Kind.init(import_path)) {
+                .relative => relative: {
+                    const resolved_file_id = import_utils.resolveFile(
+                        &self.file_store,
+                        &self.module_store,
+                        self.io,
+                        self.zig_lib_directory,
+                        .{
+                            .parent_file_id = item.file_id,
+                            .compile_root_file_id = compile_root_file_id,
+                        },
+                        import_path,
+                    ) catch break :relative null;
+
+                    break :relative if (resolved_file_id) |resolved_file|
+                        .{
+                            .file_id = resolved_file,
+                            .module_id = item.module_id,
+                        }
+                    else
+                        null;
+                },
+                .root => .{
+                    .file_id = compile_root_file_id,
+                    .module_id = root_module_id,
+                },
+                .module => module: {
+                    const imported_module_id = self.module_store.moduleIdByImportName(
+                        item.module_id,
+                        import_path,
+                    ) orelse break :module null;
+
+                    break :module .{
+                        .file_id = self.module_store.rootFileId(imported_module_id),
+                        .module_id = imported_module_id,
+                    };
+                },
+                .stdlib,
+                .builtin,
+                => null,
+            };
+
+            const next = resolved orelse continue;
+            if (next.file_id == target_file_id) return true;
+            try queue.append(gpa, next);
+        }
+    }
+
+    return false;
 }
 
 pub fn debugPrintFileDecls(self: *const LintContext, file_id: FileStore.FileId) void {
@@ -1106,12 +1258,15 @@ fn resolveImportRootDecl(
         &self.module_store,
         self.io,
         self.zig_lib_directory,
-        parent_file_id,
+        .{
+            .parent_file_id = parent_file_id,
+            .compile_root_file_id = self.compile_root_file_id,
+        },
         import_path,
     ) catch return null;
 
     const file_id = maybe_file_id orelse return null;
-    _ = self.decl_store.store(file_id, &self.file_store);
+    self.resolveFileTypes(file_id);
     return self.decl_store.rootDecl(file_id);
 }
 
@@ -1674,6 +1829,132 @@ test "LintContext.resolveTypeKind" {
 
     if (failed)
         return error.TestExpectedEqual;
+}
+
+// TODO: #149 - add integration tests for root, multiple compile units, modules etc...
+test "compileContextIdsForFile includes shared dependency children" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try testing.writeFile(tmp.dir, "root1.zig", "const dep = @import(\"dep\");");
+    try testing.writeFile(tmp.dir, "root2.zig", "const dep = @import(\"dep\");");
+    try tmp.dir.createDirPath(std.testing.io, "dep");
+    try testing.writeFile(tmp.dir, "dep/root.zig", "pub const child = @import(\"child.zig\");");
+    try testing.writeFile(tmp.dir, "dep/child.zig", "const root = @import(\"root\");");
+
+    var context = testing.initFakeContext(
+        arena.allocator(),
+        std.testing.io,
+    );
+
+    var root1_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    const root1_path = root1_path_buffer[0..try tmp.dir.realPathFile(
+        std.testing.io,
+        "root1.zig",
+        &root1_path_buffer,
+    )];
+    var root2_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    const root2_path = root2_path_buffer[0..try tmp.dir.realPathFile(
+        std.testing.io,
+        "root2.zig",
+        &root2_path_buffer,
+    )];
+    var dep_root_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    const dep_root_path = dep_root_path_buffer[0..try tmp.dir.realPathFile(
+        std.testing.io,
+        "dep/root.zig",
+        &dep_root_path_buffer,
+    )];
+    var dep_child_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    const dep_child_path = dep_child_path_buffer[0..try tmp.dir.realPathFile(
+        std.testing.io,
+        "dep/child.zig",
+        &dep_child_path_buffer,
+    )];
+
+    const root1_file_id = try context.file_store.resolve(root1_path, std.testing.io, ".");
+    const root2_file_id = try context.file_store.resolve(root2_path, std.testing.io, ".");
+    const dep_root_file_id = try context.file_store.resolve(dep_root_path, std.testing.io, ".");
+    const dep_child_file_id = try context.file_store.resolve(dep_child_path, std.testing.io, ".");
+
+    const build_config_id: BuildConfigStore.ConfigId = .fromIndex(0);
+    const root1_build_module: std.Build.Configuration.Module.Index = @enumFromInt(0);
+    const root2_build_module: std.Build.Configuration.Module.Index = @enumFromInt(1);
+    const dep_build_module: std.Build.Configuration.Module.Index = @enumFromInt(2);
+
+    const dep_module_id = context.module_store.resolve(.{
+        .root_file = dep_root_file_id,
+        .build_config = build_config_id,
+        .build_config_module = dep_build_module,
+        .module_id_by_import_name = .empty,
+    });
+
+    var root1_imports: std.StringHashMapUnmanaged(ModuleStore.ModuleId) = .empty;
+    try root1_imports.put(
+        arena.allocator(),
+        try arena.allocator().dupe(u8, "dep"),
+        dep_module_id,
+    );
+    const root1_module_id = context.module_store.resolve(.{
+        .root_file = root1_file_id,
+        .build_config = build_config_id,
+        .build_config_module = root1_build_module,
+        .module_id_by_import_name = root1_imports,
+    });
+
+    var root2_imports: std.StringHashMapUnmanaged(ModuleStore.ModuleId) = .empty;
+    try root2_imports.put(
+        arena.allocator(),
+        try arena.allocator().dupe(u8, "dep"),
+        dep_module_id,
+    );
+    const root2_module_id = context.module_store.resolve(.{
+        .root_file = root2_file_id,
+        .build_config = build_config_id,
+        .build_config_module = root2_build_module,
+        .module_id_by_import_name = root2_imports,
+    });
+
+    try context.compile_contexts.append(arena.allocator(), .{
+        .step_index = @enumFromInt(0),
+        .root_module = root1_module_id,
+    });
+    try context.compile_contexts.append(arena.allocator(), .{
+        .step_index = @enumFromInt(1),
+        .root_module = root2_module_id,
+    });
+
+    const compile_context_ids = try context.compileContextIdsForFile(
+        dep_child_file_id,
+        arena.allocator(),
+    );
+    try std.testing.expectEqual(@as(usize, 2), compile_context_ids.len);
+
+    var found_root1 = false;
+    var found_root2 = false;
+    for (compile_context_ids) |compile_context_id| {
+        const compile_root_file_id = context.compileRootFileId(compile_context_id);
+        found_root1 = found_root1 or compile_root_file_id == root1_file_id;
+        found_root2 = found_root2 or compile_root_file_id == root2_file_id;
+
+        const resolved_root = try import_utils.resolveFile(
+            &context.file_store,
+            &context.module_store,
+            std.testing.io,
+            ".",
+            .{
+                .parent_file_id = dep_child_file_id,
+                .compile_root_file_id = compile_root_file_id,
+            },
+            "root",
+        );
+        try std.testing.expectEqual(compile_root_file_id, resolved_root.?);
+    }
+    try std.testing.expect(found_root1);
+    try std.testing.expect(found_root2);
 }
 
 const ast = @import("../ast.zig");

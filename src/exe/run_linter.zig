@@ -409,22 +409,78 @@ fn runLinterRules(
         }
         printer.println(.verbose, "  - Process syntax errors: {d}ms", .{timer.lapMilliseconds()});
 
+        const compile_context_ids = try context.compileContextIdsForFile(
+            file_id,
+            file_arena,
+        );
+
         printer.println(.verbose, "  - Rules", .{});
 
         var rule_it = enabled_rules.iterator(.{ .direction = .forward, .kind = .set });
         while (rule_it.next()) |rule_index| {
             const rule = rules[rule_index];
-            if (try rule.run(
-                rule,
-                &context,
-                &doc,
-                session_arena,
-                .{ .config = rule_configs[rule_index] },
-            )) |result| {
-                for (result.problems) |*err| {
-                    err.disabled_by_comment = try doc.shouldSkipProblem(err.*);
-                }
-                oom(results.append(session_arena, result));
+            switch (rule.execution) {
+                .syntax_only => {
+                    context.setCompileRootFileId(null);
+                    if (try rule.run(
+                        rule,
+                        &context,
+                        &doc,
+                        session_arena,
+                        .{ .config = rule_configs[rule_index] },
+                    )) |result| {
+                        try appendDedupedResult(
+                            session_arena,
+                            &results,
+                            &doc,
+                            result,
+                        );
+                    }
+                },
+                .compile_context => {
+                    if (compile_context_ids.len == 0) {
+                        context.setCompileRootFileId(null);
+                        context.resolveFileTypes(file_id);
+                        if (try rule.run(
+                            rule,
+                            &context,
+                            &doc,
+                            session_arena,
+                            .{ .config = rule_configs[rule_index] },
+                        )) |result| {
+                            try appendDedupedResult(
+                                session_arena,
+                                &results,
+                                &doc,
+                                result,
+                            );
+                        }
+                    } else {
+                        for (compile_context_ids) |compile_context_id| {
+                            const compile_root_file_id = context.compileRootFileId(compile_context_id);
+                            context.setCompileRootFileId(compile_root_file_id);
+                            context.resolveFileTypes(file_id);
+                            if (try rule.run(
+                                rule,
+                                &context,
+                                &doc,
+                                session_arena,
+                                .{
+                                    .config = rule_configs[rule_index],
+                                    .compile_context_id = compile_context_id,
+                                    .compile_root_file_id = compile_root_file_id,
+                                },
+                            )) |result| {
+                                try appendDedupedResult(
+                                    session_arena,
+                                    &results,
+                                    &doc,
+                                    result,
+                                );
+                            }
+                        }
+                    }
+                },
             }
 
             const ns = timer.lapNanoseconds();
@@ -442,6 +498,66 @@ fn runLinterRules(
             ));
         }
     }
+}
+
+fn sameProblem(
+    lhs: zlinter.results.LintProblem,
+    rhs: zlinter.results.LintProblem,
+) bool {
+    return std.mem.eql(u8, lhs.rule_id, rhs.rule_id) and
+        lhs.severity == rhs.severity and
+        lhs.start.byte_offset == rhs.start.byte_offset and
+        lhs.end.byte_offset == rhs.end.byte_offset and
+        std.mem.eql(u8, lhs.message, rhs.message);
+}
+
+fn containsProblem(
+    results: []const zlinter.results.LintResult,
+    problem: zlinter.results.LintProblem,
+) bool {
+    for (results) |result| {
+        for (result.problems) |existing_problem| {
+            if (sameProblem(existing_problem, problem)) return true;
+        }
+    }
+    return false;
+}
+
+fn containsProblemInSlice(
+    problems: []const zlinter.results.LintProblem,
+    problem: zlinter.results.LintProblem,
+) bool {
+    for (problems) |existing_problem| {
+        if (sameProblem(existing_problem, problem)) return true;
+    }
+    return false;
+}
+
+fn appendDedupedResult(
+    session_arena: std.mem.Allocator,
+    results: *std.ArrayList(zlinter.results.LintResult),
+    doc: *zlinter.session.LintDocument,
+    result: zlinter.results.LintResult,
+) error{OutOfMemory}!void {
+    var deduped_problems = std.ArrayList(zlinter.results.LintProblem).empty;
+    errdefer deduped_problems.deinit(session_arena);
+
+    for (result.problems) |problem| {
+        var deduped_problem = problem;
+        deduped_problem.disabled_by_comment = try doc.shouldSkipProblem(deduped_problem);
+
+        if (containsProblem(results.items, deduped_problem)) continue;
+        if (containsProblemInSlice(deduped_problems.items, deduped_problem)) continue;
+
+        try deduped_problems.append(session_arena, deduped_problem);
+    }
+
+    if (deduped_problems.items.len == 0) return;
+
+    try results.append(session_arena, .{
+        .abs_path = result.abs_path,
+        .problems = try deduped_problems.toOwnedSlice(session_arena),
+    });
 }
 
 fn runFormatter(
