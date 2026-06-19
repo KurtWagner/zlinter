@@ -7,9 +7,6 @@
 //!
 //! **Auto fixing is an experimental feature so only use it if you use source control - always back up your code first!**
 
-// TODO(#52): Add guard code for declarations appearing on same line - just prevent it
-// from crashing the lint process, really it shouldn't be happening.
-
 /// Config for import_ordering rule.
 pub const Config = struct {
     /// The severity (off, warning, error).
@@ -73,7 +70,8 @@ fn run(
 
         while (imports.popMin()) |import| {
             if (previous) |p| {
-                const is_same_chunk = (p.last_line + 1) == import.first_line;
+                const is_same_chunk = (p.last_line + 1) >= import.first_line;
+                const same_line = p.first_line == import.first_line;
 
                 if (!config.allow_line_separated_chunks and !is_same_chunk) {
                     try lint_problems.append(gpa, .{
@@ -82,7 +80,7 @@ fn run(
                         .start = .startOfNode(tree, import.decl_node),
                         .end = .endOfNode(tree, import.decl_node),
                         .message = try std.fmt.allocPrint(gpa, "Import '{s}' should be grouped with other imports", .{import.decl_name}),
-                        .fix = try swapNodesFix(doc, session, p.decl_node, import.decl_node, gpa),
+                        .fix = if (same_line) null else try swapNodesFix(doc, session, p.decl_node, import.decl_node, gpa),
                     });
                     continue :scopes;
                 }
@@ -96,7 +94,7 @@ fn run(
                             .start = .startOfNode(tree, import.decl_node),
                             .end = .endOfNode(tree, import.decl_node),
                             .message = try std.fmt.allocPrint(gpa, "Import '{s}' is not in {s} order", .{ import.decl_name, config.order.name() }),
-                            .fix = try swapNodesFix(doc, session, p.decl_node, import.decl_node, gpa),
+                            .fix = if (same_line) null else try swapNodesFix(doc, session, p.decl_node, import.decl_node, gpa),
                         });
                         continue :scopes;
                     }
@@ -121,7 +119,7 @@ fn run(
 const ImportsQueueLinesAscending = std.PriorityDequeue(
     ImportDecl,
     void,
-    ImportDecl.compareLinesAscending,
+    ImportDecl.compareSourceAscending,
 );
 
 const ImportDecl = struct {
@@ -130,11 +128,16 @@ const ImportDecl = struct {
     classification: Classification,
     first_line: usize,
     last_line: usize,
+    start_offset: usize,
+    end_offset: usize,
 
     const Classification = enum { local, external };
 
-    pub fn compareLinesAscending(_: void, a: ImportDecl, b: ImportDecl) std.math.Order {
-        return std.math.order(a.first_line, b.first_line);
+    pub fn compareSourceAscending(_: void, a: ImportDecl, b: ImportDecl) std.math.Order {
+        const line_order = std.math.order(a.first_line, b.first_line);
+        if (line_order != .eq) return line_order;
+
+        return std.math.order(a.start_offset, b.start_offset);
     }
 };
 
@@ -210,6 +213,8 @@ fn resolveScopedImports(
             .classification = classification,
             .first_line = first_loc.line,
             .last_line = last_loc.line,
+            .start_offset = tree.tokenStart(tree.firstToken(node)),
+            .end_offset = tree.tokenStart(tree.lastToken(node)) + tree.tokenSlice(tree.lastToken(node)).len,
         };
 
         var gop = try scoped_imports.getOrPut(gpa, parent);
@@ -503,6 +508,35 @@ test "order" {
                     \\
                     ,
                 },
+            },
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const a = @import("a"); const b = @import("b");
+    ,
+        .{},
+        Config{ .order = .alphabetical_ascending },
+        &.{},
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const b = @import("b"); const a = @import("a");
+    ,
+        .{},
+        Config{ .order = .alphabetical_ascending },
+        &.{
+            .{
+                .rule_id = "import_ordering",
+                .severity = .warning,
+                .slice =
+                \\const a = @import("a")
+                ,
+                .message = "Import 'a' is not in alphabetical order",
+                .disabled_by_comment = false,
+                .fix = null,
             },
         },
     );
