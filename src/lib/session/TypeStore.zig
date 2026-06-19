@@ -362,8 +362,8 @@ pub fn store(
     if (self.type_id_by_summary.get(type_summary)) |type_id| return type_id;
 
     const type_id: TypeId = .fromIndex(self.summaries.items.len);
-    self.summaries.append(self.arena, type_summary) catch @panic("OOM");
-    self.type_id_by_summary.put(self.arena, type_summary, type_id) catch @panic("OOM");
+    oom(self.summaries.append(self.arena, type_summary));
+    oom(self.type_id_by_summary.put(self.arena, type_summary, type_id));
     return type_id;
 }
 
@@ -799,3 +799,4 @@ const Ast = std.zig.Ast;
 const ast = @import("../ast.zig");
 const std = @import("std");
 const tracy = @import("tracy");
+const oom = @import("../allocations.zig").oom;

@@ -51,39 +51,45 @@ pub fn resolve(
     input_path: []const u8,
     io: std.Io,
     cwd: []const u8,
-) !FileId {
+) error{ResolutionError}!FileId {
     const zone = tracy.traceNamed(@src(), "FileStore.resolve");
     defer zone.end();
 
     var fba_buffer: [std.fs.max_path_bytes]u8 = undefined;
     var fba: std.heap.FixedBufferAllocator = .init(&fba_buffer);
 
-    const normal_path = std.fs.path.resolve(
+    const normal_path = oom(std.fs.path.resolve(
         fba.allocator(),
         &.{ cwd, input_path },
-    ) catch unreachable;
+    ));
     if (self.file_id_by_path.get(normal_path)) |index| return index;
 
-    const source: [:0]const u8 = try std.Io.Dir.cwd().readFileAllocOptions(
+    const source: [:0]const u8 = std.Io.Dir.cwd().readFileAllocOptions(
         io,
         normal_path,
         self.arena,
         .limited(max_zig_file_size_bytes),
         .of(u8),
         0,
-    );
+    ) catch |e| switch (e) {
+        error.OutOfMemory => @panic("OOM"),
+        else => {
+            std.log.err("Could not read file '{s}' due to {t}", .{ normal_path, e });
+            return error.ResolutionError;
+        },
+    };
 
-    const tree = try std.zig.Ast.parse(self.arena, source, .zig);
-    const abs_path = try self.arena.dupe(u8, normal_path);
+    const tree = oom(std.zig.Ast.parse(self.arena, source, .zig));
+    const abs_path = oom(self.arena.dupe(u8, normal_path));
     const id: FileId = .fromIndex(self.files.len);
 
-    try self.files.append(self.arena, .{
+    oom(self.files.append(self.arena, .{
         .tree = tree,
         .abs_path = abs_path,
         .source = source,
-    });
+    }));
 
-    try self.file_id_by_path.putNoClobber(self.arena, abs_path, id);
+    oom(self.file_id_by_path.putNoClobber(self.arena, abs_path, id));
 
     std.log.info("Resolving '{s}' to '{s}'", .{ cwd, input_path });
     std.log.info(" - adding '{s}", .{abs_path});
@@ -95,7 +101,7 @@ pub fn resolveStdlib(
     self: *FileStore,
     io: std.Io,
     zig_lib_directory: []const u8,
-) !FileId {
+) error{ResolutionError}!FileId {
     return self.resolve("std/std.zig", io, zig_lib_directory);
 }
 
@@ -103,7 +109,7 @@ pub fn resolveStdLib(
     self: *FileStore,
     io: std.Io,
     zig_lib_directory: []const u8,
-) !FileId {
+) error{ResolutionError}!FileId {
     return self.resolveStdlib(io, zig_lib_directory);
 }
 
@@ -121,3 +127,4 @@ pub fn fileAbsPath(self: *const FileStore, id: FileId) []const u8 {
 
 const std = @import("std");
 const tracy = @import("tracy");
+const oom = @import("../allocations.zig").oom;

@@ -93,12 +93,12 @@ pub fn resolve(self: *ModuleStore, seed: ModuleSeed) ModuleId {
         return id;
 
     const id: ModuleId = .fromIndex(self.modules.len);
-    self.modules.append(self.arena, .{
+    oom(self.modules.append(self.arena, .{
         .root_file = seed.root_file,
         .module_id_by_import_name = seed.module_id_by_import_name,
-    }) catch unreachable;
+    }));
 
-    self.module_id_by_key.put(self.arena, key, id) catch unreachable;
+    oom(self.module_id_by_key.put(self.arena, key, id));
 
     return id;
 }
@@ -149,3 +149,4 @@ const FileId = @import("FileStore.zig").FileId;
 const BuildConfigStore = @import("BuildConfigStore.zig");
 const std = @import("std");
 const tracy = @import("tracy");
+const oom = @import("../allocations.zig").oom;

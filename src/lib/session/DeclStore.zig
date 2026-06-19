@@ -1514,18 +1514,18 @@ fn appendScope(
     owner_decl_id: ?DeclId,
 ) ScopeId {
     const scope_id: ScopeId = .fromIndex(self.scopes.len);
-    self.scopes.append(self.arena, .{
+    oom(self.scopes.append(self.arena, .{
         .file_id = file_id,
         .owner_node = owner_node,
         .parent_scope_id = parent_scope_id,
         .owner_decl_id = owner_decl_id,
         .decl_id_by_name = .empty,
-    }) catch @panic("OOM");
-    self.scope_id_by_owner_node.putNoClobber(
+    }));
+    oom(self.scope_id_by_owner_node.putNoClobber(
         self.arena,
         .init(file_id, owner_node),
         scope_id,
-    ) catch @panic("OOM");
+    ));
     return scope_id;
 }
 
@@ -1540,20 +1540,20 @@ fn appendDecl(
     kind: DeclKind,
 ) DeclId {
     const decl_id: DeclId = .fromIndex(self.decls.len);
-    self.decls.append(self.arena, .{
+    oom(self.decls.append(self.arena, .{
         .name_token = name_token,
         .ast_node = ast_node,
         .type_node = type_node,
         .scope_id = scope_id,
         .file_id = file_id,
         .kind = kind,
-    }) catch @panic("OOM");
+    }));
     if (ast_node) |node| {
-        self.decl_id_by_ast_node.putNoClobber(
+        oom(self.decl_id_by_ast_node.putNoClobber(
             self.arena,
             .init(file_id, node),
             decl_id,
-        ) catch @panic("OOM");
+        ));
     }
     return decl_id;
 }
@@ -1581,11 +1581,11 @@ fn putDecl(
         scope_id,
         kind,
     );
-    self.scopes.items(.decl_id_by_name)[scope_id.toIndex()].putNoClobber(
+    oom(self.scopes.items(.decl_id_by_name)[scope_id.toIndex()].putNoClobber(
         self.arena,
         name,
         decl_id,
-    ) catch @panic("OOM");
+    ));
 
     return decl_id;
 }
@@ -1938,3 +1938,4 @@ const TypeStore = @import("TypeStore.zig");
 const ast = @import("../ast.zig");
 const import_utils = @import("imports.zig");
 const tracy = @import("tracy");
+const oom = @import("../allocations.zig").oom;
