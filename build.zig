@@ -626,7 +626,9 @@ fn buildStep(
 
     buff.writer.writeInt(u32, 0, .little) catch @panic("stdin write failed");
     std.zon.stringify.serialize(BuildInfo{
-        // TODO: #149 - decide whether we want this to hang around.
+        // TODO: #149 - decide whether we want this to hang around for anything
+        // ideally we use addFileArg and addDirectoryArg so that the build
+        // dependency graph is correct.
         .include_paths = null,
         .exclude_paths = null,
     }, .{}, &buff.writer) catch @panic("Invalid build info");
