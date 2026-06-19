@@ -86,19 +86,21 @@ pub fn resolve(
     };
     std.log.info(" = Root: {s}", .{build_root_path});
 
-    // TODO: #149 - catch and report build errors appropriately otherwise it appears as missing build config...
     const config_path = files.resolveBuildConfigurationPath(
         io,
         fba.allocator(),
         zig_exe,
         build_root_path,
-    ) catch |e| {
-        std.log.err("Could not resolve build file '{s}' using '{s}' due to {t}", .{
-            build_root_path,
-            zig_exe,
-            e,
-        });
-        return error.ResolutionError;
+    ) catch |e| switch (e) {
+        error.OutOfMemory => @panic("OOM"),
+        else => {
+            std.log.err("Could not resolve build configuration path for '{s}' using '{s}' due to {t}", .{
+                build_root_path,
+                zig_exe,
+                e,
+            });
+            return error.ResolutionError;
+        },
     };
 
     var file = std.Io.Dir.cwd().openFile(

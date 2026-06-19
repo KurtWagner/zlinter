@@ -81,9 +81,6 @@ fn consumeBuildConfigStep(
         .step_index = step_index,
         .root_module = root_module_id,
     }) catch unreachable;
-
-    // TODO: #149 - decide whether compile contexts should eagerly populate
-    // declarations for module descendants.
 }
 
 fn resolveBuildModule(
