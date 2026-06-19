@@ -1,0 +1,6 @@
+warning File is not formatted [test_cases/require_fmt/require_fmt.input.zig:1:1] require_fmt
+
+ 1 | // Intentionally unformatted for require_fmt integration coverage.
+   | ^
+
+x 1 warnings

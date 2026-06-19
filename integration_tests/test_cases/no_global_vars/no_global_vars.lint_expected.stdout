@@ -1,0 +1,16 @@
+error Global `var` reduces testability and makes the program harder to reason about [test_cases/no_global_vars/no_global_vars.input.zig:1:1] no_global_vars
+
+ 1 | var global_counter: u32 = 0;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error Global `var` reduces testability and makes the program harder to reason about [test_cases/no_global_vars/no_global_vars.input.zig:7:9] no_global_vars
+
+ 7 |         var active: bool = false;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error Global `var` reduces testability and makes the program harder to reason about [test_cases/no_global_vars/no_global_vars.input.zig:4:5] no_global_vars
+
+ 4 |     var instance: GlobalState = .{};
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+x 3 errors
