@@ -1,4 +1,5 @@
 // Keep in alphabetical order:
+pub const allocations = @import("allocations.zig");
 pub const ansi = @import("ansi.zig");
 pub const Args = @import("Args.zig");
 pub const ast = @import("ast.zig");

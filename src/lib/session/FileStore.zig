@@ -38,11 +38,11 @@ files: std.MultiArrayList(File) = .empty,
 /// `ast(index)` and `source(index)`.
 file_id_by_path: std.StringHashMapUnmanaged(FileId) = .empty,
 
-arena: std.mem.Allocator,
+session_arena: std.mem.Allocator,
 
-pub fn init(arena: std.mem.Allocator) FileStore {
+pub fn init(session_arena: std.mem.Allocator) FileStore {
     return .{
-        .arena = arena,
+        .session_arena = session_arena,
     };
 }
 
@@ -67,7 +67,7 @@ pub fn resolve(
     const source: [:0]const u8 = std.Io.Dir.cwd().readFileAllocOptions(
         io,
         normal_path,
-        self.arena,
+        self.session_arena,
         .limited(max_zig_file_size_bytes),
         .of(u8),
         0,
@@ -79,17 +79,17 @@ pub fn resolve(
         },
     };
 
-    const tree = oom(std.zig.Ast.parse(self.arena, source, .zig));
-    const abs_path = oom(self.arena.dupe(u8, normal_path));
+    const tree = oom(std.zig.Ast.parse(self.session_arena, source, .zig));
+    const abs_path = oom(self.session_arena.dupe(u8, normal_path));
     const id: FileId = .fromIndex(self.files.len);
 
-    oom(self.files.append(self.arena, .{
+    oom(self.files.append(self.session_arena, .{
         .tree = tree,
         .abs_path = abs_path,
         .source = source,
     }));
 
-    oom(self.file_id_by_path.putNoClobber(self.arena, abs_path, id));
+    oom(self.file_id_by_path.putNoClobber(self.session_arena, abs_path, id));
 
     std.log.info("Resolving '{s}' to '{s}'", .{ cwd, input_path });
     std.log.info(" - adding '{s}", .{abs_path});

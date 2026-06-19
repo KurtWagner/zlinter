@@ -29,11 +29,11 @@ configs: std.MultiArrayList(Config) = .empty,
 /// and should never be used externally.
 config_id_by_path: std.StringHashMapUnmanaged(ConfigId) = .empty,
 
-arena: std.mem.Allocator,
+session_arena: std.mem.Allocator,
 
-pub fn init(arena: std.mem.Allocator) BuildConfigStore {
+pub fn init(session_arena: std.mem.Allocator) BuildConfigStore {
     return .{
-        .arena = arena,
+        .session_arena = session_arena,
     };
 }
 
@@ -112,7 +112,7 @@ pub fn resolve(
     defer file.close(io);
 
     const config = std.Build.Configuration.loadFile(
-        self.arena,
+        self.session_arena,
         io,
         file,
     ) catch |e| switch (e) {
@@ -123,15 +123,15 @@ pub fn resolve(
         },
     };
 
-    const build_root_key = oom(self.arena.dupe(u8, build_root_path));
+    const build_root_key = oom(self.session_arena.dupe(u8, build_root_path));
     const config_id: ConfigId = .fromIndex(self.configs.len);
 
-    oom(self.configs.append(self.arena, .{
+    oom(self.configs.append(self.session_arena, .{
         .build_config = config,
         .build_root_path = build_root_key,
     }));
 
-    oom(self.config_id_by_path.putNoClobber(self.arena, build_root_key, config_id));
+    oom(self.config_id_by_path.putNoClobber(self.session_arena, build_root_key, config_id));
     self.cacheResolvedConfigPaths(normal_path, build_root_key, config_id);
 
     return config_id;
@@ -229,8 +229,8 @@ fn cacheResolvedConfigPaths(
 
     while (!std.mem.eql(u8, path, cached_ancestor_path)) {
         if (!self.config_id_by_path.contains(path)) {
-            const key = oom(self.arena.dupe(u8, path));
-            oom(self.config_id_by_path.putNoClobber(self.arena, key, config_id));
+            const key = oom(self.session_arena.dupe(u8, path));
+            oom(self.config_id_by_path.putNoClobber(self.session_arena, key, config_id));
         }
 
         const parent = std.fs.path.dirname(path) orelse cached_ancestor_path;

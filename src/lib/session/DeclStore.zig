@@ -1,25 +1,23 @@
 const DeclStore = @This();
 
-// TODO: #149 - decide on error handling, specifically OOM. This module just panics to keep it simpler
-
 decls: std.MultiArrayList(Decl) = .empty,
 scopes: std.MultiArrayList(Scope) = .empty,
 decl_id_by_ast_node: std.AutoHashMapUnmanaged(DeclAstNodeKey, DeclId) = .empty,
 scope_id_by_owner_node: std.AutoHashMapUnmanaged(ScopeOwnerKey, ScopeId) = .empty,
 
-// TODO: #149 - use better pattern for passing these common things around
-arena: std.mem.Allocator,
+/// Lives for the full linter invocation.
+session_arena: std.mem.Allocator,
 io: std.Io,
 /// externally owned
 zig_lib_directory: []const u8,
 
 pub fn init(
-    arena: std.mem.Allocator,
+    session_arena: std.mem.Allocator,
     io: std.Io,
     zig_lib_directory: []const u8,
 ) DeclStore {
     return .{
-        .arena = arena,
+        .session_arena = session_arena,
         .io = io,
         .zig_lib_directory = zig_lib_directory,
     };
@@ -1514,7 +1512,7 @@ fn appendScope(
     owner_decl_id: ?DeclId,
 ) ScopeId {
     const scope_id: ScopeId = .fromIndex(self.scopes.len);
-    oom(self.scopes.append(self.arena, .{
+    oom(self.scopes.append(self.session_arena, .{
         .file_id = file_id,
         .owner_node = owner_node,
         .parent_scope_id = parent_scope_id,
@@ -1522,7 +1520,7 @@ fn appendScope(
         .decl_id_by_name = .empty,
     }));
     oom(self.scope_id_by_owner_node.putNoClobber(
-        self.arena,
+        self.session_arena,
         .init(file_id, owner_node),
         scope_id,
     ));
@@ -1540,7 +1538,7 @@ fn appendDecl(
     kind: DeclKind,
 ) DeclId {
     const decl_id: DeclId = .fromIndex(self.decls.len);
-    oom(self.decls.append(self.arena, .{
+    oom(self.decls.append(self.session_arena, .{
         .name_token = name_token,
         .ast_node = ast_node,
         .type_node = type_node,
@@ -1550,7 +1548,7 @@ fn appendDecl(
     }));
     if (ast_node) |node| {
         oom(self.decl_id_by_ast_node.putNoClobber(
-            self.arena,
+            self.session_arena,
             .init(file_id, node),
             decl_id,
         ));
@@ -1582,7 +1580,7 @@ fn putDecl(
         kind,
     );
     oom(self.scopes.items(.decl_id_by_name)[scope_id.toIndex()].putNoClobber(
-        self.arena,
+        self.session_arena,
         name,
         decl_id,
     ));

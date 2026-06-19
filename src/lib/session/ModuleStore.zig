@@ -8,11 +8,11 @@ module_id_by_key: std.HashMapUnmanaged(
     std.hash_map.default_max_load_percentage,
 ) = .empty,
 
-arena: std.mem.Allocator,
+session_arena: std.mem.Allocator,
 
-pub fn init(arena: std.mem.Allocator) ModuleStore {
+pub fn init(session_arena: std.mem.Allocator) ModuleStore {
     return .{
-        .arena = arena,
+        .session_arena = session_arena,
     };
 }
 
@@ -93,12 +93,12 @@ pub fn resolve(self: *ModuleStore, seed: ModuleSeed) ModuleId {
         return id;
 
     const id: ModuleId = .fromIndex(self.modules.len);
-    oom(self.modules.append(self.arena, .{
+    oom(self.modules.append(self.session_arena, .{
         .root_file = seed.root_file,
         .module_id_by_import_name = seed.module_id_by_import_name,
     }));
 
-    oom(self.module_id_by_key.put(self.arena, key, id));
+    oom(self.module_id_by_key.put(self.session_arena, key, id));
 
     return id;
 }

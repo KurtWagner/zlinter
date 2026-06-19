@@ -8,11 +8,11 @@ type_id_by_summary: std.HashMapUnmanaged(
     std.hash_map.default_max_load_percentage,
 ) = .empty,
 
-arena: std.mem.Allocator,
+session_arena: std.mem.Allocator,
 
-pub fn init(arena: std.mem.Allocator) TypeStore {
+pub fn init(session_arena: std.mem.Allocator) TypeStore {
     return .{
-        .arena = arena,
+        .session_arena = session_arena,
     };
 }
 
@@ -362,8 +362,8 @@ pub fn store(
     if (self.type_id_by_summary.get(type_summary)) |type_id| return type_id;
 
     const type_id: TypeId = .fromIndex(self.summaries.items.len);
-    oom(self.summaries.append(self.arena, type_summary));
-    oom(self.type_id_by_summary.put(self.arena, type_summary, type_id));
+    oom(self.summaries.append(self.session_arena, type_summary));
+    oom(self.type_id_by_summary.put(self.session_arena, type_summary, type_id));
     return type_id;
 }
 
@@ -763,7 +763,7 @@ fn parsePrimitiveIntBits(text: []const u8) ?u16 {
 
 test "TypeStore.store deduplicates equivalent summaries" {
     var type_store: TypeStore = .{
-        .arena = std.testing.allocator,
+        .session_arena = std.testing.allocator,
     };
     defer type_store.summaries.deinit(std.testing.allocator);
     defer type_store.type_id_by_summary.deinit(std.testing.allocator);

@@ -13,7 +13,8 @@ zig_lib_directory: []const u8,
 /// Externally owned slice to current working directory
 cwd: []const u8,
 
-arena: std.mem.Allocator,
+/// Lives for the full linter invocation.
+session_arena: std.mem.Allocator,
 compile_contexts: std.MultiArrayList(CompileContext) = .empty,
 file_store: FileStore = undefined, // zlinter-disable-current-line no_undefined - set in init
 module_store: ModuleStore = undefined, // zlinter-disable-current-line no_undefined - set in init
@@ -76,7 +77,7 @@ fn consumeBuildConfigStep(
         return;
     };
 
-    self.compile_contexts.append(self.arena, .{
+    self.compile_contexts.append(self.session_arena, .{
         .step_index = step_index,
         .root_module = root_module_id,
     }) catch unreachable;
@@ -99,18 +100,18 @@ fn resolveBuildModule(
         std.Build.Configuration.Module.Index,
         ModuleStore.ModuleId,
     ) = .empty;
-    defer module_id_by_build_module_index.deinit(self.arena);
+    defer module_id_by_build_module_index.deinit(self.session_arena);
 
     var queue: std.ArrayList(std.Build.Configuration.Module.Index) = .empty;
-    defer queue.deinit(self.arena);
+    defer queue.deinit(self.session_arena);
 
     const root_module_id = try self.resolveBuildModuleShallow(
         config_id,
         build_module_index,
     ) orelse return null;
 
-    module_id_by_build_module_index.put(self.arena, build_module_index, root_module_id) catch unreachable;
-    queue.append(self.arena, build_module_index) catch unreachable;
+    module_id_by_build_module_index.put(self.session_arena, build_module_index, root_module_id) catch unreachable;
+    queue.append(self.session_arena, build_module_index) catch unreachable;
 
     while (queue.pop()) |current_build_module_index| {
         const current_module_id = module_id_by_build_module_index.get(current_build_module_index).?;
@@ -126,11 +127,11 @@ fn resolveBuildModule(
         var module_id_by_import_name: std.StringHashMapUnmanaged(ModuleStore.ModuleId) = .empty;
         errdefer {
             var it = module_id_by_import_name.keyIterator();
-            while (it.next()) |key| self.arena.free(key.*);
-            module_id_by_import_name.deinit(self.arena);
+            while (it.next()) |key| self.session_arena.free(key.*);
+            module_id_by_import_name.deinit(self.session_arena);
         }
 
-        module_id_by_import_name.ensureTotalCapacity(self.arena, @intCast(imports.len)) catch unreachable;
+        module_id_by_import_name.ensureTotalCapacity(self.session_arena, @intCast(imports.len)) catch unreachable;
         for (imports.items(.name), imports.items(.module)) |
             build_import_name_id,
             build_import_module_index,
@@ -143,14 +144,14 @@ fn resolveBuildModule(
                     build_import_module_index,
                 )) orelse continue;
 
-                module_id_by_build_module_index.put(self.arena, build_import_module_index, resolved) catch unreachable;
-                queue.append(self.arena, build_import_module_index) catch unreachable;
+                module_id_by_build_module_index.put(self.session_arena, build_import_module_index, resolved) catch unreachable;
+                queue.append(self.session_arena, build_import_module_index) catch unreachable;
 
                 break :child resolved;
             };
 
             module_id_by_import_name.putAssumeCapacity(
-                self.arena.dupe(u8, import_name_slice) catch unreachable,
+                self.session_arena.dupe(u8, import_name_slice) catch unreachable,
                 import_module_id,
             );
         }
@@ -180,10 +181,10 @@ fn resolveBuildModuleShallow(
     const root_path = try files.resolveLazyPath(
         root_source_file,
         build_config,
-        self.arena,
+        self.session_arena,
         build_root_path,
     ) orelse return null;
-    defer self.arena.free(root_path);
+    defer self.session_arena.free(root_path);
 
     return self.module_store.resolve(.{
         .root_file = try self.file_store.resolve(

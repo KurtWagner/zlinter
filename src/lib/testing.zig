@@ -57,7 +57,7 @@ pub fn initFakeContext(
 
     var context: LintContext = .{
         .io = io,
-        .arena = arena,
+        .session_arena = arena,
         // TODO: If we really ever need to we can pass zig exe through a build
         // config and evaluate lib dir from `zig env` but I think overkill for
         // our unit tests, so leaving as this for now...
