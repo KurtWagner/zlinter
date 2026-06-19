@@ -125,11 +125,6 @@ fn resolveBuildModule(
 
         const imports = build_module.import_table.get(build_config).imports.mal;
         var module_id_by_import_name: std.StringHashMapUnmanaged(ModuleStore.ModuleId) = .empty;
-        errdefer {
-            var it = module_id_by_import_name.keyIterator();
-            while (it.next()) |key| self.session_arena.free(key.*);
-            module_id_by_import_name.deinit(self.session_arena);
-        }
 
         module_id_by_import_name.ensureTotalCapacity(self.session_arena, @intCast(imports.len)) catch unreachable;
         for (imports.items(.name), imports.items(.module)) |
@@ -242,19 +237,12 @@ pub fn initDocument(
     const source = self.file_store.fileSource(file_id);
     const tree = self.file_store.fileTree(file_id);
 
-    var src_comments = try comments.allocParse(source, gpa);
-    errdefer src_comments.deinit(gpa);
-
     doc.* = .{
         .file_id = file_id,
         .lineage = .empty,
-        .comments = src_comments,
-        .skipper = undefined, // zlinter-disable-current-line no_undefined - set below
+        .comments = try comments.allocParse(source, gpa),
+        .skipper = .init(doc.comments, source, gpa),
     };
-    errdefer doc.lineage.deinit(gpa);
-
-    doc.skipper = .init(doc.comments, source, gpa);
-    errdefer doc.skipper.deinit();
 
     {
         try doc.lineage.resize(gpa, tree.nodes.len);
@@ -728,7 +716,6 @@ pub fn allocDeclDocComments(
     if (first_doc_token == first_token) return null;
 
     var comments_text = std.ArrayList(u8).empty;
-    errdefer comments_text.deinit(allocator);
 
     var token = first_doc_token;
     while (token < first_token) : (token += 1) {
