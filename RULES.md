@@ -322,11 +322,8 @@ that return types and `camelCase` for others.
 
 ## `import_ordering`
 
-> [!WARNING]
-> The `import_ordering` rule is still under testing and development. It may
-> not work as expected and may change without notice.
-
-Enforces a consistent ordering of `@import` declarations in Zig source files.
+Enforces a consistent ordering of `@import` declarations by their local
+declaration name in Zig source files.
 
 Maintaining a standardized import order improves readability and reduces
 merge conflicts.
@@ -345,7 +342,7 @@ merge conflicts.
 
 * `order`
 
-  * The order that the imports appear in.
+  * The order that the imports appear in, compared by the local declaration name.
 
   * **Default:** `.alphabetical_ascending`
 

@@ -1,4 +1,12 @@
-//! Enforces a consistent ordering of `@import` declarations in Zig source files.
+//! Enforces a consistent ordering of `@import` declarations by their local
+//! declaration name in Zig source files.
+//!
+//! For example: `a` < `b` and not `apple` < `zebra`.
+//!
+//! ```
+//! const a = @import("zebra");
+//! const b = @import("apple");
+//! ```
 //!
 //! Maintaining a standardized import order improves readability and reduces
 //! merge conflicts.
@@ -12,7 +20,8 @@ pub const Config = struct {
     /// The severity (off, warning, error).
     severity: zlinter.rules.LintProblemSeverity = .warning,
 
-    /// The order that the imports appear in.
+    /// The order that the imports appear in, compared by the local declaration
+    /// name.
     order: zlinter.rules.LintTextOrder = .alphabetical_ascending,
 
     /// Whether or not the linter allows imports to be separated by blank
@@ -86,6 +95,8 @@ fn run(
                 }
 
                 if (is_same_chunk) {
+                    // Import ordering is intentionally based on the local declaration
+                    // name, not the import path.
                     const order = config.order.cmp(import.decl_name, p.decl_name);
                     if (order == .lt) {
                         try lint_problems.append(gpa, .{
@@ -124,6 +135,7 @@ const ImportsQueueLinesAscending = std.PriorityDequeue(
 
 const ImportDecl = struct {
     decl_node: Ast.Node.Index,
+    /// Local declaration name used to order imports.
     decl_name: []const u8,
     classification: Classification,
     first_line: usize,
@@ -533,6 +545,35 @@ test "order" {
                 .severity = .warning,
                 .slice =
                 \\const a = @import("a")
+                ,
+                .message = "Import 'a' is not in alphabetical order",
+                .disabled_by_comment = false,
+                .fix = null,
+            },
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const a = @import("z"); const b = @import("a");
+    ,
+        .{},
+        Config{ .order = .alphabetical_ascending },
+        &.{},
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const b = @import("a"); const a = @import("z");
+    ,
+        .{},
+        Config{ .order = .alphabetical_ascending },
+        &.{
+            .{
+                .rule_id = "import_ordering",
+                .severity = .warning,
+                .slice =
+                \\const a = @import("z")
                 ,
                 .message = "Import 'a' is not in alphabetical order",
                 .disabled_by_comment = false,
