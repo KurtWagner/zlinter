@@ -358,5 +358,4 @@ fn runLintCommand(
     );
 }
 
-const builtin = @import("builtin");
 const std = @import("std");

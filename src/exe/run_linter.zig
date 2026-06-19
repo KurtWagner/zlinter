@@ -1,4 +1,3 @@
-var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 const default_formatter = zlinter.formatters.DefaultFormatter{};
 
 pub const std_options: std.Options = .{
@@ -996,7 +995,6 @@ test {
     std.testing.refAllDecls(@This());
 }
 
-const builtin = @import("builtin");
 const std = @import("std");
 const zlinter = @import("zlinter");
 const rules = @import("rules").rules; // Generated in build_rules.zig
