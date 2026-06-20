@@ -193,21 +193,34 @@ fn resolveBuildModule(
         const imports = build_module.import_table.get(build_config).imports.mal;
         var module_id_by_import_name: std.StringHashMapUnmanaged(ModuleStore.ModuleId) = .empty;
 
-        module_id_by_import_name.ensureTotalCapacity(self.runtime.sessionArena(), @intCast(imports.len)) catch unreachable;
+        oom(module_id_by_import_name.ensureTotalCapacity(
+            self.runtime.sessionArena(),
+            @intCast(imports.len),
+        ));
+
         for (imports.items(.name), imports.items(.module)) |
             build_import_name_id,
             build_import_module_index,
         | {
             const import_name_slice = build_import_name_id.slice(build_config);
 
-            const import_module_id = module_id_by_build_module_index.get(build_import_module_index) orelse child: {
+            const import_module_id = module_id_by_build_module_index
+                .get(build_import_module_index) orelse child: {
                 const resolved = (try self.resolveBuildModuleShallow(
                     config_id,
                     build_import_module_index,
                 )) orelse continue;
 
-                module_id_by_build_module_index.put(self.runtime.sessionArena(), build_import_module_index, resolved) catch unreachable;
-                queue.append(self.runtime.sessionArena(), build_import_module_index) catch unreachable;
+                oom(module_id_by_build_module_index.put(
+                    self.runtime.sessionArena(),
+                    build_import_module_index,
+                    resolved,
+                ));
+
+                oom(queue.append(
+                    self.runtime.sessionArena(),
+                    build_import_module_index,
+                ));
 
                 break :child resolved;
             };
