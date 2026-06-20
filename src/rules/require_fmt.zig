@@ -27,12 +27,15 @@ fn run(
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
+    const tree = doc.tree(session);
+    // Invalid ASTs will trip assertions inside Zig's renderer.
+    if (tree.errors.len > 0) return null;
+
     const session_arena = session.runtime.sessionArena();
     const rule_arena = session.runtime.ruleArena();
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
 
-    const tree = doc.tree(session);
     const fmt = tree.renderAlloc(rule_arena) catch |e| {
         std.log.err("Oh no {t}", .{e});
         return e;
@@ -107,6 +110,36 @@ test "require_fmt" {
         Config{ .severity = .off },
         &.{},
     );
+}
+
+test "require_fmt ignores invalid ast trees" {
+    const rule = buildRule(.{});
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    var session = zlinter.testing.initFakeContext(arena.allocator(), std.testing.io);
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const doc = try zlinter.testing.loadFakeDocument(
+        &session,
+        tmp.dir,
+        "test.zig",
+        "const foo = 1\n",
+        arena.allocator(),
+    );
+
+    try std.testing.expect(doc.tree(&session).errors.len > 0);
+
+    var config = Config{ .severity = .warning };
+    const result = try rule.run(
+        rule,
+        &session,
+        doc,
+        .{ .config = &config },
+    );
+    try std.testing.expect(result == null);
 }
 
 const std = @import("std");
