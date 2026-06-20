@@ -26,15 +26,15 @@ fn run(
     rule: zlinter.rules.LintRule,
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
-    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+    const session_arena = session.runtime.session_arena;
 
     if (config.container_declaration == .off) return null;
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(gpa);
+    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
     const token_tags = tree.tokens.items(.tag);
@@ -49,15 +49,15 @@ fn run(
         while (index < tree.nodes.len) : (index += 1) {
             const node: Ast.Node.Index = @enumFromInt(index);
             switch (tree.nodeTag(node)) {
-                .identifier => try map.put(gpa, tree.tokenSlice(tree.nodeMainToken(node)), {}),
+                .identifier => try map.put(session_arena, tree.tokenSlice(tree.nodeMainToken(node)), {}),
                 .field_access => if (referencedDeclName(session, doc, node)) |name|
-                    try map.put(gpa, name, {}),
+                    try map.put(session_arena, name, {}),
                 else => {},
             }
         }
         break :map map;
     };
-    defer container_references.deinit(gpa);
+    defer container_references.deinit(session_arena);
 
     for (tree.rootDecls()) |decl| {
         const problem: ?struct { first: Ast.TokenIndex, last: Ast.TokenIndex } = problem: {
@@ -105,12 +105,12 @@ fn run(
             const end_newline: bool = if (last_token + 1 < tree.tokens.len) tree.tokenLocation(0, last_token + 1).line > end.line else true;
             const end_offset: usize = if (start_newline and end_newline) 1 else 0;
 
-            try lint_problems.append(gpa, .{
+            try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
                 .severity = config.container_declaration,
                 .start = .startOfToken(tree, first_token),
                 .end = .endOfToken(tree, last_token),
-                .message = try gpa.dupe(u8, "Unused declaration"),
+                .message = try session_arena.dupe(u8, "Unused declaration"),
                 .fix = .{
                     .start = start.line_start,
                     .end = end.line_end + end_offset,
@@ -122,9 +122,9 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            gpa,
+            session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(gpa),
+            try lint_problems.toOwnedSlice(session_arena),
         )
     else
         null;

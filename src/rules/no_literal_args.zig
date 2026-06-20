@@ -61,19 +61,19 @@ fn run(
     rule: zlinter.rules.LintRule,
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
-    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+    const session_arena = session.runtime.session_arena;
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(gpa);
+    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
     var call_buffer: [1]Ast.Node.Index = undefined;
 
     const root: Ast.Node.Index = .root;
-    var it = try doc.nodeLineageIterator(root, gpa);
+    var it = try doc.nodeLineageIterator(root, session_arena);
     defer it.deinit();
 
     nodes: while (try it.next()) |tuple| {
@@ -114,36 +114,36 @@ fn run(
 
             switch (kind) {
                 .bool => if (config.detect_bool_literal != .off)
-                    try lint_problems.append(gpa, .{
+                    try lint_problems.append(session_arena, .{
                         .rule_id = rule.rule_id,
                         .severity = config.detect_bool_literal,
                         .start = .startOfNode(tree, param_node),
                         .end = .endOfNode(tree, param_node),
-                        .message = try std.fmt.allocPrint(gpa, "Avoid bool literal arguments as they're ambiguous.", .{}),
+                        .message = try std.fmt.allocPrint(session_arena, "Avoid bool literal arguments as they're ambiguous.", .{}),
                     }),
                 .string => if (config.detect_string_literal != .off)
-                    try lint_problems.append(gpa, .{
+                    try lint_problems.append(session_arena, .{
                         .rule_id = rule.rule_id,
                         .severity = config.detect_string_literal,
                         .start = .startOfNode(tree, param_node),
                         .end = .endOfNode(tree, param_node),
-                        .message = try std.fmt.allocPrint(gpa, "Avoid string literal arguments as they're ambiguous.", .{}),
+                        .message = try std.fmt.allocPrint(session_arena, "Avoid string literal arguments as they're ambiguous.", .{}),
                     }),
                 .char => if (config.detect_char_literal != .off)
-                    try lint_problems.append(gpa, .{
+                    try lint_problems.append(session_arena, .{
                         .rule_id = rule.rule_id,
                         .severity = config.detect_char_literal,
                         .start = .startOfNode(tree, param_node),
                         .end = .endOfNode(tree, param_node),
-                        .message = try std.fmt.allocPrint(gpa, "Avoid char literal arguments as they're ambiguous.", .{}),
+                        .message = try std.fmt.allocPrint(session_arena, "Avoid char literal arguments as they're ambiguous.", .{}),
                     }),
                 .number => if (config.detect_number_literal != .off)
-                    try lint_problems.append(gpa, .{
+                    try lint_problems.append(session_arena, .{
                         .rule_id = rule.rule_id,
                         .severity = config.detect_number_literal,
                         .start = .startOfNode(tree, param_node),
                         .end = .endOfNode(tree, param_node),
-                        .message = try std.fmt.allocPrint(gpa, "Avoid number literal arguments as they're ambiguous.", .{}),
+                        .message = try std.fmt.allocPrint(session_arena, "Avoid number literal arguments as they're ambiguous.", .{}),
                     }),
             }
         }
@@ -151,9 +151,9 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            gpa,
+            session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(gpa),
+            try lint_problems.toOwnedSlice(session_arena),
         )
     else
         null;

@@ -44,19 +44,19 @@ fn run(
     rule: zlinter.rules.LintRule,
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
-    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+    const session_arena = session.runtime.session_arena;
     if (config.severity == .off) return null;
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(gpa);
+    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
 
     const root: Ast.Node.Index = .root;
-    var it = try doc.nodeLineageIterator(root, gpa);
+    var it = try doc.nodeLineageIterator(root, session_arena);
     defer it.deinit();
 
     var fn_proto_buffer: [1]Ast.Node.Index = undefined;
@@ -115,7 +115,7 @@ fn run(
                     => true,
                     else => false,
                 }) {
-                    var block_it = try doc.nodeLineageIterator(parent, gpa);
+                    var block_it = try doc.nodeLineageIterator(parent, session_arena);
                     defer block_it.deinit();
 
                     while (try block_it.next()) |block_tuple| {
@@ -140,20 +140,20 @@ fn run(
             next_parent = doc.lineage.items(.parent)[@intFromEnum(parent)];
         }
 
-        try lint_problems.append(gpa, .{
+        try lint_problems.append(session_arena, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
             .start = .startOfNode(tree, node),
             .end = .endOfNode(tree, node),
-            .message = try gpa.dupe(u8, "Take care when using `undefined`"),
+            .message = try session_arena.dupe(u8, "Take care when using `undefined`"),
         });
     }
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            gpa,
+            session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(gpa),
+            try lint_problems.toOwnedSlice(session_arena),
         )
     else
         null;

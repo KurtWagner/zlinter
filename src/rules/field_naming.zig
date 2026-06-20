@@ -144,13 +144,13 @@ fn run(
     rule: zlinter.rules.LintRule,
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
-    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+    const session_arena = session.runtime.session_arena;
 
     var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
-    defer lint_problems.deinit(gpa);
+    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
     var buffer: [2]Ast.Node.Index = undefined;
@@ -179,34 +179,34 @@ fn run(
                                 if (std.mem.eql(u8, name, exclude_name)) continue :tokens;
                             }
 
-                            try lint_problems.append(gpa, .{
+                            try lint_problems.append(session_arena, .{
                                 .rule_id = rule.rule_id,
                                 .severity = min_len.severity,
                                 .start = .startOfToken(tree, token),
                                 .end = .endOfToken(tree, token),
-                                .message = try std.fmt.allocPrint(gpa, "Error field names should have a length greater or equal to {d}", .{min_len.len}),
+                                .message = try std.fmt.allocPrint(session_arena, "Error field names should have a length greater or equal to {d}", .{min_len.len}),
                             });
                         } else if (max_len.severity != .off and name_len > max_len.len) {
                             for (exclude_len) |exclude_name| {
                                 if (std.mem.eql(u8, name, exclude_name)) continue :tokens;
                             }
 
-                            try lint_problems.append(gpa, .{
+                            try lint_problems.append(session_arena, .{
                                 .rule_id = rule.rule_id,
                                 .severity = max_len.severity,
                                 .start = .startOfToken(tree, token),
                                 .end = .endOfToken(tree, token),
-                                .message = try std.fmt.allocPrint(gpa, "Error field names should have a length less or equal to {d}", .{max_len.len}),
+                                .message = try std.fmt.allocPrint(session_arena, "Error field names should have a length less or equal to {d}", .{max_len.len}),
                             });
                         }
 
                         if (!config.error_field.style.check(name)) {
-                            try lint_problems.append(gpa, .{
+                            try lint_problems.append(session_arena, .{
                                 .rule_id = rule.rule_id,
                                 .severity = config.error_field.severity,
                                 .start = .startOfToken(tree, token),
                                 .end = .endOfToken(tree, token),
-                                .message = try std.fmt.allocPrint(gpa, "Error fields should be {s}", .{config.error_field.style.name()}),
+                                .message = try std.fmt.allocPrint(session_arena, "Error fields should be {s}", .{config.error_field.style.name()}),
                             });
                         }
                     },
@@ -270,34 +270,34 @@ fn run(
                             if (std.mem.eql(u8, name, exclude_name)) continue :fields;
                         }
 
-                        try lint_problems.append(gpa, .{
+                        try lint_problems.append(session_arena, .{
                             .rule_id = rule.rule_id,
                             .severity = min_len.severity,
                             .start = .startOfToken(tree, name_token),
                             .end = .endOfToken(tree, name_token),
-                            .message = try std.fmt.allocPrint(gpa, "{s} field names should have a length greater or equal to {d}", .{ container_name, min_len.len }),
+                            .message = try std.fmt.allocPrint(session_arena, "{s} field names should have a length greater or equal to {d}", .{ container_name, min_len.len }),
                         });
                     } else if (max_len.severity != .off and name_len > max_len.len) {
                         for (exclude_len) |exclude_name| {
                             if (std.mem.eql(u8, name, exclude_name)) continue :fields;
                         }
 
-                        try lint_problems.append(gpa, .{
+                        try lint_problems.append(session_arena, .{
                             .rule_id = rule.rule_id,
                             .severity = max_len.severity,
                             .start = .startOfToken(tree, name_token),
                             .end = .endOfToken(tree, name_token),
-                            .message = try std.fmt.allocPrint(gpa, "{s} field names should have a length less or equal to {d}", .{ container_name, max_len.len }),
+                            .message = try std.fmt.allocPrint(session_arena, "{s} field names should have a length less or equal to {d}", .{ container_name, max_len.len }),
                         });
                     }
 
                     if (!style_with_severity.style.check(name)) {
-                        try lint_problems.append(gpa, .{
+                        try lint_problems.append(session_arena, .{
                             .rule_id = rule.rule_id,
                             .severity = style_with_severity.severity,
                             .start = .startOfToken(tree, name_token),
                             .end = .endOfToken(tree, name_token),
-                            .message = try std.fmt.allocPrint(gpa, "{s} fields should be {s}", .{ field_desc, style_with_severity.style.name() }),
+                            .message = try std.fmt.allocPrint(session_arena, "{s} fields should be {s}", .{ field_desc, style_with_severity.style.name() }),
                         });
                     }
                 }
@@ -307,9 +307,9 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            gpa,
+            session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(gpa),
+            try lint_problems.toOwnedSlice(session_arena),
         )
     else
         null;

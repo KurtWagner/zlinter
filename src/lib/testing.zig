@@ -255,12 +255,10 @@ fn runRule(
     options: struct {
         config: ?*anyopaque = null,
     },
+    arena: *std.heap.ArenaAllocator,
 ) !?LintResult {
     assertTestOnly();
     const io = std.testing.io;
-
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
 
     var session = initFakeContext(arena.allocator(), std.testing.io);
 
@@ -291,7 +289,6 @@ fn runRule(
         rule,
         &session,
         doc,
-        std.testing.allocator,
         .{ .config = options.config },
     );
 }
@@ -402,14 +399,18 @@ pub fn testRunRule(
     config: anytype,
     expected: []const LintProblemExpectation,
 ) !void {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
     var local_config = config;
     var result = (try runRule(
         rule,
         options.filename,
         source,
         .{ .config = &local_config },
+        &arena,
     ));
-    defer if (result) |*r| r.deinit(std.testing.allocator);
+    defer if (result) |*r| r.deinit(arena.allocator());
 
     var actual = std.ArrayList(LintProblemExpectation).empty;
     defer actual.deinit(std.testing.allocator);

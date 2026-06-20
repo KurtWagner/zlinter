@@ -22,24 +22,24 @@ fn run(
     rule: zlinter.rules.LintRule,
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
-    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+    const session_arena = session.runtime.session_arena;
     if (config.severity == .off) return null;
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(gpa);
+    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
-    const fmt = try tree.renderAlloc(gpa);
-    defer gpa.free(fmt);
+    const fmt = try tree.renderAlloc(session_arena);
+    defer session_arena.free(fmt);
 
     if (!std.mem.eql(u8, fmt, tree.source)) {
-        try lint_problems.append(gpa, .{
+        try lint_problems.append(session_arena, .{
             .start = .zero,
             .end = .zero,
-            .message = try gpa.dupe(u8, "File is not formatted"),
+            .message = try session_arena.dupe(u8, "File is not formatted"),
             .rule_id = rule.rule_id,
             .severity = config.severity,
         });
@@ -47,9 +47,9 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            gpa,
+            session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(gpa),
+            try lint_problems.toOwnedSlice(session_arena),
         )
     else
         null;

@@ -53,14 +53,14 @@ fn run(
     rule: zlinter.rules.LintRule,
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
-    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+    const session_arena = session.runtime.session_arena;
     if (config.severity == .off) return null;
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(gpa);
+    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
     var fn_buffer: [1]Ast.Node.Index = undefined;
@@ -86,13 +86,13 @@ fn run(
             if (!isRedundantComptimeType(tree, type_node)) continue;
 
             const type_slice = tree.tokenSlice(tree.firstToken(type_node));
-            try lint_problems.append(gpa, .{
+            try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
                 .severity = config.severity,
                 .start = .startOfToken(tree, comptime_token),
                 .end = .endOfToken(tree, tree.lastToken(type_node)),
                 .message = try std.fmt.allocPrint(
-                    gpa,
+                    session_arena,
                     "Redundant `comptime` on parameter of type `{s}` - parameters of this type are always comptime",
                     .{type_slice},
                 ),
@@ -102,9 +102,9 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            gpa,
+            session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(gpa),
+            try lint_problems.toOwnedSlice(session_arena),
         )
     else
         null;

@@ -6,7 +6,6 @@ pub const LintRule = struct {
         self: LintRule,
         session: *LintSession,
         doc: *const LintDocument,
-        gpa: std.mem.Allocator,
         options: RunOptions,
     ) RunError!?results.LintResult,
 };

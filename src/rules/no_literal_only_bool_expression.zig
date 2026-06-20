@@ -45,19 +45,19 @@ fn run(
     rule: zlinter.rules.LintRule,
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
-    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+    const session_arena = session.runtime.session_arena;
     if (config.severity == .off) return null;
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(gpa);
+    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
 
     const root: Ast.Node.Index = .root;
-    var it = try doc.nodeLineageIterator(root, gpa);
+    var it = try doc.nodeLineageIterator(root, session_arena);
     defer it.deinit();
 
     nodes: while (try it.next()) |tuple| {
@@ -75,35 +75,35 @@ fn run(
                 const data = tree.nodeData(node);
                 const lhs, const rhs = .{ data.node_and_node[0], data.node_and_node[1] };
                 if (isLiteral(tree, lhs) != null and isLiteral(tree, rhs) != null) {
-                    try lint_problems.append(gpa, .{
+                    try lint_problems.append(session_arena, .{
                         .rule_id = rule.rule_id,
                         .severity = config.severity,
                         .start = .startOfNode(tree, node),
                         .end = .endOfNode(tree, node),
-                        .message = try gpa.dupe(u8, "Useless condition"),
+                        .message = try session_arena.dupe(u8, "Useless condition"),
                     });
                 }
             },
             else => if (tree.fullIf(node)) |full_if| {
                 if (isLiteral(tree, full_if.ast.cond_expr)) |_| {
-                    try lint_problems.append(gpa, .{
+                    try lint_problems.append(session_arena, .{
                         .rule_id = rule.rule_id,
                         .severity = config.severity,
                         .start = .startOfNode(tree, full_if.ast.cond_expr),
                         .end = .endOfNode(tree, full_if.ast.cond_expr),
-                        .message = try gpa.dupe(u8, "Useless condition"),
+                        .message = try session_arena.dupe(u8, "Useless condition"),
                     });
                 }
             } else if (tree.fullWhile(node)) |full_while| {
                 if (isLiteral(tree, full_while.ast.cond_expr)) |literal| {
                     if (literal == .true) continue :nodes;
 
-                    try lint_problems.append(gpa, .{
+                    try lint_problems.append(session_arena, .{
                         .rule_id = rule.rule_id,
                         .severity = config.severity,
                         .start = .startOfNode(tree, full_while.ast.cond_expr),
                         .end = .endOfNode(tree, full_while.ast.cond_expr),
-                        .message = try gpa.dupe(u8, "Useless condition"),
+                        .message = try session_arena.dupe(u8, "Useless condition"),
                     });
                 }
             },
@@ -118,9 +118,9 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            gpa,
+            session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(gpa),
+            try lint_problems.toOwnedSlice(session_arena),
         )
     else
         null;

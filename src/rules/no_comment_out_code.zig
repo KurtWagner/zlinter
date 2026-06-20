@@ -45,19 +45,19 @@ fn run(
     rule: zlinter.rules.LintRule,
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
-    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
+    const session_arena = session.runtime.session_arena;
 
     const source = doc.source(session);
 
     var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
-    defer lint_problems.deinit(gpa);
+    defer lint_problems.deinit(session_arena);
 
     var content_accumulator: std.ArrayList(u8) = .empty;
-    defer content_accumulator.deinit(gpa);
+    defer content_accumulator.deinit(session_arena);
 
     var first_comment: ?zlinter.comments.Comment = null;
     var last_comment: ?zlinter.comments.Comment = null;
@@ -72,28 +72,28 @@ fn run(
 
         if (content_accumulator.items.len == 0 or prev_line == line - 1) {
             if (content_accumulator.items.len == 0) {
-                try content_accumulator.appendSlice(gpa, "fn container() void {");
+                try content_accumulator.appendSlice(session_arena, "fn container() void {");
             }
-            try content_accumulator.appendSlice(gpa, contents);
-            try content_accumulator.append(gpa, '\n');
+            try content_accumulator.appendSlice(session_arena, contents);
+            try content_accumulator.append(session_arena, '\n');
         } else {
             if (content_accumulator.items.len > 0) {
-                if (try looksLikeCode(content_accumulator.items[0..], gpa)) {
-                    try lint_problems.append(gpa, .{
+                if (try looksLikeCode(content_accumulator.items[0..], session_arena)) {
+                    try lint_problems.append(session_arena, .{
                         .rule_id = rule.rule_id,
                         .severity = config.severity,
                         .start = .startOfComment(doc.comments, first_comment.?),
                         .end = .endOfComment(doc.comments, last_comment.?),
-                        .message = try gpa.dupe(u8, "Avoid code in comments"),
+                        .message = try session_arena.dupe(u8, "Avoid code in comments"),
                     });
                 }
 
-                content_accumulator.clearAndFree(gpa);
+                content_accumulator.clearAndFree(session_arena);
                 first_comment = null;
                 last_comment = null;
             }
-            try content_accumulator.appendSlice(gpa, contents);
-            try content_accumulator.append(gpa, '\n');
+            try content_accumulator.appendSlice(session_arena, contents);
+            try content_accumulator.append(session_arena, '\n');
         }
 
         first_comment = first_comment orelse comment;
@@ -101,26 +101,26 @@ fn run(
     }
 
     if (content_accumulator.items.len > 0) {
-        if (try looksLikeCode(content_accumulator.items[0..], gpa)) {
-            try lint_problems.append(gpa, .{
+        if (try looksLikeCode(content_accumulator.items[0..], session_arena)) {
+            try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
                 .severity = config.severity,
                 .start = .startOfComment(doc.comments, first_comment.?),
                 .end = .endOfComment(doc.comments, last_comment.?),
-                .message = try gpa.dupe(u8, "Avoid code in comments"),
+                .message = try session_arena.dupe(u8, "Avoid code in comments"),
             });
         }
 
-        content_accumulator.clearAndFree(gpa);
+        content_accumulator.clearAndFree(session_arena);
         first_comment = null;
         last_comment = null;
     }
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            gpa,
+            session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(gpa),
+            try lint_problems.toOwnedSlice(session_arena),
         )
     else
         null;

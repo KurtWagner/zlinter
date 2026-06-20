@@ -57,31 +57,31 @@ fn run(
     rule: zlinter.rules.LintRule,
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
-    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
+    const session_arena = session.runtime.session_arena;
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(gpa);
+    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
 
     const root: Ast.Node.Index = .root;
-    var it = try doc.nodeLineageIterator(root, gpa);
+    var it = try doc.nodeLineageIterator(root, session_arena);
     defer it.deinit();
 
     // Holds all tags within an enum used in a switch statement
-    var complete_tag_set: std.StringHashMap(void) = .init(gpa);
+    var complete_tag_set: std.StringHashMap(void) = .init(session_arena);
     defer complete_tag_set.deinit();
 
     // Tracks only the used enum tags within a switch statement
-    var used_tag_set = std.StringHashMap(void).init(gpa);
+    var used_tag_set = std.StringHashMap(void).init(session_arena);
     defer used_tag_set.deinit();
 
     var missing_tags: std.ArrayList([]const u8) = .empty;
-    defer missing_tags.deinit(gpa);
+    defer missing_tags.deinit(session_arena);
 
     nodes: while (try it.next()) |tuple| {
         const node, const connections = tuple;
@@ -130,24 +130,24 @@ fn run(
 
             for (enum_members) |member| {
                 const tag = switch_expr_enum.tagName(session, member) orelse continue;
-                if (!used_tag_set.contains(tag)) try missing_tags.append(gpa, tag);
+                if (!used_tag_set.contains(tag)) try missing_tags.append(session_arena, tag);
             }
 
-            try lint_problems.append(gpa, .{
+            try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
                 .severity = config.severity,
                 .start = .startOfToken(tree, tree.firstToken(node)),
                 .end = .endOfToken(tree, tree.firstToken(node)),
-                .message = buildProblemMessage(missing_tags.items, gpa) catch "Error building linter message",
+                .message = buildProblemMessage(missing_tags.items, session_arena) catch "Error building linter message",
             });
         }
     }
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            gpa,
+            session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(gpa),
+            try lint_problems.toOwnedSlice(session_arena),
         )
     else
         null;

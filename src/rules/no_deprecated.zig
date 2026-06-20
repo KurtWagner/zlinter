@@ -27,16 +27,16 @@ fn run(
     rule: zlinter.rules.LintRule,
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
-    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+    const session_arena = session.runtime.session_arena;
     if (config.severity == .off) return null;
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(gpa);
+    defer lint_problems.deinit(session_arena);
 
-    var arena_allocator = std.heap.ArenaAllocator.init(gpa);
+    var arena_allocator = std.heap.ArenaAllocator.init(session_arena);
     defer arena_allocator.deinit();
     const arena = arena_allocator.allocator();
 
@@ -50,7 +50,7 @@ fn run(
         switch (tag) {
             .enum_literal => try handleEnumLiteral(
                 rule,
-                gpa,
+                session_arena,
                 arena,
                 session,
                 doc,
@@ -61,7 +61,7 @@ fn run(
             ),
             .field_access => try handleFieldAccess(
                 rule,
-                gpa,
+                session_arena,
                 arena,
                 session,
                 doc,
@@ -72,7 +72,7 @@ fn run(
             ),
             .identifier => try handleIdentifierAccess(
                 rule,
-                gpa,
+                session_arena,
                 arena,
                 session,
                 doc,
@@ -91,9 +91,9 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            gpa,
+            session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(gpa),
+            try lint_problems.toOwnedSlice(session_arena),
         )
     else
         null;

@@ -32,10 +32,10 @@ fn run(
     rule: zlinter.rules.LintRule,
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
-    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+    const session_arena = session.runtime.session_arena;
     const tree = doc.tree(session);
 
     const message, const severity = msg: {
@@ -43,20 +43,20 @@ fn run(
         if (ast.isRootImplicitStruct(tree)) {
             if (config.file_struct.severity != .off and !config.file_struct.style.check(basename)) {
                 break :msg .{
-                    try std.fmt.allocPrint(gpa, "File is struct so name should be {s}", .{config.file_struct.style.name()}),
+                    try std.fmt.allocPrint(session_arena, "File is struct so name should be {s}", .{config.file_struct.style.name()}),
                     config.file_struct.severity,
                 };
             }
         } else if (config.file_namespace.severity != .off and !config.file_namespace.style.check(basename)) {
             break :msg .{
-                try std.fmt.allocPrint(gpa, "File is namespace so name should be {s}", .{config.file_namespace.style.name()}),
+                try std.fmt.allocPrint(session_arena, "File is namespace so name should be {s}", .{config.file_namespace.style.name()}),
                 config.file_namespace.severity,
             };
         }
         return null;
     };
 
-    var lint_problems = try gpa.alloc(zlinter.results.LintProblem, 1);
+    var lint_problems = try session_arena.alloc(zlinter.results.LintProblem, 1);
     lint_problems[0] = .{
         .severity = severity,
         .rule_id = rule.rule_id,
@@ -65,7 +65,7 @@ fn run(
         .message = message,
     };
     return try zlinter.results.LintResult.init(
-        gpa,
+        session_arena,
         doc.absPath(session),
         lint_problems,
     );

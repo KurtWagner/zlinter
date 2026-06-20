@@ -29,19 +29,19 @@ fn run(
     rule: zlinter.rules.LintRule,
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
-    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
+    const session_arena = session.runtime.session_arena;
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(gpa);
+    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
 
     const root: Ast.Node.Index = .root;
-    var it = try doc.nodeLineageIterator(root, gpa);
+    var it = try doc.nodeLineageIterator(root, session_arena);
     defer it.deinit();
 
     while (try it.next()) |tuple| {
@@ -56,12 +56,12 @@ fn run(
         if (depth <= config.max_unlabeled_depth) continue;
 
         const continue_token = tree.nodeMainToken(node);
-        try lint_problems.append(gpa, .{
+        try lint_problems.append(session_arena, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
             .start = .startOfToken(tree, continue_token),
             .end = .endOfToken(tree, continue_token),
-            .message = try gpa.dupe(
+            .message = try session_arena.dupe(
                 u8,
                 "Unlabeled `continue` inside nested loop is ambiguous. Use a loop label to make the control flow explicit.",
             ),
@@ -70,9 +70,9 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            gpa,
+            session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(gpa),
+            try lint_problems.toOwnedSlice(session_arena),
         )
     else
         null;

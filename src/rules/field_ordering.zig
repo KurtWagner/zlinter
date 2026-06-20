@@ -51,18 +51,18 @@ fn run(
     rule: zlinter.rules.LintRule,
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
-    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+    const session_arena = session.runtime.session_arena;
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(gpa);
+    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
 
     const root: Ast.Node.Index = .root;
-    var it = try doc.nodeLineageIterator(root, gpa);
+    var it = try doc.nodeLineageIterator(root, session_arena);
     defer it.deinit();
 
     var container_decl_buffer: [2]Ast.Node.Index = undefined;
@@ -100,17 +100,17 @@ fn run(
         }
 
         var actual_order = std.ArrayList(Ast.Node.Index).empty;
-        defer actual_order.deinit(gpa);
+        defer actual_order.deinit(session_arena);
 
         var expected_order = std.ArrayList(Ast.Node.Index).empty;
-        defer expected_order.deinit(gpa);
+        defer expected_order.deinit(session_arena);
 
         var sorted_queue: std.PriorityQueue(
             Field,
             struct { zlinter.rules.LintTextOrder },
             Field.cmp,
         ) = .initContext(.{order_with_severity.order});
-        defer sorted_queue.deinit(gpa);
+        defer sorted_queue.deinit(session_arena);
 
         var seen_field: bool = false;
         children: for (connections.children orelse &.{}) |container_child| {
@@ -128,8 +128,8 @@ fn run(
                 else => if (seen_field) break :children else continue :children,
             };
 
-            try actual_order.append(gpa, container_child);
-            try sorted_queue.push(gpa, .{
+            try actual_order.append(session_arena, container_child);
+            try sorted_queue.push(session_arena, .{
                 .name = tree.tokenSlice(name_token),
                 .node = container_child,
             });
@@ -140,7 +140,7 @@ fn run(
         var maybe_first_problem_index: ?usize = null; // Inclusive
         var maybe_last_problem_index: ?usize = null; // Inclusive
         while (sorted_queue.pop()) |field| : (i += 1) {
-            try expected_order.append(gpa, field.node);
+            try expected_order.append(session_arena, field.node);
             if (field.node != actual_order.items[i]) {
                 maybe_first_problem_index = maybe_first_problem_index orelse i;
                 maybe_last_problem_index = i;
@@ -161,7 +161,7 @@ fn run(
                 );
 
             var expected_source = std.ArrayList(u8).empty;
-            defer expected_source.deinit(gpa);
+            defer expected_source.deinit(session_arena);
 
             const last_node = expected_order.items[expected_order.items.len - 1];
             for (expected_order.items[first_problem_index .. last_problem_index + 1]) |current_node| {
@@ -180,25 +180,25 @@ fn run(
                     break :is_multiline false;
                 };
 
-                try expected_source.appendSlice(gpa, tree.source[expected_start.byte_offset .. expected_end.byte_offset + 1]);
+                try expected_source.appendSlice(session_arena, tree.source[expected_start.byte_offset .. expected_end.byte_offset + 1]);
                 if (!is_last_field or is_multiline) {
-                    try expected_source.append(gpa, ',');
+                    try expected_source.append(session_arena, ',');
                 }
             }
 
-            try lint_problems.append(gpa, .{
+            try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
                 .severity = order_with_severity.severity,
                 .start = actual_start,
                 .end = actual_end,
-                .message = try std.fmt.allocPrint(gpa, "{s} fields should be in {s} order", .{
+                .message = try std.fmt.allocPrint(session_arena, "{s} fields should be in {s} order", .{
                     container_kind_name,
                     order_with_severity.order.name(),
                 }),
                 .fix = .{
                     .start = actual_start.byte_offset,
                     .end = actual_end.byte_offset + 1, // + 1 as fix is exclusive
-                    .text = try expected_source.toOwnedSlice(gpa),
+                    .text = try expected_source.toOwnedSlice(session_arena),
                 },
             });
         }
@@ -206,9 +206,9 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            gpa,
+            session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(gpa),
+            try lint_problems.toOwnedSlice(session_arena),
         )
     else
         null;

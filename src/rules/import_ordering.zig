@@ -73,17 +73,17 @@ fn run(
     rule: zlinter.rules.LintRule,
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
-    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+    const session_arena = session.runtime.session_arena;
     if (config.severity == .off) return null;
 
     var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
-    defer lint_problems.deinit(gpa);
+    defer lint_problems.deinit(session_arena);
 
-    var scoped_imports = try resolveScopedImports(doc, session, gpa);
-    defer deinitScopedImports(gpa, &scoped_imports);
+    var scoped_imports = try resolveScopedImports(doc, session, session_arena);
+    defer deinitScopedImports(session_arena, &scoped_imports);
 
     const tree = doc.tree(session);
     var import_it = scoped_imports.iterator();
@@ -97,13 +97,13 @@ fn run(
                 const same_line = p.first_line == import.first_line;
 
                 if (!config.allow_line_separated_chunks and !is_same_chunk) {
-                    try lint_problems.append(gpa, .{
+                    try lint_problems.append(session_arena, .{
                         .rule_id = rule.rule_id,
                         .severity = config.severity,
                         .start = .startOfNode(tree, import.decl_node),
                         .end = .endOfNode(tree, import.decl_node),
-                        .message = try std.fmt.allocPrint(gpa, "Import '{s}' should be grouped with other imports", .{import.decl_name}),
-                        .fix = if (same_line) null else try swapImportBlocksFix(doc, session, p.decl_node, import.decl_node, gpa),
+                        .message = try std.fmt.allocPrint(session_arena, "Import '{s}' should be grouped with other imports", .{import.decl_name}),
+                        .fix = if (same_line) null else try swapImportBlocksFix(doc, session, p.decl_node, import.decl_node, session_arena),
                     });
                     continue :scopes;
                 }
@@ -113,13 +113,13 @@ fn run(
                     // name, not the import path.
                     const order = config.order.cmp(import.decl_name, p.decl_name);
                     if (order == .lt) {
-                        try lint_problems.append(gpa, .{
+                        try lint_problems.append(session_arena, .{
                             .rule_id = rule.rule_id,
                             .severity = config.severity,
                             .start = .startOfNode(tree, import.decl_node),
                             .end = .endOfNode(tree, import.decl_node),
-                            .message = try std.fmt.allocPrint(gpa, "Import '{s}' is not in {s} order", .{ import.decl_name, config.order.name() }),
-                            .fix = if (same_line) null else try swapImportBlocksFix(doc, session, p.decl_node, import.decl_node, gpa),
+                            .message = try std.fmt.allocPrint(session_arena, "Import '{s}' is not in {s} order", .{ import.decl_name, config.order.name() }),
+                            .fix = if (same_line) null else try swapImportBlocksFix(doc, session, p.decl_node, import.decl_node, session_arena),
                         });
                         continue :scopes;
                     }
@@ -131,9 +131,9 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            gpa,
+            session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(gpa),
+            try lint_problems.toOwnedSlice(session_arena),
         )
     else
         null;

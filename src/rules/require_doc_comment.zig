@@ -32,13 +32,13 @@ fn run(
     rule: zlinter.rules.LintRule,
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
-    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+    const session_arena = session.runtime.session_arena;
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(gpa);
+    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
 
@@ -46,18 +46,18 @@ fn run(
 
     if (config.file_severity != .off) {
         if (!try hasDocComments(tree, root)) {
-            try lint_problems.append(gpa, .{
+            try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
                 .severity = config.file_severity,
                 .start = .startOfNode(tree, root),
                 .end = .startOfNode(tree, root),
-                .message = try gpa.dupe(u8, "File is missing a doc comment"),
+                .message = try session_arena.dupe(u8, "File is missing a doc comment"),
             });
         }
     }
     if (config.private_severity == .off and config.public_severity == .off) return null;
 
-    var it = try doc.nodeLineageIterator(root, gpa);
+    var it = try doc.nodeLineageIterator(root, session_arena);
     defer it.deinit();
 
     var fn_decl_buffer: [1]Ast.Node.Index = undefined;
@@ -78,12 +78,12 @@ fn run(
 
                 if (try hasDocComments(tree, node)) continue :nodes;
 
-                try lint_problems.append(gpa, .{
+                try lint_problems.append(session_arena, .{
                     .rule_id = rule.rule_id,
                     .severity = severity,
                     .start = .startOfToken(tree, tree.firstToken(node)),
                     .end = .endOfNode(tree, fn_decl.ast.proto_node),
-                    .message = try std.fmt.allocPrint(gpa, "{s} function is missing a doc comment", .{label}),
+                    .message = try std.fmt.allocPrint(session_arena, "{s} function is missing a doc comment", .{label}),
                 });
             },
             else => if (tree.fullVarDecl(node)) |var_decl| {
@@ -95,12 +95,12 @@ fn run(
 
                 if (try hasDocComments(tree, node)) continue :nodes;
 
-                try lint_problems.append(gpa, .{
+                try lint_problems.append(session_arena, .{
                     .rule_id = rule.rule_id,
                     .severity = severity,
                     .start = .startOfToken(tree, tree.firstToken(node)),
                     .end = .endOfToken(tree, var_decl.ast.mut_token + 1),
-                    .message = try std.fmt.allocPrint(gpa, "{s} declaration is missing a doc comment", .{label}),
+                    .message = try std.fmt.allocPrint(session_arena, "{s} declaration is missing a doc comment", .{label}),
                 });
             },
         }
@@ -110,9 +110,9 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            gpa,
+            session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(gpa),
+            try lint_problems.toOwnedSlice(session_arena),
         )
     else
         null;

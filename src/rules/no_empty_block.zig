@@ -65,18 +65,18 @@ fn run(
     rule: zlinter.rules.LintRule,
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
-    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+    const session_arena = session.runtime.session_arena;
 
     var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
-    defer lint_problems.deinit(gpa);
+    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
 
     const root: Ast.Node.Index = .root;
-    var it = try doc.nodeLineageIterator(root, gpa);
+    var it = try doc.nodeLineageIterator(root, session_arena);
     defer it.deinit();
 
     nodes: while (try it.next()) |tuple| {
@@ -84,13 +84,13 @@ fn run(
 
         if (fnDeclBlock(tree, node)) |block| {
             if (config.fn_decl_block != .off and isEmptyBlock(tree, block)) {
-                try lint_problems.append(gpa, .{
+                try lint_problems.append(session_arena, .{
                     .rule_id = rule.rule_id,
                     .severity = config.fn_decl_block,
                     .start = .startOfToken(tree, tree.firstToken(block)),
                     .end = .endOfToken(tree, tree.lastToken(block)),
                     .message = try std.fmt.allocPrint(
-                        gpa,
+                        session_arena,
                         problem_msg_template,
                         .{"function declaration"},
                     ),
@@ -145,13 +145,13 @@ fn run(
 
             if (!isEmptyBlock(tree, expr_node)) continue :expr_nodes;
 
-            try lint_problems.append(gpa, .{
+            try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
                 .severity = severity,
                 .start = .startOfToken(tree, tree.firstToken(expr_node)),
                 .end = .endOfToken(tree, tree.lastToken(expr_node)),
                 .message = try std.fmt.allocPrint(
-                    gpa,
+                    session_arena,
                     problem_msg_template,
                     .{statement.name()},
                 ),
@@ -161,9 +161,9 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            gpa,
+            session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(gpa),
+            try lint_problems.toOwnedSlice(session_arena),
         )
     else
         null;

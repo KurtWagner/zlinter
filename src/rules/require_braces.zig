@@ -99,18 +99,18 @@ fn run(
     rule: zlinter.rules.LintRule,
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
-    gpa: std.mem.Allocator,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+    const session_arena = session.runtime.session_arena;
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(gpa);
+    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
 
     const root: Ast.Node.Index = .root;
-    var it = try doc.nodeLineageIterator(root, gpa);
+    var it = try doc.nodeLineageIterator(root, session_arena);
     defer it.deinit();
 
     nodes: while (try it.next()) |tuple| {
@@ -191,14 +191,14 @@ fn run(
                 switch (req_and_severity.requirement) {
                     .all => {
                         if (!has_braces) {
-                            break :error_msg try gpa.dupe(u8, "Expects braces whether on a single or across multiple lines");
+                            break :error_msg try session_arena.dupe(u8, "Expects braces whether on a single or across multiple lines");
                         }
                     },
                     .multi_statement_only => {
                         if (has_braces) {
                             const children = doc.lineage.items(.children)[@intFromEnum(expr_node)] orelse &.{};
                             if (children.len == 1) {
-                                break :error_msg try gpa.dupe(u8, "Expects no braces when there's only one statement");
+                                break :error_msg try session_arena.dupe(u8, "Expects no braces when there's only one statement");
                             }
                         }
                     },
@@ -207,12 +207,12 @@ fn run(
                         if (on_single_line) {
                             const children = doc.lineage.items(.children)[@intFromEnum(expr_node)] orelse &.{};
                             if (has_braces and children.len > 0) { // We allow empy blocks / no children
-                                break :error_msg try gpa.dupe(u8, "Expects no braces when on a single line");
+                                break :error_msg try session_arena.dupe(u8, "Expects no braces when on a single line");
                             }
                         } else if (!has_braces) {
                             const starts_on_same_line = tree.tokensOnSameLine(first_token - 1, first_token);
                             if (!starts_on_same_line) {
-                                break :error_msg try gpa.dupe(u8, "Expects braces when over multiple lines");
+                                break :error_msg try session_arena.dupe(u8, "Expects braces when over multiple lines");
                             }
                         }
                     },
@@ -220,7 +220,7 @@ fn run(
                 continue :expr_nodes;
             };
 
-            try lint_problems.append(gpa, .{
+            try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
                 .severity = req_and_severity.severity,
                 .start = .startOfToken(tree, first_token),
@@ -232,9 +232,9 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            gpa,
+            session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(gpa),
+            try lint_problems.toOwnedSlice(session_arena),
         )
     else
         null;

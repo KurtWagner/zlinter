@@ -408,7 +408,6 @@ fn runLinterRules(
                         rule,
                         &session,
                         &doc,
-                        runtime.session_arena,
                         .{ .config = rule_configs[rule_index] },
                     )) |result| {
                         try appendDedupedResult(
@@ -427,7 +426,6 @@ fn runLinterRules(
                             rule,
                             &session,
                             &doc,
-                            runtime.session_arena,
                             .{ .config = rule_configs[rule_index] },
                         )) |result| {
                             try appendDedupedResult(
@@ -449,7 +447,6 @@ fn runLinterRules(
                                 rule,
                                 &session,
                                 &doc,
-                                runtime.session_arena,
                                 .{
                                     .config = rule_configs[rule_index],
                                     .compile_context_id = compile_context_id,
