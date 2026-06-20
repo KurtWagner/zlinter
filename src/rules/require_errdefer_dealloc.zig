@@ -237,10 +237,14 @@ fn declRequiringCleanup(
         doc.file_id,
         maybe_var_decl_node,
     ) orelse return null;
-    const module_ids = try session.moduleIdsForFile(doc.file_id, allocator);
-    defer allocator.free(module_ids);
-    for (module_ids) |module_id| {
-        if (declHasPublicDeinit(session, module_id, var_decl_id)) {
+    var deinit_candidates = try session.resolveDeclTypeMemberCandidates(
+        allocator,
+        var_decl_id,
+        "deinit",
+    );
+    defer deinit_candidates.deinit(allocator);
+    for (deinit_candidates.items) |candidate| {
+        if (declIsPublicDeinit(session, candidate.decl_id)) {
             return .{ .decl_name_token = var_decl.ast.mut_token + 1 };
         }
     }
@@ -248,20 +252,13 @@ fn declRequiringCleanup(
     return null;
 }
 
-fn declHasPublicDeinit(
+fn declIsPublicDeinit(
     session: *zlinter.session.LintSession,
-    module_id: zlinter.session.ModuleStore.ModuleId,
     decl_id: zlinter.session.DeclStore.DeclId,
 ) bool {
-    const deinit_decl_id = session.resolveDeclTypeMemberForModule(
-        module_id,
-        decl_id,
-        "deinit",
-    ) orelse return false;
-
-    const file_id = session.decl_store.declFileId(deinit_decl_id);
+    const file_id = session.decl_store.declFileId(decl_id);
     const tree = session.file_store.fileTree(file_id);
-    const node = session.decl_store.declAstNode(deinit_decl_id) orelse return false;
+    const node = session.decl_store.declAstNode(decl_id) orelse return false;
 
     var fn_proto_buffer: [1]Ast.Node.Index = undefined;
     const fn_proto = tree.fullFnProto(

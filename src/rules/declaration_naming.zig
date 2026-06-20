@@ -127,10 +127,10 @@ fn run(
         }
 
         var type_summary: zlinter.session.TypeStore.TypeSummary = .other;
-        const module_ids = try session.moduleIdsForFile(doc.file_id, rule_arena);
-        defer rule_arena.free(module_ids);
-        for (module_ids) |module_id| {
-            type_summary = session.resolveDeclValueSummaryForModule(module_id, decl_id) orelse continue;
+        var summary_candidates = try session.resolveDeclValueSummaryCandidates(rule_arena, decl_id);
+        defer summary_candidates.deinit(rule_arena);
+        for (summary_candidates.items) |candidate| {
+            type_summary = candidate.summary;
             break;
         }
         const name_token = var_decl.ast.mut_token + 1;

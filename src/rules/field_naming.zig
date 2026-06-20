@@ -218,10 +218,10 @@ fn run(
             fields: for (container_decl.ast.members) |member| {
                 if (tree.fullContainerField(member)) |container_field| {
                     const type_summary = if (session.decl_store.declIdByNode(doc.file_id, member)) |decl_id| summary: {
-                        const module_ids = try session.moduleIdsForFile(doc.file_id, rule_arena);
-                        defer rule_arena.free(module_ids);
-                        for (module_ids) |module_id| {
-                            break :summary session.resolveDeclValueSummaryForModule(module_id, decl_id) orelse continue;
+                        var summary_candidates = try session.resolveDeclValueSummaryCandidates(rule_arena, decl_id);
+                        defer summary_candidates.deinit(rule_arena);
+                        for (summary_candidates.items) |candidate| {
+                            break :summary candidate.summary;
                         }
                         break :summary null;
                     } else null;

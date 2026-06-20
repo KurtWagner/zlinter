@@ -269,6 +269,14 @@ pub fn moduleIdsForFile(
     return gpa.dupe(ModuleStore.ModuleId, cached.items);
 }
 
+fn moduleIdsForDecl(
+    self: *LintContext,
+    decl_id: DeclStore.DeclId,
+    allocator: std.mem.Allocator,
+) ![]ModuleStore.ModuleId {
+    return self.moduleIdsForFile(self.decl_store.declFileId(decl_id), allocator);
+}
+
 fn ensureModuleIdsByFile(
     self: *LintContext,
     gpa: std.mem.Allocator,
@@ -497,6 +505,11 @@ pub const EnumCandidate = struct {
     decl_id: DeclStore.DeclId,
 };
 
+pub const DeclValueSummaryCandidate = struct {
+    module_id: ModuleStore.ModuleId,
+    summary: TypeStore.TypeSummary,
+};
+
 /// Resolves the type summary for an expression node in a single module.
 fn resolveTypeOfNodeForModule(
     self: *LintContext,
@@ -582,6 +595,54 @@ pub fn resolveDeclMemberForModule(
     );
 }
 
+/// Resolves a member declaration from a container/type declaration across all
+/// modules that can reach the declaration's file.
+pub fn resolveDeclMemberCandidates(
+    self: *LintContext,
+    allocator: std.mem.Allocator,
+    parent_decl_id: DeclStore.DeclId,
+    member_name: []const u8,
+) !std.ArrayList(DeclCandidate) {
+    var candidates = std.ArrayList(DeclCandidate).empty;
+    const module_ids = try self.moduleIdsForDecl(parent_decl_id, allocator);
+    defer allocator.free(module_ids);
+    for (module_ids) |module_id| {
+        const decl_id = self.resolveDeclMemberForModule(
+            module_id,
+            parent_decl_id,
+            member_name,
+        ) orelse continue;
+        try candidates.append(allocator, .{
+            .module_id = module_id,
+            .decl_id = decl_id,
+        });
+    }
+    return candidates;
+}
+
+/// Resolves a member declaration from each declaration candidate, preserving
+/// the candidate module used for lookup.
+pub fn resolveDeclMemberCandidatesFromCandidates(
+    self: *LintContext,
+    allocator: std.mem.Allocator,
+    parent_candidates: []const DeclCandidate,
+    member_name: []const u8,
+) !std.ArrayList(DeclCandidate) {
+    var candidates = std.ArrayList(DeclCandidate).empty;
+    for (parent_candidates) |parent| {
+        const decl_id = self.resolveDeclMemberForModule(
+            parent.module_id,
+            parent.decl_id,
+            member_name,
+        ) orelse continue;
+        try candidates.append(allocator, .{
+            .module_id = parent.module_id,
+            .decl_id = decl_id,
+        });
+    }
+    return candidates;
+}
+
 /// Resolves the type of `node` for every module reachable from the file.
 pub fn resolveTypeCandidatesOfNode(
     self: *LintContext,
@@ -662,6 +723,31 @@ pub fn resolveDeclTypeMemberForModule(
     );
 }
 
+/// Resolves a member from the type represented by a declaration across all
+/// modules that can reach the declaration's file.
+pub fn resolveDeclTypeMemberCandidates(
+    self: *LintContext,
+    allocator: std.mem.Allocator,
+    parent_decl_id: DeclStore.DeclId,
+    member_name: []const u8,
+) !std.ArrayList(DeclCandidate) {
+    var candidates = std.ArrayList(DeclCandidate).empty;
+    const module_ids = try self.moduleIdsForDecl(parent_decl_id, allocator);
+    defer allocator.free(module_ids);
+    for (module_ids) |module_id| {
+        const decl_id = self.resolveDeclTypeMemberForModule(
+            module_id,
+            parent_decl_id,
+            member_name,
+        ) orelse continue;
+        try candidates.append(allocator, .{
+            .module_id = module_id,
+            .decl_id = decl_id,
+        });
+    }
+    return candidates;
+}
+
 /// Resolves the declaration named by a declaration's type expression.
 pub fn resolveDeclTypeDeclForModule(
     self: *LintContext,
@@ -677,6 +763,50 @@ pub fn resolveDeclTypeDeclForModule(
         self.module_store.rootFileId(module_id),
         decl_id,
     );
+}
+
+/// Resolves the declaration named by a declaration's type expression across
+/// all modules that can reach the declaration's file.
+pub fn resolveDeclTypeDeclCandidates(
+    self: *LintContext,
+    allocator: std.mem.Allocator,
+    decl_id: DeclStore.DeclId,
+) !std.ArrayList(DeclCandidate) {
+    var candidates = std.ArrayList(DeclCandidate).empty;
+    const module_ids = try self.moduleIdsForDecl(decl_id, allocator);
+    defer allocator.free(module_ids);
+    for (module_ids) |module_id| {
+        const type_decl_id = self.resolveDeclTypeDeclForModule(
+            module_id,
+            decl_id,
+        ) orelse continue;
+        try candidates.append(allocator, .{
+            .module_id = module_id,
+            .decl_id = type_decl_id,
+        });
+    }
+    return candidates;
+}
+
+/// Resolves the declaration named by each candidate's type expression,
+/// preserving the candidate module used for lookup.
+pub fn resolveDeclTypeDeclCandidatesFromCandidates(
+    self: *LintContext,
+    allocator: std.mem.Allocator,
+    decl_candidates: []const DeclCandidate,
+) !std.ArrayList(DeclCandidate) {
+    var candidates = std.ArrayList(DeclCandidate).empty;
+    for (decl_candidates) |candidate| {
+        const type_decl_id = self.resolveDeclTypeDeclForModule(
+            candidate.module_id,
+            candidate.decl_id,
+        ) orelse continue;
+        try candidates.append(allocator, .{
+            .module_id = candidate.module_id,
+            .decl_id = type_decl_id,
+        });
+    }
+    return candidates;
 }
 
 /// Returns the cached concrete type target for a declaration, when one was
@@ -1108,6 +1238,27 @@ pub fn resolveDeclValueSummaryForModule(
     decl_id: DeclStore.DeclId,
 ) ?TypeStore.TypeSummary {
     return self.resolveDeclValueSummaryDepth(module_id, decl_id, 16);
+}
+
+pub fn resolveDeclValueSummaryCandidates(
+    self: *LintContext,
+    allocator: std.mem.Allocator,
+    decl_id: DeclStore.DeclId,
+) !std.ArrayList(DeclValueSummaryCandidate) {
+    var candidates = std.ArrayList(DeclValueSummaryCandidate).empty;
+    const module_ids = try self.moduleIdsForDecl(decl_id, allocator);
+    defer allocator.free(module_ids);
+    for (module_ids) |module_id| {
+        const summary = self.resolveDeclValueSummaryForModule(
+            module_id,
+            decl_id,
+        ) orelse continue;
+        try candidates.append(allocator, .{
+            .module_id = module_id,
+            .summary = summary,
+        });
+    }
+    return candidates;
 }
 
 fn resolveDeclValueSummaryDepth(

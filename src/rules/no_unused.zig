@@ -175,10 +175,14 @@ fn referencedDeclName(
 
     if (isCallCallee(tree, doc, node)) {
         const root_decl_id = session.decl_store.rootDecl(doc.file_id) orelse return null;
-        const module_ids = session.moduleIdsForFile(doc.file_id, allocator) catch return null;
-        defer allocator.free(module_ids);
-        for (module_ids) |module_id| {
-            const decl_id = session.resolveDeclMemberForModule(module_id, root_decl_id, member_name) orelse continue;
+        var member_candidates = session.resolveDeclMemberCandidates(
+            allocator,
+            root_decl_id,
+            member_name,
+        ) catch return null;
+        defer member_candidates.deinit(allocator);
+        for (member_candidates.items) |candidate| {
+            const decl_id = candidate.decl_id;
             if (session.decl_store.declFileId(decl_id) != doc.file_id)
                 continue;
 
