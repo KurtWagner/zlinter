@@ -377,20 +377,7 @@ fn runLinterRules(
         }
         printer.println(.verbose, "  - Process syntax errors: {d}ms", .{timer.lapMilliseconds()});
 
-        const module_ids = try session.moduleIdsForFile(
-            file_id,
-            runtime.fileArena(),
-        );
-
-        const active_module_id = if (module_ids.len == 0) null else module_ids[0];
-
-        session.resolveFileTypes(
-            file_id,
-            if (active_module_id) |module_id|
-                session.module_store.rootFileId(module_id)
-            else
-                null,
-        );
+        session.resolveFileTypes(file_id);
 
         printer.println(.verbose, "  - Rules", .{});
 

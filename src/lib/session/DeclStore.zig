@@ -445,7 +445,7 @@ fn scopeDecl(self: *const DeclStore, scope_id: ScopeId, name: []const u8) ?DeclI
     return self.scopes.items(.decl_id_by_name)[scope_id.toIndex()].get(name);
 }
 
-fn resolveDeclType(
+pub fn resolveDeclType(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
@@ -1063,7 +1063,7 @@ fn resolveTypeTargetMember(
     };
 }
 
-fn resolveDeclTypeTargetForValue(
+pub fn resolveDeclTypeTargetForValue(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
@@ -1980,14 +1980,14 @@ fn blockLabel(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) ?std.zig.Ast.Toke
 }
 
 /// Iterate declarations within a given file.
-fn fileDeclIterator(self: *const DeclStore, file_id: FileStore.FileId) FileDeclIterator {
+pub fn fileDeclIterator(self: *const DeclStore, file_id: FileStore.FileId) FileDeclIterator {
     return .{
         .store = self,
         .file_id = file_id,
     };
 }
 
-const FileDeclIterator = struct {
+pub const FileDeclIterator = struct {
     store: *const DeclStore,
     file_id: FileStore.FileId,
     index: usize = 0,

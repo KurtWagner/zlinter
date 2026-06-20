@@ -15,6 +15,17 @@ build_config_store: BuildConfigStore,
 compile_contexts: std.MultiArrayList(CompileContext) = .empty,
 module_ids_by_file: std.AutoHashMapUnmanaged(FileStore.FileId, std.ArrayList(ModuleStore.ModuleId)) = .empty,
 module_file_index_built: bool = false,
+resolved_decl_types_by_module: std.AutoHashMapUnmanaged(ResolvedDeclTypeKey, ResolvedDeclType) = .empty,
+
+const ResolvedDeclTypeKey = struct {
+    module_id: ModuleStore.ModuleId,
+    decl_id: DeclStore.DeclId,
+};
+
+const ResolvedDeclType = struct {
+    type_id: ?TypeStore.TypeId,
+    type_target: ?DeclStore.TypeTarget,
+};
 
 pub fn init(self: *LintContext) !void {
     const zone = tracy.traceNamed(@src(), "LintContext.init");
@@ -236,15 +247,78 @@ pub fn resolveFile(self: *LintContext, input_path: []const u8) !FileStore.FileId
 pub fn resolveFileTypes(
     self: *LintContext,
     file_id: FileStore.FileId,
-    root_file_id: ?FileStore.FileId,
 ) void {
     self.decl_store.resolveFileTypes(
         file_id,
         &self.file_store,
         &self.module_store,
         &self.type_store,
-        root_file_id,
+        null,
     );
+
+    const module_ids = oom(self.moduleIdsForFile(
+        file_id,
+        self.runtime.sessionArena(),
+    ));
+    defer self.runtime.sessionArena().free(module_ids);
+
+    for (module_ids) |module_id| {
+        self.resolveFileTypesForModule(file_id, module_id);
+    }
+}
+
+fn resolveFileTypesForModule(
+    self: *LintContext,
+    file_id: FileStore.FileId,
+    module_id: ModuleStore.ModuleId,
+) void {
+    _ = self.decl_store.store(file_id, &self.file_store);
+
+    var it = self.decl_store.fileDeclIterator(file_id);
+    while (it.next()) |decl_id| {
+        _ = self.cacheResolvedDeclTypeForModule(module_id, decl_id);
+    }
+}
+
+fn cacheResolvedDeclTypeForModule(
+    self: *LintContext,
+    module_id: ModuleStore.ModuleId,
+    decl_id: DeclStore.DeclId,
+) ResolvedDeclType {
+    const key: ResolvedDeclTypeKey = .{
+        .module_id = module_id,
+        .decl_id = decl_id,
+    };
+    if (self.resolved_decl_types_by_module.get(key)) |resolved| return resolved;
+
+    const root_file_id = self.module_store.rootFileId(module_id);
+    const type_id = if (self.decl_store.resolveDeclType(
+        &self.file_store,
+        &self.module_store,
+        decl_id,
+        root_file_id,
+    )) |summary|
+        self.type_store.store(summary)
+    else
+        null;
+
+    const type_target = self.decl_store.resolveDeclTypeTargetForValue(
+        &self.file_store,
+        &self.module_store,
+        root_file_id,
+        decl_id,
+    );
+
+    const resolved: ResolvedDeclType = .{
+        .type_id = type_id,
+        .type_target = type_target,
+    };
+    oom(self.resolved_decl_types_by_module.put(
+        self.runtime.sessionArena(),
+        key,
+        resolved,
+    ));
+    return resolved;
 }
 
 pub fn moduleIdsForFile(
@@ -530,7 +604,7 @@ fn resolveTypeOfNodeForModule(
         null;
 
     if (resolved_decl_id) |decl_id| {
-        if (self.decl_store.declResolvedType(decl_id)) |type_id| {
+        if (self.cacheResolvedDeclTypeForModule(module_id, decl_id).type_id) |type_id| {
             return .{
                 .summary = self.type_store.summary(type_id),
                 .decl_id = decl_id,
@@ -577,7 +651,7 @@ pub fn resolveDeclCandidatesOfNode(
 }
 
 /// Resolves a member declaration from a container/type declaration.
-pub fn resolveDeclMemberForModule(
+fn resolveDeclMemberForModule(
     self: *LintContext,
     module_id: ModuleStore.ModuleId,
     parent_decl_id: DeclStore.DeclId,
@@ -705,7 +779,7 @@ pub fn resolveEnumTagNameCandidatesOfNode(
 }
 
 /// Resolves a member from the type represented by a declaration.
-pub fn resolveDeclTypeMemberForModule(
+fn resolveDeclTypeMemberForModule(
     self: *LintContext,
     module_id: ModuleStore.ModuleId,
     parent_decl_id: DeclStore.DeclId,
@@ -749,7 +823,7 @@ pub fn resolveDeclTypeMemberCandidates(
 }
 
 /// Resolves the declaration named by a declaration's type expression.
-pub fn resolveDeclTypeDeclForModule(
+fn resolveDeclTypeDeclForModule(
     self: *LintContext,
     module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
@@ -860,7 +934,7 @@ inline fn enumMemberTagName(tree: Ast, member: Ast.Node.Index) ?[]const u8 {
 /// Resolves an expression to the concrete enum declaration that determines its
 /// values. This preserves enum identity where a coarse type summary such as
 /// `.instance = .enum` cannot list the enum's tags.
-pub fn resolveEnumDeclOfNodeForModule(
+fn resolveEnumDeclOfNodeForModule(
     self: *LintContext,
     module_id: ModuleStore.ModuleId,
     doc: *const LintDocument,
@@ -915,7 +989,7 @@ pub fn enumInfo(
 
 /// Resolves a switch case value expression to an enum tag name, including simple
 /// aliases such as `const tag = Enum.a; tag`.
-pub fn resolveEnumTagNameOfNodeForModule(
+fn resolveEnumTagNameOfNodeForModule(
     self: *LintContext,
     module_id: ModuleStore.ModuleId,
     doc: *const LintDocument,
@@ -1221,7 +1295,7 @@ fn contextScopeForNode(
     return self.decl_store.scopeIdByNode(doc.file_id, .root);
 }
 
-pub fn resolveDeclValueKindForModule(
+fn resolveDeclValueKindForModule(
     self: *LintContext,
     module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
@@ -1232,7 +1306,7 @@ pub fn resolveDeclValueKindForModule(
         null;
 }
 
-pub fn resolveDeclValueSummaryForModule(
+fn resolveDeclValueSummaryForModule(
     self: *LintContext,
     module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
@@ -1255,6 +1329,25 @@ pub fn resolveDeclValueSummaryCandidates(
         ) orelse continue;
         try candidates.append(allocator, .{
             .module_id = module_id,
+            .summary = summary,
+        });
+    }
+    return candidates;
+}
+
+pub fn resolveDeclValueSummaryCandidatesFromCandidates(
+    self: *LintContext,
+    allocator: std.mem.Allocator,
+    decl_candidates: []const DeclCandidate,
+) !std.ArrayList(DeclValueSummaryCandidate) {
+    var candidates = std.ArrayList(DeclValueSummaryCandidate).empty;
+    for (decl_candidates) |candidate| {
+        const summary = self.resolveDeclValueSummaryForModule(
+            candidate.module_id,
+            candidate.decl_id,
+        ) orelse continue;
+        try candidates.append(allocator, .{
+            .module_id = candidate.module_id,
             .summary = summary,
         });
     }
@@ -1339,7 +1432,8 @@ fn resolveDeclTypeSummaryDepth(
 
     const file_id = self.decl_store.declFileId(decl_id);
 
-    if (self.decl_store.declResolvedType(decl_id)) |type_id| {
+    const resolved_type = self.cacheResolvedDeclTypeForModule(module_id, decl_id);
+    if (resolved_type.type_id) |type_id| {
         const summary = self.type_store.summary(type_id);
         switch (summary) {
             .unknown, .other, .primitive => {},
@@ -1347,7 +1441,7 @@ fn resolveDeclTypeSummaryDepth(
         }
     }
 
-    if (self.declResolvedTypeTarget(decl_id)) |target| {
+    if (resolved_type.type_target) |target| {
         if (self.typeSummaryFromTarget(
             module_id,
             target,
@@ -1601,7 +1695,7 @@ fn resolveImportRootDecl(
     ) catch return null;
 
     const file_id = maybe_file_id orelse return null;
-    self.resolveFileTypes(file_id, self.module_store.rootFileId(module_id));
+    self.resolveFileTypesForModule(file_id, module_id);
     return self.decl_store.rootDecl(file_id);
 }
 
