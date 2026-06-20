@@ -74,7 +74,7 @@ pub fn resolveFrom(
     defer zone.end();
 
     const io = self.runtime.io;
-    const session_arena = self.runtime.session_arena;
+    const session_arena = self.runtime.sessionArena();
 
     var fba_buffer: [std.fs.max_path_bytes]u8 = undefined;
     var fba: std.heap.FixedBufferAllocator = .init(&fba_buffer);

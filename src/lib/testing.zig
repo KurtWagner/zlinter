@@ -55,11 +55,22 @@ pub fn initFakeContext(
 ) LintSession {
     assertTestOnly();
 
+    const session_arena = arena.create(std.heap.ArenaAllocator) catch @panic("failed to allocate fake session arena");
+    session_arena.* = .init(arena);
+
+    const file_arena_allocator = arena.create(std.heap.ArenaAllocator) catch @panic("failed to allocate fake file arena");
+    file_arena_allocator.* = .init(arena);
+
+    const rule_arena_allocator = arena.create(std.heap.ArenaAllocator) catch @panic("failed to allocate fake rule arena");
+    rule_arena_allocator.* = .init(arena);
+
     const runtime = arena.create(LintRuntime) catch @panic("failed to allocate fake lint runtime");
     runtime.* = .{
         .io = io,
         .verbose = false,
-        .session_arena = arena,
+        .session_arena = session_arena,
+        .file_arena = file_arena_allocator,
+        .rule_arena = rule_arena_allocator,
         // TODO: If we really ever need to we can pass zig exe through a build
         // config and evaluate lib dir from `zig env` but I think overkill for
         // our unit tests, so leaving as this for now...

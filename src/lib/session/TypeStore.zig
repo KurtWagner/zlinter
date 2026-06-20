@@ -364,7 +364,7 @@ pub fn store(
     if (self.type_id_by_summary.get(type_summary)) |type_id| return type_id;
 
     const type_id: TypeId = .fromIndex(self.summaries.items.len);
-    const session_arena = self.runtime.session_arena;
+    const session_arena = self.runtime.sessionArena();
     oom(self.summaries.append(session_arena, type_summary));
     oom(self.type_id_by_summary.put(session_arena, type_summary, type_id));
     return type_id;
@@ -749,17 +749,26 @@ fn parsePrimitiveIntBits(text: []const u8) ?u16 {
 }
 
 test "TypeStore.store deduplicates equivalent summaries" {
+    var session_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer session_arena.deinit();
+    var file_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer file_arena.deinit();
+    var rule_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer rule_arena.deinit();
+
     var runtime: LintRuntime = .{
         .io = std.testing.io,
         .verbose = false,
-        .session_arena = std.testing.allocator,
+        .session_arena = &session_arena,
+        .file_arena = &file_arena,
+        .rule_arena = &rule_arena,
         .zig_exe = "zig",
         .zig_lib_directory = ".",
         .cwd = ".",
     };
     var type_store: TypeStore = .init(&runtime);
-    defer type_store.summaries.deinit(std.testing.allocator);
-    defer type_store.type_id_by_summary.deinit(std.testing.allocator);
+    defer type_store.summaries.deinit(session_arena.allocator());
+    defer type_store.type_id_by_summary.deinit(session_arena.allocator());
 
     const first = type_store.store(.{ .primitive = .{
         .number = .{

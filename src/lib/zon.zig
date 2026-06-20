@@ -8,7 +8,7 @@ pub fn parseFileAlloc(
     diagnostics: ?*Diagnostics,
 ) !T {
     const io = runtime.io;
-    const gpa = runtime.session_arena;
+    const gpa = runtime.sessionArena();
 
     const file = try dir.openFile(io, cwd_file_path, .{
         .mode = .read_only,
@@ -59,10 +59,16 @@ test "parseFileAlloc" {
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
+    var file_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer file_arena.deinit();
+    var rule_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer rule_arena.deinit();
     const runtime: LintRuntime = .{
         .io = std.testing.io,
         .verbose = false,
-        .session_arena = arena.allocator(),
+        .session_arena = &arena,
+        .file_arena = &file_arena,
+        .rule_arena = &rule_arena,
         .zig_exe = "zig",
         .zig_lib_directory = ".",
         .cwd = ".",

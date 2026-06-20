@@ -49,7 +49,7 @@ fn run(
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
-    const session_arena = session.runtime.session_arena;
+    const session_arena = session.runtime.sessionArena();
 
     const source = doc.source(session);
 

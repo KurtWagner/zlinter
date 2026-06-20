@@ -61,7 +61,7 @@ fn run(
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
-    const session_arena = session.runtime.session_arena;
+    const session_arena = session.runtime.sessionArena();
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
     defer lint_problems.deinit(session_arena);

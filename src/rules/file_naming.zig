@@ -35,7 +35,7 @@ fn run(
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
-    const session_arena = session.runtime.session_arena;
+    const session_arena = session.runtime.sessionArena();
     const tree = doc.tree(session);
 
     const message, const severity = msg: {

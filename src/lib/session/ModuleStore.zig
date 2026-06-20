@@ -94,7 +94,7 @@ pub fn resolve(self: *ModuleStore, seed: ModuleSeed) ModuleId {
     if (self.module_id_by_key.get(key)) |id|
         return id;
 
-    const session_arena = self.runtime.session_arena;
+    const session_arena = self.runtime.sessionArena();
     const id: ModuleId = .fromIndex(self.modules.len);
     oom(self.modules.append(session_arena, .{
         .root_file = seed.root_file,

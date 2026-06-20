@@ -193,6 +193,12 @@ test "isLintableFilePath" {
 test "allocLintFiles - with default args" {
     var tmp_dir = std.testing.tmpDir(.{ .iterate = true });
     defer tmp_dir.cleanup();
+    var session_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer session_arena.deinit();
+    var file_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer file_arena.deinit();
+    var rule_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer rule_arena.deinit();
 
     try testing.createFiles(tmp_dir.dir, @constCast(&[_][]const u8{
         testing.paths.posix("a.zig"),
@@ -212,7 +218,9 @@ test "allocLintFiles - with default args" {
     const runtime: LintRuntime = .{
         .io = std.testing.io,
         .verbose = false,
-        .session_arena = std.testing.allocator,
+        .session_arena = &session_arena,
+        .file_arena = &file_arena,
+        .rule_arena = &rule_arena,
         .zig_exe = "zig",
         .zig_lib_directory = ".",
         .cwd = cwd,
@@ -242,6 +250,12 @@ test "allocLintFiles - with default args" {
 test "allocLintFiles - with arg files" {
     var tmp_dir = std.testing.tmpDir(.{ .iterate = true });
     defer tmp_dir.cleanup();
+    var session_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer session_arena.deinit();
+    var file_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer file_arena.deinit();
+    var rule_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer rule_arena.deinit();
 
     try testing.createFiles(tmp_dir.dir, @constCast(&[_][]const u8{
         testing.paths.posix("a.zig"),
@@ -264,7 +278,9 @@ test "allocLintFiles - with arg files" {
     const runtime: LintRuntime = .{
         .io = std.testing.io,
         .verbose = false,
-        .session_arena = std.testing.allocator,
+        .session_arena = &session_arena,
+        .file_arena = &file_arena,
+        .rule_arena = &rule_arena,
         .zig_exe = "zig",
         .zig_lib_directory = ".",
         .cwd = cwd,

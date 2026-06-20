@@ -51,7 +51,7 @@ pub fn resolve(
     defer zone.end();
 
     const io = self.runtime.io;
-    const session_arena = self.runtime.session_arena;
+    const session_arena = self.runtime.sessionArena();
 
     // 2x as we use it for generating two paths.
     var fba_buffer: [std.fs.max_path_bytes * 2]u8 = undefined;
@@ -231,8 +231,8 @@ fn cacheResolvedConfigPaths(
 
     while (!std.mem.eql(u8, path, cached_ancestor_path)) {
         if (!self.config_id_by_path.contains(path)) {
-            const key = oom(self.runtime.session_arena.dupe(u8, path));
-            oom(self.config_id_by_path.putNoClobber(self.runtime.session_arena, key, config_id));
+            const key = oom(self.runtime.sessionArena().dupe(u8, path));
+            oom(self.config_id_by_path.putNoClobber(self.runtime.sessionArena(), key, config_id));
         }
 
         const parent = std.fs.path.dirname(path) orelse cached_ancestor_path;

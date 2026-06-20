@@ -1504,7 +1504,7 @@ fn appendScope(
     owner_decl_id: ?DeclId,
 ) ScopeId {
     const scope_id: ScopeId = .fromIndex(self.scopes.len);
-    oom(self.scopes.append(self.runtime.session_arena, .{
+    oom(self.scopes.append(self.runtime.sessionArena(), .{
         .file_id = file_id,
         .owner_node = owner_node,
         .parent_scope_id = parent_scope_id,
@@ -1512,7 +1512,7 @@ fn appendScope(
         .decl_id_by_name = .empty,
     }));
     oom(self.scope_id_by_owner_node.putNoClobber(
-        self.runtime.session_arena,
+        self.runtime.sessionArena(),
         .init(file_id, owner_node),
         scope_id,
     ));
@@ -1530,7 +1530,7 @@ fn appendDecl(
     kind: DeclKind,
 ) DeclId {
     const decl_id: DeclId = .fromIndex(self.decls.len);
-    oom(self.decls.append(self.runtime.session_arena, .{
+    oom(self.decls.append(self.runtime.sessionArena(), .{
         .name_token = name_token,
         .ast_node = ast_node,
         .type_node = type_node,
@@ -1540,7 +1540,7 @@ fn appendDecl(
     }));
     if (ast_node) |node| {
         oom(self.decl_id_by_ast_node.putNoClobber(
-            self.runtime.session_arena,
+            self.runtime.sessionArena(),
             .init(file_id, node),
             decl_id,
         ));
@@ -1572,7 +1572,7 @@ fn putDecl(
         kind,
     );
     oom(self.scopes.items(.decl_id_by_name)[scope_id.toIndex()].putNoClobber(
-        self.runtime.session_arena,
+        self.runtime.sessionArena(),
         name,
         decl_id,
     ));

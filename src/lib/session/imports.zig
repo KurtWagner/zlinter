@@ -195,6 +195,10 @@ pub fn resolveFile(
 test "resolveFile - root import uses supplied root file id" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
+    var file_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer file_arena.deinit();
+    var rule_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer rule_arena.deinit();
 
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -219,7 +223,9 @@ test "resolveFile - root import uses supplied root file id" {
     var runtime: LintRuntime = .{
         .io = std.testing.io,
         .verbose = false,
-        .session_arena = arena.allocator(),
+        .session_arena = &arena,
+        .file_arena = &file_arena,
+        .rule_arena = &rule_arena,
         .zig_exe = "zig",
         .zig_lib_directory = ".",
         .cwd = ".",

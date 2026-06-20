@@ -44,7 +44,7 @@ pub fn init(self: *LintContext, focus_compiled_names: ?[]const []const u8) !void
                 };
                 if (maybe_focus_id) |focus_id|
                     oom(self.focused_compiled_contexts.put(
-                        self.runtime.session_arena,
+                        self.runtime.sessionArena(),
                         focus_id,
                         {},
                     ))
@@ -59,7 +59,7 @@ pub fn init(self: *LintContext, focus_compiled_names: ?[]const []const u8) !void
 
                 if (compilePriority(kind) == selected_priority) {
                     oom(self.focused_compiled_contexts.put(
-                        self.runtime.session_arena,
+                        self.runtime.sessionArena(),
                         .fromIndex(i),
                         {},
                     ));
@@ -147,7 +147,7 @@ fn consumeBuildConfigStep(
         return;
     };
 
-    self.compile_contexts.append(self.runtime.session_arena, .{
+    self.compile_contexts.append(self.runtime.sessionArena(), .{
         .step_index = step_index,
         .root_module = root_module_id,
     }) catch unreachable;
@@ -167,18 +167,18 @@ fn resolveBuildModule(
         std.Build.Configuration.Module.Index,
         ModuleStore.ModuleId,
     ) = .empty;
-    defer module_id_by_build_module_index.deinit(self.runtime.session_arena);
+    defer module_id_by_build_module_index.deinit(self.runtime.sessionArena());
 
     var queue: std.ArrayList(std.Build.Configuration.Module.Index) = .empty;
-    defer queue.deinit(self.runtime.session_arena);
+    defer queue.deinit(self.runtime.sessionArena());
 
     const root_module_id = try self.resolveBuildModuleShallow(
         config_id,
         build_module_index,
     ) orelse return null;
 
-    module_id_by_build_module_index.put(self.runtime.session_arena, build_module_index, root_module_id) catch unreachable;
-    queue.append(self.runtime.session_arena, build_module_index) catch unreachable;
+    module_id_by_build_module_index.put(self.runtime.sessionArena(), build_module_index, root_module_id) catch unreachable;
+    queue.append(self.runtime.sessionArena(), build_module_index) catch unreachable;
 
     while (queue.pop()) |current_build_module_index| {
         const current_module_id = module_id_by_build_module_index.get(current_build_module_index).?;
@@ -193,7 +193,7 @@ fn resolveBuildModule(
         const imports = build_module.import_table.get(build_config).imports.mal;
         var module_id_by_import_name: std.StringHashMapUnmanaged(ModuleStore.ModuleId) = .empty;
 
-        module_id_by_import_name.ensureTotalCapacity(self.runtime.session_arena, @intCast(imports.len)) catch unreachable;
+        module_id_by_import_name.ensureTotalCapacity(self.runtime.sessionArena(), @intCast(imports.len)) catch unreachable;
         for (imports.items(.name), imports.items(.module)) |
             build_import_name_id,
             build_import_module_index,
@@ -206,14 +206,14 @@ fn resolveBuildModule(
                     build_import_module_index,
                 )) orelse continue;
 
-                module_id_by_build_module_index.put(self.runtime.session_arena, build_import_module_index, resolved) catch unreachable;
-                queue.append(self.runtime.session_arena, build_import_module_index) catch unreachable;
+                module_id_by_build_module_index.put(self.runtime.sessionArena(), build_import_module_index, resolved) catch unreachable;
+                queue.append(self.runtime.sessionArena(), build_import_module_index) catch unreachable;
 
                 break :child resolved;
             };
 
             module_id_by_import_name.putAssumeCapacity(
-                self.runtime.session_arena.dupe(u8, import_name_slice) catch unreachable,
+                self.runtime.sessionArena().dupe(u8, import_name_slice) catch unreachable,
                 import_module_id,
             );
         }
@@ -243,10 +243,10 @@ fn resolveBuildModuleShallow(
     const root_path = try files.resolveLazyPath(
         root_source_file,
         build_config,
-        self.runtime.session_arena,
+        self.runtime.sessionArena(),
         build_root_path,
     ) orelse return null;
-    defer self.runtime.session_arena.free(root_path);
+    defer self.runtime.sessionArena().free(root_path);
 
     return self.module_store.resolve(.{
         .root_file = try self.file_store.resolve(root_path),
@@ -327,13 +327,13 @@ fn appendCompileContextForFile(
     compile_context_id: CompileContext.Id,
 ) void {
     const entry = oom(self.compile_context_ids_by_file.getOrPut(
-        self.runtime.session_arena,
+        self.runtime.sessionArena(),
         file_id,
     ));
     if (!entry.found_existing)
         entry.value_ptr.* = .empty;
 
-    oom(entry.value_ptr.append(self.runtime.session_arena, compile_context_id));
+    oom(entry.value_ptr.append(self.runtime.sessionArena(), compile_context_id));
 }
 
 const ReachKey = enum(u64) {
