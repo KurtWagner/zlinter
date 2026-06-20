@@ -31,6 +31,10 @@ fn run(
     defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
+
+    // Invalid ASTs will trip assertions inside Zig's renderer.
+    if (tree.errors.len > 0) return null;
+
     const fmt = try tree.renderAlloc(gpa);
     defer gpa.free(fmt);
 
