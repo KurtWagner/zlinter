@@ -27,6 +27,120 @@ const ResolvedDeclType = struct {
     type_target: ?DeclStore.TypeTarget,
 };
 
+const ModuleResolution = struct {
+    session: *LintContext,
+    module_id: ModuleStore.ModuleId,
+
+    fn context(self: ModuleResolution, parent_file_id: FileStore.FileId) import_utils.ResolveContext {
+        return .{
+            .file_store = &self.session.file_store,
+            .module_store = &self.session.module_store,
+            .parent_file_id = parent_file_id,
+            .root_file_id = self.session.module_store.rootFileId(self.module_id),
+        };
+    }
+
+    fn declContext(self: ModuleResolution, decl_id: DeclStore.DeclId) import_utils.ResolveContext {
+        return self.context(self.session.decl_store.declFileId(decl_id));
+    }
+
+    fn declType(self: ModuleResolution, decl_id: DeclStore.DeclId) ?TypeStore.TypeSummary {
+        return self.session.decl_store.resolveDeclType(
+            self.declContext(decl_id),
+            decl_id,
+        );
+    }
+
+    fn declTypeTargetForValue(self: ModuleResolution, decl_id: DeclStore.DeclId) ?DeclStore.TypeTarget {
+        return self.session.decl_store.resolveDeclTypeTargetForValue(
+            self.declContext(decl_id),
+            decl_id,
+        );
+    }
+
+    fn memberDecl(
+        self: ModuleResolution,
+        parent_decl_id: DeclStore.DeclId,
+        member_name: []const u8,
+    ) ?DeclStore.DeclId {
+        return self.session.decl_store.resolveMemberDecl(
+            self.declContext(parent_decl_id),
+            parent_decl_id,
+            member_name,
+        );
+    }
+
+    fn declTypeMember(
+        self: ModuleResolution,
+        parent_decl_id: DeclStore.DeclId,
+        member_name: []const u8,
+    ) ?DeclStore.DeclId {
+        return self.session.decl_store.resolveDeclTypeMember(
+            self.declContext(parent_decl_id),
+            parent_decl_id,
+            member_name,
+        );
+    }
+
+    fn declTypeDecl(
+        self: ModuleResolution,
+        decl_id: DeclStore.DeclId,
+    ) ?DeclStore.DeclId {
+        return self.session.decl_store.resolveDeclTypeDecl(
+            self.declContext(decl_id),
+            decl_id,
+        );
+    }
+
+    fn declByNode(
+        self: ModuleResolution,
+        context_decl_id: DeclStore.DeclId,
+        node: Ast.Node.Index,
+    ) ?DeclStore.DeclId {
+        return self.session.decl_store.resolveDeclByNode(
+            self.declContext(context_decl_id),
+            context_decl_id,
+            node,
+        );
+    }
+
+    fn nodeDeclWithRoot(
+        self: ModuleResolution,
+        context_decl_id: DeclStore.DeclId,
+        node: Ast.Node.Index,
+    ) ?DeclStore.DeclId {
+        return self.session.decl_store.resolveNodeDeclWithRoot(
+            self.declContext(context_decl_id),
+            context_decl_id,
+            node,
+        );
+    }
+
+    fn declByNodeFromScope(
+        self: ModuleResolution,
+        file_id: FileStore.FileId,
+        scope_id: DeclStore.ScopeId,
+        node: Ast.Node.Index,
+    ) ?DeclStore.DeclId {
+        return self.session.decl_store.resolveDeclByNodeFromScope(
+            self.context(file_id),
+            file_id,
+            scope_id,
+            node,
+        );
+    }
+
+    fn typeFactoryResultTarget(
+        self: ModuleResolution,
+        fn_decl_id: DeclStore.DeclId,
+    ) ?DeclStore.TypeTarget {
+        return self.session.decl_store.resolveTypeFactoryResultTarget(
+            self.declContext(fn_decl_id),
+            fn_decl_id,
+        );
+    }
+};
+
 pub fn init(self: *LintContext) !void {
     const zone = tracy.traceNamed(@src(), "LintContext.init");
     defer zone.end();
@@ -236,10 +350,13 @@ pub fn resolveFile(self: *LintContext, input_path: []const u8) !FileStore.FileId
     const id = try self.file_store.resolve(input_path);
     self.decl_store.resolveFileTypes(
         id,
-        &self.file_store,
-        &self.module_store,
+        .{
+            .file_store = &self.file_store,
+            .module_store = &self.module_store,
+            .parent_file_id = id,
+            .root_file_id = null,
+        },
         &self.type_store,
-        null,
     );
     return id;
 }
@@ -255,10 +372,13 @@ pub fn resolveFileTypes(
 ) void {
     self.decl_store.resolveFileTypes(
         file_id,
-        &self.file_store,
-        &self.module_store,
+        .{
+            .file_store = &self.file_store,
+            .module_store = &self.module_store,
+            .parent_file_id = file_id,
+            .root_file_id = null,
+        },
         &self.type_store,
-        null,
     );
 
     const module_ids = oom(self.moduleIdsForFile(
@@ -299,23 +419,13 @@ fn cacheResolvedDeclTypeForModule(
     };
     if (self.resolved_decl_types_by_module.get(key)) |resolved| return resolved;
 
-    const root_file_id = self.module_store.rootFileId(module_id);
-    const type_id = if (self.decl_store.resolveDeclType(
-        &self.file_store,
-        &self.module_store,
-        decl_id,
-        root_file_id,
-    )) |summary|
+    const resolution = self.resolutionForModule(module_id);
+    const type_id = if (resolution.declType(decl_id)) |summary|
         self.type_store.store(summary)
     else
         null;
 
-    const type_target = self.decl_store.resolveDeclTypeTargetForValue(
-        &self.file_store,
-        &self.module_store,
-        root_file_id,
-        decl_id,
-    );
+    const type_target = resolution.declTypeTargetForValue(decl_id);
 
     const resolved: ResolvedDeclType = .{
         .type_id = type_id,
@@ -327,6 +437,16 @@ fn cacheResolvedDeclTypeForModule(
         resolved,
     ));
     return resolved;
+}
+
+fn resolutionForModule(
+    self: *LintContext,
+    module_id: ModuleStore.ModuleId,
+) ModuleResolution {
+    return .{
+        .session = self,
+        .module_id = module_id,
+    };
 }
 
 pub fn moduleIdsForFile(
@@ -445,9 +565,9 @@ fn indexModuleFiles(
             const resolved: ?ReachQueueItem = switch (import_utils.Kind.init(import_path)) {
                 .relative => relative: {
                     const resolved_file_id = import_utils.resolveFile(
-                        &self.file_store,
-                        &self.module_store,
                         .{
+                            .file_store = &self.file_store,
+                            .module_store = &self.module_store,
                             .parent_file_id = item.file_id,
                             .root_file_id = compile_root_file_id,
                         },
@@ -668,13 +788,7 @@ fn resolveDeclMemberForModule(
     const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclMember");
     defer zone.end();
 
-    return self.decl_store.resolveMemberDecl(
-        &self.file_store,
-        &self.module_store,
-        self.module_store.rootFileId(module_id),
-        parent_decl_id,
-        member_name,
-    );
+    return self.resolutionForModule(module_id).memberDecl(parent_decl_id, member_name);
 }
 
 /// Resolves a member declaration from a container/type declaration across all
@@ -723,6 +837,37 @@ pub fn resolveDeclMemberCandidatesFromCandidates(
         });
     }
     return candidates;
+}
+
+/// Follows simple value aliases from a declaration candidate while preserving
+/// its module context.
+pub fn resolveDeclAliasCandidate(
+    self: *LintContext,
+    candidate: DeclCandidate,
+) DeclCandidate {
+    var current_decl_id = candidate.decl_id;
+    var remaining_alias_depth: u8 = 16;
+
+    const resolution = self.resolutionForModule(candidate.module_id);
+    while (remaining_alias_depth > 0) : (remaining_alias_depth -= 1) {
+        const file_id = self.decl_store.declFileId(current_decl_id);
+        const tree = self.file_store.fileTree(file_id);
+        const decl_node = self.decl_store.declAstNode(current_decl_id) orelse break;
+        const var_decl = tree.fullVarDecl(decl_node) orelse break;
+        const init_node = var_decl.ast.init_node.unwrap() orelse break;
+        const target_decl_id = resolution.nodeDeclWithRoot(
+            current_decl_id,
+            init_node,
+        ) orelse break;
+
+        if (target_decl_id == current_decl_id) break;
+        current_decl_id = target_decl_id;
+    }
+
+    return .{
+        .module_id = candidate.module_id,
+        .decl_id = current_decl_id,
+    };
 }
 
 /// Resolves the type of `node` for every module reachable from the file.
@@ -796,13 +941,7 @@ fn resolveDeclTypeMemberForModule(
     const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclTypeMember");
     defer zone.end();
 
-    return self.decl_store.resolveDeclTypeMember(
-        &self.file_store,
-        &self.module_store,
-        self.module_store.rootFileId(module_id),
-        parent_decl_id,
-        member_name,
-    );
+    return self.resolutionForModule(module_id).declTypeMember(parent_decl_id, member_name);
 }
 
 /// Resolves a member from the type represented by a declaration across all
@@ -839,12 +978,7 @@ fn resolveDeclTypeDeclForModule(
     const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclTypeDecl");
     defer zone.end();
 
-    return self.decl_store.resolveDeclTypeDecl(
-        &self.file_store,
-        &self.module_store,
-        self.module_store.rootFileId(module_id),
-        decl_id,
-    );
+    return self.resolutionForModule(module_id).declTypeDecl(decl_id);
 }
 
 /// Resolves the declaration named by a declaration's type expression across
@@ -1043,10 +1177,7 @@ fn resolveFunctionReturnEnumDecl(
         node,
     ) orelse return null;
     const return_type = fn_proto.ast.return_type.unwrap() orelse return null;
-    const return_decl_id = self.decl_store.resolveDeclByNode(
-        &self.file_store,
-        &self.module_store,
-        self.module_store.rootFileId(module_id),
+    const return_decl_id = self.resolutionForModule(module_id).declByNode(
         fn_decl_id,
         return_type,
     ) orelse return null;
@@ -1101,20 +1232,14 @@ fn resolveEnumDeclFromValueExpr(
 
     if (tree.nodeTag(node) == .field_access) {
         const lhs, _ = tree.nodeData(node).node_and_token;
-        const lhs_decl_id = self.decl_store.resolveDeclByNode(
-            &self.file_store,
-            &self.module_store,
-            self.module_store.rootFileId(module_id),
+        const lhs_decl_id = self.resolutionForModule(module_id).declByNode(
             context_decl_id,
             lhs,
         ) orelse return null;
         return self.resolveEnumDeclAlias(module_id, lhs_decl_id);
     }
 
-    const target_decl_id = self.decl_store.resolveDeclByNode(
-        &self.file_store,
-        &self.module_store,
-        self.module_store.rootFileId(module_id),
+    const target_decl_id = self.resolutionForModule(module_id).declByNode(
         context_decl_id,
         node,
     ) orelse return null;
@@ -1137,10 +1262,7 @@ fn resolveEnumDeclAlias(
         const decl_node = self.decl_store.declAstNode(current_decl_id) orelse return null;
         const var_decl = tree.fullVarDecl(decl_node) orelse return null;
         const init_node = var_decl.ast.init_node.unwrap() orelse return null;
-        const target_decl_id = self.decl_store.resolveDeclByNode(
-            &self.file_store,
-            &self.module_store,
-            self.module_store.rootFileId(module_id),
+        const target_decl_id = self.resolutionForModule(module_id).declByNode(
             current_decl_id,
             init_node,
         ) orelse return null;
@@ -1199,10 +1321,7 @@ fn tagNameFromValueExpr(
             break :blk tree.tokenSlice(last_token);
         },
         .identifier => blk: {
-            const target_decl_id = self.decl_store.resolveDeclByNode(
-                &self.file_store,
-                &self.module_store,
-                self.module_store.rootFileId(module_id),
+            const target_decl_id = self.resolutionForModule(module_id).declByNode(
                 context_decl_id,
                 node,
             ) orelse break :blk null;
@@ -1269,10 +1388,7 @@ fn immediateDeclForNode(
 
     const context_scope_id = self.contextScopeForNode(doc, node) orelse return null;
 
-    return self.decl_store.resolveDeclByNodeFromScope(
-        &self.file_store,
-        &self.module_store,
-        self.module_store.rootFileId(module_id),
+    return self.resolutionForModule(module_id).declByNodeFromScope(
         doc.file_id,
         context_scope_id,
         node,
@@ -1628,10 +1744,7 @@ fn typeSummaryFromValueNode(
 
     var call_buffer: [1]Ast.Node.Index = undefined;
     if (tree.fullCall(&call_buffer, node)) |call| {
-        const callee_decl_id = self.decl_store.resolveNodeDeclWithRoot(
-            &self.file_store,
-            &self.module_store,
-            self.module_store.rootFileId(module_id),
+        const callee_decl_id = self.resolutionForModule(module_id).nodeDeclWithRoot(
             context_decl_id,
             call.ast.fn_expr,
         ) orelse return null;
@@ -1641,10 +1754,7 @@ fn typeSummaryFromValueNode(
             remaining_depth - 1,
         ) orelse return null;
         if (callee_summary.coarseType() == .fn_returns_type) {
-            if (self.decl_store.resolveTypeFactoryResultTarget(
-                &self.file_store,
-                &self.module_store,
-                self.module_store.rootFileId(module_id),
+            if (self.resolutionForModule(module_id).typeFactoryResultTarget(
                 callee_decl_id,
             )) |target| {
                 return self.typeSummaryFromTarget(module_id, target, remaining_depth - 1);
@@ -1655,10 +1765,7 @@ fn typeSummaryFromValueNode(
 
     if (tree.nodeTag(node) == .address_of) {
         const target_node = tree.nodeData(node).node;
-        const target_decl_id = self.decl_store.resolveNodeDeclWithRoot(
-            &self.file_store,
-            &self.module_store,
-            self.module_store.rootFileId(module_id),
+        const target_decl_id = self.resolutionForModule(module_id).nodeDeclWithRoot(
             context_decl_id,
             target_node,
         ) orelse return null;
@@ -1670,10 +1777,7 @@ fn typeSummaryFromValueNode(
         );
     }
 
-    const target_decl_id = self.decl_store.resolveNodeDeclWithRoot(
-        &self.file_store,
-        &self.module_store,
-        self.module_store.rootFileId(module_id),
+    const target_decl_id = self.resolutionForModule(module_id).nodeDeclWithRoot(
         context_decl_id,
         node,
     ) orelse return null;
@@ -1703,9 +1807,9 @@ fn resolveImportRootDecl(
     ) orelse return null;
 
     const maybe_file_id = import_utils.resolveFile(
-        &self.file_store,
-        &self.module_store,
         .{
+            .file_store = &self.file_store,
+            .module_store = &self.module_store,
             .parent_file_id = parent_file_id,
             .root_file_id = self.module_store.rootFileId(module_id),
         },
@@ -2379,9 +2483,9 @@ test "moduleIdsForFile includes shared dependency children" {
         found_root2 = found_root2 or root_file_id == root2_file_id;
 
         const resolved_root = try import_utils.resolveFile(
-            &session.file_store,
-            &session.module_store,
             .{
+                .file_store = &session.file_store,
+                .module_store = &session.module_store,
                 .parent_file_id = dep_child_file_id,
                 .root_file_id = root_file_id,
             },

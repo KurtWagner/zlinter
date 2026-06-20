@@ -149,51 +149,9 @@ fn resolveAllocatorDecl(
     defer decl_candidates.deinit(arena);
 
     for (decl_candidates.items) |candidate| {
-        return resolveDeclAlias(session, candidate.module_id, candidate.decl_id);
+        return session.resolveDeclAliasCandidate(candidate).decl_id;
     }
     return null;
-}
-
-/// Allocators are often reached through local aliases.
-///
-/// For example,
-///
-/// ```
-/// const heap = std.heap;
-/// const allocator = heap.page_allocator;
-/// allocator.alloc(...);
-/// ```
-///
-/// This function walks `allocator` -> `heap.page_allocator` -> `std.heap.page_allocator`
-/// so detection is based on the original allocator declaration, not the
-/// alias declarations or their common `std.mem.Allocator` type.
-fn resolveDeclAlias(
-    session: *zlinter.session.LintSession,
-    module_id: zlinter.session.ModuleStore.ModuleId,
-    decl_id: zlinter.session.DeclStore.DeclId,
-) zlinter.session.DeclStore.DeclId {
-    var current_decl_id = decl_id;
-    var remaining_alias_depth: u8 = 16; // Cap to avoid getting caught in a loop.
-
-    while (remaining_alias_depth > 0) : (remaining_alias_depth -= 1) {
-        const file_id = session.decl_store.declFileId(current_decl_id);
-        const tree = session.file_store.fileTree(file_id);
-        const decl_node = session.decl_store.declAstNode(current_decl_id) orelse return current_decl_id;
-        const var_decl = tree.fullVarDecl(decl_node) orelse return current_decl_id;
-        const init_node = var_decl.ast.init_node.unwrap() orelse return current_decl_id;
-        const target_decl_id = session.decl_store.resolveNodeDeclWithRoot(
-            &session.file_store,
-            &session.module_store,
-            session.module_store.rootFileId(module_id),
-            current_decl_id,
-            init_node,
-        ) orelse return current_decl_id;
-
-        if (target_decl_id == current_decl_id) return current_decl_id;
-        current_decl_id = target_decl_id;
-    }
-
-    return current_decl_id;
 }
 
 fn pathEndsWith(path: []const u8, suffix: []const u8) bool {

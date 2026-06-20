@@ -149,10 +149,21 @@ test "writeImportPath - rejects non-string import arguments" {
 }
 
 pub const ResolveContext = struct {
+    file_store: *FileStore,
+    module_store: *const ModuleStore,
     parent_file_id: FileStore.FileId,
 
     /// Root source file for the active semantic module context.
     root_file_id: ?FileStore.FileId,
+
+    pub fn withParent(self: ResolveContext, parent_file_id: FileStore.FileId) ResolveContext {
+        return .{
+            .file_store = self.file_store,
+            .module_store = self.module_store,
+            .parent_file_id = parent_file_id,
+            .root_file_id = self.root_file_id,
+        };
+    }
 };
 
 /// Resolves an `@import` path in the supplied context.
@@ -161,33 +172,31 @@ pub const ResolveContext = struct {
 /// Callers should pass the compile context root file directly instead of
 /// searching for it from `context.parent_file_id`.
 pub fn resolveFile(
-    file_store: *FileStore,
-    module_store: *const ModuleStore,
     context: ResolveContext,
     import_path: []const u8,
 ) !?FileStore.FileId {
     const parent_file_id = context.parent_file_id;
-    const parent_abs_path = file_store.fileAbsPath(parent_file_id);
+    const parent_abs_path = context.file_store.fileAbsPath(parent_file_id);
     const parent_file_dir = std.fs.path.dirname(parent_abs_path) orelse ".";
 
     return switch (Kind.init(import_path)) {
-        .relative => try file_store.resolveFrom(
+        .relative => try context.file_store.resolveFrom(
             import_path,
             parent_file_dir,
         ),
-        .stdlib => try file_store.resolveStdlib(),
+        .stdlib => try context.file_store.resolveStdlib(),
         // TODO: #149 - handle "builtin" imports.
         .builtin,
         => null,
         .root,
         => context.root_file_id,
         .module => id: {
-            const parent_module_id = module_store.moduleIdByRootFile(parent_file_id) orelse break :id null;
-            const imported_module_id = module_store.moduleIdByImportName(
+            const parent_module_id = context.module_store.moduleIdByRootFile(parent_file_id) orelse break :id null;
+            const imported_module_id = context.module_store.moduleIdByImportName(
                 parent_module_id,
                 import_path,
             ) orelse break :id null;
-            break :id module_store.rootFileId(imported_module_id);
+            break :id context.module_store.rootFileId(imported_module_id);
         },
     };
 }
@@ -241,9 +250,9 @@ test "resolveFile - root import uses supplied root file id" {
     );
 
     const resolved_compile_root_file_id = try resolveFile(
-        &file_store,
-        &module_store,
         .{
+            .file_store = &file_store,
+            .module_store = &module_store,
             .parent_file_id = child_file_id,
             .root_file_id = compile_root_file_id,
         },
@@ -252,9 +261,9 @@ test "resolveFile - root import uses supplied root file id" {
     try std.testing.expectEqual(compile_root_file_id, resolved_compile_root_file_id.?);
 
     const unresolved_compile_root_file_id = try resolveFile(
-        &file_store,
-        &module_store,
         .{
+            .file_store = &file_store,
+            .module_store = &module_store,
             .parent_file_id = child_file_id,
             .root_file_id = null,
         },
