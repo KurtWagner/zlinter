@@ -445,6 +445,10 @@ fn scopeDecl(self: *const DeclStore, scope_id: ScopeId, name: []const u8) ?DeclI
     return self.scopes.items(.decl_id_by_name)[scope_id.toIndex()].get(name);
 }
 
+/// Computes the value/type summary for a declaration in a given root context.
+///
+/// The caller decides whether and how to cache it because results can differ
+/// between modules that resolve imports differently.
 pub fn resolveDeclType(
     self: *DeclStore,
     file_store: *FileStore,
@@ -1063,6 +1067,10 @@ fn resolveTypeTargetMember(
     };
 }
 
+/// Computes the concrete type target for a declaration's value in one root
+/// context.
+///
+/// This is exposed so LintSession can cache targets per module.
 pub fn resolveDeclTypeTargetForValue(
     self: *DeclStore,
     file_store: *FileStore,

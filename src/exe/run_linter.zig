@@ -216,6 +216,8 @@ fn run(
         );
 }
 
+/// Resolves lint files, prepares one session, and runs each enabled rule once
+/// per file.
 fn runLinterRules(
     runtime: *const LintRuntime,
     lint_files: []zlinter.files.LintFile,

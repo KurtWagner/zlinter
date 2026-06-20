@@ -244,6 +244,11 @@ pub fn resolveFile(self: *LintContext, input_path: []const u8) !FileStore.FileId
     return id;
 }
 
+/// Resolves cached type information for a file in every module context that can
+/// reach it.
+///
+/// This avoids choosing one active module when imports can resolve to
+/// different declarations across compile units.
 pub fn resolveFileTypes(
     self: *LintContext,
     file_id: FileStore.FileId,
@@ -267,6 +272,7 @@ pub fn resolveFileTypes(
     }
 }
 
+/// Resolves type caches for a file under one module root.
 fn resolveFileTypesForModule(
     self: *LintContext,
     file_id: FileStore.FileId,
@@ -280,6 +286,8 @@ fn resolveFileTypesForModule(
     }
 }
 
+/// Returns cached type information for a declaration in one module context,
+/// computing it on demand so module-specific import resolution is preserved.
 fn cacheResolvedDeclTypeForModule(
     self: *LintContext,
     module_id: ModuleStore.ModuleId,
@@ -1295,6 +1303,7 @@ fn contextScopeForNode(
     return self.decl_store.scopeIdByNode(doc.file_id, .root);
 }
 
+/// Resolves the coarse value kind for a declaration in one module context.
 fn resolveDeclValueKindForModule(
     self: *LintContext,
     module_id: ModuleStore.ModuleId,
@@ -1306,6 +1315,7 @@ fn resolveDeclValueKindForModule(
         null;
 }
 
+/// Resolves the value summary for a declaration in one module context.
 fn resolveDeclValueSummaryForModule(
     self: *LintContext,
     module_id: ModuleStore.ModuleId,
@@ -1314,6 +1324,8 @@ fn resolveDeclValueSummaryForModule(
     return self.resolveDeclValueSummaryDepth(module_id, decl_id, 16);
 }
 
+/// Resolves value summaries for a declaration across every module that can
+/// reach its file.
 pub fn resolveDeclValueSummaryCandidates(
     self: *LintContext,
     allocator: std.mem.Allocator,
@@ -1335,6 +1347,8 @@ pub fn resolveDeclValueSummaryCandidates(
     return candidates;
 }
 
+/// Resolves value summaries for existing declaration candidates while keeping
+/// each candidate's module context.
 pub fn resolveDeclValueSummaryCandidatesFromCandidates(
     self: *LintContext,
     allocator: std.mem.Allocator,
@@ -1354,6 +1368,7 @@ pub fn resolveDeclValueSummaryCandidatesFromCandidates(
     return candidates;
 }
 
+/// Recursively summarizes a declaration's value in one module context.
 fn resolveDeclValueSummaryDepth(
     self: *LintContext,
     module_id: ModuleStore.ModuleId,
@@ -1422,6 +1437,7 @@ fn resolveDeclValueSummaryDepth(
     return null;
 }
 
+/// Recursively summarizes the Zig type of a declaration in one module context.
 fn resolveDeclTypeSummaryDepth(
     self: *LintContext,
     module_id: ModuleStore.ModuleId,
@@ -1669,6 +1685,8 @@ fn typeSummaryFromValueNode(
     );
 }
 
+/// Resolves an `@import` root declaration in the active module context and
+/// seeds that imported file's module-specific type cache.
 fn resolveImportRootDecl(
     self: *LintContext,
     module_id: ModuleStore.ModuleId,
