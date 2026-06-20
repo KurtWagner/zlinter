@@ -289,16 +289,6 @@ pub fn resolveDeclByNode(
     );
 }
 
-pub fn resolveNodeDecl(
-    self: *DeclStore,
-    file_store: *FileStore,
-    module_store: *const ModuleStore,
-    context_decl_id: DeclId,
-    node: std.zig.Ast.Node.Index,
-) ?DeclId {
-    return self.resolveDeclByNode(file_store, module_store, null, context_decl_id, node);
-}
-
 pub fn resolveNodeDeclWithRoot(
     self: *DeclStore,
     file_store: *FileStore,

@@ -269,16 +269,6 @@ pub fn moduleIdsForFile(
     return gpa.dupe(ModuleStore.ModuleId, cached.items);
 }
 
-fn firstModuleIdForFile(
-    self: *LintContext,
-    file_id: FileStore.FileId,
-) ?ModuleStore.ModuleId {
-    const allocator = self.runtime.ruleArena();
-    const module_ids = self.moduleIdsForFile(file_id, allocator) catch return null;
-    defer allocator.free(module_ids);
-    return if (module_ids.len == 0) null else module_ids[0];
-}
-
 fn ensureModuleIdsByFile(
     self: *LintContext,
     gpa: std.mem.Allocator,
@@ -507,17 +497,6 @@ pub const EnumCandidate = struct {
     decl_id: DeclStore.DeclId,
 };
 
-/// Compatibility wrapper that resolves the first reachable module for a node.
-/// New semantic rules should use `resolveTypeCandidatesOfNode`.
-pub fn resolveTypeOfNode(
-    self: *LintContext,
-    doc: *const LintDocument,
-    node: Ast.Node.Index,
-) ?ResolvedNodeType {
-    const module_id = self.firstModuleIdForFile(doc.file_id) orelse return null;
-    return self.resolveTypeOfNodeForModule(module_id, doc, node);
-}
-
 /// Resolves the type summary for an expression node in a single module.
 fn resolveTypeOfNodeForModule(
     self: *LintContext,
@@ -547,17 +526,6 @@ fn resolveTypeOfNodeForModule(
     }
 
     return null;
-}
-
-/// Compatibility wrapper that resolves the first reachable module for a node.
-/// New semantic rules should use `resolveDeclCandidatesOfNode`.
-pub fn resolveDeclOfNode(
-    self: *LintContext,
-    doc: *const LintDocument,
-    node: Ast.Node.Index,
-) ?DeclStore.DeclId {
-    const module_id = self.firstModuleIdForFile(doc.file_id) orelse return null;
-    return self.resolveDeclOfNodeForModule(module_id, doc, node);
 }
 
 /// Resolves `node` to the declaration it directly names in a single module.
@@ -593,18 +561,6 @@ pub fn resolveDeclCandidatesOfNode(
         }
     }
     return candidates;
-}
-
-/// Compatibility wrapper that resolves a member in the first module reaching
-/// the parent declaration's file. New semantic rules should use
-/// `resolveDeclMemberForModule`.
-pub fn resolveDeclMember(
-    self: *LintContext,
-    parent_decl_id: DeclStore.DeclId,
-    member_name: []const u8,
-) ?DeclStore.DeclId {
-    const module_id = self.firstModuleIdForFile(self.decl_store.declFileId(parent_decl_id)) orelse return null;
-    return self.resolveDeclMemberForModule(module_id, parent_decl_id, member_name);
 }
 
 /// Resolves a member declaration from a container/type declaration.
@@ -687,18 +643,6 @@ pub fn resolveEnumTagNameCandidatesOfNode(
     return candidates;
 }
 
-/// Compatibility wrapper that resolves a type member in the first module
-/// reaching the declaration's file. New semantic rules should use
-/// `resolveDeclTypeMemberForModule`.
-pub fn resolveDeclTypeMember(
-    self: *LintContext,
-    parent_decl_id: DeclStore.DeclId,
-    member_name: []const u8,
-) ?DeclStore.DeclId {
-    const module_id = self.firstModuleIdForFile(self.decl_store.declFileId(parent_decl_id)) orelse return null;
-    return self.resolveDeclTypeMemberForModule(module_id, parent_decl_id, member_name);
-}
-
 /// Resolves a member from the type represented by a declaration.
 pub fn resolveDeclTypeMemberForModule(
     self: *LintContext,
@@ -716,16 +660,6 @@ pub fn resolveDeclTypeMemberForModule(
         parent_decl_id,
         member_name,
     );
-}
-
-/// Compatibility wrapper that resolves a declaration type in the first module
-/// reaching the declaration's file.
-pub fn resolveDeclTypeDecl(
-    self: *LintContext,
-    decl_id: DeclStore.DeclId,
-) ?DeclStore.DeclId {
-    const module_id = self.firstModuleIdForFile(self.decl_store.declFileId(decl_id)) orelse return null;
-    return self.resolveDeclTypeDeclForModule(module_id, decl_id);
 }
 
 /// Resolves the declaration named by a declaration's type expression.
@@ -796,15 +730,6 @@ inline fn enumMemberTagName(tree: Ast, member: Ast.Node.Index) ?[]const u8 {
 /// Resolves an expression to the concrete enum declaration that determines its
 /// values. This preserves enum identity where a coarse type summary such as
 /// `.instance = .enum` cannot list the enum's tags.
-pub fn resolveEnumDeclOfNode(
-    self: *LintContext,
-    doc: *const LintDocument,
-    expr_node: Ast.Node.Index,
-) ?DeclStore.DeclId {
-    const module_id = self.firstModuleIdForFile(doc.file_id) orelse return null;
-    return self.resolveEnumDeclOfNodeForModule(module_id, doc, expr_node);
-}
-
 pub fn resolveEnumDeclOfNodeForModule(
     self: *LintContext,
     module_id: ModuleStore.ModuleId,
@@ -860,15 +785,6 @@ pub fn enumInfo(
 
 /// Resolves a switch case value expression to an enum tag name, including simple
 /// aliases such as `const tag = Enum.a; tag`.
-pub fn resolveEnumTagNameOfNode(
-    self: *LintContext,
-    doc: *const LintDocument,
-    expr_node: Ast.Node.Index,
-) ?[]const u8 {
-    const module_id = self.firstModuleIdForFile(doc.file_id) orelse return null;
-    return self.resolveEnumTagNameOfNodeForModule(module_id, doc, expr_node);
-}
-
 pub fn resolveEnumTagNameOfNodeForModule(
     self: *LintContext,
     module_id: ModuleStore.ModuleId,
@@ -1173,24 +1089,6 @@ fn contextScopeForNode(
         current = doc.lineage.items(.parent)[@intFromEnum(current_node)];
     }
     return self.decl_store.scopeIdByNode(doc.file_id, .root);
-}
-
-pub fn resolveDeclValueKind(
-    self: *LintContext,
-    decl_id: DeclStore.DeclId,
-) ?TypeStore.Type {
-    return if (self.resolveDeclValueSummary(decl_id)) |summary|
-        summary.coarseType()
-    else
-        null;
-}
-
-pub fn resolveDeclValueSummary(
-    self: *LintContext,
-    decl_id: DeclStore.DeclId,
-) ?TypeStore.TypeSummary {
-    const module_id = self.firstModuleIdForFile(self.decl_store.declFileId(decl_id)) orelse return null;
-    return self.resolveDeclValueSummaryForModule(module_id, decl_id);
 }
 
 pub fn resolveDeclValueKindForModule(

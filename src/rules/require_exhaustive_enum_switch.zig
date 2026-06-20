@@ -71,8 +71,8 @@ fn run(
     const root: Ast.Node.Index = .root;
     var it = try doc.nodeLineageIterator(root, rule_arena);
 
-    // Holds all tags within an enum used in a switch statement
-    var complete_tag_set: std.StringHashMap(void) = .init(rule_arena);
+    // Holds all tags within an enum used in a switch statement.
+    var complete_tags = std.ArrayList([]const u8).empty;
 
     // Tracks only the used enum tags within a switch statement
     var used_tag_set = std.StringHashMap(void).init(rule_arena);
@@ -85,25 +85,26 @@ fn run(
 
         const switch_info = tree.fullSwitch(node) orelse continue :nodes;
 
-        const switch_expr_enum_decl = session.resolveEnumDeclOfNode(doc, switch_info.ast.condition) orelse
-            continue :nodes;
+        defer complete_tags.clearRetainingCapacity();
+        var enum_candidates = try session.resolveEnumCandidatesOfNode(
+            rule_arena,
+            doc,
+            switch_info.ast.condition,
+        );
+        defer enum_candidates.deinit(rule_arena);
+        for (enum_candidates.items) |candidate| {
+            const switch_expr_enum = session.enumInfo(candidate.decl_id) orelse continue;
+            if (switch_expr_enum.is_non_exhaustive) continue;
 
-        const switch_expr_enum = session.enumInfo(switch_expr_enum_decl) orelse
-            continue :nodes;
-        if (switch_expr_enum.is_non_exhaustive) continue :nodes;
-
-        var enum_member_buffer: [2]Ast.Node.Index = undefined;
-        const enum_container_decl = switch_expr_enum.containerDecl(session, &enum_member_buffer) orelse
-            continue :nodes;
-        const enum_members = enum_container_decl.ast.members;
-        if (enum_members.len == 0) continue :nodes;
-
-        defer complete_tag_set.clearRetainingCapacity();
-        try complete_tag_set.ensureTotalCapacity(@intCast(enum_members.len));
-        for (enum_members) |member| {
-            if (switch_expr_enum.tagName(session, member)) |tag|
-                complete_tag_set.putAssumeCapacity(tag, {});
+            var enum_member_buffer: [2]Ast.Node.Index = undefined;
+            const enum_container_decl = switch_expr_enum.containerDecl(session, &enum_member_buffer) orelse
+                continue;
+            for (enum_container_decl.ast.members) |member| {
+                const tag = switch_expr_enum.tagName(session, member) orelse continue;
+                if (!containsString(complete_tags.items, tag)) try complete_tags.append(rule_arena, tag);
+            }
         }
+        if (complete_tags.items.len == 0) continue :nodes;
 
         // Set if an else case exists in switch
         var else_case_node: ?Ast.Node.Index = null;
@@ -116,10 +117,19 @@ fn run(
                 if (else_case_node == null) else_case_node = case_node;
             } else {
                 case_values: for (switch_case.ast.values) |value_node| {
-                    const tag_name = session.resolveEnumTagNameOfNode(doc, value_node) orelse continue :case_values;
+                    var tag_candidates = try session.resolveEnumTagNameCandidatesOfNode(
+                        rule_arena,
+                        doc,
+                        value_node,
+                    );
+                    defer tag_candidates.deinit(rule_arena);
 
-                    if (complete_tag_set.contains(tag_name))
-                        try used_tag_set.put(tag_name, {});
+                    for (tag_candidates.items) |tag_name| {
+                        if (containsString(complete_tags.items, tag_name)) {
+                            try used_tag_set.put(tag_name, {});
+                            continue :case_values;
+                        }
+                    }
                 }
             }
         }
@@ -127,8 +137,7 @@ fn run(
         if (else_case_node != null) {
             missing_tags.clearRetainingCapacity();
 
-            for (enum_members) |member| {
-                const tag = switch_expr_enum.tagName(session, member) orelse continue;
+            for (complete_tags.items) |tag| {
                 if (!used_tag_set.contains(tag)) try missing_tags.append(
                     rule_arena,
                     tag,
@@ -174,6 +183,13 @@ fn buildProblemMessage(missing: []const []const u8, gpa: std.mem.Allocator) ![]c
     }
 
     return try aw.toOwnedSlice();
+}
+
+fn containsString(haystack: []const []const u8, needle: []const u8) bool {
+    for (haystack) |item| {
+        if (std.mem.eql(u8, item, needle)) return true;
+    }
+    return false;
 }
 
 test {

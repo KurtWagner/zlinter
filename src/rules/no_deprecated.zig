@@ -105,29 +105,31 @@ fn handleIdentifierAccess(
 ) !void {
     const tree = doc.tree(session);
 
-    const decl_id = session.resolveDeclOfNode(doc, node_index) orelse return;
-
-    // Check whether the identifier is itself the declaration, in which case
-    // we should skip as its not the usage but the declaration of it and we
-    // dont want to list the declaration as deprecated only its usages
-    if (session.decl_store.declFileId(decl_id) == doc.file_id) {
-        if (session.decl_store.declNameToken(decl_id)) |name_token| {
-            if (name_token == identifier_token) return;
+    var decl_candidates = try session.resolveDeclCandidatesOfNode(arena, doc, node_index);
+    defer decl_candidates.deinit(arena);
+    for (decl_candidates.items) |candidate| {
+        // Check whether the identifier is itself the declaration, in which case
+        // we should skip as its not the usage but the declaration of it and we
+        // dont want to list the declaration as deprecated only its usages
+        if (session.decl_store.declFileId(candidate.decl_id) == doc.file_id) {
+            if (session.decl_store.declNameToken(candidate.decl_id)) |name_token| {
+                if (name_token == identifier_token) continue;
+            }
         }
-    }
 
-    try appendDeprecatedProblem(
-        rule,
-        gpa,
-        arena,
-        session,
-        tree,
-        node_index,
-        decl_id,
-        "Deprecated - {s}",
-        lint_problems,
-        config,
-    );
+        try appendDeprecatedProblem(
+            rule,
+            gpa,
+            arena,
+            session,
+            tree,
+            node_index,
+            candidate.decl_id,
+            "Deprecated - {s}",
+            lint_problems,
+            config,
+        );
+    }
 }
 
 fn handleEnumLiteral(
@@ -142,25 +144,30 @@ fn handleEnumLiteral(
     config: Config,
 ) !void {
     const tree = doc.tree(session);
-    const decl_id = resolveEnumLiteralDecl(
-        session,
-        doc,
-        node_index,
-        tree.tokenSlice(identifier_token),
-    ) orelse return;
+    const module_ids = try session.moduleIdsForFile(doc.file_id, arena);
+    defer arena.free(module_ids);
+    for (module_ids) |module_id| {
+        const decl_id = resolveEnumLiteralDecl(
+            session,
+            module_id,
+            doc,
+            node_index,
+            tree.tokenSlice(identifier_token),
+        ) orelse continue;
 
-    try appendDeprecatedProblem(
-        rule,
-        gpa,
-        arena,
-        session,
-        tree,
-        node_index,
-        decl_id,
-        "Deprecated: {s}",
-        lint_problems,
-        config,
-    );
+        try appendDeprecatedProblem(
+            rule,
+            gpa,
+            arena,
+            session,
+            tree,
+            node_index,
+            decl_id,
+            "Deprecated: {s}",
+            lint_problems,
+            config,
+        );
+    }
 }
 
 fn handleFieldAccess(
@@ -177,19 +184,22 @@ fn handleFieldAccess(
     const tree = doc.tree(session);
     _ = identifier_token;
 
-    const decl_id = session.resolveDeclOfNode(doc, node_index) orelse return;
-    try appendDeprecatedProblem(
-        rule,
-        gpa,
-        arena,
-        session,
-        tree,
-        node_index,
-        decl_id,
-        "Deprecated: {s}",
-        lint_problems,
-        config,
-    );
+    var decl_candidates = try session.resolveDeclCandidatesOfNode(arena, doc, node_index);
+    defer decl_candidates.deinit(arena);
+    for (decl_candidates.items) |candidate| {
+        try appendDeprecatedProblem(
+            rule,
+            gpa,
+            arena,
+            session,
+            tree,
+            node_index,
+            candidate.decl_id,
+            "Deprecated: {s}",
+            lint_problems,
+            config,
+        );
+    }
 }
 
 fn appendDeprecatedProblem(
@@ -218,21 +228,24 @@ fn appendDeprecatedProblem(
 
 fn resolveEnumLiteralDecl(
     session: *zlinter.session.LintSession,
+    module_id: zlinter.session.ModuleStore.ModuleId,
     doc: *const zlinter.session.LintDocument,
     node: Ast.Node.Index,
     name: []const u8,
 ) ?zlinter.session.DeclStore.DeclId {
     const enum_decl_id = resolveEnumLiteralContextTypeDecl(
         session,
+        module_id,
         doc,
         node,
     ) orelse return null;
 
-    return session.resolveDeclMember(enum_decl_id, name);
+    return session.resolveDeclMemberForModule(module_id, enum_decl_id, name);
 }
 
 fn resolveEnumLiteralContextTypeDecl(
     session: *zlinter.session.LintSession,
+    module_id: zlinter.session.ModuleStore.ModuleId,
     doc: *const zlinter.session.LintDocument,
     node: Ast.Node.Index,
 ) ?zlinter.session.DeclStore.DeclId {
@@ -247,16 +260,24 @@ fn resolveEnumLiteralContextTypeDecl(
         if (tree.fullStructInit(&struct_init_buffer, ancestor)) |struct_init| {
             if (structInitFieldNameToken(tree, struct_init, current)) |field_name_token| {
                 const struct_decl_id = if (struct_init.ast.type_expr.unwrap()) |type_expr|
-                    session.resolveDeclOfNode(doc, type_expr)
+                    struct_decl: {
+                        var decl_candidates = session.resolveDeclCandidatesOfNode(session.runtime.ruleArena(), doc, type_expr) catch break :struct_decl null;
+                        defer decl_candidates.deinit(session.runtime.ruleArena());
+                        for (decl_candidates.items) |candidate| {
+                            if (candidate.module_id == module_id) break :struct_decl candidate.decl_id;
+                        }
+                        break :struct_decl null;
+                    }
                 else
-                    resolveEnumLiteralContextTypeDecl(session, doc, ancestor);
+                    resolveEnumLiteralContextTypeDecl(session, module_id, doc, ancestor);
 
-                const field_decl_id = session.resolveDeclMember(
+                const field_decl_id = session.resolveDeclMemberForModule(
+                    module_id,
                     struct_decl_id orelse return null,
                     tree.tokenSlice(field_name_token),
                 ) orelse return null;
 
-                return session.resolveDeclTypeDecl(field_decl_id);
+                return session.resolveDeclTypeDeclForModule(module_id, field_decl_id);
             }
         }
 
@@ -267,7 +288,7 @@ fn resolveEnumLiteralContextTypeDecl(
             };
             if (nodeWithin(tree, init_node, current)) {
                 const decl_id = session.decl_store.declIdByNode(doc.file_id, ancestor) orelse return null;
-                return session.resolveDeclTypeDecl(decl_id);
+                return session.resolveDeclTypeDeclForModule(module_id, decl_id);
             }
         }
 
@@ -278,7 +299,7 @@ fn resolveEnumLiteralContextTypeDecl(
             };
             if (nodeWithin(tree, value_node, current)) {
                 const decl_id = session.decl_store.declIdByNode(doc.file_id, ancestor) orelse return null;
-                return session.resolveDeclTypeDecl(decl_id);
+                return session.resolveDeclTypeDeclForModule(module_id, decl_id);
             }
         }
 

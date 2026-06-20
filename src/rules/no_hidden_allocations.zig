@@ -144,8 +144,14 @@ fn resolveAllocatorDecl(
     doc: *const zlinter.session.LintDocument,
     lhs: Ast.Node.Index,
 ) ?zlinter.session.DeclStore.DeclId {
-    const decl_id = session.resolveDeclOfNode(doc, lhs) orelse return null;
-    return resolveDeclAlias(session, decl_id);
+    const arena = session.runtime.ruleArena();
+    var decl_candidates = session.resolveDeclCandidatesOfNode(arena, doc, lhs) catch return null;
+    defer decl_candidates.deinit(arena);
+
+    for (decl_candidates.items) |candidate| {
+        return resolveDeclAlias(session, candidate.module_id, candidate.decl_id);
+    }
+    return null;
 }
 
 /// Allocators are often reached through local aliases.
@@ -163,6 +169,7 @@ fn resolveAllocatorDecl(
 /// alias declarations or their common `std.mem.Allocator` type.
 fn resolveDeclAlias(
     session: *zlinter.session.LintSession,
+    module_id: zlinter.session.ModuleStore.ModuleId,
     decl_id: zlinter.session.DeclStore.DeclId,
 ) zlinter.session.DeclStore.DeclId {
     var current_decl_id = decl_id;
@@ -174,9 +181,10 @@ fn resolveDeclAlias(
         const decl_node = session.decl_store.declAstNode(current_decl_id) orelse return current_decl_id;
         const var_decl = tree.fullVarDecl(decl_node) orelse return current_decl_id;
         const init_node = var_decl.ast.init_node.unwrap() orelse return current_decl_id;
-        const target_decl_id = session.decl_store.resolveNodeDecl(
+        const target_decl_id = session.decl_store.resolveNodeDeclWithRoot(
             &session.file_store,
             &session.module_store,
+            session.module_store.rootFileId(module_id),
             current_decl_id,
             init_node,
         ) orelse return current_decl_id;

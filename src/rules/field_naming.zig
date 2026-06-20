@@ -147,6 +147,7 @@ fn run(
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     const session_arena = session.runtime.sessionArena();
+    const rule_arena = session.runtime.ruleArena();
 
     var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
 
@@ -216,10 +217,14 @@ fn run(
 
             fields: for (container_decl.ast.members) |member| {
                 if (tree.fullContainerField(member)) |container_field| {
-                    const type_summary = if (session.decl_store.declIdByNode(doc.file_id, member)) |decl_id|
-                        session.resolveDeclValueSummary(decl_id)
-                    else
-                        null;
+                    const type_summary = if (session.decl_store.declIdByNode(doc.file_id, member)) |decl_id| summary: {
+                        const module_ids = try session.moduleIdsForFile(doc.file_id, rule_arena);
+                        defer rule_arena.free(module_ids);
+                        for (module_ids) |module_id| {
+                            break :summary session.resolveDeclValueSummaryForModule(module_id, decl_id) orelse continue;
+                        }
+                        break :summary null;
+                    } else null;
                     const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const field_desc: []const u8 = tuple: {
                         break :tuple switch (container_tag) {
                             .keyword_struct => if (type_summary) |summary|

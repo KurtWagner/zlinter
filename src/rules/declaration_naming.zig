@@ -96,6 +96,7 @@ fn run(
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     const session_arena = session.runtime.sessionArena();
+    const rule_arena = session.runtime.ruleArena();
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
 
@@ -125,7 +126,13 @@ fn run(
             if (isThisBuiltinCall(tree, init_node)) continue :nodes;
         }
 
-        const type_summary = session.resolveDeclValueSummary(decl_id) orelse .other;
+        var type_summary: zlinter.session.TypeStore.TypeSummary = .other;
+        const module_ids = try session.moduleIdsForFile(doc.file_id, rule_arena);
+        defer rule_arena.free(module_ids);
+        for (module_ids) |module_id| {
+            type_summary = session.resolveDeclValueSummaryForModule(module_id, decl_id) orelse continue;
+            break;
+        }
         const name_token = var_decl.ast.mut_token + 1;
         const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
 

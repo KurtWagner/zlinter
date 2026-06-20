@@ -138,7 +138,7 @@ fn processBlock(
     var call_buffer: [1]Ast.Node.Index = undefined;
 
     for (doc.lineage.items(.children)[@intFromEnum(block_node)] orelse &.{}) |child_node| {
-        if (try declRequiringCleanup(session, doc, child_node)) |decl_ref| {
+        if (try declRequiringCleanup(session, doc, arena, child_node)) |decl_ref| {
             try cleanup_symbols.put(
                 try arena.dupe(u8, tree.tokenSlice(decl_ref.decl_name_token)),
                 child_node,
@@ -193,6 +193,7 @@ const DeclRef = struct {
 fn declRequiringCleanup(
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
+    allocator: std.mem.Allocator,
     maybe_var_decl_node: Ast.Node.Index,
 ) !?DeclRef {
     const tree = doc.tree(session);
@@ -236,16 +237,24 @@ fn declRequiringCleanup(
         doc.file_id,
         maybe_var_decl_node,
     ) orelse return null;
-    if (!declHasPublicDeinit(session, var_decl_id)) return null;
+    const module_ids = try session.moduleIdsForFile(doc.file_id, allocator);
+    defer allocator.free(module_ids);
+    for (module_ids) |module_id| {
+        if (declHasPublicDeinit(session, module_id, var_decl_id)) {
+            return .{ .decl_name_token = var_decl.ast.mut_token + 1 };
+        }
+    }
 
-    return .{ .decl_name_token = var_decl.ast.mut_token + 1 };
+    return null;
 }
 
 fn declHasPublicDeinit(
     session: *zlinter.session.LintSession,
+    module_id: zlinter.session.ModuleStore.ModuleId,
     decl_id: zlinter.session.DeclStore.DeclId,
 ) bool {
-    const deinit_decl_id = session.resolveDeclTypeMember(
+    const deinit_decl_id = session.resolveDeclTypeMemberForModule(
+        module_id,
         decl_id,
         "deinit",
     ) orelse return false;

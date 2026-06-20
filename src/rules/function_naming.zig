@@ -282,9 +282,13 @@ fn classifyParamTypeKind(
         }
     }
 
-    if (session.resolveDeclOfNode(doc, param_type_node)) |decl_id| {
-        if (session.decl_store.declResolvedType(decl_id)) |type_id| {
+    const arena = session.runtime.ruleArena();
+    var decl_candidates = session.resolveDeclCandidatesOfNode(arena, doc, param_type_node) catch return type_summary;
+    defer decl_candidates.deinit(arena);
+    for (decl_candidates.items) |candidate| {
+        if (session.decl_store.declResolvedType(candidate.decl_id)) |type_id| {
             type_summary = session.type_store.summary(type_id);
+            break;
         }
     }
     if (paramValueKindFromTypeAnnotation(

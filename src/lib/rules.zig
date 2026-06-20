@@ -13,12 +13,6 @@ pub const RunOptions = struct {
     /// Configuration for the rule. See `getConfig`.
     config: ?*anyopaque = null,
 
-    /// Compatibility only. Rules should use session candidate APIs instead.
-    compile_context_id: ?CompileContext.Id = null,
-
-    /// Compatibility only. Rules should use session candidate APIs instead.
-    compile_root_file_id: ?FileStore.FileId = null,
-
     pub inline fn getConfig(self: @This(), T: type) T {
         return if (self.config) |config| @as(*T, @ptrCast(@alignCast(config))).* else T{};
     }
@@ -228,8 +222,6 @@ pub const LintProblemSeverity = enum(u8) {
 
 const ansi = @import("ansi.zig");
 const results = @import("results.zig");
-const CompileContext = @import("session/CompileContext.zig");
-const FileStore = @import("session/FileStore.zig");
 const LintDocument = @import("session/LintDocument.zig");
 const LintSession = @import("session/LintSession.zig");
 const std = @import("std");
