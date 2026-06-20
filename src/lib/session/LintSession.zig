@@ -364,15 +364,15 @@ fn indexModuleFiles(
 
             const resolved: ?ReachQueueItem = switch (import_utils.Kind.init(import_path)) {
                 .relative => relative: {
-                            const resolved_file_id = import_utils.resolveFile(
-                                &self.file_store,
-                                &self.module_store,
-                                .{
-                                    .parent_file_id = item.file_id,
-                                    .root_file_id = compile_root_file_id,
-                                },
-                                import_path,
-                            ) catch break :relative null;
+                    const resolved_file_id = import_utils.resolveFile(
+                        &self.file_store,
+                        &self.module_store,
+                        .{
+                            .parent_file_id = item.file_id,
+                            .root_file_id = compile_root_file_id,
+                        },
+                        import_path,
+                    ) catch break :relative null;
 
                     break :relative if (resolved_file_id) |resolved_file|
                         .{

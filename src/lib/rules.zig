@@ -1,8 +1,6 @@
 /// A linter rule with a unique id and a run method.
 pub const LintRule = struct {
     rule_id: []const u8,
-    /// Compatibility only. The runner no longer branches on execution mode.
-    execution: ExecutionMode = .syntax_only,
     run: *const fn (
         self: LintRule,
         session: *LintSession,
@@ -27,12 +25,6 @@ pub const RunOptions = struct {
 };
 
 pub const RunError = std.mem.Allocator.Error || std.Io.Cancelable;
-
-pub const ExecutionMode = enum {
-    syntax_only,
-    compile_context,
-    module_context,
-};
 
 /// Extra per-rule options used during rule construction.
 pub const RuleOptions = struct {}; // zlinter-disable-current-line

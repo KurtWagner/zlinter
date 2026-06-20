@@ -134,7 +134,6 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.field_naming),
-        .execution = .compile_context,
         .run = &run,
     };
 }

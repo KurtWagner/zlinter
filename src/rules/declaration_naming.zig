@@ -83,7 +83,6 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.declaration_naming),
-        .execution = .compile_context,
         .run = &run,
     };
 }

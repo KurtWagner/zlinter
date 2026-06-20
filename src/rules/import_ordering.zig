@@ -63,7 +63,6 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.import_ordering),
-        .execution = .syntax_only,
         .run = &run,
     };
 }
