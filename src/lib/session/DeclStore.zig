@@ -3,7 +3,9 @@ const DeclStore = @This();
 decls: std.MultiArrayList(Decl) = .empty,
 scopes: std.MultiArrayList(Scope) = .empty,
 decl_id_by_ast_node: std.AutoHashMapUnmanaged(DeclAstNodeKey, DeclId) = .empty,
+decl_ids_by_file: std.AutoHashMapUnmanaged(FileStore.FileId, std.ArrayList(DeclId)) = .empty,
 scope_id_by_owner_node: std.AutoHashMapUnmanaged(ScopeOwnerKey, ScopeId) = .empty,
+scope_id_by_owner_decl: std.AutoHashMapUnmanaged(DeclId, ScopeId) = .empty,
 
 /// Lives for the full linter invocation.
 runtime: *const LintRuntime,
@@ -1372,11 +1374,7 @@ fn scopeForOwnerDecl(
     const zone = tracy.traceNamed(@src(), "DeclStore.scopeForOwnerDecl");
     defer zone.end();
 
-    for (self.scopes.items(.owner_decl_id), 0..) |maybe_owner_decl_id, index| {
-        if (maybe_owner_decl_id == owner_decl_id) return .fromIndex(index);
-    }
-
-    return null;
+    return self.scope_id_by_owner_decl.get(owner_decl_id);
 }
 
 fn declByAstNode(
@@ -1394,20 +1392,7 @@ fn fileRootDecl(
     self: *const DeclStore,
     file_id: FileStore.FileId,
 ) ?DeclId {
-    for (
-        self.decls.items(.file_id),
-        self.decls.items(.name_token),
-        self.decls.items(.ast_node),
-        0..,
-    ) |decl_file_id, name_token, ast_node, index| {
-        if (decl_file_id != file_id) continue;
-        if (name_token != null) continue;
-        if (ast_node == null or ast_node.? != .root) continue;
-
-        return .fromIndex(index);
-    }
-
-    return null;
+    return self.decl_id_by_ast_node.get(.init(file_id, .root));
 }
 
 /// Appends a scope and returns its typed id.
@@ -1431,6 +1416,13 @@ fn appendScope(
         .init(file_id, owner_node),
         scope_id,
     ));
+    if (owner_decl_id) |decl_id| {
+        oom(self.scope_id_by_owner_decl.putNoClobber(
+            self.runtime.sessionArena(),
+            decl_id,
+            scope_id,
+        ));
+    }
     return scope_id;
 }
 
@@ -1453,6 +1445,17 @@ fn appendDecl(
         .file_id = file_id,
         .kind = kind,
     }));
+    const file_decls_entry = oom(self.decl_ids_by_file.getOrPut(
+        self.runtime.sessionArena(),
+        file_id,
+    ));
+    if (!file_decls_entry.found_existing) {
+        file_decls_entry.value_ptr.* = .empty;
+    }
+    oom(file_decls_entry.value_ptr.append(
+        self.runtime.sessionArena(),
+        decl_id,
+    ));
     if (ast_node) |node| {
         oom(self.decl_id_by_ast_node.putNoClobber(
             self.runtime.sessionArena(),
@@ -1814,25 +1817,21 @@ fn blockLabel(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) ?std.zig.Ast.Toke
 /// Iterate declarations within a given file.
 pub fn fileDeclIterator(self: *const DeclStore, file_id: FileStore.FileId) FileDeclIterator {
     return .{
-        .store = self,
-        .file_id = file_id,
+        .decl_ids = if (self.decl_ids_by_file.get(file_id)) |decl_ids|
+            decl_ids.items
+        else
+            &.{},
     };
 }
 
 pub const FileDeclIterator = struct {
-    store: *const DeclStore,
-    file_id: FileStore.FileId,
+    decl_ids: []const DeclId,
     index: usize = 0,
 
     pub fn next(self: *FileDeclIterator) ?DeclId {
-        while (self.index < self.store.decls.len) {
-            const index = self.index;
-            self.index += 1;
-
-            if (self.store.decls.items(.file_id)[index] == self.file_id)
-                return .fromIndex(index);
-        }
-        return null;
+        if (self.index >= self.decl_ids.len) return null;
+        defer self.index += 1;
+        return self.decl_ids[self.index];
     }
 };
 
