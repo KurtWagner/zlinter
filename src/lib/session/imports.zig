@@ -153,6 +153,10 @@ pub const ResolveContext = struct {
     module_store: *const ModuleStore,
     parent_file_id: FileStore.FileId,
 
+    /// Active semantic module context. Named imports can differ between modules
+    /// even when those modules share the same root source file.
+    module_id: ?ModuleStore.ModuleId,
+
     /// Root source file for the active semantic module context.
     root_file_id: ?FileStore.FileId,
 
@@ -161,6 +165,7 @@ pub const ResolveContext = struct {
             .file_store = self.file_store,
             .module_store = self.module_store,
             .parent_file_id = parent_file_id,
+            .module_id = self.module_id,
             .root_file_id = self.root_file_id,
         };
     }
@@ -191,7 +196,9 @@ pub fn resolveFile(
         .root,
         => context.root_file_id,
         .module => id: {
-            const parent_module_id = context.module_store.moduleIdByRootFile(parent_file_id) orelse break :id null;
+            const parent_module_id = context.module_id orelse
+                context.module_store.moduleIdByRootFile(parent_file_id) orelse
+                break :id null;
             const imported_module_id = context.module_store.moduleIdByImportName(
                 parent_module_id,
                 import_path,
@@ -254,6 +261,7 @@ test "resolveFile - root import uses supplied root file id" {
             .file_store = &file_store,
             .module_store = &module_store,
             .parent_file_id = child_file_id,
+            .module_id = null,
             .root_file_id = compile_root_file_id,
         },
         "root",
@@ -265,6 +273,7 @@ test "resolveFile - root import uses supplied root file id" {
             .file_store = &file_store,
             .module_store = &module_store,
             .parent_file_id = child_file_id,
+            .module_id = null,
             .root_file_id = null,
         },
         "root",

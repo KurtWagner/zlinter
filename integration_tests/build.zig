@@ -15,6 +15,8 @@ pub fn build(b: *std.Build) !void {
     var walker = try test_cases_dir.walk(b.allocator);
     defer walker.deinit();
 
+    createCompiledUnits(b, target, optimize);
+
     const test_runner_module = b.createModule(.{
         .root_source_file = b.path("src/test_runner.zig"),
         .target = target,
@@ -90,6 +92,81 @@ fn addFileArgIfExists(b: *std.Build, step: *std.Build.Step.Run, raw_path: []cons
     const exists = if (std.Io.Dir.cwd().access(b.graph.io, raw_path, .{})) true else |e| e != error.FileNotFound;
     if (exists) {
         step.addFileArg(path);
+    }
+}
+
+/// Creates compiled units that the linter should be capable of discovering
+/// and walking for tests that care about the cross module coverage.
+fn createCompiledUnits(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.lang.OptimizeMode,
+) void {
+    const sub_module_a = b.createModule(.{
+        .root_source_file = b.path("sub_module_a_src/root.zig"),
+    });
+
+    const sub_module_b = b.createModule(.{
+        .root_source_file = b.path("sub_module_b_src/root.zig"),
+    });
+
+    const fake_install_cmd = b.step(
+        "install-tests-with-sub-modules",
+        "Fake step to install tests that depend on fake modules.",
+    );
+
+    // Any test that wants to import "sub_module" should add itself here. It'll
+    // create two compiled units that use sub module a and sub module b as imports
+    // for "sub_module", allowing tests to cover multiple implementations and
+    // dependency graphs of compiled units.
+    for ([_][]const u8{
+        "test_cases/no_deprecated/sub_module_resolution.input.zig",
+    }) |rel_path| {
+        const path = b.path(rel_path);
+
+        const name: []u8 = b.allocator.dupe(u8, rel_path) catch unreachable;
+        std.mem.replaceScalar(u8, name, '/', '-');
+
+        const step_a =
+            b.addInstallArtifact(
+                b.addLibrary(.{
+                    .name = name,
+                    .root_module = b.createModule(.{
+                        .root_source_file = path,
+                        .target = target,
+                        .optimize = optimize,
+                        .imports = &.{
+                            .{
+                                .name = "sub_module",
+                                .module = sub_module_a,
+                            },
+                        },
+                    }),
+                }),
+                .{},
+            );
+
+        fake_install_cmd.dependOn(&step_a.step);
+
+        const step_b =
+            b.addInstallArtifact(
+                b.addLibrary(.{
+                    .name = "fake_library_b",
+                    .root_module = b.createModule(.{
+                        .root_source_file = path,
+                        .target = target,
+                        .optimize = optimize,
+                        .imports = &.{
+                            .{
+                                .name = "sub_module",
+                                .module = sub_module_b,
+                            },
+                        },
+                    }),
+                }),
+                .{},
+            );
+        fake_install_cmd.dependOn(&step_b.step);
     }
 }
 
