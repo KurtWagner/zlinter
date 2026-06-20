@@ -25,15 +25,18 @@ fn run(
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
-    const session_arena = session.runtime.sessionArena();
     if (config.severity == .off) return null;
 
+    const session_arena = session.runtime.sessionArena();
+    const rule_arena = session.runtime.ruleArena();
+
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
-    const fmt = try tree.renderAlloc(session_arena);
-    defer session_arena.free(fmt);
+    const fmt = tree.renderAlloc(rule_arena) catch |e| {
+        std.log.err("Oh no {t}", .{e});
+        return e;
+    };
 
     if (!std.mem.eql(u8, fmt, tree.source)) {
         try lint_problems.append(session_arena, .{
@@ -49,7 +52,7 @@ fn run(
         try zlinter.results.LintResult.init(
             session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(session_arena),
+            lint_problems.items,
         )
     else
         null;

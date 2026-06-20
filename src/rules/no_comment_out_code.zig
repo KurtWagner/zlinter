@@ -50,14 +50,13 @@ fn run(
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
     const session_arena = session.runtime.sessionArena();
+    const rule_arena = session.runtime.ruleArena();
 
     const source = doc.source(session);
 
     var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
-    defer lint_problems.deinit(session_arena);
 
     var content_accumulator: std.ArrayList(u8) = .empty;
-    defer content_accumulator.deinit(session_arena);
 
     var first_comment: ?zlinter.comments.Comment = null;
     var last_comment: ?zlinter.comments.Comment = null;
@@ -72,10 +71,10 @@ fn run(
 
         if (content_accumulator.items.len == 0 or prev_line == line - 1) {
             if (content_accumulator.items.len == 0) {
-                try content_accumulator.appendSlice(session_arena, "fn container() void {");
+                try content_accumulator.appendSlice(rule_arena, "fn container() void {");
             }
-            try content_accumulator.appendSlice(session_arena, contents);
-            try content_accumulator.append(session_arena, '\n');
+            try content_accumulator.appendSlice(rule_arena, contents);
+            try content_accumulator.append(rule_arena, '\n');
         } else {
             if (content_accumulator.items.len > 0) {
                 if (try looksLikeCode(content_accumulator.items[0..], session_arena)) {
@@ -88,12 +87,12 @@ fn run(
                     });
                 }
 
-                content_accumulator.clearAndFree(session_arena);
+                content_accumulator.clearAndFree(rule_arena);
                 first_comment = null;
                 last_comment = null;
             }
-            try content_accumulator.appendSlice(session_arena, contents);
-            try content_accumulator.append(session_arena, '\n');
+            try content_accumulator.appendSlice(rule_arena, contents);
+            try content_accumulator.append(rule_arena, '\n');
         }
 
         first_comment = first_comment orelse comment;
@@ -111,7 +110,7 @@ fn run(
             });
         }
 
-        content_accumulator.clearAndFree(session_arena);
+        content_accumulator.clearAndFree(rule_arena);
         first_comment = null;
         last_comment = null;
     }
@@ -120,7 +119,7 @@ fn run(
         try zlinter.results.LintResult.init(
             session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(session_arena),
+            lint_problems.items,
         )
     else
         null;

@@ -66,23 +66,17 @@ fn run(
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
-    const session_arena = session.runtime.sessionArena();
     if (config.severity == .off) return null;
+
+    const session_arena = session.runtime.sessionArena();
+    const rule_arena = session.runtime.ruleArena();
 
     const tree = doc.tree(session);
 
     var problem_nodes = std.ArrayList(Ast.Node.Index).empty;
-    defer problem_nodes.deinit(session_arena);
 
     const root: Ast.Node.Index = .root;
-    var it = try doc.nodeLineageIterator(
-        root,
-        session_arena,
-    );
-    defer it.deinit();
-
-    var arena: std.heap.ArenaAllocator = .init(session_arena);
-    defer arena.deinit();
+    var it = try doc.nodeLineageIterator(root, rule_arena);
 
     nodes: while (try it.next()) |tuple| {
         const node = tuple[0];
@@ -103,14 +97,11 @@ fn run(
             fn_decl.block,
             &problem_nodes,
             session_arena,
-            arena.allocator(),
+            rule_arena,
         );
-
-        _ = arena.reset(.retain_capacity);
     }
 
     var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
-    defer lint_problems.deinit(session_arena);
 
     for (problem_nodes.items) |node| {
         try lint_problems.append(session_arena, .{
@@ -126,7 +117,7 @@ fn run(
         try zlinter.results.LintResult.init(
             session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(session_arena),
+            lint_problems.items,
         )
     else
         null;

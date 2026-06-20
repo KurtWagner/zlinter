@@ -43,17 +43,17 @@ fn run(
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
-    const session_arena = session.runtime.sessionArena();
     if (config.severity == .off) return null;
 
+    const session_arena = session.runtime.sessionArena();
+    const rule_arena = session.runtime.ruleArena();
+
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
 
     const root: Ast.Node.Index = .root;
-    var it = try doc.nodeLineageIterator(root, session_arena);
-    defer it.deinit();
+    var it = try doc.nodeLineageIterator(root, rule_arena);
 
     var fn_decl_buffer: [1]Ast.Node.Index = undefined;
     nodes: while (try it.next()) |tuple| {
@@ -63,10 +63,13 @@ fn run(
         const tag = tree.nodeTag(node);
         if (tag != .fn_decl) continue :nodes;
 
-        const fn_decl = tree.fullFnProto(&fn_decl_buffer, node) orelse continue :nodes;
-        if (config.allow_private and zlinter.ast.fnProtoVisibility(tree, fn_decl) == .private) continue :nodes;
+        const fn_decl = tree.fullFnProto(&fn_decl_buffer, node) orelse
+            continue :nodes;
+        if (config.allow_private and zlinter.ast.fnProtoVisibility(tree, fn_decl) == .private)
+            continue :nodes;
 
-        const return_type = fn_decl.ast.return_type.unwrap() orelse continue :nodes;
+        const return_type = fn_decl.ast.return_type.unwrap() orelse
+            continue :nodes;
 
         const return_type_tag = tree.nodeTag(return_type);
         switch (return_type_tag) {
@@ -93,7 +96,7 @@ fn run(
         try zlinter.results.LintResult.init(
             session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(session_arena),
+            lint_problems.items,
         )
     else
         null;

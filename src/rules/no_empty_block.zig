@@ -69,14 +69,14 @@ fn run(
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     const session_arena = session.runtime.sessionArena();
+    const rule_arena = session.runtime.ruleArena();
 
     var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
-    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
 
     const root: Ast.Node.Index = .root;
-    var it = try doc.nodeLineageIterator(root, session_arena);
+    var it = try doc.nodeLineageIterator(root, rule_arena);
     defer it.deinit();
 
     nodes: while (try it.next()) |tuple| {
@@ -163,7 +163,7 @@ fn run(
         try zlinter.results.LintResult.init(
             session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(session_arena),
+            lint_problems.items,
         )
     else
         null;

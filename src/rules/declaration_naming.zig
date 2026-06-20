@@ -99,7 +99,6 @@ fn run(
     const session_arena = session.runtime.sessionArena();
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
 
@@ -211,7 +210,7 @@ fn run(
         try zlinter.results.LintResult.init(
             session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(session_arena),
+            lint_problems.items,
         )
     else
         null;

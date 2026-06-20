@@ -36,12 +36,11 @@ fn run(
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     const session_arena = session.runtime.sessionArena();
+    const rule_arena = session.runtime.ruleArena();
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
-
     const root: Ast.Node.Index = .root;
 
     if (config.file_severity != .off) {
@@ -57,8 +56,7 @@ fn run(
     }
     if (config.private_severity == .off and config.public_severity == .off) return null;
 
-    var it = try doc.nodeLineageIterator(root, session_arena);
-    defer it.deinit();
+    var it = try doc.nodeLineageIterator(root, rule_arena);
 
     var fn_decl_buffer: [1]Ast.Node.Index = undefined;
 
@@ -76,7 +74,8 @@ fn run(
                 };
                 if (severity == .off) continue :nodes;
 
-                if (try hasDocComments(tree, node)) continue :nodes;
+                if (try hasDocComments(tree, node))
+                    continue :nodes;
 
                 try lint_problems.append(session_arena, .{
                     .rule_id = rule.rule_id,
@@ -112,7 +111,7 @@ fn run(
         try zlinter.results.LintResult.init(
             session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(session_arena),
+            lint_problems.items,
         )
     else
         null;

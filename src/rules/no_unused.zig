@@ -29,12 +29,12 @@ fn run(
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
-    const session_arena = session.runtime.sessionArena();
-
     if (config.container_declaration == .off) return null;
 
+    const session_arena = session.runtime.sessionArena();
+    const rule_arena = session.runtime.ruleArena();
+
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
     const token_tags = tree.tokens.items(.tag);
@@ -43,37 +43,40 @@ fn run(
     // container, this is then used to check whether a root declaration is
     // being used.
     var container_references = map: {
-        var map = std.StringHashMapUnmanaged(void).empty;
+        var map: std.StringHashMapUnmanaged(void) = .empty;
 
         var index: u32 = @intFromEnum(Ast.Node.Index.root);
         while (index < tree.nodes.len) : (index += 1) {
             const node: Ast.Node.Index = @enumFromInt(index);
             switch (tree.nodeTag(node)) {
-                .identifier => try map.put(session_arena, tree.tokenSlice(tree.nodeMainToken(node)), {}),
+                .identifier => try map.put(
+                    rule_arena,
+                    tree.tokenSlice(tree.nodeMainToken(node)),
+                    {},
+                ),
                 .field_access => if (referencedDeclName(session, doc, node)) |name|
-                    try map.put(session_arena, name, {}),
+                    try map.put(rule_arena, name, {}),
                 else => {},
             }
         }
         break :map map;
     };
-    defer container_references.deinit(session_arena);
 
     for (tree.rootDecls()) |decl| {
         const problem: ?struct { first: Ast.TokenIndex, last: Ast.TokenIndex } = problem: {
             if (tree.fullVarDecl(decl)) |var_decl| {
-                if (zlinter.ast.varDeclVisibility(tree, var_decl) == .public) break :problem null;
+                if (zlinter.ast.varDeclVisibility(tree, var_decl) == .public)
+                    break :problem null;
 
                 if (var_decl.extern_export_token) |extern_export_token|
                     if (token_tags[extern_export_token] == .keyword_export)
                         break :problem null;
 
-                if (!container_references.contains(tree.tokenSlice(var_decl.ast.mut_token + 1))) {
+                if (!container_references.contains(tree.tokenSlice(var_decl.ast.mut_token + 1)))
                     break :problem .{
                         .first = tree.firstToken(decl),
                         .last = tree.lastToken(decl) + 1, // "+ 1" to consume the semicolon for this statement
                     };
-                }
             } else {
                 var buffer: [1]Ast.Node.Index = undefined;
                 if (namedFnDeclProto(tree, &buffer, decl)) |fn_proto| {
@@ -83,12 +86,11 @@ fn run(
                         if (token_tags[token] == .keyword_export)
                             break :problem null;
 
-                    if (!container_references.contains(tree.tokenSlice(fn_proto.name_token.?))) {
+                    if (!container_references.contains(tree.tokenSlice(fn_proto.name_token.?)))
                         break :problem .{
                             .first = tree.firstToken(decl),
                             .last = tree.lastToken(decl),
                         };
-                    }
                 }
             }
             break :problem null;
@@ -124,7 +126,7 @@ fn run(
         try zlinter.results.LintResult.init(
             session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(session_arena),
+            lint_problems.items,
         )
     else
         null;

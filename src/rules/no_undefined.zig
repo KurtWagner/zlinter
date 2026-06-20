@@ -47,17 +47,17 @@ fn run(
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
-    const session_arena = session.runtime.sessionArena();
     if (config.severity == .off) return null;
 
+    const session_arena = session.runtime.sessionArena();
+    const rule_arena = session.runtime.ruleArena();
+
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
 
     const root: Ast.Node.Index = .root;
-    var it = try doc.nodeLineageIterator(root, session_arena);
-    defer it.deinit();
+    var it = try doc.nodeLineageIterator(root, rule_arena);
 
     var fn_proto_buffer: [1]Ast.Node.Index = undefined;
 
@@ -65,7 +65,8 @@ fn run(
         const node, const connections = tuple;
 
         if (tree.nodeTag(node) != .identifier) continue :nodes;
-        if (!std.mem.eql(u8, tree.getNodeSource(node), "undefined")) continue :nodes;
+        if (!std.mem.eql(u8, tree.getNodeSource(node), "undefined"))
+            continue :nodes;
 
         var decl_var_name: ?[]const u8 = null;
         if (doc.lineage.items(.parent)[@intFromEnum(node)]) |parent| {
@@ -76,10 +77,12 @@ fn run(
                     decl_var_name = name;
 
                     for (config.exclude_var_decl_name_equals) |var_name| {
-                        if (std.ascii.eqlIgnoreCase(name, var_name)) continue :nodes;
+                        if (std.ascii.eqlIgnoreCase(name, var_name))
+                            continue :nodes;
                     }
                     for (config.exclude_var_decl_name_ends_with) |var_name| {
-                        if (std.ascii.endsWithIgnoreCase(name, var_name)) continue :nodes;
+                        if (std.ascii.endsWithIgnoreCase(name, var_name))
+                            continue :nodes;
                     }
                 }
             }
@@ -87,7 +90,8 @@ fn run(
 
         // We expect any undefined with a test to simply be ignored as really we expect
         // the test to fail if there's issues
-        if (config.exclude_tests and doc.isEnclosedInTestBlock(session, node)) continue :nodes;
+        if (config.exclude_tests and doc.isEnclosedInTestBlock(session, node))
+            continue :nodes;
 
         var next_parent = connections.parent;
         while (next_parent) |parent| {
@@ -97,7 +101,10 @@ fn run(
                 if (tree.fullFnProto(&fn_proto_buffer, parent)) |fn_proto| {
                     if (fn_proto.name_token) |name_token| {
                         for (config.exclude_in_fn) |skip_fn_name| {
-                            if (std.ascii.endsWithIgnoreCase(tree.tokenSlice(name_token), skip_fn_name)) continue :nodes;
+                            if (std.ascii.endsWithIgnoreCase(
+                                tree.tokenSlice(name_token),
+                                skip_fn_name,
+                            )) continue :nodes;
                         }
                     }
                 }
@@ -115,21 +122,22 @@ fn run(
                     => true,
                     else => false,
                 }) {
-                    var block_it = try doc.nodeLineageIterator(parent, session_arena);
-                    defer block_it.deinit();
+                    var block_it = try doc.nodeLineageIterator(parent, rule_arena);
 
                     while (try block_it.next()) |block_tuple| {
                         const block_node, _ = block_tuple;
                         if (tree.nodeTag(block_node) == .field_access) {
                             const node_data = tree.nodeData(block_node);
-                            const lhs_node, const identifier_token = .{ node_data.node_and_token.@"0", node_data.node_and_token.@"1" };
+                            const lhs_node, const identifier_token = .{
+                                node_data.node_and_token.@"0",
+                                node_data.node_and_token.@"1",
+                            };
                             const lhs_source = tree.getNodeSource(lhs_node);
                             if (std.mem.eql(u8, lhs_source, var_name)) {
                                 const identifier_name = tree.tokenSlice(identifier_token);
                                 for (config.init_method_names) |init_name| {
-                                    if (std.mem.eql(u8, identifier_name, init_name)) {
+                                    if (std.mem.eql(u8, identifier_name, init_name))
                                         continue :nodes;
-                                    }
                                 }
                             }
                         }
@@ -153,7 +161,7 @@ fn run(
         try zlinter.results.LintResult.init(
             session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(session_arena),
+            lint_problems.items,
         )
     else
         null;

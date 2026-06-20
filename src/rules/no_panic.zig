@@ -69,17 +69,17 @@ fn run(
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
-    const session_arena = session.runtime.sessionArena();
     if (config.severity == .off) return null;
 
+    const session_arena = session.runtime.sessionArena();
+    const rule_arena = session.runtime.ruleArena();
+
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
 
     const root: Ast.Node.Index = .root;
-    var it = try doc.nodeLineageIterator(root, session_arena);
-    defer it.deinit();
+    var it = try doc.nodeLineageIterator(root, rule_arena);
 
     nodes: while (try it.next()) |tuple| {
         const node, const connections = tuple;
@@ -99,12 +99,15 @@ fn run(
         }
 
         // if configured, skip if a parent is a test block
-        if (config.exclude_tests and doc.isEnclosedInTestBlock(session, node)) {
+        if (config.exclude_tests and doc.isEnclosedInTestBlock(session, node))
             continue :nodes;
-        }
 
         // if configured, skip if panic has case sensitive string content matching
-        if (builtinHasParamContent(tree, node, config.exclude_panic_with_content)) continue :nodes;
+        if (builtinHasParamContent(
+            tree,
+            node,
+            config.exclude_panic_with_content,
+        )) continue :nodes;
 
         try lint_problems.append(session_arena, .{
             .rule_id = rule.rule_id,
@@ -119,7 +122,7 @@ fn run(
         try zlinter.results.LintResult.init(
             session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(session_arena),
+            lint_problems.items,
         )
     else
         null;

@@ -31,27 +31,21 @@ fn run(
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     const session_arena = session.runtime.sessionArena();
+    const rule_arena = session.runtime.ruleArena();
     if (config.severity == .off) return null;
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(session_arena);
-
-    var arena_allocator = std.heap.ArenaAllocator.init(session_arena);
-    defer arena_allocator.deinit();
-    const arena = arena_allocator.allocator();
 
     var index: u32 = @intFromEnum(Ast.Node.Index.root);
     while (index < doc.tree(session).nodes.len) : (index += 1) {
-        defer _ = arena_allocator.reset(.retain_capacity);
-
         const tree = doc.tree(session);
         const node: Ast.Node.Index = @enumFromInt(index);
         const tag = tree.nodeTag(node);
         switch (tag) {
             .enum_literal => try handleEnumLiteral(
                 rule,
-                session_arena,
-                arena,
+                rule_arena,
+                rule_arena,
                 session,
                 doc,
                 node,
@@ -62,7 +56,7 @@ fn run(
             .field_access => try handleFieldAccess(
                 rule,
                 session_arena,
-                arena,
+                rule_arena,
                 session,
                 doc,
                 node,
@@ -73,7 +67,7 @@ fn run(
             .identifier => try handleIdentifierAccess(
                 rule,
                 session_arena,
-                arena,
+                rule_arena,
                 session,
                 doc,
                 node,
@@ -93,7 +87,7 @@ fn run(
         try zlinter.results.LintResult.init(
             session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(session_arena),
+            lint_problems.items,
         )
     else
         null;

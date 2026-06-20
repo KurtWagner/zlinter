@@ -57,16 +57,16 @@ fn run(
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
+    const rule_arena = session.runtime.ruleArena();
+
     const session_arena = session.runtime.sessionArena();
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
 
     const root: Ast.Node.Index = .root;
-    var it = try doc.nodeLineageIterator(root, session_arena);
-    defer it.deinit();
+    var it = try doc.nodeLineageIterator(root, rule_arena);
 
     nodes: while (try it.next()) |tuple| {
         const node, const connections = tuple;
@@ -81,14 +81,18 @@ fn run(
 
         // unwrap field access lhs and identifier (e.g., lhs.identifier)
         const node_data = tree.nodeData(node);
-        const lhs, const identifier = .{ node_data.node_and_token.@"0", node_data.node_and_token.@"1" };
+        const lhs, const identifier = .{
+            node_data.node_and_token.@"0",
+            node_data.node_and_token.@"1",
+        };
 
         // is identifier a method on Allocator e.g., something.alloc(..) or something.create(..)
         const is_allocator_method = is_allocator_method: {
             const actual_name = tree.tokenSlice(identifier);
             inline for (@typeInfo(std.mem.Allocator).@"struct".decl_names) |decl_name| {
                 if (comptime std.meta.hasMethod(std.mem.Allocator, decl_name)) {
-                    if (std.mem.eql(u8, actual_name, decl_name)) break :is_allocator_method true;
+                    if (std.mem.eql(u8, actual_name, decl_name))
+                        break :is_allocator_method true;
                 }
             }
             break :is_allocator_method false;
@@ -130,7 +134,7 @@ fn run(
         try zlinter.results.LintResult.init(
             session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(session_arena),
+            lint_problems.items,
         )
     else
         null;

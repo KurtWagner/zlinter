@@ -52,7 +52,6 @@ fn run(
     if (config.severity == .off) return null;
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
     var fn_buffer: [1]Ast.Node.Index = undefined;
@@ -87,7 +86,7 @@ fn run(
         try zlinter.results.LintResult.init(
             session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(session_arena),
+            lint_problems.items,
         )
     else
         null;

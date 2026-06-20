@@ -103,20 +103,20 @@ fn run(
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     const session_arena = session.runtime.sessionArena();
+    const rule_arena = session.runtime.ruleArena();
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
 
     const root: Ast.Node.Index = .root;
-    var it = try doc.nodeLineageIterator(root, session_arena);
-    defer it.deinit();
+    var it = try doc.nodeLineageIterator(root, rule_arena);
 
     nodes: while (try it.next()) |tuple| {
         const node, const connections = tuple;
 
-        const statement = zlinter.ast.fullStatement(tree, node) orelse continue :nodes;
+        const statement = zlinter.ast.fullStatement(tree, node) orelse
+            continue :nodes;
 
         // Skip if part of an assignment or return statement as braces are omitted
         switch (tree.nodeTag(connections.parent.?)) {
@@ -146,21 +146,18 @@ fn run(
         switch (statement) {
             .@"if" => |info| {
                 expr_nodes.appendAssumeCapacity(info.ast.then_expr);
-                if (info.ast.else_expr.unwrap()) |n| {
+                if (info.ast.else_expr.unwrap()) |n|
                     expr_nodes.appendAssumeCapacity(n);
-                }
             },
             .@"while" => |info| {
                 expr_nodes.appendAssumeCapacity(info.ast.then_expr);
-                if (info.ast.else_expr.unwrap()) |n| {
+                if (info.ast.else_expr.unwrap()) |n|
                     expr_nodes.appendAssumeCapacity(n);
-                }
             },
             .@"for" => |info| {
                 expr_nodes.appendAssumeCapacity(info.ast.then_expr);
-                if (info.ast.else_expr.unwrap()) |n| {
+                if (info.ast.else_expr.unwrap()) |n|
                     expr_nodes.appendAssumeCapacity(n);
-                }
             },
             .switch_case => |info| expr_nodes.appendAssumeCapacity(info.ast.target_expr),
             .@"catch" => |expr_node| expr_nodes.appendAssumeCapacity(expr_node),
@@ -170,7 +167,8 @@ fn run(
 
         expr_nodes: for (expr_nodes.items) |expr_node| {
             // Ignore here as it'll be processed in the outer loop.
-            if (zlinter.ast.fullStatement(tree, expr_node) != null) continue :expr_nodes;
+            if (zlinter.ast.fullStatement(tree, expr_node) != null)
+                continue :expr_nodes;
 
             // If it's not a block we assume it's a single statement (i.e., one
             // child). Keep in mind a block may have zero statement (i.e., empty).
@@ -190,30 +188,38 @@ fn run(
             const error_msg = error_msg: {
                 switch (req_and_severity.requirement) {
                     .all => {
-                        if (!has_braces) {
-                            break :error_msg try session_arena.dupe(u8, "Expects braces whether on a single or across multiple lines");
-                        }
+                        if (!has_braces)
+                            break :error_msg try session_arena.dupe(
+                                u8,
+                                "Expects braces whether on a single or across multiple lines",
+                            );
                     },
                     .multi_statement_only => {
                         if (has_braces) {
                             const children = doc.lineage.items(.children)[@intFromEnum(expr_node)] orelse &.{};
-                            if (children.len == 1) {
-                                break :error_msg try session_arena.dupe(u8, "Expects no braces when there's only one statement");
-                            }
+                            if (children.len == 1)
+                                break :error_msg try session_arena.dupe(
+                                    u8,
+                                    "Expects no braces when there's only one statement",
+                                );
                         }
                     },
                     .multi_line_only => {
                         const on_single_line = tree.tokensOnSameLine(first_token, last_token);
                         if (on_single_line) {
                             const children = doc.lineage.items(.children)[@intFromEnum(expr_node)] orelse &.{};
-                            if (has_braces and children.len > 0) { // We allow empy blocks / no children
-                                break :error_msg try session_arena.dupe(u8, "Expects no braces when on a single line");
-                            }
+                            if (has_braces and children.len > 0) // We allow empy blocks / no children
+                                break :error_msg try session_arena.dupe(
+                                    u8,
+                                    "Expects no braces when on a single line",
+                                );
                         } else if (!has_braces) {
                             const starts_on_same_line = tree.tokensOnSameLine(first_token - 1, first_token);
-                            if (!starts_on_same_line) {
-                                break :error_msg try session_arena.dupe(u8, "Expects braces when over multiple lines");
-                            }
+                            if (!starts_on_same_line)
+                                break :error_msg try session_arena.dupe(
+                                    u8,
+                                    "Expects braces when over multiple lines",
+                                );
                         }
                     },
                 }
@@ -234,7 +240,7 @@ fn run(
         try zlinter.results.LintResult.init(
             session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(session_arena),
+            lint_problems.items,
         )
     else
         null;

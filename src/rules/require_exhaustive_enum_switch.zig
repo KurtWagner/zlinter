@@ -61,27 +61,24 @@ fn run(
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
+
     const session_arena = session.runtime.sessionArena();
+    const rule_arena = session.runtime.ruleArena();
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
 
     const root: Ast.Node.Index = .root;
-    var it = try doc.nodeLineageIterator(root, session_arena);
-    defer it.deinit();
+    var it = try doc.nodeLineageIterator(root, rule_arena);
 
     // Holds all tags within an enum used in a switch statement
-    var complete_tag_set: std.StringHashMap(void) = .init(session_arena);
-    defer complete_tag_set.deinit();
+    var complete_tag_set: std.StringHashMap(void) = .init(rule_arena);
 
     // Tracks only the used enum tags within a switch statement
-    var used_tag_set = std.StringHashMap(void).init(session_arena);
-    defer used_tag_set.deinit();
+    var used_tag_set = std.StringHashMap(void).init(rule_arena);
 
     var missing_tags: std.ArrayList([]const u8) = .empty;
-    defer missing_tags.deinit(session_arena);
 
     nodes: while (try it.next()) |tuple| {
         const node, const connections = tuple;
@@ -89,13 +86,16 @@ fn run(
 
         const switch_info = tree.fullSwitch(node) orelse continue :nodes;
 
-        const switch_expr_enum_decl = session.resolveEnumDeclOfNode(doc, switch_info.ast.condition) orelse continue :nodes;
+        const switch_expr_enum_decl = session.resolveEnumDeclOfNode(doc, switch_info.ast.condition) orelse
+            continue :nodes;
 
-        const switch_expr_enum = session.enumInfo(switch_expr_enum_decl) orelse continue :nodes;
+        const switch_expr_enum = session.enumInfo(switch_expr_enum_decl) orelse
+            continue :nodes;
         if (switch_expr_enum.is_non_exhaustive) continue :nodes;
 
         var enum_member_buffer: [2]Ast.Node.Index = undefined;
-        const enum_container_decl = switch_expr_enum.containerDecl(session, &enum_member_buffer) orelse continue :nodes;
+        const enum_container_decl = switch_expr_enum.containerDecl(session, &enum_member_buffer) orelse
+            continue :nodes;
         const enum_members = enum_container_decl.ast.members;
         if (enum_members.len == 0) continue :nodes;
 
@@ -130,7 +130,10 @@ fn run(
 
             for (enum_members) |member| {
                 const tag = switch_expr_enum.tagName(session, member) orelse continue;
-                if (!used_tag_set.contains(tag)) try missing_tags.append(session_arena, tag);
+                if (!used_tag_set.contains(tag)) try missing_tags.append(
+                    rule_arena,
+                    tag,
+                );
             }
 
             try lint_problems.append(session_arena, .{
@@ -138,7 +141,10 @@ fn run(
                 .severity = config.severity,
                 .start = .startOfToken(tree, tree.firstToken(node)),
                 .end = .endOfToken(tree, tree.firstToken(node)),
-                .message = buildProblemMessage(missing_tags.items, session_arena) catch "Error building linter message",
+                .message = buildProblemMessage(
+                    missing_tags.items,
+                    session_arena,
+                ) catch "Error building linter message",
             });
         }
     }
@@ -147,7 +153,7 @@ fn run(
         try zlinter.results.LintResult.init(
             session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(session_arena),
+            lint_problems.items,
         )
     else
         null;

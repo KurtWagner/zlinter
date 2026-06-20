@@ -77,9 +77,9 @@ fn run(
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     const session_arena = session.runtime.sessionArena();
+    const rule_arena = session.runtime.ruleArena();
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    defer lint_problems.deinit(session_arena);
 
     const tree = doc.tree(session);
 
@@ -150,7 +150,6 @@ fn run(
             }
 
             var param_kinds = std.ArrayList(ParamKind).empty;
-            defer param_kinds.deinit(session_arena);
 
             for (fn_proto.ast.params) |param| {
                 const colon_token = tree.firstToken(param) - 1;
@@ -173,13 +172,13 @@ fn run(
                 if (type_kind) |kind| {
                     switch (kind) {
                         .@"fn", .fn_returns_type => {
-                            try param_kinds.append(session_arena, .{
+                            try param_kinds.append(rule_arena, .{
                                 .name = identifier,
                                 .kind = kind,
                             });
                         },
                         .type => |type_value| switch (type_value.kind) {
-                            .@"fn", .fn_returns_type => try param_kinds.append(session_arena, .{
+                            .@"fn", .fn_returns_type => try param_kinds.append(rule_arena, .{
                                 .name = identifier,
                                 .kind = kind,
                             }),
@@ -219,7 +218,7 @@ fn run(
         try zlinter.results.LintResult.init(
             session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(session_arena),
+            lint_problems.items,
         )
     else
         null;

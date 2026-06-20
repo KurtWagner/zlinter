@@ -79,12 +79,15 @@ fn run(
     if (config.severity == .off) return null;
 
     const session_arena = session.runtime.sessionArena();
+    const rule_arena = session.runtime.ruleArena();
 
     var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
-    defer lint_problems.deinit(session_arena);
 
-    var scoped_imports = try resolveScopedImports(doc, session, session_arena);
-    defer deinitScopedImports(session_arena, &scoped_imports);
+    var scoped_imports = try resolveScopedImports(
+        doc,
+        session,
+        rule_arena,
+    );
 
     const tree = doc.tree(session);
     var import_it = scoped_imports.iterator();
@@ -103,8 +106,18 @@ fn run(
                         .severity = config.severity,
                         .start = .startOfNode(tree, import.decl_node),
                         .end = .endOfNode(tree, import.decl_node),
-                        .message = try std.fmt.allocPrint(session_arena, "Import '{s}' should be grouped with other imports", .{import.decl_name}),
-                        .fix = if (same_line) null else try swapImportBlocksFix(doc, session, p.decl_node, import.decl_node, session_arena),
+                        .message = try std.fmt.allocPrint(
+                            session_arena,
+                            "Import '{s}' should be grouped with other imports",
+                            .{import.decl_name},
+                        ),
+                        .fix = if (same_line) null else try swapImportBlocksFix(
+                            doc,
+                            session,
+                            p.decl_node,
+                            import.decl_node,
+                            session_arena,
+                        ),
                     });
                     continue :scopes;
                 }
@@ -119,8 +132,18 @@ fn run(
                             .severity = config.severity,
                             .start = .startOfNode(tree, import.decl_node),
                             .end = .endOfNode(tree, import.decl_node),
-                            .message = try std.fmt.allocPrint(session_arena, "Import '{s}' is not in {s} order", .{ import.decl_name, config.order.name() }),
-                            .fix = if (same_line) null else try swapImportBlocksFix(doc, session, p.decl_node, import.decl_node, session_arena),
+                            .message = try std.fmt.allocPrint(
+                                session_arena,
+                                "Import '{s}' is not in {s} order",
+                                .{ import.decl_name, config.order.name() },
+                            ),
+                            .fix = if (same_line) null else try swapImportBlocksFix(
+                                doc,
+                                session,
+                                p.decl_node,
+                                import.decl_node,
+                                session_arena,
+                            ),
                         });
                         continue :scopes;
                     }
@@ -134,7 +157,7 @@ fn run(
         try zlinter.results.LintResult.init(
             session_arena,
             doc.absPath(session),
-            try lint_problems.toOwnedSlice(session_arena),
+            lint_problems.items,
         )
     else
         null;
@@ -165,11 +188,6 @@ const ImportDecl = struct {
         return std.math.order(a.start_offset, b.start_offset);
     }
 };
-
-fn deinitScopedImports(gpa: std.mem.Allocator, scoped_imports: *std.array_hash_map.Auto(Ast.Node.Index, ImportsQueueLinesAscending)) void {
-    for (scoped_imports.values()) |*v| v.deinit(gpa);
-    scoped_imports.deinit(gpa);
-}
 
 const ImportSwapRange = struct {
     start_line: usize,
