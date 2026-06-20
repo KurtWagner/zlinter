@@ -151,13 +151,13 @@ test "writeImportPath - rejects non-string import arguments" {
 pub const ResolveContext = struct {
     parent_file_id: FileStore.FileId,
 
-    /// Root source file for the active compile context.
-    compile_root_file_id: ?FileStore.FileId,
+    /// Root source file for the active semantic module context.
+    root_file_id: ?FileStore.FileId,
 };
 
 /// Resolves an `@import` path in the supplied context.
 ///
-/// `@import("root")` resolves only when `context.compile_root_file_id` is known.
+/// `@import("root")` resolves only when `context.root_file_id` is known.
 /// Callers should pass the compile context root file directly instead of
 /// searching for it from `context.parent_file_id`.
 pub fn resolveFile(
@@ -180,7 +180,7 @@ pub fn resolveFile(
         .builtin,
         => null,
         .root,
-        => context.compile_root_file_id,
+        => context.root_file_id,
         .module => id: {
             const parent_module_id = module_store.moduleIdByRootFile(parent_file_id) orelse break :id null;
             const imported_module_id = module_store.moduleIdByImportName(
@@ -245,7 +245,7 @@ test "resolveFile - root import uses supplied root file id" {
         &module_store,
         .{
             .parent_file_id = child_file_id,
-            .compile_root_file_id = compile_root_file_id,
+            .root_file_id = compile_root_file_id,
         },
         "root",
     );
@@ -256,7 +256,7 @@ test "resolveFile - root import uses supplied root file id" {
         &module_store,
         .{
             .parent_file_id = child_file_id,
-            .compile_root_file_id = null,
+            .root_file_id = null,
         },
         "root",
     );

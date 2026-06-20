@@ -29,6 +29,27 @@ pub fn loadFakeDocument(
 
     const file_id = try session.resolveFile(real_path);
 
+    const module_id = session.module_store.resolve(.{
+        .root_file = file_id,
+        .build_config = .fromIndex(0),
+        .build_config_module = @enumFromInt(0),
+        .module_id_by_import_name = .empty,
+    });
+
+    var has_compile_context = false;
+    for (session.compile_contexts.items(.root_module)) |root_module| {
+        if (root_module == module_id) {
+            has_compile_context = true;
+            break;
+        }
+    }
+    if (!has_compile_context) {
+        _ = session.appendCompileContext(.{
+            .root_module = module_id,
+            .step_index = @enumFromInt(0),
+        });
+    }
+
     const doc = try arena.create(LintDocument);
     try session.initDocument(file_id, arena, doc);
     return doc;
@@ -87,7 +108,7 @@ pub fn initFakeContext(
         .type_store = .init(runtime),
         .decl_store = .init(runtime),
     };
-    session.init(null) catch @panic("failed to initialize fake lint session");
+    session.init() catch @panic("failed to initialize fake lint session");
     return session;
 }
 

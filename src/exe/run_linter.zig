@@ -255,7 +255,7 @@ fn runLinterRules(
         .type_store = .init(runtime),
         .decl_store = .init(runtime),
     };
-    try session.init(args.compile_names);
+    try session.init();
 
     var enabled_rules = enabledRules(args.rules);
 
@@ -377,9 +377,19 @@ fn runLinterRules(
         }
         printer.println(.verbose, "  - Process syntax errors: {d}ms", .{timer.lapMilliseconds()});
 
-        const compile_context_ids = try session.compileContextIdsForFile(
+        const module_ids = try session.moduleIdsForFile(
             file_id,
             runtime.fileArena(),
+        );
+
+        const active_module_id = if (module_ids.len == 0) null else module_ids[0];
+
+        session.resolveFileTypes(
+            file_id,
+            if (active_module_id) |module_id|
+                session.module_store.rootFileId(module_id)
+            else
+                null,
         );
 
         printer.println(.verbose, "  - Rules", .{});
@@ -389,68 +399,18 @@ fn runLinterRules(
             defer runtime.resetRuleArena();
 
             const rule = rules[rule_index];
-            switch (rule.execution) {
-                .syntax_only => {
-                    session.setCompileRootFileId(null);
-                    if (try rule.run(
-                        rule,
-                        &session,
-                        &doc,
-                        .{ .config = rule_configs[rule_index] },
-                    )) |result| {
-                        try appendDedupedResult(
-                            runtime.sessionArena(),
-                            &results,
-                            &doc,
-                            result,
-                        );
-                    }
-                },
-                .compile_context => {
-                    if (compile_context_ids.len == 0) {
-                        session.setCompileRootFileId(null);
-                        session.resolveFileTypes(file_id);
-                        if (try rule.run(
-                            rule,
-                            &session,
-                            &doc,
-                            .{ .config = rule_configs[rule_index] },
-                        )) |result| {
-                            try appendDedupedResult(
-                                runtime.sessionArena(),
-                                &results,
-                                &doc,
-                                result,
-                            );
-                        }
-                    } else {
-                        for (compile_context_ids) |compile_context_id| {
-                            if (!session.focused_compiled_contexts.contains(compile_context_id))
-                                continue;
-
-                            const compile_root_file_id = session.compileRootFileId(compile_context_id);
-                            session.setCompileRootFileId(compile_root_file_id);
-                            session.resolveFileTypes(file_id);
-                            if (try rule.run(
-                                rule,
-                                &session,
-                                &doc,
-                                .{
-                                    .config = rule_configs[rule_index],
-                                    .compile_context_id = compile_context_id,
-                                    .compile_root_file_id = compile_root_file_id,
-                                },
-                            )) |result| {
-                                try appendDedupedResult(
-                                    runtime.sessionArena(),
-                                    &results,
-                                    &doc,
-                                    result,
-                                );
-                            }
-                        }
-                    }
-                },
+            if (try rule.run(
+                rule,
+                &session,
+                &doc,
+                .{ .config = rule_configs[rule_index] },
+            )) |result| {
+                try appendDedupedResult(
+                    runtime.sessionArena(),
+                    &results,
+                    &doc,
+                    result,
+                );
             }
 
             const ns = timer.lapNanoseconds();

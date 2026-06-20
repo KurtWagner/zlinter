@@ -13,59 +13,17 @@ type_store: TypeStore,
 build_config_store: BuildConfigStore,
 
 compile_contexts: std.MultiArrayList(CompileContext) = .empty,
-compile_context_ids_by_file: std.AutoHashMapUnmanaged(FileStore.FileId, std.ArrayList(CompileContext.Id)) = .empty,
-compile_file_index_built: bool = false,
+module_ids_by_file: std.AutoHashMapUnmanaged(FileStore.FileId, std.ArrayList(ModuleStore.ModuleId)) = .empty,
+module_file_index_built: bool = false,
 
-focused_compiled_contexts: std.AutoHashMapUnmanaged(CompileContext.Id, void) = .empty,
-/// Root source file for the active compile session, when known.
-compile_root_file_id: ?FileStore.FileId = null,
-
-pub fn init(self: *LintContext, focus_compiled_names: ?[]const []const u8) !void {
+pub fn init(self: *LintContext) !void {
     const zone = tracy.traceNamed(@src(), "LintContext.init");
     defer zone.end();
 
     // Maybe one day we will care enough to use a fake for tests but for now
     // it's fine to ignore...
     if (!builtin.is_test) {
-        const config_id = try self.initBuildConfig(); // populated compile contexts
-        const build_config = self.build_config_store.buildConfig(config_id);
-
-        if (focus_compiled_names) |l| {
-            for (l) |focus_compiled_name| {
-                const maybe_focus_id: ?CompileContext.Id = focus_id: {
-                    for (0..self.compile_contexts.len) |i| {
-                        const name = self.compile_contexts
-                            .get(i)
-                            .stepName(build_config);
-                        if (std.mem.eql(u8, name, focus_compiled_name))
-                            break :focus_id .fromIndex(i);
-                    }
-                    break :focus_id null;
-                };
-                if (maybe_focus_id) |focus_id|
-                    oom(self.focused_compiled_contexts.put(
-                        self.runtime.sessionArena(),
-                        focus_id,
-                        {},
-                    ))
-                else
-                    std.log.err("Could not find compiled unit: '{s}'", .{focus_compiled_name});
-            }
-        } else if (selectedCompilePriority(build_config)) |selected_priority| {
-            for (0..self.compile_contexts.len) |i| {
-                const kind = self.compile_contexts
-                    .get(i)
-                    .stepKind(build_config);
-
-                if (compilePriority(kind) == selected_priority) {
-                    oom(self.focused_compiled_contexts.put(
-                        self.runtime.sessionArena(),
-                        .fromIndex(i),
-                        {},
-                    ));
-                }
-            }
-        }
+        _ = try self.initBuildConfig();
     }
 }
 
@@ -83,42 +41,6 @@ fn initBuildConfig(self: *LintContext) !BuildConfigStore.ConfigId {
         );
     return config_id;
 }
-
-fn selectedCompilePriority(build_config: *const std.Build.Configuration) ?CompilePriority {
-    var selected_priority: ?CompilePriority = null;
-
-    for (build_config.steps) |step| {
-        const compile = step.extended.cast(
-            build_config,
-            std.Build.Configuration.Step.Compile,
-        ) orelse continue;
-
-        const priority = compilePriority(compile.flags3.kind);
-        if (selected_priority == null or
-            @intFromEnum(priority) < @intFromEnum(selected_priority.?))
-            selected_priority = priority;
-    }
-
-    return selected_priority;
-}
-
-fn compilePriority(kind: std.Build.Configuration.Step.Compile.Kind) CompilePriority {
-    return switch (kind) {
-        .exe => .exe,
-        .lib => .lib,
-        .obj => .obj,
-        .@"test", .test_obj => .@"test",
-    };
-}
-
-/// When no compiled units are provided by the user we look at all from the build
-/// configuration in this order. e.g., if there's an exe, we only use exe's.
-const CompilePriority = enum(u3) {
-    exe = 0,
-    lib = 1,
-    obj = 2,
-    @"test" = 3,
-};
 
 fn consumeBuildConfigStep(
     self: *LintContext,
@@ -147,10 +69,37 @@ fn consumeBuildConfigStep(
         return;
     };
 
-    self.compile_contexts.append(self.runtime.sessionArena(), .{
+    _ = self.appendCompileContext(.{
         .step_index = step_index,
         .root_module = root_module_id,
-    }) catch unreachable;
+    });
+}
+
+pub fn appendCompileContext(
+    self: *LintContext,
+    context: CompileContext,
+) CompileContext.Id {
+    const id: CompileContext.Id = .fromIndex(self.compile_contexts.len);
+    oom(self.compile_contexts.append(self.runtime.sessionArena(), context));
+    self.module_file_index_built = false;
+    return id;
+}
+
+pub fn compileContext(
+    self: *const LintContext,
+    id: CompileContext.Id,
+) CompileContext {
+    return self.compile_contexts.get(id.toIndex());
+}
+
+pub fn compileContextIdForModule(
+    self: *const LintContext,
+    module_id: ModuleStore.ModuleId,
+) ?CompileContext.Id {
+    for (self.compile_contexts.items(.root_module), 0..) |root_module, index| {
+        if (root_module == module_id) return .fromIndex(index);
+    }
+    return null;
 }
 
 fn resolveBuildModule(
@@ -279,74 +228,87 @@ pub fn resolveFile(self: *LintContext, input_path: []const u8) !FileStore.FileId
         &self.file_store,
         &self.module_store,
         &self.type_store,
+        null,
     );
     return id;
 }
 
-pub fn resolveFileTypes(self: *LintContext, file_id: FileStore.FileId) void {
+pub fn resolveFileTypes(
+    self: *LintContext,
+    file_id: FileStore.FileId,
+    root_file_id: ?FileStore.FileId,
+) void {
     self.decl_store.resolveFileTypes(
         file_id,
         &self.file_store,
         &self.module_store,
         &self.type_store,
+        root_file_id,
     );
 }
 
-// TODO: #149 - avoid this shared state and instead pass through
-pub fn setCompileRootFileId(self: *LintContext, compile_root_file_id: ?FileStore.FileId) void {
-    self.compile_root_file_id = compile_root_file_id;
-    self.decl_store.compile_root_file_id = compile_root_file_id;
-}
-
-pub fn compileRootFileId(
-    self: *const LintContext,
-    compile_context_id: CompileContext.Id,
-) FileStore.FileId {
-    return self.module_store.rootFileId(
-        self.compile_contexts.items(.root_module)[compile_context_id.toIndex()],
-    );
-}
-
-pub fn compileContextIdsForFile(
+pub fn moduleIdsForFile(
     self: *LintContext,
     file_id: FileStore.FileId,
     gpa: std.mem.Allocator,
-) ![]CompileContext.Id {
-    self.ensureCompileContextIdsByFile(gpa);
+) ![]ModuleStore.ModuleId {
+    self.ensureModuleIdsByFile(gpa);
 
-    const cached = self.compile_context_ids_by_file.get(file_id) orelse
-        return gpa.dupe(CompileContext.Id, &.{});
+    const cached = self.module_ids_by_file.get(file_id) orelse fallback: {
+        const module_id = self.module_store.resolve(.{
+            .root_file = file_id,
+            .build_config = .fromIndex(0),
+            .build_config_module = @enumFromInt(file_id.toIndex()),
+            .module_id_by_import_name = .empty,
+        });
+        self.indexModuleFiles(module_id, gpa);
+        break :fallback self.module_ids_by_file.get(file_id) orelse
+            return gpa.dupe(ModuleStore.ModuleId, &.{module_id});
+    };
 
-    return gpa.dupe(CompileContext.Id, cached.items);
+    return gpa.dupe(ModuleStore.ModuleId, cached.items);
 }
 
-fn ensureCompileContextIdsByFile(
+fn firstModuleIdForFile(
+    self: *LintContext,
+    file_id: FileStore.FileId,
+) ?ModuleStore.ModuleId {
+    const allocator = self.runtime.ruleArena();
+    const module_ids = self.moduleIdsForFile(file_id, allocator) catch return null;
+    defer allocator.free(module_ids);
+    return if (module_ids.len == 0) null else module_ids[0];
+}
+
+fn ensureModuleIdsByFile(
     self: *LintContext,
     gpa: std.mem.Allocator,
 ) void {
-    if (self.compile_file_index_built) return;
+    if (self.module_file_index_built) return;
 
-    for (0..self.compile_contexts.len) |index| {
-        const compile_context_id: CompileContext.Id = .fromIndex(index);
-        self.indexCompileContextFiles(compile_context_id, gpa);
+    for (self.compile_contexts.items(.root_module)) |root_module_id| {
+        self.indexModuleFiles(root_module_id, gpa);
     }
 
-    self.compile_file_index_built = true;
+    self.module_file_index_built = true;
 }
 
-fn appendCompileContextForFile(
+fn appendModuleForFile(
     self: *LintContext,
     file_id: FileStore.FileId,
-    compile_context_id: CompileContext.Id,
+    module_id: ModuleStore.ModuleId,
 ) void {
-    const entry = oom(self.compile_context_ids_by_file.getOrPut(
+    const entry = oom(self.module_ids_by_file.getOrPut(
         self.runtime.sessionArena(),
         file_id,
     ));
     if (!entry.found_existing)
         entry.value_ptr.* = .empty;
 
-    oom(entry.value_ptr.append(self.runtime.sessionArena(), compile_context_id));
+    if (self.module_store.rootFileId(module_id) == file_id) {
+        oom(entry.value_ptr.insert(self.runtime.sessionArena(), 0, module_id));
+    } else {
+        oom(entry.value_ptr.append(self.runtime.sessionArena(), module_id));
+    }
 }
 
 const ReachKey = enum(u64) {
@@ -363,19 +325,15 @@ const ReachQueueItem = struct {
     module_id: ModuleStore.ModuleId,
 };
 
-fn indexCompileContextFiles(
+fn indexModuleFiles(
     self: *LintContext,
-    compile_context_id: CompileContext.Id,
+    root_module_id: ModuleStore.ModuleId,
     gpa: std.mem.Allocator,
 ) void {
-    const root_module_id = self.compile_contexts.items(.root_module)[compile_context_id.toIndex()];
     const compile_root_file_id = self.module_store.rootFileId(root_module_id);
 
     var visited = std.AutoHashMapUnmanaged(ReachKey, void).empty;
     defer visited.deinit(gpa);
-
-    var indexed_files = std.AutoHashMapUnmanaged(FileStore.FileId, void).empty;
-    defer indexed_files.deinit(gpa);
 
     var queue = std.ArrayList(ReachQueueItem).empty;
     defer queue.deinit(gpa);
@@ -390,9 +348,7 @@ fn indexCompileContextFiles(
         const visited_entry = oom(visited.getOrPut(gpa, key));
         if (visited_entry.found_existing) continue;
 
-        const indexed_entry = oom(indexed_files.getOrPut(gpa, item.file_id));
-        if (!indexed_entry.found_existing)
-            self.appendCompileContextForFile(item.file_id, compile_context_id);
+        self.appendModuleForFile(item.file_id, root_module_id);
 
         const tree = self.file_store.fileTree(item.file_id);
         var node_index: u32 = @intFromEnum(Ast.Node.Index.root);
@@ -408,15 +364,15 @@ fn indexCompileContextFiles(
 
             const resolved: ?ReachQueueItem = switch (import_utils.Kind.init(import_path)) {
                 .relative => relative: {
-                    const resolved_file_id = import_utils.resolveFile(
-                        &self.file_store,
-                        &self.module_store,
-                        .{
-                            .parent_file_id = item.file_id,
-                            .compile_root_file_id = compile_root_file_id,
-                        },
-                        import_path,
-                    ) catch break :relative null;
+                            const resolved_file_id = import_utils.resolveFile(
+                                &self.file_store,
+                                &self.module_store,
+                                .{
+                                    .parent_file_id = item.file_id,
+                                    .root_file_id = compile_root_file_id,
+                                },
+                                import_path,
+                            ) catch break :relative null;
 
                     break :relative if (resolved_file_id) |resolved_file|
                         .{
@@ -536,21 +492,43 @@ pub const ResolvedNodeType = struct {
     decl_id: DeclStore.DeclId,
 };
 
-/// Resolves the type summary for an expression node.
-///
-/// This first resolves the expression to the declaration it names, then asks
-/// `DeclStore` to normalize container aliases such as `const Self = @This();`.
-/// The returned `decl_id` is the declaration whose resolved type produced the
-/// summary, not necessarily the declaration textually named by `node`.
+pub const DeclCandidate = struct {
+    module_id: ModuleStore.ModuleId,
+    decl_id: DeclStore.DeclId,
+};
+
+pub const TypeCandidate = struct {
+    module_id: ModuleStore.ModuleId,
+    type: ResolvedNodeType,
+};
+
+pub const EnumCandidate = struct {
+    module_id: ModuleStore.ModuleId,
+    decl_id: DeclStore.DeclId,
+};
+
+/// Compatibility wrapper that resolves the first reachable module for a node.
+/// New semantic rules should use `resolveTypeCandidatesOfNode`.
 pub fn resolveTypeOfNode(
     self: *LintContext,
+    doc: *const LintDocument,
+    node: Ast.Node.Index,
+) ?ResolvedNodeType {
+    const module_id = self.firstModuleIdForFile(doc.file_id) orelse return null;
+    return self.resolveTypeOfNodeForModule(module_id, doc, node);
+}
+
+/// Resolves the type summary for an expression node in a single module.
+fn resolveTypeOfNodeForModule(
+    self: *LintContext,
+    module_id: ModuleStore.ModuleId,
     doc: *const LintDocument,
     node: Ast.Node.Index,
 ) ?ResolvedNodeType {
     const zone = tracy.traceNamed(@src(), "LintContext.resolveTypeOfNode");
     defer zone.end();
 
-    const immediate_decl_id = self.immediateDeclForNode(doc, node);
+    const immediate_decl_id = self.immediateDeclForNode(module_id, doc, node);
     const resolved_decl_id = if (immediate_decl_id) |decl_id|
         self.decl_store.resolvedContainerDecl(
             &self.file_store,
@@ -571,21 +549,68 @@ pub fn resolveTypeOfNode(
     return null;
 }
 
-/// Resolves `node` to the declaration it directly names.
+/// Compatibility wrapper that resolves the first reachable module for a node.
+/// New semantic rules should use `resolveDeclCandidatesOfNode`.
 pub fn resolveDeclOfNode(
     self: *LintContext,
+    doc: *const LintDocument,
+    node: Ast.Node.Index,
+) ?DeclStore.DeclId {
+    const module_id = self.firstModuleIdForFile(doc.file_id) orelse return null;
+    return self.resolveDeclOfNodeForModule(module_id, doc, node);
+}
+
+/// Resolves `node` to the declaration it directly names in a single module.
+fn resolveDeclOfNodeForModule(
+    self: *LintContext,
+    module_id: ModuleStore.ModuleId,
     doc: *const LintDocument,
     node: Ast.Node.Index,
 ) ?DeclStore.DeclId {
     const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclOfNode");
     defer zone.end();
 
-    return self.immediateDeclForNode(doc, node);
+    return self.immediateDeclForNode(module_id, doc, node);
+}
+
+/// Resolves `node` to all declarations it names across the modules reachable
+/// from the file. This is the new semantic entrypoint for ambiguous lookup.
+pub fn resolveDeclCandidatesOfNode(
+    self: *LintContext,
+    allocator: std.mem.Allocator,
+    doc: *const LintDocument,
+    node: Ast.Node.Index,
+) !std.ArrayList(DeclCandidate) {
+    var candidates = std.ArrayList(DeclCandidate).empty;
+    const module_ids = try self.moduleIdsForFile(doc.file_id, allocator);
+    defer allocator.free(module_ids);
+    for (module_ids) |module_id| {
+        if (self.resolveDeclOfNodeForModule(module_id, doc, node)) |decl_id| {
+            try candidates.append(allocator, .{
+                .module_id = module_id,
+                .decl_id = decl_id,
+            });
+        }
+    }
+    return candidates;
+}
+
+/// Compatibility wrapper that resolves a member in the first module reaching
+/// the parent declaration's file. New semantic rules should use
+/// `resolveDeclMemberForModule`.
+pub fn resolveDeclMember(
+    self: *LintContext,
+    parent_decl_id: DeclStore.DeclId,
+    member_name: []const u8,
+) ?DeclStore.DeclId {
+    const module_id = self.firstModuleIdForFile(self.decl_store.declFileId(parent_decl_id)) orelse return null;
+    return self.resolveDeclMemberForModule(module_id, parent_decl_id, member_name);
 }
 
 /// Resolves a member declaration from a container/type declaration.
-pub fn resolveDeclMember(
+pub fn resolveDeclMemberForModule(
     self: *LintContext,
+    module_id: ModuleStore.ModuleId,
     parent_decl_id: DeclStore.DeclId,
     member_name: []const u8,
 ) ?DeclStore.DeclId {
@@ -595,14 +620,89 @@ pub fn resolveDeclMember(
     return self.decl_store.resolveMemberDecl(
         &self.file_store,
         &self.module_store,
+        self.module_store.rootFileId(module_id),
         parent_decl_id,
         member_name,
     );
 }
 
-/// Resolves a member from the type represented by a declaration.
+/// Resolves the type of `node` for every module reachable from the file.
+pub fn resolveTypeCandidatesOfNode(
+    self: *LintContext,
+    allocator: std.mem.Allocator,
+    doc: *const LintDocument,
+    node: Ast.Node.Index,
+) !std.ArrayList(TypeCandidate) {
+    var candidates = std.ArrayList(TypeCandidate).empty;
+    const module_ids = try self.moduleIdsForFile(doc.file_id, allocator);
+    defer allocator.free(module_ids);
+    for (module_ids) |module_id| {
+        if (self.resolveTypeOfNodeForModule(module_id, doc, node)) |resolved| {
+            try candidates.append(allocator, .{
+                .module_id = module_id,
+                .type = resolved,
+            });
+        }
+    }
+    return candidates;
+}
+
+/// Resolves `node` to all enum declarations it can name across reachable modules.
+pub fn resolveEnumCandidatesOfNode(
+    self: *LintContext,
+    allocator: std.mem.Allocator,
+    doc: *const LintDocument,
+    node: Ast.Node.Index,
+) !std.ArrayList(EnumCandidate) {
+    var candidates = std.ArrayList(EnumCandidate).empty;
+    const module_ids = try self.moduleIdsForFile(doc.file_id, allocator);
+    defer allocator.free(module_ids);
+    for (module_ids) |module_id| {
+        if (self.resolveEnumDeclOfNodeForModule(module_id, doc, node)) |decl_id| {
+            try candidates.append(allocator, .{
+                .module_id = module_id,
+                .decl_id = decl_id,
+            });
+        }
+    }
+    return candidates;
+}
+
+/// Resolves an expression to all enum tag names it can name across reachable
+/// modules.
+pub fn resolveEnumTagNameCandidatesOfNode(
+    self: *LintContext,
+    allocator: std.mem.Allocator,
+    doc: *const LintDocument,
+    node: Ast.Node.Index,
+) !std.ArrayList([]const u8) {
+    var candidates = std.ArrayList([]const u8).empty;
+    const module_ids = try self.moduleIdsForFile(doc.file_id, allocator);
+    defer allocator.free(module_ids);
+    for (module_ids) |module_id| {
+        if (self.resolveEnumTagNameOfNodeForModule(module_id, doc, node)) |tag_name| {
+            try candidates.append(allocator, tag_name);
+        }
+    }
+    return candidates;
+}
+
+/// Compatibility wrapper that resolves a type member in the first module
+/// reaching the declaration's file. New semantic rules should use
+/// `resolveDeclTypeMemberForModule`.
 pub fn resolveDeclTypeMember(
     self: *LintContext,
+    parent_decl_id: DeclStore.DeclId,
+    member_name: []const u8,
+) ?DeclStore.DeclId {
+    const module_id = self.firstModuleIdForFile(self.decl_store.declFileId(parent_decl_id)) orelse return null;
+    return self.resolveDeclTypeMemberForModule(module_id, parent_decl_id, member_name);
+}
+
+/// Resolves a member from the type represented by a declaration.
+pub fn resolveDeclTypeMemberForModule(
+    self: *LintContext,
+    module_id: ModuleStore.ModuleId,
     parent_decl_id: DeclStore.DeclId,
     member_name: []const u8,
 ) ?DeclStore.DeclId {
@@ -612,14 +712,26 @@ pub fn resolveDeclTypeMember(
     return self.decl_store.resolveDeclTypeMember(
         &self.file_store,
         &self.module_store,
+        self.module_store.rootFileId(module_id),
         parent_decl_id,
         member_name,
     );
 }
 
-/// Resolves the declaration named by a declaration's type expression.
+/// Compatibility wrapper that resolves a declaration type in the first module
+/// reaching the declaration's file.
 pub fn resolveDeclTypeDecl(
     self: *LintContext,
+    decl_id: DeclStore.DeclId,
+) ?DeclStore.DeclId {
+    const module_id = self.firstModuleIdForFile(self.decl_store.declFileId(decl_id)) orelse return null;
+    return self.resolveDeclTypeDeclForModule(module_id, decl_id);
+}
+
+/// Resolves the declaration named by a declaration's type expression.
+pub fn resolveDeclTypeDeclForModule(
+    self: *LintContext,
+    module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
 ) ?DeclStore.DeclId {
     const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclTypeDecl");
@@ -628,6 +740,7 @@ pub fn resolveDeclTypeDecl(
     return self.decl_store.resolveDeclTypeDecl(
         &self.file_store,
         &self.module_store,
+        self.module_store.rootFileId(module_id),
         decl_id,
     );
 }
@@ -688,6 +801,16 @@ pub fn resolveEnumDeclOfNode(
     doc: *const LintDocument,
     expr_node: Ast.Node.Index,
 ) ?DeclStore.DeclId {
+    const module_id = self.firstModuleIdForFile(doc.file_id) orelse return null;
+    return self.resolveEnumDeclOfNodeForModule(module_id, doc, expr_node);
+}
+
+pub fn resolveEnumDeclOfNodeForModule(
+    self: *LintContext,
+    module_id: ModuleStore.ModuleId,
+    doc: *const LintDocument,
+    expr_node: Ast.Node.Index,
+) ?DeclStore.DeclId {
     const tree = doc.tree(self);
     const node = ast.unwrapNode(tree, expr_node, .{
         .unwrap_optional_unwrap = false,
@@ -695,15 +818,16 @@ pub fn resolveEnumDeclOfNode(
 
     var call_buffer: [1]Ast.Node.Index = undefined;
     if (tree.fullCall(&call_buffer, node)) |call| {
-        const callee_decl_id = self.resolveDeclOfNode(
+        const callee_decl_id = self.resolveDeclOfNodeForModule(
+            module_id,
             doc,
             call.ast.fn_expr,
         ) orelse return null;
-        return self.resolveFunctionReturnEnumDecl(callee_decl_id);
+        return self.resolveFunctionReturnEnumDecl(module_id, callee_decl_id);
     }
 
-    const decl_id = self.resolveDeclOfNode(doc, node) orelse return null;
-    return self.resolveDeclEnumType(decl_id);
+    const decl_id = self.resolveDeclOfNodeForModule(module_id, doc, node) orelse return null;
+    return self.resolveDeclEnumType(module_id, decl_id);
 }
 
 /// Returns enum declaration metadata for a declaration whose value is an enum
@@ -741,6 +865,16 @@ pub fn resolveEnumTagNameOfNode(
     doc: *const LintDocument,
     expr_node: Ast.Node.Index,
 ) ?[]const u8 {
+    const module_id = self.firstModuleIdForFile(doc.file_id) orelse return null;
+    return self.resolveEnumTagNameOfNodeForModule(module_id, doc, expr_node);
+}
+
+pub fn resolveEnumTagNameOfNodeForModule(
+    self: *LintContext,
+    module_id: ModuleStore.ModuleId,
+    doc: *const LintDocument,
+    expr_node: Ast.Node.Index,
+) ?[]const u8 {
     const tree = doc.tree(self);
     const node = ast.unwrapNode(tree, expr_node, .{
         .unwrap_optional_unwrap = false,
@@ -755,11 +889,12 @@ pub fn resolveEnumTagNameOfNode(
             break :tag_name tree.tokenSlice(last_token);
         },
         .identifier => tag_name: {
-            const decl_id = self.resolveDeclOfNode(
+            const decl_id = self.resolveDeclOfNodeForModule(
+                module_id,
                 doc,
                 node,
             ) orelse break :tag_name null;
-            break :tag_name self.tagNameFromDeclValue(decl_id);
+            break :tag_name self.tagNameFromDeclValue(module_id, decl_id);
         },
         else => null,
     };
@@ -767,6 +902,7 @@ pub fn resolveEnumTagNameOfNode(
 
 fn resolveFunctionReturnEnumDecl(
     self: *LintContext,
+    module_id: ModuleStore.ModuleId,
     fn_decl_id: DeclStore.DeclId,
 ) ?DeclStore.DeclId {
     const file_id = self.decl_store.declFileId(fn_decl_id);
@@ -782,29 +918,32 @@ fn resolveFunctionReturnEnumDecl(
     const return_decl_id = self.decl_store.resolveDeclByNode(
         &self.file_store,
         &self.module_store,
+        self.module_store.rootFileId(module_id),
         fn_decl_id,
         return_type,
     ) orelse return null;
 
-    return self.resolveEnumDeclAlias(return_decl_id);
+    return self.resolveEnumDeclAlias(module_id, return_decl_id);
 }
 
 fn resolveDeclEnumType(
     self: *LintContext,
+    module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
 ) ?DeclStore.DeclId {
     if (self.enumInfo(decl_id) != null) return decl_id;
 
-    if (self.resolveDeclTypeDecl(decl_id)) |type_decl_id| {
-        if (self.resolveEnumDeclAlias(type_decl_id)) |enum_decl_id|
+    if (self.resolveDeclTypeDeclForModule(module_id, decl_id)) |type_decl_id| {
+        if (self.resolveEnumDeclAlias(module_id, type_decl_id)) |enum_decl_id|
             return enum_decl_id;
     }
 
-    return self.resolveEnumDeclFromValue(decl_id);
+    return self.resolveEnumDeclFromValue(module_id, decl_id);
 }
 
 fn resolveEnumDeclFromValue(
     self: *LintContext,
+    module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
 ) ?DeclStore.DeclId {
     const file_id = self.decl_store.declFileId(decl_id);
@@ -814,6 +953,7 @@ fn resolveEnumDeclFromValue(
     const init_node = var_decl.ast.init_node.unwrap() orelse return null;
 
     return self.resolveEnumDeclFromValueExpr(
+        module_id,
         decl_id,
         init_node,
     );
@@ -821,6 +961,7 @@ fn resolveEnumDeclFromValue(
 
 fn resolveEnumDeclFromValueExpr(
     self: *LintContext,
+    module_id: ModuleStore.ModuleId,
     context_decl_id: DeclStore.DeclId,
     value_node: Ast.Node.Index,
 ) ?DeclStore.DeclId {
@@ -835,23 +976,26 @@ fn resolveEnumDeclFromValueExpr(
         const lhs_decl_id = self.decl_store.resolveDeclByNode(
             &self.file_store,
             &self.module_store,
+            self.module_store.rootFileId(module_id),
             context_decl_id,
             lhs,
         ) orelse return null;
-        return self.resolveEnumDeclAlias(lhs_decl_id);
+        return self.resolveEnumDeclAlias(module_id, lhs_decl_id);
     }
 
     const target_decl_id = self.decl_store.resolveDeclByNode(
         &self.file_store,
         &self.module_store,
+        self.module_store.rootFileId(module_id),
         context_decl_id,
         node,
     ) orelse return null;
-    return self.resolveDeclEnumType(target_decl_id);
+    return self.resolveDeclEnumType(module_id, target_decl_id);
 }
 
 fn resolveEnumDeclAlias(
     self: *LintContext,
+    module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
 ) ?DeclStore.DeclId {
     var current_decl_id = decl_id;
@@ -868,6 +1012,7 @@ fn resolveEnumDeclAlias(
         const target_decl_id = self.decl_store.resolveDeclByNode(
             &self.file_store,
             &self.module_store,
+            self.module_store.rootFileId(module_id),
             current_decl_id,
             init_node,
         ) orelse return null;
@@ -893,6 +1038,7 @@ fn enumDeclIsNonExhaustive(
 
 fn tagNameFromDeclValue(
     self: *LintContext,
+    module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
 ) ?[]const u8 {
     const file_id = self.decl_store.declFileId(decl_id);
@@ -901,11 +1047,12 @@ fn tagNameFromDeclValue(
     const var_decl = tree.fullVarDecl(decl_node) orelse return null;
     const init_node = var_decl.ast.init_node.unwrap() orelse return null;
 
-    return self.tagNameFromValueExpr(decl_id, init_node);
+    return self.tagNameFromValueExpr(module_id, decl_id, init_node);
 }
 
 fn tagNameFromValueExpr(
     self: *LintContext,
+    module_id: ModuleStore.ModuleId,
     context_decl_id: DeclStore.DeclId,
     value_node: Ast.Node.Index,
 ) ?[]const u8 {
@@ -927,10 +1074,11 @@ fn tagNameFromValueExpr(
             const target_decl_id = self.decl_store.resolveDeclByNode(
                 &self.file_store,
                 &self.module_store,
+                self.module_store.rootFileId(module_id),
                 context_decl_id,
                 node,
             ) orelse break :blk null;
-            break :blk self.tagNameFromDeclValue(target_decl_id);
+            break :blk self.tagNameFromDeclValue(module_id, target_decl_id);
         },
         else => null,
     };
@@ -980,6 +1128,7 @@ pub fn allocDeclDocComments(
 /// nearest declaration containing `node` and then resolves from that scope.
 fn immediateDeclForNode(
     self: *LintContext,
+    module_id: ModuleStore.ModuleId,
     doc: *const LintDocument,
     node: Ast.Node.Index,
 ) ?DeclStore.DeclId {
@@ -995,6 +1144,7 @@ fn immediateDeclForNode(
     return self.decl_store.resolveDeclByNodeFromScope(
         &self.file_store,
         &self.module_store,
+        self.module_store.rootFileId(module_id),
         doc.file_id,
         context_scope_id,
         node,
@@ -1039,11 +1189,32 @@ pub fn resolveDeclValueSummary(
     self: *LintContext,
     decl_id: DeclStore.DeclId,
 ) ?TypeStore.TypeSummary {
-    return self.resolveDeclValueSummaryDepth(decl_id, 16);
+    const module_id = self.firstModuleIdForFile(self.decl_store.declFileId(decl_id)) orelse return null;
+    return self.resolveDeclValueSummaryForModule(module_id, decl_id);
+}
+
+pub fn resolveDeclValueKindForModule(
+    self: *LintContext,
+    module_id: ModuleStore.ModuleId,
+    decl_id: DeclStore.DeclId,
+) ?TypeStore.Type {
+    return if (self.resolveDeclValueSummaryForModule(module_id, decl_id)) |summary|
+        summary.coarseType()
+    else
+        null;
+}
+
+pub fn resolveDeclValueSummaryForModule(
+    self: *LintContext,
+    module_id: ModuleStore.ModuleId,
+    decl_id: DeclStore.DeclId,
+) ?TypeStore.TypeSummary {
+    return self.resolveDeclValueSummaryDepth(module_id, decl_id, 16);
 }
 
 fn resolveDeclValueSummaryDepth(
     self: *LintContext,
+    module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
     remaining_depth: u8,
 ) ?TypeStore.TypeSummary {
@@ -1078,6 +1249,7 @@ fn resolveDeclValueSummaryDepth(
 
         if (init_node) |value_node| {
             return self.typeSummaryFromValueNode(
+                module_id,
                 decl_id,
                 value_node,
                 remaining_depth - 1,
@@ -1097,6 +1269,7 @@ fn resolveDeclValueSummaryDepth(
 
         if (value_node) |expr| {
             return self.typeSummaryFromValueNode(
+                module_id,
                 decl_id,
                 expr,
                 remaining_depth - 1,
@@ -1109,10 +1282,13 @@ fn resolveDeclValueSummaryDepth(
 
 fn resolveDeclTypeSummaryDepth(
     self: *LintContext,
+    module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
     remaining_depth: u8,
 ) ?TypeStore.TypeSummary {
     if (remaining_depth == 0) return null;
+
+    const file_id = self.decl_store.declFileId(decl_id);
 
     if (self.decl_store.declResolvedType(decl_id)) |type_id| {
         const summary = self.type_store.summary(type_id);
@@ -1124,12 +1300,12 @@ fn resolveDeclTypeSummaryDepth(
 
     if (self.declResolvedTypeTarget(decl_id)) |target| {
         if (self.typeSummaryFromTarget(
+            module_id,
             target,
             remaining_depth - 1,
         )) |summary| return summary;
     }
 
-    const file_id = self.decl_store.declFileId(decl_id);
     const tree = self.file_store.fileTree(file_id);
     const node = self.decl_store.declAstNode(decl_id) orelse return null;
 
@@ -1149,6 +1325,7 @@ fn resolveDeclTypeSummaryDepth(
 
         if (var_decl.ast.init_node.unwrap()) |init_node| {
             return self.typeSummaryFromValueNode(
+                module_id,
                 decl_id,
                 init_node,
                 remaining_depth - 1,
@@ -1163,6 +1340,7 @@ fn resolveDeclTypeSummaryDepth(
 
         if (container_field.ast.value_expr.unwrap()) |value_node| {
             return self.typeSummaryFromValueNode(
+                module_id,
                 decl_id,
                 value_node,
                 remaining_depth - 1,
@@ -1175,11 +1353,13 @@ fn resolveDeclTypeSummaryDepth(
 
 fn typeSummaryFromTarget(
     self: *LintContext,
+    module_id: ModuleStore.ModuleId,
     target: DeclStore.TypeTarget,
     remaining_depth: u8,
 ) ?TypeStore.TypeSummary {
     return switch (target) {
         .decl => |decl_id| self.resolveDeclTypeSummaryDepth(
+            module_id,
             decl_id,
             remaining_depth,
         ),
@@ -1232,6 +1412,7 @@ fn typeSummaryFromValueTypeNode(
 
 fn typeSummaryFromValueNode(
     self: *LintContext,
+    module_id: ModuleStore.ModuleId,
     context_decl_id: DeclStore.DeclId,
     value_node: Ast.Node.Index,
     remaining_depth: u8,
@@ -1245,13 +1426,20 @@ fn typeSummaryFromValueNode(
         .unwrap_optional_unwrap = false,
     });
 
+    var container_decl_buffer: [2]Ast.Node.Index = undefined;
+    if (tree.fullContainerDecl(&container_decl_buffer, node)) |container_decl| {
+        return containerDeclTypeSummary(tree, container_decl);
+    }
+
     if (ast.isBuiltinCallNamed(tree, node, "@import")) {
         const target_decl_id = self.resolveImportRootDecl(
+            module_id,
             self.decl_store.declFileId(context_decl_id),
             node,
         ) orelse return null;
 
         return self.resolveDeclValueSummaryDepth(
+            module_id,
             target_decl_id,
             remaining_depth - 1,
         );
@@ -1281,13 +1469,15 @@ fn typeSummaryFromValueNode(
 
     var call_buffer: [1]Ast.Node.Index = undefined;
     if (tree.fullCall(&call_buffer, node)) |call| {
-        const callee_decl_id = self.decl_store.resolveNodeDecl(
+        const callee_decl_id = self.decl_store.resolveNodeDeclWithRoot(
             &self.file_store,
             &self.module_store,
+            self.module_store.rootFileId(module_id),
             context_decl_id,
             call.ast.fn_expr,
         ) orelse return null;
         const callee_summary = self.resolveDeclTypeSummaryDepth(
+            module_id,
             callee_decl_id,
             remaining_depth - 1,
         ) orelse return null;
@@ -1295,9 +1485,10 @@ fn typeSummaryFromValueNode(
             if (self.decl_store.resolveTypeFactoryResultTarget(
                 &self.file_store,
                 &self.module_store,
+                self.module_store.rootFileId(module_id),
                 callee_decl_id,
             )) |target| {
-                return self.typeSummaryFromTarget(target, remaining_depth - 1);
+                return self.typeSummaryFromTarget(module_id, target, remaining_depth - 1);
             }
             return .{ .type = .unknown };
         }
@@ -1305,27 +1496,31 @@ fn typeSummaryFromValueNode(
 
     if (tree.nodeTag(node) == .address_of) {
         const target_node = tree.nodeData(node).node;
-        const target_decl_id = self.decl_store.resolveNodeDecl(
+        const target_decl_id = self.decl_store.resolveNodeDeclWithRoot(
             &self.file_store,
             &self.module_store,
+            self.module_store.rootFileId(module_id),
             context_decl_id,
             target_node,
         ) orelse return null;
 
         return self.resolveDeclValueSummaryDepth(
+            module_id,
             target_decl_id,
             remaining_depth - 1,
         );
     }
 
-    const target_decl_id = self.decl_store.resolveNodeDecl(
+    const target_decl_id = self.decl_store.resolveNodeDeclWithRoot(
         &self.file_store,
         &self.module_store,
+        self.module_store.rootFileId(module_id),
         context_decl_id,
         node,
     ) orelse return null;
 
     return self.resolveDeclValueSummaryDepth(
+        module_id,
         target_decl_id,
         remaining_depth - 1,
     );
@@ -1333,6 +1528,7 @@ fn typeSummaryFromValueNode(
 
 fn resolveImportRootDecl(
     self: *LintContext,
+    module_id: ModuleStore.ModuleId,
     parent_file_id: FileStore.FileId,
     node: Ast.Node.Index,
 ) ?DeclStore.DeclId {
@@ -1350,13 +1546,13 @@ fn resolveImportRootDecl(
         &self.module_store,
         .{
             .parent_file_id = parent_file_id,
-            .compile_root_file_id = self.compile_root_file_id,
+            .root_file_id = self.module_store.rootFileId(module_id),
         },
         import_path,
     ) catch return null;
 
     const file_id = maybe_file_id orelse return null;
-    self.resolveFileTypes(file_id);
+    self.resolveFileTypes(file_id, self.module_store.rootFileId(module_id));
     return self.decl_store.rootDecl(file_id);
 }
 
@@ -1872,7 +2068,14 @@ test "LintSession.resolveTypeKind" {
         const tree = doc.tree(&session);
         const node = tree.rootDecls()[0];
 
-        const maybe_resolved_type = session.resolveTypeOfNode(doc, node);
+        const module_id = session.module_store.resolve(.{
+            .root_file = doc.file_id,
+            .build_config = .fromIndex(0),
+            .build_config_module = @enumFromInt(0),
+            .module_id_by_import_name = .empty,
+        });
+
+        const maybe_resolved_type = session.resolveTypeOfNodeForModule(module_id, doc, node);
 
         if (maybe_resolved_type == null or !TypeStore.TypeSummary.eql(
             maybe_resolved_type.?.summary,
@@ -1906,7 +2109,7 @@ test "LintSession.resolveTypeKind" {
 }
 
 // TODO: #149 - add integration tests for root, multiple compile units, modules etc...
-test "compileContextIdsForFile includes shared dependency children" {
+test "moduleIdsForFile includes shared dependency children" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
@@ -1992,38 +2195,38 @@ test "compileContextIdsForFile includes shared dependency children" {
         .module_id_by_import_name = root2_imports,
     });
 
-    try session.compile_contexts.append(arena.allocator(), .{
+    _ = session.appendCompileContext(.{
         .step_index = @enumFromInt(0),
         .root_module = root1_module_id,
     });
-    try session.compile_contexts.append(arena.allocator(), .{
+    _ = session.appendCompileContext(.{
         .step_index = @enumFromInt(1),
         .root_module = root2_module_id,
     });
 
-    const compile_context_ids = try session.compileContextIdsForFile(
+    const module_ids = try session.moduleIdsForFile(
         dep_child_file_id,
         arena.allocator(),
     );
-    try std.testing.expectEqual(@as(usize, 2), compile_context_ids.len);
+    try std.testing.expectEqual(@as(usize, 2), module_ids.len);
 
     var found_root1 = false;
     var found_root2 = false;
-    for (compile_context_ids) |compile_context_id| {
-        const compile_root_file_id = session.compileRootFileId(compile_context_id);
-        found_root1 = found_root1 or compile_root_file_id == root1_file_id;
-        found_root2 = found_root2 or compile_root_file_id == root2_file_id;
+    for (module_ids) |module_id| {
+        const root_file_id = session.module_store.rootFileId(module_id);
+        found_root1 = found_root1 or root_file_id == root1_file_id;
+        found_root2 = found_root2 or root_file_id == root2_file_id;
 
         const resolved_root = try import_utils.resolveFile(
             &session.file_store,
             &session.module_store,
             .{
                 .parent_file_id = dep_child_file_id,
-                .compile_root_file_id = compile_root_file_id,
+                .root_file_id = root_file_id,
             },
             "root",
         );
-        try std.testing.expectEqual(compile_root_file_id, resolved_root.?);
+        try std.testing.expectEqual(root_file_id, resolved_root.?);
     }
     try std.testing.expect(found_root1);
     try std.testing.expect(found_root2);

@@ -7,9 +7,6 @@ scope_id_by_owner_node: std.AutoHashMapUnmanaged(ScopeOwnerKey, ScopeId) = .empt
 
 /// Lives for the full linter invocation.
 runtime: *const LintRuntime,
-/// Root source file for the active compile context, when known.
-compile_root_file_id: ?FileStore.FileId = null,
-
 pub fn init(runtime: *const LintRuntime) DeclStore {
     return .{
         .runtime = runtime,
@@ -154,6 +151,7 @@ pub fn resolveFileTypes(
     file_store: *FileStore,
     module_store: *const ModuleStore,
     type_store: *TypeStore,
+    root_file_id: ?FileStore.FileId,
 ) void {
     const zone = tracy.traceNamed(@src(), "DeclStore.resolveFileTypes");
     defer zone.end();
@@ -166,6 +164,7 @@ pub fn resolveFileTypes(
             file_store,
             module_store,
             decl_id,
+            root_file_id,
         )) |summary|
             type_store.store(summary)
         else
@@ -173,6 +172,7 @@ pub fn resolveFileTypes(
         const type_target = self.resolveDeclTypeTargetForValue(
             file_store,
             module_store,
+            root_file_id,
             decl_id,
         );
 
@@ -261,6 +261,7 @@ pub fn resolveDeclByNode(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     context_decl_id: DeclId,
     node: std.zig.Ast.Node.Index,
 ) ?DeclId {
@@ -280,6 +281,7 @@ pub fn resolveDeclByNode(
     return self.resolveExprDeclFromScope(
         file_store,
         module_store,
+        root_file_id,
         file_id,
         scope_id,
         node,
@@ -294,7 +296,18 @@ pub fn resolveNodeDecl(
     context_decl_id: DeclId,
     node: std.zig.Ast.Node.Index,
 ) ?DeclId {
-    return self.resolveDeclByNode(file_store, module_store, context_decl_id, node);
+    return self.resolveDeclByNode(file_store, module_store, null, context_decl_id, node);
+}
+
+pub fn resolveNodeDeclWithRoot(
+    self: *DeclStore,
+    file_store: *FileStore,
+    module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
+    context_decl_id: DeclId,
+    node: std.zig.Ast.Node.Index,
+) ?DeclId {
+    return self.resolveDeclByNode(file_store, module_store, root_file_id, context_decl_id, node);
 }
 
 /// Resolves an expression node to the declaration it names from a lexical scope.
@@ -302,6 +315,7 @@ pub fn resolveDeclByNodeFromScope(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     file_id: FileStore.FileId,
     scope_id: ScopeId,
     node: std.zig.Ast.Node.Index,
@@ -319,6 +333,7 @@ pub fn resolveDeclByNodeFromScope(
     return self.resolveExprDeclFromScope(
         file_store,
         module_store,
+        root_file_id,
         file_id,
         scope_id,
         node,
@@ -330,11 +345,12 @@ pub fn resolveNodeDeclFromScope(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     file_id: FileStore.FileId,
     scope_id: ScopeId,
     node: std.zig.Ast.Node.Index,
 ) ?DeclId {
-    return self.resolveDeclByNodeFromScope(file_store, module_store, file_id, scope_id, node);
+    return self.resolveDeclByNodeFromScope(file_store, module_store, root_file_id, file_id, scope_id, node);
 }
 
 /// Returns the stored declaration represented by this AST node, if any.
@@ -418,6 +434,7 @@ pub fn resolveDeclTypeDecl(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     decl_id: DeclId,
 ) ?DeclId {
     const zone = tracy.traceNamed(@src(), "DeclStore.resolveDeclTypeDecl");
@@ -427,6 +444,7 @@ pub fn resolveDeclTypeDecl(
     return self.resolveTypeExprDecl(
         file_store,
         module_store,
+        root_file_id,
         decl_id,
         type_node,
     );
@@ -442,6 +460,7 @@ fn resolveDeclType(
     file_store: *FileStore,
     module_store: *const ModuleStore,
     decl_id: DeclId,
+    root_file_id: ?FileStore.FileId,
 ) ?TypeStore.TypeSummary {
     const tree = file_store.fileTree(self.declFileId(decl_id));
     const node = self.declAstNode(decl_id) orelse {
@@ -455,6 +474,7 @@ fn resolveDeclType(
         return self.resolveVarDeclType(
             file_store,
             module_store,
+            root_file_id,
             decl_id,
             var_decl,
         );
@@ -464,6 +484,7 @@ fn resolveDeclType(
         return self.resolveContainerFieldType(
             file_store,
             module_store,
+            root_file_id,
             decl_id,
             field,
         );
@@ -481,6 +502,7 @@ fn resolveVarDeclType(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     decl_id: DeclId,
     var_decl: std.zig.Ast.full.VarDecl,
 ) ?TypeStore.TypeSummary {
@@ -493,18 +515,21 @@ fn resolveVarDeclType(
     if (self.resolveCallReturnType(
         file_store,
         module_store,
+        root_file_id,
         decl_id,
         init_node,
     )) |summary| return summary;
     if (self.resolveValueAliasType(
         file_store,
         module_store,
+        root_file_id,
         decl_id,
         init_node,
     )) |summary| return summary;
     if (self.resolveInstanceValueType(
         file_store,
         module_store,
+        root_file_id,
         decl_id,
         init_node,
     )) |summary| return summary;
@@ -515,6 +540,7 @@ fn resolveContainerFieldType(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     decl_id: DeclId,
     field: std.zig.Ast.full.ContainerField,
 ) ?TypeStore.TypeSummary {
@@ -527,18 +553,21 @@ fn resolveContainerFieldType(
     if (self.resolveCallReturnType(
         file_store,
         module_store,
+        root_file_id,
         decl_id,
         value_node,
     )) |summary| return summary;
     if (self.resolveValueAliasType(
         file_store,
         module_store,
+        root_file_id,
         decl_id,
         value_node,
     )) |summary| return summary;
     if (self.resolveInstanceValueType(
         file_store,
         module_store,
+        root_file_id,
         decl_id,
         value_node,
     )) |summary| return summary;
@@ -575,6 +604,7 @@ fn resolveValueAliasType(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     decl_id: DeclId,
     value_node: std.zig.Ast.Node.Index,
 ) ?TypeStore.TypeSummary {
@@ -591,6 +621,7 @@ fn resolveValueAliasType(
     const target_decl_id = self.resolveExprDecl(
         file_store,
         module_store,
+        root_file_id,
         decl_id,
         target_node,
     ) orelse return null;
@@ -600,6 +631,7 @@ fn resolveValueAliasType(
         file_store,
         module_store,
         target_decl_id,
+        root_file_id,
     ) orelse return null;
 
     return switch (summary) {
@@ -612,6 +644,7 @@ fn resolveInstanceValueType(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     decl_id: DeclId,
     value_node: std.zig.Ast.Node.Index,
 ) ?TypeStore.TypeSummary {
@@ -626,6 +659,7 @@ fn resolveInstanceValueType(
         const type_summary = self.resolveTypeExprValueSummary(
             file_store,
             module_store,
+            root_file_id,
             decl_id,
             type_expr,
         ) orelse return null;
@@ -644,6 +678,7 @@ fn resolveInstanceValueType(
         const target_summary = self.resolveTypeExprValueSummary(
             file_store,
             module_store,
+            root_file_id,
             decl_id,
             target_node,
         ) orelse return null;
@@ -660,6 +695,7 @@ fn resolveTypeExprValueSummary(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     context_decl_id: DeclId,
     type_expr: std.zig.Ast.Node.Index,
 ) ?TypeStore.TypeSummary {
@@ -673,6 +709,7 @@ fn resolveTypeExprValueSummary(
     const target = self.resolveTypeExprTarget(
         file_store,
         module_store,
+        root_file_id,
         context_decl_id,
         type_expr,
     ) orelse return null;
@@ -681,6 +718,7 @@ fn resolveTypeExprValueSummary(
         file_store,
         module_store,
         target,
+        root_file_id,
     );
 }
 
@@ -702,6 +740,7 @@ fn resolveCallReturnType(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     decl_id: DeclId,
     value_node: std.zig.Ast.Node.Index,
 ) ?TypeStore.TypeSummary {
@@ -715,6 +754,7 @@ fn resolveCallReturnType(
     const callee_decl_id = self.resolveExprDecl(
         file_store,
         module_store,
+        root_file_id,
         decl_id,
         call.ast.fn_expr,
     ) orelse return null;
@@ -725,6 +765,7 @@ fn resolveCallReturnType(
     const target = self.resolveTypeFactoryResultTarget(
         file_store,
         module_store,
+        root_file_id,
         callee_decl_id,
     ) orelse return return_type;
 
@@ -732,6 +773,7 @@ fn resolveCallReturnType(
         file_store,
         module_store,
         target,
+        root_file_id,
     ) orelse return_type;
 }
 
@@ -740,12 +782,14 @@ fn summarizeTypeTargetValue(
     file_store: *FileStore,
     module_store: *const ModuleStore,
     target: TypeTarget,
+    root_file_id: ?FileStore.FileId,
 ) ?TypeStore.TypeSummary {
     return switch (target) {
         .decl => |decl_id| self.resolveDeclType(
             file_store,
             module_store,
             decl_id,
+            root_file_id,
         ),
         .container => |container| blk: {
             const tree = file_store.fileTree(container.file_id);
@@ -762,6 +806,7 @@ fn resolveExprDecl(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     decl_id: DeclId,
     expr_node: std.zig.Ast.Node.Index,
 ) ?DeclId {
@@ -770,6 +815,7 @@ fn resolveExprDecl(
     return self.resolveExprDeclFromScope(
         file_store,
         module_store,
+        root_file_id,
         file_id,
         scope_id,
         expr_node,
@@ -781,6 +827,7 @@ fn resolveExprDeclFromScope(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     file_id: FileStore.FileId,
     scope_id: ScopeId,
     expr_node: std.zig.Ast.Node.Index,
@@ -807,6 +854,7 @@ fn resolveExprDeclFromScope(
             if (self.resolveImportMember(
                 file_store,
                 module_store,
+                root_file_id,
                 file_id,
                 target_node,
                 tree.tokenSlice(member_token),
@@ -815,6 +863,7 @@ fn resolveExprDeclFromScope(
             const target_decl_id = self.resolveExprDeclFromScope(
                 file_store,
                 module_store,
+                root_file_id,
                 file_id,
                 scope_id,
                 target_node,
@@ -824,6 +873,7 @@ fn resolveExprDeclFromScope(
             return self.resolveMemberDecl(
                 file_store,
                 module_store,
+                root_file_id,
                 target_decl_id,
                 tree.tokenSlice(member_token),
             );
@@ -853,6 +903,7 @@ pub fn resolveMemberDecl(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     parent_decl_id: DeclId,
     member_name: []const u8,
 ) ?DeclId {
@@ -862,6 +913,7 @@ pub fn resolveMemberDecl(
     if (self.resolveMemberDeclFromType(
         file_store,
         module_store,
+        root_file_id,
         parent_decl_id,
         member_name,
     )) |decl_id| {
@@ -885,6 +937,7 @@ pub fn resolveMemberDecl(
     if (self.resolveImportMember(
         file_store,
         module_store,
+        root_file_id,
         parent_file_id,
         init_node,
         member_name,
@@ -895,6 +948,7 @@ pub fn resolveMemberDecl(
     if (self.resolveExprDecl(
         file_store,
         module_store,
+        root_file_id,
         parent_decl_id,
         init_node,
     )) |target_decl_id| {
@@ -902,6 +956,7 @@ pub fn resolveMemberDecl(
             if (self.resolveMemberDecl(
                 file_store,
                 module_store,
+                root_file_id,
                 target_decl_id,
                 member_name,
             )) |decl_id| return decl_id;
@@ -914,12 +969,14 @@ pub fn resolveMemberDecl(
         const type_decl_id = self.resolveTypeExprDecl(
             file_store,
             module_store,
+            root_file_id,
             parent_decl_id,
             type_expr,
         ) orelse return null;
         return self.resolveMemberDecl(
             file_store,
             module_store,
+            root_file_id,
             type_decl_id,
             member_name,
         );
@@ -950,6 +1007,7 @@ pub fn resolveDeclTypeMember(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     decl_id: DeclId,
     member_name: []const u8,
 ) ?DeclId {
@@ -960,6 +1018,7 @@ pub fn resolveDeclTypeMember(
         if (self.resolveTypeTargetMember(
             file_store,
             module_store,
+            root_file_id,
             target,
             member_name,
         )) |member_decl_id| return member_decl_id;
@@ -968,11 +1027,13 @@ pub fn resolveDeclTypeMember(
     const target = self.resolveDeclTypeTargetForValue(
         file_store,
         module_store,
+        root_file_id,
         decl_id,
     ) orelse return null;
     return self.resolveTypeTargetMember(
         file_store,
         module_store,
+        root_file_id,
         target,
         member_name,
     );
@@ -982,6 +1043,7 @@ fn resolveTypeTargetMember(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     target: TypeTarget,
     member_name: []const u8,
 ) ?DeclId {
@@ -989,6 +1051,7 @@ fn resolveTypeTargetMember(
         .decl => |type_decl_id| self.resolveMemberDecl(
             file_store,
             module_store,
+            root_file_id,
             type_decl_id,
             member_name,
         ),
@@ -1014,6 +1077,7 @@ fn resolveDeclTypeTargetForValue(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     decl_id: DeclId,
 ) ?TypeTarget {
     const zone = tracy.traceNamed(@src(), "DeclStore.resolveDeclTypeTargetForValue");
@@ -1022,6 +1086,7 @@ fn resolveDeclTypeTargetForValue(
     return self.resolveDeclTypeTargetForValueDepth(
         file_store,
         module_store,
+        root_file_id,
         decl_id,
         16,
     );
@@ -1031,6 +1096,7 @@ fn resolveDeclTypeTargetForValueDepth(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     decl_id: DeclId,
     remaining_depth: u8,
 ) ?TypeTarget {
@@ -1040,6 +1106,7 @@ fn resolveDeclTypeTargetForValueDepth(
         if (self.resolveTypeExprTarget(
             file_store,
             module_store,
+            root_file_id,
             decl_id,
             type_node,
         )) |type_decl_id| return type_decl_id;
@@ -1048,12 +1115,14 @@ fn resolveDeclTypeTargetForValueDepth(
     if (self.resolveDeclTypeDecl(
         file_store,
         module_store,
+        root_file_id,
         decl_id,
     )) |type_decl_id| {
         if (type_decl_id == decl_id) return .{ .decl = type_decl_id };
         return self.resolveDeclTypeTargetForValueDepth(
             file_store,
             module_store,
+            root_file_id,
             type_decl_id,
             remaining_depth - 1,
         ) orelse .{ .decl = type_decl_id };
@@ -1070,6 +1139,7 @@ fn resolveDeclTypeTargetForValueDepth(
     return self.resolveValueTypeTarget(
         file_store,
         module_store,
+        root_file_id,
         decl_id,
         init_node,
     );
@@ -1079,6 +1149,7 @@ fn resolveMemberDeclFromType(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     parent_decl_id: DeclId,
     member_name: []const u8,
 ) ?DeclId {
@@ -1086,6 +1157,7 @@ fn resolveMemberDeclFromType(
     const type_decl_id = self.resolveTypeExprDecl(
         file_store,
         module_store,
+        root_file_id,
         parent_decl_id,
         type_node,
     ) orelse return null;
@@ -1094,6 +1166,7 @@ fn resolveMemberDeclFromType(
     return self.resolveMemberDecl(
         file_store,
         module_store,
+        root_file_id,
         type_decl_id,
         member_name,
     );
@@ -1103,6 +1176,7 @@ fn resolveValueTypeTarget(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     context_decl_id: DeclId,
     value_node: std.zig.Ast.Node.Index,
 ) ?TypeTarget {
@@ -1141,6 +1215,7 @@ fn resolveValueTypeTarget(
         return self.resolveTypeExprTarget(
             file_store,
             module_store,
+            root_file_id,
             context_decl_id,
             type_expr,
         );
@@ -1151,11 +1226,13 @@ fn resolveValueTypeTarget(
         return self.resolveTypeExprTarget(
             file_store,
             module_store,
+            root_file_id,
             context_decl_id,
             node,
         ) orelse self.resolveTypeExprTarget(
             file_store,
             module_store,
+            root_file_id,
             context_decl_id,
             target_node,
         );
@@ -1164,6 +1241,7 @@ fn resolveValueTypeTarget(
     return self.resolveTypeExprTarget(
         file_store,
         module_store,
+        root_file_id,
         context_decl_id,
         node,
     );
@@ -1173,6 +1251,7 @@ fn resolveTypeExprTarget(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     context_decl_id: DeclId,
     type_expr: std.zig.Ast.Node.Index,
 ) ?TypeTarget {
@@ -1200,18 +1279,21 @@ fn resolveTypeExprTarget(
         const immediate_callee_decl_id = self.resolveExprDecl(
             file_store,
             module_store,
+            root_file_id,
             context_decl_id,
             call.ast.fn_expr,
         ) orelse return null;
         const callee_decl_id = self.resolveValueAliasDecl(
             file_store,
             module_store,
+            root_file_id,
             immediate_callee_decl_id,
             16,
         );
         return self.resolveTypeFactoryResultTarget(
             file_store,
             module_store,
+            root_file_id,
             callee_decl_id,
         );
     }
@@ -1219,6 +1301,7 @@ fn resolveTypeExprTarget(
     const decl_id = self.resolveExprDecl(
         file_store,
         module_store,
+        root_file_id,
         context_decl_id,
         node,
     ) orelse return null;
@@ -1226,6 +1309,7 @@ fn resolveTypeExprTarget(
     const target_decl_id = self.resolveValueAliasDecl(
         file_store,
         module_store,
+        root_file_id,
         decl_id,
         16,
     );
@@ -1233,6 +1317,7 @@ fn resolveTypeExprTarget(
     return self.resolveDeclTypeTargetForValueDepth(
         file_store,
         module_store,
+        root_file_id,
         target_decl_id,
         16,
     ) orelse .{ .decl = target_decl_id };
@@ -1242,6 +1327,7 @@ pub fn resolveTypeFactoryResultTarget(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     fn_decl_id: DeclId,
 ) ?TypeTarget {
     const zone = tracy.traceNamed(@src(), "DeclStore.resolveTypeFactoryResultTarget");
@@ -1283,6 +1369,7 @@ pub fn resolveTypeFactoryResultTarget(
         return self.resolveTypeExprTarget(
             file_store,
             module_store,
+            root_file_id,
             fn_decl_id,
             return_expr,
         );
@@ -1295,6 +1382,7 @@ fn resolveValueAliasDecl(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     decl_id: DeclId,
     remaining_depth: u8,
 ) DeclId {
@@ -1310,6 +1398,7 @@ fn resolveValueAliasDecl(
     const target_decl_id = self.resolveExprDecl(
         file_store,
         module_store,
+        root_file_id,
         decl_id,
         init_node,
     ) orelse return decl_id;
@@ -1318,6 +1407,7 @@ fn resolveValueAliasDecl(
     return self.resolveValueAliasDecl(
         file_store,
         module_store,
+        root_file_id,
         target_decl_id,
         remaining_depth - 1,
     );
@@ -1331,6 +1421,7 @@ fn resolveTypeExprDecl(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     decl_id: DeclId,
     type_node: std.zig.Ast.Node.Index,
 ) ?DeclId {
@@ -1338,6 +1429,7 @@ fn resolveTypeExprDecl(
     return self.resolveExprDecl(
         file_store,
         module_store,
+        root_file_id,
         decl_id,
         ast.unwrapNode(tree, type_node, .{}),
     );
@@ -1347,6 +1439,7 @@ fn resolveImportMember(
     self: *DeclStore,
     file_store: *FileStore,
     module_store: *const ModuleStore,
+    root_file_id: ?FileStore.FileId,
     parent_file_id: FileStore.FileId,
     init_node: std.zig.Ast.Node.Index,
     member_name: []const u8,
@@ -1369,7 +1462,7 @@ fn resolveImportMember(
         module_store,
         .{
             .parent_file_id = parent_file_id,
-            .compile_root_file_id = self.compile_root_file_id,
+            .root_file_id = root_file_id,
         },
         import_path,
     ) catch |e| {
