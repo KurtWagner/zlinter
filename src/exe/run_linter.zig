@@ -427,7 +427,29 @@ fn sameProblem(
         lhs.severity == rhs.severity and
         lhs.start.byte_offset == rhs.start.byte_offset and
         lhs.end.byte_offset == rhs.end.byte_offset and
-        std.mem.eql(u8, lhs.message, rhs.message);
+        std.mem.eql(u8, lhs.message, rhs.message) and
+        sameProblemNotes(lhs.notes, rhs.notes);
+}
+
+fn sameProblemNotes(
+    lhs: ?[]zlinter.results.LintProblemNote,
+    rhs: ?[]zlinter.results.LintProblemNote,
+) bool {
+    if (lhs == null and rhs == null) return true;
+    const lhs_notes = lhs orelse return false;
+    const rhs_notes = rhs orelse return false;
+    if (lhs_notes.len != rhs_notes.len) return false;
+
+    for (lhs_notes, rhs_notes) |lhs_note, rhs_note| {
+        if (!std.mem.eql(u8, lhs_note.abs_path, rhs_note.abs_path)) return false;
+        if (lhs_note.start.byte_offset != rhs_note.start.byte_offset) return false;
+        if (lhs_note.end.byte_offset != rhs_note.end.byte_offset) return false;
+        if (lhs_note.line != rhs_note.line) return false;
+        if (lhs_note.column != rhs_note.column) return false;
+        if (!std.mem.eql(u8, lhs_note.message, rhs_note.message)) return false;
+    }
+
+    return true;
 }
 
 fn containsProblem(

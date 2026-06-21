@@ -60,7 +60,7 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: *st
             const end_line, const end_column = file_renderer.lineAndColumn(problem.end.byte_offset);
 
             var severity_buffer: [32]u8 = undefined;
-            writer.print("{s} {s} [{s}{s}:{d}:{d}{s}] {s}{s}{s}\n\n", .{
+            writer.print("{s} {s} [{s}{s}:{d}:{d}{s}] {s}{s}{s}\n", .{
                 problem.severity.name(&severity_buffer, .{ .tty = input.tty }),
 
                 problem.message,
@@ -77,6 +77,20 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: *st
                 problem.rule_id,
                 input.tty.ansiOrEmpty(&.{.reset}),
             }) catch |e| return logAndReturnWriteFailure("Problem title", e);
+
+            if (problem.notes) |notes| {
+                for (notes) |note| {
+                    renderNoteTitle(
+                        input,
+                        file_arena.allocator(),
+                        note,
+                        writer,
+                    ) catch |e| return e;
+                }
+            }
+
+            writer.writeByte('\n') catch |e| return logAndReturnWriteFailure("Newline", e);
+
             file_renderer.render(
                 start_line,
                 start_column,
@@ -86,6 +100,7 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: *st
                 input.tty,
             ) catch |e| return logAndReturnWriteFailure("Problem lint", e);
             writer.writeAll("\n\n") catch |e| return logAndReturnWriteFailure("Newline", e);
+
             writer.flush() catch |e| return logAndReturnWriteFailure("Flush", e);
         }
     }
@@ -126,6 +141,32 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: *st
             },
         ) catch |e| return logAndReturnWriteFailure("Summary", e);
     }
+}
+
+fn renderNoteTitle(
+    input: Formatter.FormatInput,
+    allocator: std.mem.Allocator,
+    note: zlinter.results.LintProblemNote,
+    writer: *std.Io.Writer,
+) Formatter.Error!void {
+    const cwd_rel_path = std.fs.path.relative(
+        allocator,
+        input.cwd,
+        null,
+        input.cwd,
+        note.abs_path,
+    ) catch return error.OutOfMemory;
+
+    writer.print("  {s}↳ note{s} {s} [{s}{s}:{d}:{d}{s}]\n", .{
+        input.tty.ansiOrEmpty(&.{.cyan}),
+        input.tty.ansiOrEmpty(&.{.reset}),
+        note.message,
+        input.tty.ansiOrEmpty(&.{.underline}),
+        cwd_rel_path,
+        note.line + 1,
+        note.column + 1,
+        input.tty.ansiOrEmpty(&.{.reset}),
+    }) catch |e| return logAndReturnWriteFailure("Note title", e);
 }
 
 fn logAndReturnWriteFailure(comptime suffix: []const u8, err: anyerror) error{WriteFailure} {

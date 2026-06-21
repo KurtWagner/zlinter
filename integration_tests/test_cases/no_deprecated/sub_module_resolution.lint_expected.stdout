@@ -1,9 +1,11 @@
 warning Deprecated: Use stringLength instead. [test_cases/no_deprecated/sub_module_resolution.input.zig:6:12] no_deprecated
+  ↳ note deprecated declaration is here [sub_module_b_src/root.zig:2:8]
 
  6 |     return sub_module.strLen(name);
    |            ^^^^^^^^^^^^^^^^^
 
 warning Deprecated: Use stringLength instead. [test_cases/no_deprecated/sub_module_resolution.input.zig:14:12] no_deprecated
+  ↳ note deprecated declaration is here [sub_module_b_src/root.zig:2:8]
 
  14 |     return direct_module_b.strLen(name);
     |            ^^^^^^^^^^^^^^^^^^^^^^

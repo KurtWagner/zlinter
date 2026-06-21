@@ -716,6 +716,14 @@ pub const DeclValueSummaryCandidate = struct {
     summary: TypeStore.TypeSummary,
 };
 
+pub const DeclLocation = struct {
+    abs_path: []const u8,
+    start: results.LintProblemLocation,
+    end: results.LintProblemLocation,
+    line: usize,
+    column: usize,
+};
+
 /// Resolves the type summary for an expression node in a single module.
 fn resolveTypeOfNodeForModule(
     self: *LintContext,
@@ -1371,6 +1379,42 @@ pub fn allocDeclDocComments(
     }
 
     return oom(comments_text.toOwnedSlice(allocator));
+}
+
+/// Returns the source span to show when explaining where a declaration lives.
+///
+/// Prefer the declaration name when available because secondary diagnostics are
+/// easier to scan when they point at the identifier instead of the full decl.
+pub fn declLocation(
+    self: *const LintContext,
+    decl_id: DeclStore.DeclId,
+) ?DeclLocation {
+    const file_id = self.decl_store.declFileId(decl_id);
+    const tree = self.file_store.fileTree(file_id);
+
+    const first_token, const start, const end = if (self.decl_store.declNameToken(decl_id)) |name_token|
+        .{
+            name_token,
+            results.LintProblemLocation.startOfToken(tree, name_token),
+            results.LintProblemLocation.endOfToken(tree, name_token),
+        }
+    else if (self.decl_store.declAstNode(decl_id)) |node|
+        .{
+            tree.firstToken(node),
+            results.LintProblemLocation.startOfNode(tree, node),
+            results.LintProblemLocation.endOfNode(tree, node),
+        }
+    else
+        return null;
+    const token_location = tree.tokenLocation(0, first_token);
+
+    return .{
+        .abs_path = self.file_store.fileAbsPath(file_id),
+        .start = start,
+        .end = end,
+        .line = token_location.line,
+        .column = token_location.column,
+    };
 }
 
 /// Resolves `node` to the declaration it directly names.
@@ -2508,6 +2552,7 @@ const builtin = @import("builtin");
 const comments = @import("../comments.zig");
 const files = @import("../files.zig");
 const import_utils = @import("imports.zig");
+const results = @import("../results.zig");
 const std = @import("std");
 const testing = @import("../testing.zig");
 const tracy = @import("tracy");

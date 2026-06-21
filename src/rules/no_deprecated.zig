@@ -214,14 +214,35 @@ fn appendDeprecatedProblem(
 ) !void {
     const doc_comment = try session.allocDeclDocComments(arena, decl_id) orelse return;
     const deprecated_message = getDeprecationFromDoc(doc_comment) orelse return;
+    const notes = try allocDeprecatedDeclNotes(gpa, session, decl_id);
 
     try lint_problems.append(gpa, .{
         .start = .startOfNode(tree, node_index),
         .end = .endOfNode(tree, node_index),
         .message = try std.fmt.allocPrint(gpa, message_fmt, .{deprecated_message}),
+        .notes = notes,
         .rule_id = rule.rule_id,
         .severity = config.severity,
     });
+}
+
+fn allocDeprecatedDeclNotes(
+    allocator: std.mem.Allocator,
+    session: *zlinter.session.LintSession,
+    decl_id: zlinter.session.DeclStore.DeclId,
+) !?[]zlinter.results.LintProblemNote {
+    const decl_location = session.declLocation(decl_id) orelse return null;
+
+    const notes = try allocator.alloc(zlinter.results.LintProblemNote, 1);
+    notes[0] = .{
+        .abs_path = try allocator.dupe(u8, decl_location.abs_path),
+        .start = decl_location.start,
+        .end = decl_location.end,
+        .line = decl_location.line,
+        .column = decl_location.column,
+        .message = try allocator.dupe(u8, "deprecated declaration is here"),
+    };
+    return notes;
 }
 
 fn resolveEnumLiteralDeclCandidates(
