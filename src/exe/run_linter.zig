@@ -216,6 +216,8 @@ fn run(
         );
 }
 
+/// Resolves lint files, prepares one session, and runs each enabled rule once
+/// per file.
 fn runLinterRules(
     runtime: *const LintRuntime,
     lint_files: []zlinter.files.LintFile,
@@ -255,7 +257,7 @@ fn runLinterRules(
         .type_store = .init(runtime),
         .decl_store = .init(runtime),
     };
-    try session.init(args.compile_names);
+    try session.init();
 
     var enabled_rules = enabledRules(args.rules);
 
@@ -377,10 +379,7 @@ fn runLinterRules(
         }
         printer.println(.verbose, "  - Process syntax errors: {d}ms", .{timer.lapMilliseconds()});
 
-        const compile_context_ids = try session.compileContextIdsForFile(
-            file_id,
-            runtime.fileArena(),
-        );
+        session.resolveFileTypes(file_id);
 
         printer.println(.verbose, "  - Rules", .{});
 
@@ -389,68 +388,18 @@ fn runLinterRules(
             defer runtime.resetRuleArena();
 
             const rule = rules[rule_index];
-            switch (rule.execution) {
-                .syntax_only => {
-                    session.setCompileRootFileId(null);
-                    if (try rule.run(
-                        rule,
-                        &session,
-                        &doc,
-                        .{ .config = rule_configs[rule_index] },
-                    )) |result| {
-                        try appendDedupedResult(
-                            runtime.sessionArena(),
-                            &results,
-                            &doc,
-                            result,
-                        );
-                    }
-                },
-                .compile_context => {
-                    if (compile_context_ids.len == 0) {
-                        session.setCompileRootFileId(null);
-                        session.resolveFileTypes(file_id);
-                        if (try rule.run(
-                            rule,
-                            &session,
-                            &doc,
-                            .{ .config = rule_configs[rule_index] },
-                        )) |result| {
-                            try appendDedupedResult(
-                                runtime.sessionArena(),
-                                &results,
-                                &doc,
-                                result,
-                            );
-                        }
-                    } else {
-                        for (compile_context_ids) |compile_context_id| {
-                            if (!session.focused_compiled_contexts.contains(compile_context_id))
-                                continue;
-
-                            const compile_root_file_id = session.compileRootFileId(compile_context_id);
-                            session.setCompileRootFileId(compile_root_file_id);
-                            session.resolveFileTypes(file_id);
-                            if (try rule.run(
-                                rule,
-                                &session,
-                                &doc,
-                                .{
-                                    .config = rule_configs[rule_index],
-                                    .compile_context_id = compile_context_id,
-                                    .compile_root_file_id = compile_root_file_id,
-                                },
-                            )) |result| {
-                                try appendDedupedResult(
-                                    runtime.sessionArena(),
-                                    &results,
-                                    &doc,
-                                    result,
-                                );
-                            }
-                        }
-                    }
-                },
+            if (try rule.run(
+                rule,
+                &session,
+                &doc,
+                .{ .config = rule_configs[rule_index] },
+            )) |result| {
+                try appendDedupedResult(
+                    runtime.sessionArena(),
+                    &results,
+                    &doc,
+                    result,
+                );
             }
 
             const ns = timer.lapNanoseconds();
@@ -478,7 +427,29 @@ fn sameProblem(
         lhs.severity == rhs.severity and
         lhs.start.byte_offset == rhs.start.byte_offset and
         lhs.end.byte_offset == rhs.end.byte_offset and
-        std.mem.eql(u8, lhs.message, rhs.message);
+        std.mem.eql(u8, lhs.message, rhs.message) and
+        sameProblemNotes(lhs.notes, rhs.notes);
+}
+
+fn sameProblemNotes(
+    lhs: ?[]zlinter.results.LintProblemNote,
+    rhs: ?[]zlinter.results.LintProblemNote,
+) bool {
+    if (lhs == null and rhs == null) return true;
+    const lhs_notes = lhs orelse return false;
+    const rhs_notes = rhs orelse return false;
+    if (lhs_notes.len != rhs_notes.len) return false;
+
+    for (lhs_notes, rhs_notes) |lhs_note, rhs_note| {
+        if (!std.mem.eql(u8, lhs_note.abs_path, rhs_note.abs_path)) return false;
+        if (lhs_note.start.byte_offset != rhs_note.start.byte_offset) return false;
+        if (lhs_note.end.byte_offset != rhs_note.end.byte_offset) return false;
+        if (lhs_note.line != rhs_note.line) return false;
+        if (lhs_note.column != rhs_note.column) return false;
+        if (!std.mem.eql(u8, lhs_note.message, rhs_note.message)) return false;
+    }
+
+    return true;
 }
 
 fn containsProblem(

@@ -260,11 +260,16 @@ pub const LintProblem = struct {
     end: LintProblemLocation,
 
     message: []const u8,
+    notes: ?[]LintProblemNote = null,
     disabled_by_comment: bool = false,
     fix: ?LintProblemFix = null,
 
     pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
         allocator.free(self.message);
+        if (self.notes) |notes| {
+            for (notes) |*note| note.deinit(allocator);
+            allocator.free(notes);
+        }
         if (self.fix) |*fix| fix.deinit(allocator);
 
         self.* = undefined;
@@ -286,6 +291,13 @@ pub const LintProblem = struct {
         self.end.debugPrintWithIndent(writer, 4);
 
         writer.print("  .message = \"{s}\",\n", .{self.message});
+        if (self.notes) |notes| {
+            writer.print("  .notes = &.{{\n", .{});
+            for (notes) |note| note.debugPrintWithIndent(writer, 4);
+            writer.print("  }},\n", .{});
+        } else {
+            writer.print("  .notes = null,\n", .{});
+        }
         writer.print("  .disabled_by_comment = {},\n", .{self.disabled_by_comment});
 
         if (self.fix) |fix| {
@@ -296,6 +308,39 @@ pub const LintProblem = struct {
         }
 
         writer.print("}},\n", .{});
+    }
+};
+
+pub const LintProblemNote = struct {
+    abs_path: []const u8,
+    start: LintProblemLocation,
+    end: LintProblemLocation,
+    /// Zero-indexed display line for `start`.
+    line: usize,
+    /// Zero-indexed display column for `start`.
+    column: usize,
+    message: []const u8,
+
+    pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+        allocator.free(self.abs_path);
+        allocator.free(self.message);
+        self.* = undefined;
+    }
+
+    pub fn debugPrintWithIndent(self: @This(), writer: anytype, indent: usize) void {
+        var spaces: [80]u8 = @splat(' ');
+        const indent_str = spaces[0..indent];
+
+        writer.print("{s}.{{\n", .{indent_str});
+        writer.print("{s}  .abs_path = \"{s}\",\n", .{ indent_str, self.abs_path });
+        writer.print("{s}  .start =\n", .{indent_str});
+        self.start.debugPrintWithIndent(writer, indent + 4);
+        writer.print("{s}  .end =\n", .{indent_str});
+        self.end.debugPrintWithIndent(writer, indent + 4);
+        writer.print("{s}  .line = {d},\n", .{ indent_str, self.line });
+        writer.print("{s}  .column = {d},\n", .{ indent_str, self.column });
+        writer.print("{s}  .message = \"{s}\",\n", .{ indent_str, self.message });
+        writer.print("{s}}},\n", .{indent_str});
     }
 };
 

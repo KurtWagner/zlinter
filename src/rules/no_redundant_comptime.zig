@@ -28,7 +28,6 @@ pub const Config = struct {
 pub fn buildRule(_: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.no_redundant_comptime),
-        .execution = .syntax_only,
         .run = &run,
     };
 }

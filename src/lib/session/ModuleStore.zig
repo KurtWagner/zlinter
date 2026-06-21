@@ -7,6 +7,7 @@ module_id_by_key: std.HashMapUnmanaged(
     ModuleKeyContext,
     std.hash_map.default_max_load_percentage,
 ) = .empty,
+module_id_by_root_file: std.AutoHashMapUnmanaged(FileId, ModuleId) = .empty,
 
 runtime: *const LintRuntime,
 
@@ -102,6 +103,10 @@ pub fn resolve(self: *ModuleStore, seed: ModuleSeed) ModuleId {
     }));
 
     oom(self.module_id_by_key.put(session_arena, key, id));
+    const root_file_entry = oom(self.module_id_by_root_file.getOrPut(session_arena, seed.root_file));
+    if (!root_file_entry.found_existing) {
+        root_file_entry.value_ptr.* = id;
+    }
 
     return id;
 }
@@ -115,10 +120,7 @@ pub fn rootFile(self: *const ModuleStore, module_id: ModuleId) FileId {
 }
 
 pub fn moduleIdByRootFile(self: *const ModuleStore, file_id: FileId) ?ModuleId {
-    for (self.modules.items(.root_file), 0..) |root_file, index| {
-        if (root_file == file_id) return .fromIndex(index);
-    }
-    return null;
+    return self.module_id_by_root_file.get(file_id);
 }
 
 pub fn moduleForRootFile(self: *const ModuleStore, file_id: FileId) ?ModuleId {

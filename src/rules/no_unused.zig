@@ -16,7 +16,6 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.no_unused),
-        .execution = .compile_context,
         .run = &run,
     };
 }
@@ -54,7 +53,7 @@ fn run(
                     tree.tokenSlice(tree.nodeMainToken(node)),
                     {},
                 ),
-                .field_access => if (referencedDeclName(session, doc, node)) |name|
+                .field_access => if (referencedDeclName(session, doc, rule_arena, node)) |name|
                     try map.put(rule_arena, name, {}),
                 else => {},
             }
@@ -153,17 +152,22 @@ fn namedFnDeclProto(
 fn referencedDeclName(
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
+    allocator: std.mem.Allocator,
     node: Ast.Node.Index,
 ) ?[]const u8 {
     const tree = doc.tree(session);
     std.debug.assert(tree.nodeTag(node) == .field_access);
 
-    if (session.resolveDeclOfNode(doc, node)) |decl_id| {
-        if (session.decl_store.declFileId(decl_id) != doc.file_id)
-            return null;
+    {
+        var decl_candidates = session.resolveDeclCandidatesOfNode(allocator, doc, node) catch return null;
+        defer decl_candidates.deinit(allocator);
+        for (decl_candidates.items) |candidate| {
+            if (session.decl_store.declFileId(candidate.decl_id) != doc.file_id)
+                continue;
 
-        const name_token = session.decl_store.declNameToken(decl_id) orelse return null;
-        return tree.tokenSlice(name_token);
+            const name_token = session.decl_store.declNameToken(candidate.decl_id) orelse continue;
+            return tree.tokenSlice(name_token);
+        }
     }
 
     const lhs, const member_token = tree.nodeData(node).node_and_token;
@@ -171,19 +175,30 @@ fn referencedDeclName(
 
     if (isCallCallee(tree, doc, node)) {
         const root_decl_id = session.decl_store.rootDecl(doc.file_id) orelse return null;
-        if (session.resolveDeclMember(root_decl_id, member_name)) |decl_id| {
+        var member_candidates = session.resolveDeclMemberCandidates(
+            allocator,
+            root_decl_id,
+            member_name,
+        ) catch return null;
+        defer member_candidates.deinit(allocator);
+        for (member_candidates.items) |candidate| {
+            const decl_id = candidate.decl_id;
             if (session.decl_store.declFileId(decl_id) != doc.file_id)
-                return null;
+                continue;
 
             const name_token = session.decl_store.declNameToken(decl_id) orelse return null;
             return tree.tokenSlice(name_token);
         }
     }
 
-    if (session.resolveTypeOfNode(doc, lhs)) |resolved| {
+    {
+        var type_candidates = session.resolveTypeCandidatesOfNode(allocator, doc, lhs) catch return null;
+        defer type_candidates.deinit(allocator);
         if (session.decl_store.rootDecl(doc.file_id)) |root_decl_id| {
-            if (resolved.decl_id == root_decl_id)
-                return member_name;
+            for (type_candidates.items) |candidate| {
+                if (candidate.type.decl_id == root_decl_id)
+                    return member_name;
+            }
         }
     }
     return null;

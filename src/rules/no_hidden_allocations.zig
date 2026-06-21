@@ -43,7 +43,6 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.no_hidden_allocations),
-        .execution = .compile_context,
         .run = &run,
     };
 }
@@ -145,48 +144,14 @@ fn resolveAllocatorDecl(
     doc: *const zlinter.session.LintDocument,
     lhs: Ast.Node.Index,
 ) ?zlinter.session.DeclStore.DeclId {
-    const decl_id = session.resolveDeclOfNode(doc, lhs) orelse return null;
-    return resolveDeclAlias(session, decl_id);
-}
+    const arena = session.runtime.ruleArena();
+    var decl_candidates = session.resolveDeclCandidatesOfNode(arena, doc, lhs) catch return null;
+    defer decl_candidates.deinit(arena);
 
-/// Allocators are often reached through local aliases.
-///
-/// For example,
-///
-/// ```
-/// const heap = std.heap;
-/// const allocator = heap.page_allocator;
-/// allocator.alloc(...);
-/// ```
-///
-/// This function walks `allocator` -> `heap.page_allocator` -> `std.heap.page_allocator`
-/// so detection is based on the original allocator declaration, not the
-/// alias declarations or their common `std.mem.Allocator` type.
-fn resolveDeclAlias(
-    session: *zlinter.session.LintSession,
-    decl_id: zlinter.session.DeclStore.DeclId,
-) zlinter.session.DeclStore.DeclId {
-    var current_decl_id = decl_id;
-    var remaining_alias_depth: u8 = 16; // Cap to avoid getting caught in a loop.
-
-    while (remaining_alias_depth > 0) : (remaining_alias_depth -= 1) {
-        const file_id = session.decl_store.declFileId(current_decl_id);
-        const tree = session.file_store.fileTree(file_id);
-        const decl_node = session.decl_store.declAstNode(current_decl_id) orelse return current_decl_id;
-        const var_decl = tree.fullVarDecl(decl_node) orelse return current_decl_id;
-        const init_node = var_decl.ast.init_node.unwrap() orelse return current_decl_id;
-        const target_decl_id = session.decl_store.resolveNodeDecl(
-            &session.file_store,
-            &session.module_store,
-            current_decl_id,
-            init_node,
-        ) orelse return current_decl_id;
-
-        if (target_decl_id == current_decl_id) return current_decl_id;
-        current_decl_id = target_decl_id;
+    for (decl_candidates.items) |candidate| {
+        return session.resolveDeclAliasCandidate(candidate).decl_id;
     }
-
-    return current_decl_id;
+    return null;
 }
 
 fn pathEndsWith(path: []const u8, suffix: []const u8) bool {

@@ -1,7 +1,6 @@
 /// A linter rule with a unique id and a run method.
 pub const LintRule = struct {
     rule_id: []const u8,
-    execution: ExecutionMode,
     run: *const fn (
         self: LintRule,
         session: *LintSession,
@@ -10,27 +9,9 @@ pub const LintRule = struct {
     ) RunError!?results.LintResult,
 };
 
-pub const ExecutionMode = enum {
-    /// Rule results depend only on the parsed file.
-    syntax_only,
-
-    /// Rule results may depend on imports, types, declarations, or
-    /// `@import("root")`, so the rule must run with an active compile session
-    /// when one is known.
-    compile_context,
-};
-
 pub const RunOptions = struct {
     /// Configuration for the rule. See `getConfig`.
     config: ?*anyopaque = null,
-
-    /// Compile session currently used for semantic resolution. Null means the
-    /// rule is running without build session, such as tests, standalone files,
-    /// or a file not reachable from any known compile step.
-    compile_context_id: ?CompileContext.Id = null,
-
-    /// Root source file for `compile_context_id`, when known.
-    compile_root_file_id: ?FileStore.FileId = null,
 
     pub inline fn getConfig(self: @This(), T: type) T {
         return if (self.config) |config| @as(*T, @ptrCast(@alignCast(config))).* else T{};
@@ -39,7 +20,7 @@ pub const RunOptions = struct {
 
 pub const RunError = std.mem.Allocator.Error || std.Io.Cancelable;
 
-/// Rules the modify the execution of rules.
+/// Extra per-rule options used during rule construction.
 pub const RuleOptions = struct {}; // zlinter-disable-current-line
 
 pub const LintTextOrder = enum {
@@ -241,8 +222,6 @@ pub const LintProblemSeverity = enum(u8) {
 
 const ansi = @import("ansi.zig");
 const results = @import("results.zig");
-const CompileContext = @import("session/CompileContext.zig");
-const FileStore = @import("session/FileStore.zig");
 const LintDocument = @import("session/LintDocument.zig");
 const LintSession = @import("session/LintSession.zig");
 const std = @import("std");
