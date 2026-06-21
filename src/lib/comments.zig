@@ -471,6 +471,7 @@ test "tokenize ordinary comments" {
 test "tokenize ignores comment markers in strings" {
     try testTokenize(&.{
         "const a = \"// TODO: not a comment\";",
+        "const TODO_value = 1;",
         "const b =",
         "    \\\\// TODO: still not a comment",
         "    \\\\and still string content",
