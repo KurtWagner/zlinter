@@ -84,6 +84,11 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
         consume_comment,
         consume_newline,
         consume_forward_slash,
+        string_literal,
+        string_literal_backslash,
+        char_literal,
+        char_literal_backslash,
+        multiline_string_literal_line,
     };
 
     var t = Tokenizer{};
@@ -92,6 +97,13 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
             0 => {},
             '\n' => continue :state .consume_newline,
             '/' => continue :state .consume_forward_slash,
+            '"' => continue :state .string_literal,
+            '\'' => continue :state .char_literal,
+            '\\' => {
+                if (source[t.i + 1] == '\\') continue :state .multiline_string_literal_line;
+                t.i += 1;
+                continue :state .parsing;
+            },
             else => {
                 t.i += 1;
                 continue :state .parsing;
@@ -169,6 +181,91 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
                 },
                 else => t.i += 1,
             };
+        },
+        .string_literal => {
+            t.i += 1;
+            switch (source[t.i]) {
+                0 => continue :state .parsing,
+                '"' => {
+                    t.i += 1;
+                    continue :state .parsing;
+                },
+                '\\' => continue :state .string_literal_backslash,
+                '\n' => continue :state .consume_newline,
+                '\r' => {
+                    if (source[t.i + 1] == '\n') {
+                        continue :state .consume_newline;
+                    }
+                    t.i += 1;
+                    continue :state .parsing;
+                },
+                else => continue :state .string_literal,
+            }
+        },
+        .string_literal_backslash => {
+            t.i += 1;
+            switch (source[t.i]) {
+                0 => continue :state .parsing,
+                '\n' => continue :state .consume_newline,
+                '\r' => {
+                    if (source[t.i + 1] == '\n') {
+                        continue :state .consume_newline;
+                    }
+                    t.i += 1;
+                    continue :state .parsing;
+                },
+                else => continue :state .string_literal,
+            }
+        },
+        .char_literal => {
+            t.i += 1;
+            switch (source[t.i]) {
+                0 => continue :state .parsing,
+                '\'' => {
+                    t.i += 1;
+                    continue :state .parsing;
+                },
+                '\\' => continue :state .char_literal_backslash,
+                '\n' => continue :state .consume_newline,
+                '\r' => {
+                    if (source[t.i + 1] == '\n') {
+                        continue :state .consume_newline;
+                    }
+                    t.i += 1;
+                    continue :state .parsing;
+                },
+                else => continue :state .char_literal,
+            }
+        },
+        .char_literal_backslash => {
+            t.i += 1;
+            switch (source[t.i]) {
+                0 => continue :state .parsing,
+                '\n' => continue :state .consume_newline,
+                '\r' => {
+                    if (source[t.i + 1] == '\n') {
+                        continue :state .consume_newline;
+                    }
+                    t.i += 1;
+                    continue :state .parsing;
+                },
+                else => continue :state .char_literal,
+            }
+        },
+        .multiline_string_literal_line => {
+            t.i += 1;
+            switch (source[t.i]) {
+                0 => continue :state .parsing,
+                '\n' => continue :state .consume_newline,
+                '\r' => {
+                    if (source[t.i + 1] == '\n') {
+                        continue :state .consume_newline;
+                    }
+                    t.i += 1;
+                    continue :state .parsing;
+                },
+                else => continue :state .multiline_string_literal_line,
+            }
         },
     }
     return .{ try tokens.toOwnedSlice(gpa), try line_starts.toOwnedSlice(gpa) };
@@ -368,6 +465,36 @@ test "tokenize ordinary comments" {
         .{ 1, .word, "has" },
         .{ 1, .word, "multiple" },
         .{ 1, .word, "lines" },
+    });
+}
+
+test "tokenize ignores comment markers in strings" {
+    try testTokenize(&.{
+        "const a = \"// TODO: not a comment\";",
+        "const b =",
+        "    \\\\// TODO: still not a comment",
+        "    \\\\and still string content",
+        "    ;",
+    }, &.{});
+}
+
+test "tokenize comments after strings" {
+    try testTokenize(&.{
+        "const a = \"hello\"; // TODO: real comment",
+        "const b = 'x'; // todo: also a real comment",
+    }, &.{
+        .{ 0, .source_comment, "//" },
+        .{ 0, .todo, "TODO" },
+        .{ 0, .colon, ":" },
+        .{ 0, .word, "real" },
+        .{ 0, .word, "comment" },
+        .{ 1, .source_comment, "//" },
+        .{ 1, .todo, "todo" },
+        .{ 1, .colon, ":" },
+        .{ 1, .word, "also" },
+        .{ 1, .word, "a" },
+        .{ 1, .word, "real" },
+        .{ 1, .word, "comment" },
     });
 }
 

@@ -269,6 +269,36 @@ test "TODO comment reports when both exclusions are disabled" {
     );
 }
 
+test "TODO comment after string is still reported" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const a = "hello"; // TODO: still report me
+        \\const b = 'x'; // todo: still report me too
+        \\
+    ,
+        .{},
+        Config{
+            .exclude_if_contains_issue_number = true,
+            .exclude_if_contains_url = true,
+            .severity = .warning,
+        },
+        &.{
+            .{
+                .rule_id = "no_todo",
+                .severity = .warning,
+                .slice = "// TODO: still report me\n",
+                .message = "Avoid todo comments that don't link to a tracked issue",
+            },
+            .{
+                .rule_id = "no_todo",
+                .severity = .warning,
+                .slice = "// todo: still report me too\n",
+                .message = "Avoid todo comments that don't link to a tracked issue",
+            },
+        },
+    );
+}
+
 test "TODO comment without URL" {
     try zlinter.testing.testRunRule(
         buildRule(.{}),
