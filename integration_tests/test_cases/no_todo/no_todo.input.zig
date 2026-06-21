@@ -11,6 +11,9 @@
 // TODO(#10): content of todo
 // TODO fix in #10
 // TODO: fix in https://issue-tracker.com/user/repo/10
+// TODO: Fix #123.
+// TODO: see (#123)
+// TODO(#123): fix
 
 // These ones will be caught:
 // -------------------------------
@@ -20,3 +23,4 @@
 // TODO content of todo
 // TODO(): content
 // TODO(10) this will be caught
+// TODO: not #abc

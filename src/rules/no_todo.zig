@@ -6,19 +6,23 @@
 //!
 //! If you must leave a todo comment it's best to include a link to an issue
 //! in your issue tracker so it's visible, prioritized and won't be forgotten.
+//!
+//! By default, `no_todo` allows TODO comments when they include either a
+//! `#123`-style issue reference or an `http(s)` URL. Both checks are
+//! configurable.
 
 /// Config for no_todo rule.
 pub const Config = struct {
     /// The severity (off, warning, error).
     severity: zlinter.rules.LintProblemSeverity = .warning,
 
-    /// Exclude todo comments that contain a `#[0-9]+` in a word token or nested in
-    /// the todo suffix. For example, `// TODO(#10): <info>` or `// TODO: Fix #10`
+    /// Exclude todo comments that contain a `#[0-9]+` anywhere in the todo content.
+    /// For example, `// TODO(#10): <info>` or `// TODO: Fix #10`.
     exclude_if_contains_issue_number: bool = true,
 
-    /// Exclude todo comments that contain a url in a word token or nested in
+    /// Exclude todo comments that contain a URL in a word token or nested in
     /// the todo suffix. For example, `// TODO(http://my-issue-tracker.com/10): <info>`
-    /// or `// TODO: Fix http://my-issue-tracker.com/10`
+    /// or `// TODO: Fix http://my-issue-tracker.com/10`.
     exclude_if_contains_url: bool = true,
 };
 
@@ -49,29 +53,25 @@ fn run(
     const tree = doc.tree(session);
     const source = tree.source;
 
-    nodes: for (doc.comments.comments) |comment| {
-        if (comment.kind != .todo) continue :nodes;
+    comments: for (doc.comments.comments) |comment| {
+        if (comment.kind != .todo) continue :comments;
 
         const todo = comment.kind.todo;
 
-        if (config.exclude_if_contains_issue_number or
-            config.exclude_if_contains_url)
-        {
-            if (todo.inner_content) |inner_content| {
-                if (isExcluded(
-                    doc.comments.getRangeContent(inner_content, source),
-                    config,
-                ))
-                    continue :nodes;
-            }
+        if (todo.inner_content) |inner_content| {
+            if (containsAllowedTrackingReference(
+                doc.comments.getRangeContent(inner_content, source),
+                config,
+            ))
+                continue :comments;
+        }
 
-            if (todo.content) |content| {
-                if (isExcluded(
-                    doc.comments.getRangeContent(content, source),
-                    config,
-                ))
-                    continue :nodes;
-            }
+        if (todo.content) |content| {
+            if (containsAllowedTrackingReference(
+                doc.comments.getRangeContent(content, source),
+                config,
+            ))
+                continue :comments;
         }
 
         try lint_problems.append(session_arena, .{
@@ -96,44 +96,46 @@ fn run(
         null;
 }
 
-// It would be nice to walk to the comment tokens but we use ":" as a special
-// character, which makes urls (e.g, http://) more difficult so to keep it
-// super simple we'll iterate again using whitespace delimiter. This will
-// probably be ok as we're just doing this for TODO comments not all comments.
-fn isExcluded(content: []const u8, config: Config) bool {
+// It would be nice to walk the comment tokens directly, but `:` is a special
+// character in TODO syntax and URLs (e.g. `http://`) are easier to keep as
+// whitespace-delimited word tokens. This heuristic is intentionally narrow and
+// only needs to be good enough for TODO comments.
+fn containsAllowedTrackingReference(content: []const u8, config: Config) bool {
     var it = std.mem.splitAny(
         u8,
         content,
         &std.ascii.whitespace,
     );
     while (it.next()) |word| {
-        if (config.exclude_if_contains_issue_number and looksLikeIssueId(word)) {
-            return true;
-        }
-        if (config.exclude_if_contains_url and looksLikeUrl(word)) {
-            return true;
-        }
+        if (config.exclude_if_contains_issue_number and looksLikeIssueId(word)) return true;
+        if (config.exclude_if_contains_url and looksLikeUrl(word)) return true;
     }
     return false;
 }
 
 fn looksLikeIssueId(content: []const u8) bool {
-    if (content.len < 2) return false;
-    if (content[0] != '#') return false;
+    var i: usize = 0;
+    while (i + 1 < content.len) : (i += 1) {
+        if (content[i] != '#') continue;
+        if (!std.ascii.isDigit(content[i + 1])) continue;
 
-    _ = std.fmt.parseInt(usize, content[1..], 10) catch return false;
-    return true;
+        var j = i + 2;
+        while (j < content.len and std.ascii.isDigit(content[j])) : (j += 1) {}
+        return true;
+    }
+
+    return false;
 }
 
 test looksLikeIssueId {
-    inline for (&.{ "#0", "#1234", std.fmt.comptimePrint("#{d}", .{std.math.maxInt(usize)}) }) |valid| {
+    inline for (&.{ "#0", "#1234", "foo #1234 bar", "(#42)", "TODO(#123): fix", std.fmt.comptimePrint("#{d}", .{std.math.maxInt(usize)}) }) |valid| {
         std.testing.expect(looksLikeIssueId(valid)) catch |e| {
             std.debug.print("Expected '{s}' to look like an issue id\n", .{valid});
             return e;
         };
     }
 
-    inline for (&.{ "", "#", "#-1", "0", "1234", std.fmt.comptimePrint("{d}", .{std.math.maxInt(usize)}) }) |valid| {
+    inline for (&.{ "", "#", "#-1", "0", "1234", "not #abc", "TODO(#abc)", std.fmt.comptimePrint("{d}", .{std.math.maxInt(usize)}) }) |valid| {
         std.testing.expect(!looksLikeIssueId(valid)) catch |e| {
             std.debug.print("Expected '{s}' to NOT look like an issue id\n", .{valid});
             return e;
@@ -143,10 +145,16 @@ test looksLikeIssueId {
 
 // Just needs to be good enough... not perfect.
 fn looksLikeUrl(content: []const u8) bool {
+    // Keep URL matching deliberately lightweight. The current policy is the
+    // minimal host-shaped heuristic already covered by the tests: we accept
+    // short forms such as `http://a.c` and reject bare or incomplete schemes
+    // such as `http://`, `https://a`, and `http://a.`.
     inline for (&.{ "http://", "https://" }) |prefix| {
-        if (content.len >= prefix.len + 3 and
-            std.ascii.startsWithIgnoreCase(content, prefix))
-            return true;
+        var search_start: usize = 0;
+        while (std.mem.indexOfPos(u8, content, search_start, prefix)) |index| {
+            if (content.len >= index + prefix.len + 3) return true;
+            search_start = index + 1;
+        }
     }
     return false;
 }
@@ -165,6 +173,100 @@ test looksLikeUrl {
             return e;
         };
     }
+}
+
+test containsAllowedTrackingReference {
+    const issue_enabled = Config{
+        .exclude_if_contains_issue_number = true,
+        .exclude_if_contains_url = false,
+        .severity = .warning,
+    };
+    const url_enabled = Config{
+        .exclude_if_contains_issue_number = false,
+        .exclude_if_contains_url = true,
+        .severity = .warning,
+    };
+    const both_enabled = Config{
+        .exclude_if_contains_issue_number = true,
+        .exclude_if_contains_url = true,
+        .severity = .warning,
+    };
+    const both_disabled = Config{
+        .exclude_if_contains_issue_number = false,
+        .exclude_if_contains_url = false,
+        .severity = .warning,
+    };
+
+    inline for (&.{
+        .{ .content = "fix #10", .config = issue_enabled, .expected = true },
+        .{ .content = "fix #10", .config = url_enabled, .expected = false },
+        .{ .content = "see https://example.com/10", .config = url_enabled, .expected = true },
+        .{ .content = "see https://example.com/10", .config = issue_enabled, .expected = false },
+        .{ .content = "fix #10", .config = both_enabled, .expected = true },
+        .{ .content = "fix https://example.com/10", .config = both_disabled, .expected = false },
+    }) |case| {
+        try std.testing.expectEqual(
+            case.expected,
+            containsAllowedTrackingReference(case.content, case.config),
+        );
+    }
+}
+
+test "TODO comment default config excludes issue and URL references" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ 
+        \\// TODO(#10): fix
+        \\// TODO: see https://example.com/10
+        \\// TODO: still report me
+        \\
+    ,
+        .{},
+        Config{
+            .exclude_if_contains_issue_number = true,
+            .exclude_if_contains_url = true,
+            .severity = .warning,
+        },
+        &.{
+            .{
+                .rule_id = "no_todo",
+                .severity = .warning,
+                .slice = "// TODO: still report me\n",
+                .message = "Avoid todo comments that don't link to a tracked issue",
+            },
+        },
+    );
+}
+
+test "TODO comment reports when both exclusions are disabled" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ 
+        \\// TODO(#10): fix this later
+        \\// TODO: see https://example.com/10
+        \\
+    ,
+        .{},
+        Config{
+            .exclude_if_contains_issue_number = false,
+            .exclude_if_contains_url = false,
+            .severity = .warning,
+        },
+        &.{
+            .{
+                .rule_id = "no_todo",
+                .severity = .warning,
+                .slice = "// TODO(#10): fix this later\n",
+                .message = "Avoid todo comments",
+            },
+            .{
+                .rule_id = "no_todo",
+                .severity = .warning,
+                .slice = "// TODO: see https://example.com/10\n",
+                .message = "Avoid todo comments",
+            },
+        },
+    );
 }
 
 test "TODO comment without URL" {
@@ -304,6 +406,59 @@ test "TODO comment with issue id and url" {
             .severity = .warning,
         },
         &.{},
+    );
+}
+
+test "TODO comment with issue id in punctuation" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ 
+        \\// TODO: Fix #123.
+        \\// TODO: see (#123)
+        \\// TODO(#123): fix
+        \\// TODO: not #abc
+        \\
+    ,
+        .{},
+        Config{
+            .exclude_if_contains_issue_number = true,
+            .exclude_if_contains_url = false,
+            .severity = .warning,
+        },
+        &.{
+            .{
+                .rule_id = "no_todo",
+                .severity = .warning,
+                .slice = "// TODO: not #abc\n",
+                .message = "Avoid todo comments that don't link to a tracked issue",
+            },
+        },
+    );
+}
+
+test "TODO comment with url in punctuation" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ 
+        \\// TODO: see (https://example.com/1)
+        \\// TODO: see [http://example.com/1]
+        \\// TODO: http://
+        \\
+    ,
+        .{},
+        Config{
+            .exclude_if_contains_issue_number = false,
+            .exclude_if_contains_url = true,
+            .severity = .warning,
+        },
+        &.{
+            .{
+                .rule_id = "no_todo",
+                .severity = .warning,
+                .slice = "// TODO: http://\n",
+                .message = "Avoid todo comments that don't link to a tracked issue",
+            },
+        },
     );
 }
 

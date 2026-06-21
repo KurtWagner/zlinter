@@ -1,31 +1,36 @@
-warning Avoid todo comments that don't link to a tracked issue [test_cases/no_todo/no_todo.input.zig:17:1] no_todo
-
- 17 | // TODO()
-    | ^^^^^^^^^^
-
-warning Avoid todo comments that don't link to a tracked issue [test_cases/no_todo/no_todo.input.zig:18:1] no_todo
-
- 18 | // TODO
-    | ^^^^^^^^
-
-warning Avoid todo comments that don't link to a tracked issue [test_cases/no_todo/no_todo.input.zig:19:1] no_todo
-
- 19 | // TODO: content
-    | ^^^^^^^^^^^^^^^^^
-
 warning Avoid todo comments that don't link to a tracked issue [test_cases/no_todo/no_todo.input.zig:20:1] no_todo
 
- 20 | // TODO content of todo
-    | ^^^^^^^^^^^^^^^^^^^^^^^^
+ 20 | // TODO()
+    | ^^^^^^^^^^
 
 warning Avoid todo comments that don't link to a tracked issue [test_cases/no_todo/no_todo.input.zig:21:1] no_todo
 
- 21 | // TODO(): content
-    | ^^^^^^^^^^^^^^^^^^^
+ 21 | // TODO
+    | ^^^^^^^^
 
 warning Avoid todo comments that don't link to a tracked issue [test_cases/no_todo/no_todo.input.zig:22:1] no_todo
 
- 22 | // TODO(10) this will be caught
+ 22 | // TODO: content
+    | ^^^^^^^^^^^^^^^^^
+
+warning Avoid todo comments that don't link to a tracked issue [test_cases/no_todo/no_todo.input.zig:23:1] no_todo
+
+ 23 | // TODO content of todo
+    | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Avoid todo comments that don't link to a tracked issue [test_cases/no_todo/no_todo.input.zig:24:1] no_todo
+
+ 24 | // TODO(): content
+    | ^^^^^^^^^^^^^^^^^^^
+
+warning Avoid todo comments that don't link to a tracked issue [test_cases/no_todo/no_todo.input.zig:25:1] no_todo
+
+ 25 | // TODO(10) this will be caught
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-x 6 warnings
+warning Avoid todo comments that don't link to a tracked issue [test_cases/no_todo/no_todo.input.zig:26:1] no_todo
+
+ 26 | // TODO: not #abc
+    | ^^^^^^^^^^^^^^^^^^
+
+x 7 warnings
