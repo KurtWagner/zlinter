@@ -79,7 +79,7 @@ fn run(
             .severity = config.severity,
             .start = .startOfComment(doc.comments, comment),
             .end = .endOfComment(doc.comments, comment),
-            .message = try session_arena.dupe(u8, if (config.exclude_if_contains_issue_number or !config.exclude_if_contains_url)
+            .message = try session_arena.dupe(u8, if (config.exclude_if_contains_issue_number or config.exclude_if_contains_url)
                 "Avoid todo comments that don't link to a tracked issue"
             else
                 "Avoid todo comments"),
@@ -165,6 +165,146 @@ test looksLikeUrl {
             return e;
         };
     }
+}
+
+test "TODO comment without URL" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ 
+        \\// TODO: This is a bare todo with no URL
+        \\
+    ,
+        .{},
+        Config{
+            .exclude_if_contains_issue_number = false,
+            .exclude_if_contains_url = true,
+            .severity = .warning,
+        },
+        &.{
+            .{
+                .rule_id = "no_todo",
+                .severity = .warning,
+                .slice = "// TODO: This is a bare todo with no URL\n",
+                .message = "Avoid todo comments that don't link to a tracked issue",
+            },
+        },
+    );
+}
+
+test "TODO comment without issue id" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ 
+        \\// TODO: This is a bare todo with no issue id
+        \\
+    ,
+        .{},
+        Config{
+            .exclude_if_contains_issue_number = true,
+            .exclude_if_contains_url = false,
+            .severity = .@"error",
+        },
+        &.{
+            .{
+                .rule_id = "no_todo",
+                .severity = .@"error",
+                .slice = "// TODO: This is a bare todo with no issue id\n",
+                .message = "Avoid todo comments that don't link to a tracked issue",
+            },
+        },
+    );
+}
+
+test "TODO comment with issue id" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ 
+        \\// TODO(#10): This is a todo tied to an issue
+        \\
+    ,
+        .{},
+        Config{
+            .exclude_if_contains_issue_number = true,
+            .exclude_if_contains_url = false,
+            .severity = .warning,
+        },
+        &.{},
+    );
+}
+
+test "TODO comment with url" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ 
+        \\// TODO: https://example.com/issues/10
+        \\
+    ,
+        .{},
+        Config{
+            .exclude_if_contains_issue_number = false,
+            .exclude_if_contains_url = true,
+            .severity = .warning,
+        },
+        &.{},
+    );
+}
+
+test "TODO comment with neither issue id nor url" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ 
+        \\// TODO: This is a bare todo with no issue id or url
+        \\
+    ,
+        .{},
+        Config{
+            .exclude_if_contains_issue_number = true,
+            .exclude_if_contains_url = true,
+            .severity = .warning,
+        },
+        &.{
+            .{
+                .rule_id = "no_todo",
+                .severity = .warning,
+                .slice = "// TODO: This is a bare todo with no issue id or url\n",
+                .message = "Avoid todo comments that don't link to a tracked issue",
+            },
+        },
+    );
+}
+
+test "TODO comment severity off" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ 
+        \\// TODO: This is a bare todo that would normally be flagged
+        \\
+    ,
+        .{},
+        Config{
+            .exclude_if_contains_issue_number = false,
+            .exclude_if_contains_url = false,
+            .severity = .off,
+        },
+        &.{},
+    );
+}
+
+test "TODO comment with issue id and url" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ 
+        \\// TODO(#10): https://example.com/issues/10
+        \\
+    ,
+        .{},
+        Config{
+            .exclude_if_contains_issue_number = true,
+            .exclude_if_contains_url = true,
+            .severity = .warning,
+        },
+        &.{},
+    );
 }
 
 test {
