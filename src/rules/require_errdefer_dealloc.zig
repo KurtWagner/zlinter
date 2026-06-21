@@ -53,7 +53,6 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.require_errdefer_dealloc),
-        .execution = .compile_context,
         .run = &run,
     };
 }
@@ -139,7 +138,7 @@ fn processBlock(
     var call_buffer: [1]Ast.Node.Index = undefined;
 
     for (doc.lineage.items(.children)[@intFromEnum(block_node)] orelse &.{}) |child_node| {
-        if (try declRequiringCleanup(session, doc, child_node)) |decl_ref| {
+        if (try declRequiringCleanup(session, doc, arena, child_node)) |decl_ref| {
             try cleanup_symbols.put(
                 try arena.dupe(u8, tree.tokenSlice(decl_ref.decl_name_token)),
                 child_node,
@@ -194,6 +193,7 @@ const DeclRef = struct {
 fn declRequiringCleanup(
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
+    allocator: std.mem.Allocator,
     maybe_var_decl_node: Ast.Node.Index,
 ) !?DeclRef {
     const tree = doc.tree(session);
@@ -237,23 +237,28 @@ fn declRequiringCleanup(
         doc.file_id,
         maybe_var_decl_node,
     ) orelse return null;
-    if (!declHasPublicDeinit(session, var_decl_id)) return null;
+    var deinit_candidates = try session.resolveDeclTypeMemberCandidates(
+        allocator,
+        var_decl_id,
+        "deinit",
+    );
+    defer deinit_candidates.deinit(allocator);
+    for (deinit_candidates.items) |candidate| {
+        if (declIsPublicDeinit(session, candidate.decl_id)) {
+            return .{ .decl_name_token = var_decl.ast.mut_token + 1 };
+        }
+    }
 
-    return .{ .decl_name_token = var_decl.ast.mut_token + 1 };
+    return null;
 }
 
-fn declHasPublicDeinit(
+fn declIsPublicDeinit(
     session: *zlinter.session.LintSession,
     decl_id: zlinter.session.DeclStore.DeclId,
 ) bool {
-    const deinit_decl_id = session.resolveDeclTypeMember(
-        decl_id,
-        "deinit",
-    ) orelse return false;
-
-    const file_id = session.decl_store.declFileId(deinit_decl_id);
+    const file_id = session.decl_store.declFileId(decl_id);
     const tree = session.file_store.fileTree(file_id);
-    const node = session.decl_store.declAstNode(deinit_decl_id) orelse return false;
+    const node = session.decl_store.declAstNode(decl_id) orelse return false;
 
     var fn_proto_buffer: [1]Ast.Node.Index = undefined;
     const fn_proto = tree.fullFnProto(

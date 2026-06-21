@@ -63,7 +63,6 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.function_naming),
-        .execution = .compile_context,
         .run = &run,
     };
 }
@@ -283,10 +282,17 @@ fn classifyParamTypeKind(
         }
     }
 
-    if (session.resolveDeclOfNode(doc, param_type_node)) |decl_id| {
-        if (session.decl_store.declResolvedType(decl_id)) |type_id| {
-            type_summary = session.type_store.summary(type_id);
-        }
+    const arena = session.runtime.ruleArena();
+    var decl_candidates = session.resolveDeclCandidatesOfNode(arena, doc, param_type_node) catch return type_summary;
+    defer decl_candidates.deinit(arena);
+    var summary_candidates = session.resolveDeclValueSummaryCandidatesFromCandidates(
+        arena,
+        decl_candidates.items,
+    ) catch return type_summary;
+    defer summary_candidates.deinit(arena);
+    for (summary_candidates.items) |candidate| {
+        type_summary = candidate.summary;
+        break;
     }
     if (paramValueKindFromTypeAnnotation(
         tree,

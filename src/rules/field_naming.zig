@@ -134,7 +134,6 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.field_naming),
-        .execution = .compile_context,
         .run = &run,
     };
 }
@@ -148,6 +147,7 @@ fn run(
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     const session_arena = session.runtime.sessionArena();
+    const rule_arena = session.runtime.ruleArena();
 
     var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
 
@@ -217,10 +217,14 @@ fn run(
 
             fields: for (container_decl.ast.members) |member| {
                 if (tree.fullContainerField(member)) |container_field| {
-                    const type_summary = if (session.decl_store.declIdByNode(doc.file_id, member)) |decl_id|
-                        session.resolveDeclValueSummary(decl_id)
-                    else
-                        null;
+                    const type_summary = if (session.decl_store.declIdByNode(doc.file_id, member)) |decl_id| summary: {
+                        var summary_candidates = try session.resolveDeclValueSummaryCandidates(rule_arena, decl_id);
+                        defer summary_candidates.deinit(rule_arena);
+                        for (summary_candidates.items) |candidate| {
+                            break :summary candidate.summary;
+                        }
+                        break :summary null;
+                    } else null;
                     const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const field_desc: []const u8 = tuple: {
                         break :tuple switch (container_tag) {
                             .keyword_struct => if (type_summary) |summary|

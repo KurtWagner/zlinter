@@ -55,7 +55,6 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.no_empty_block),
-        .execution = .syntax_only,
         .run = &run,
     };
 }
@@ -77,7 +76,6 @@ fn run(
 
     const root: Ast.Node.Index = .root;
     var it = try doc.nodeLineageIterator(root, rule_arena);
-    defer it.deinit();
 
     nodes: while (try it.next()) |tuple| {
         const node, _ = tuple;

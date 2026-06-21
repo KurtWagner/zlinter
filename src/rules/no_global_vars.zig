@@ -27,7 +27,6 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
     return .{
         .rule_id = @tagName(.no_global_vars),
         .run = &run,
-        .execution = .syntax_only,
     };
 }
 

@@ -83,7 +83,6 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 
     return zlinter.rules.LintRule{
         .rule_id = @tagName(.declaration_naming),
-        .execution = .compile_context,
         .run = &run,
     };
 }
@@ -97,6 +96,7 @@ fn run(
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
     const session_arena = session.runtime.sessionArena();
+    const rule_arena = session.runtime.ruleArena();
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
 
@@ -126,7 +126,13 @@ fn run(
             if (isThisBuiltinCall(tree, init_node)) continue :nodes;
         }
 
-        const type_summary = session.resolveDeclValueSummary(decl_id) orelse .other;
+        var type_summary: zlinter.session.TypeStore.TypeSummary = .other;
+        var summary_candidates = try session.resolveDeclValueSummaryCandidates(rule_arena, decl_id);
+        defer summary_candidates.deinit(rule_arena);
+        for (summary_candidates.items) |candidate| {
+            type_summary = candidate.summary;
+            break;
+        }
         const name_token = var_decl.ast.mut_token + 1;
         const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
 
