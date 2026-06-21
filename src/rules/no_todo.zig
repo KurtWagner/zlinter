@@ -152,7 +152,8 @@ fn looksLikeUrl(content: []const u8) bool {
     inline for (&.{ "http://", "https://" }) |prefix| {
         var search_start: usize = 0;
         while (std.mem.indexOfPos(u8, content, search_start, prefix)) |index| {
-            if (content.len >= index + prefix.len + 3) return true;
+            const prefix_is_word_start = index == 0 or std.mem.indexOfScalar(u8, "([{", content[index - 1]) != null;
+            if (prefix_is_word_start and content.len >= index + prefix.len + 3) return true;
             search_start = index + 1;
         }
     }
@@ -167,7 +168,7 @@ test looksLikeUrl {
         };
     }
 
-    inline for (&.{ "", "http", "https", "http://", "https://a", "http://a." }) |valid| {
+    inline for (&.{ "", "http", "https", "http://", "https://a", "http://a.", "abc_https://abc", "not-url-http://a.cc" }) |valid| {
         std.testing.expect(!looksLikeUrl(valid)) catch |e| {
             std.debug.print("Expected '{s}' to NOT look like a url id\n", .{valid});
             return e;
