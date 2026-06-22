@@ -166,19 +166,19 @@ fn run(
 
         const call = tree.fullCall(&call_buffer, node) orelse continue :nodes;
 
+        // if configured, skip if a parent is a test block
+        if (config.exclude_tests and doc.isEnclosedInTestBlock(session, node)) {
+            continue :nodes;
+        }
+
+        if (calleeName(tree, call.ast.fn_expr)) |fn_name| {
+            for (config.exclude_fn_names) |exclude_fn_name| {
+                if (std.mem.eql(u8, exclude_fn_name, fn_name)) continue :nodes;
+            }
+        }
+
         for (call.ast.params) |param_node| {
             const kind = literalKindForArg(tree, param_node) orelse continue;
-
-            // if configured, skip if a parent is a test block
-            if (config.exclude_tests and doc.isEnclosedInTestBlock(session, node)) {
-                continue :nodes;
-            }
-
-            if (calleeName(tree, call.ast.fn_expr)) |fn_name| {
-                for (config.exclude_fn_names) |exclude_fn_name| {
-                    if (std.mem.eql(u8, exclude_fn_name, fn_name)) continue :nodes;
-                }
-            }
 
             switch (kind) {
                 .bool => if (config.detect_bool_literal != .off)
@@ -407,6 +407,84 @@ test "exclude function names for direct and field access callees" {
                 .severity = .warning,
                 .slice = "10",
                 .message = "Avoid number literal arguments as they're ambiguous.",
+            },
+        },
+    );
+}
+
+test "default excluded parseInt handles direct and qualified calls" {
+    const rule = buildRule(.{});
+    const source: [:0]const u8 =
+        \\pub fn main() void {
+        \\  parseInt(u32, "10", 10);
+        \\  std.fmt.parseInt(u32, "10", 10);
+        \\}
+        \\
+        \\const std = @import("std");
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{
+            .detect_number_literal = .warning,
+            .detect_bool_literal = .off,
+            .detect_char_literal = .off,
+            .detect_string_literal = .warning,
+        },
+        &.{},
+    );
+}
+
+test "builtin call is ignored" {
+    const rule = buildRule(.{});
+    const source: [:0]const u8 =
+        \\pub fn main() void {
+        \\  _ = @as(bool, true);
+        \\}
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{
+            .detect_number_literal = .off,
+            .detect_bool_literal = .warning,
+            .detect_char_literal = .off,
+            .detect_string_literal = .off,
+        },
+        &.{},
+    );
+}
+
+test "multiline string literals are detected when enabled" {
+    const rule = buildRule(.{});
+    const source: [:0]const u8 =
+        "pub fn main() void {\n" ++
+        "  call(\n" ++
+        "    \\\\line 1\n" ++
+        "    \\\\line 2\n" ++
+        "  );\n" ++
+        "}\n";
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{
+            .detect_number_literal = .off,
+            .detect_bool_literal = .off,
+            .detect_char_literal = .off,
+            .detect_string_literal = .@"error",
+        },
+        &.{
+            .{
+                .rule_id = "no_literal_args",
+                .severity = .@"error",
+                .slice = "\\\\line 1\n    \\\\line 2",
+                .message = "Avoid string literal arguments as they're ambiguous.",
             },
         },
     );
