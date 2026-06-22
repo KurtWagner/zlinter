@@ -1,87 +1,112 @@
-warning Empty if blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:62:31] no_empty_block
+warning Empty if body blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:70:31] no_empty_block
 
- 62 |     for (items) |_| if (true) {} else {};
+ 70 |     for (items) |_| if (true) {} else {};
     |                               ^^
 
-warning Empty if blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:62:39] no_empty_block
+warning Empty if else blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:70:39] no_empty_block
 
- 62 |     for (items) |_| if (true) {} else {};
+ 70 |     for (items) |_| if (true) {} else {};
     |                                       ^^
 
-warning Empty if blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:61:28] no_empty_block
+warning Empty if body blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:69:28] no_empty_block
 
- 61 |     while (true) if (true) {} else {};
+ 69 |     while (true) if (true) {} else {};
     |                            ^^
 
-warning Empty if blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:61:36] no_empty_block
+warning Empty if else blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:69:36] no_empty_block
 
- 61 |     while (true) if (true) {} else {};
+ 69 |     while (true) if (true) {} else {};
     |                                    ^^
 
-warning Empty if blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:60:25] no_empty_block
+warning Empty if body blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:68:25] no_empty_block
 
- 60 |     if (true) if (true) {} else {};
+ 68 |     if (true) if (true) {} else {};
     |                         ^^
 
-warning Empty if blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:60:33] no_empty_block
+warning Empty if else blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:68:33] no_empty_block
 
- 60 |     if (true) if (true) {} else {};
+ 68 |     if (true) if (true) {} else {};
     |                                 ^^
 
-error Empty comptime blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:52:10] no_empty_block
+error Empty comptime blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:60:10] no_empty_block
 
- 52 | comptime {}
+ 60 | comptime {}
     |          ^^
 
-error Empty test blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:46:13] no_empty_block
+error Empty test blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:54:13] no_empty_block
 
- 46 | test "name" {}
+ 54 | test "name" {}
     |             ^^
 
-error Empty test blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:44:6] no_empty_block
+error Empty test blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:52:6] no_empty_block
 
- 44 | test {}
+ 52 | test {}
     |      ^^
 
-warning Empty function declaration blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:38:23] no_empty_block
+warning Empty function declaration blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:46:23] no_empty_block
 
- 38 | pub fn emptyFn() void {}
+ 46 | pub fn emptyFn() void {}
     |                       ^^
 
-error Empty switch case blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:34:17] no_empty_block
+error Empty switch case blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:42:17] no_empty_block
 
- 34 |         else => {},
+ 42 |         else => {},
     |                 ^^
 
-error Empty switch case blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:30:15] no_empty_block
+error Empty switch case blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:38:15] no_empty_block
 
- 30 |         .a => {},
+ 38 |         .a => {},
     |               ^^
 
-warning Empty errdefer blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:23:14] no_empty_block
+warning Empty errdefer blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:31:14] no_empty_block
 
- 23 |     errdefer {}
+ 31 |     errdefer {}
     |              ^^
 
-warning Empty defer blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:19:11] no_empty_block
+warning Empty defer blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:27:11] no_empty_block
 
- 19 |     defer {}
+ 27 |     defer {}
     |           ^^
 
-warning Empty for blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:17:20] no_empty_block
+warning Empty for else blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:25:12] no_empty_block
 
- 17 |     for (0..1) |_| {}
+ 25 |     } else {}
+    |            ^^
+
+warning Empty for body blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:21:20] no_empty_block
+
+ 21 |     for (0..1) |_| {} else {}
     |                    ^^
 
-warning Empty while blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:7:31] no_empty_block
+warning Empty for else blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:21:28] no_empty_block
 
- 7 |     while (i < 10) : (i += 1) {}
-   |                               ^^
+ 21 |     for (0..1) |_| {} else {}
+    |                            ^^
 
-warning Empty if blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:2:15] no_empty_block
+warning Empty while else blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:15:12] no_empty_block
+
+ 15 |     } else {}
+    |            ^^
+
+warning Empty while body blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:11:31] no_empty_block
+
+ 11 |     while (i < 10) : (i += 1) {} else {}
+    |                               ^^
+
+warning Empty while else blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:11:39] no_empty_block
+
+ 11 |     while (i < 10) : (i += 1) {} else {}
+    |                                       ^^
+
+warning Empty if else blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:8:12] no_empty_block
+
+ 8 |     } else {}
+   |            ^^
+
+warning Empty if body blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:2:15] no_empty_block
 
  2 |     if (true) {} else {
    |               ^^
 
 x 5 errors
-x 12 warnings
+x 17 warnings

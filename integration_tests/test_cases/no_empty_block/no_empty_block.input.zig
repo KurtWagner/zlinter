@@ -3,18 +3,26 @@ pub fn main() void {
         // Deliberate
     }
 
+    if (false) {
+        return;
+    } else {}
+
     var i: u32 = 9;
-    while (i < 10) : (i += 1) {}
+    while (i < 10) : (i += 1) {} else {}
 
     while (i < 20) {
         i += 1;
-    }
+    } else {}
 
     while (i < 30) : (i += 2) {
         // Do nothing.
     }
 
-    for (0..1) |_| {}
+    for (0..1) |_| {} else {}
+
+    for (0..1) |_| {
+        continue;
+    } else {}
 
     defer {}
     defer {

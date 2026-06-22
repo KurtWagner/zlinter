@@ -123,39 +123,41 @@ fn run(
         };
         if (severity == .off) continue :nodes;
 
-        var expr_nodes_buffer: [2]Ast.Node.Index = undefined;
-        var expr_nodes: std.ArrayList(Ast.Node.Index) = .initBuffer(&expr_nodes_buffer);
+        var block_candidates_buffer: [2]BlockCandidate = undefined;
+        var block_candidates: std.ArrayList(BlockCandidate) = .initBuffer(&block_candidates_buffer);
 
         switch (statement) {
             .@"if" => |info| {
-                expr_nodes.appendAssumeCapacity(info.ast.then_expr);
+                block_candidates.appendAssumeCapacity(.{ .node = info.ast.then_expr, .label = "if body" });
                 if (info.ast.else_expr.unwrap()) |n| {
-                    expr_nodes.appendAssumeCapacity(n);
+                    block_candidates.appendAssumeCapacity(.{ .node = n, .label = "if else" });
                 }
             },
             .@"while" => |info| {
-                expr_nodes.appendAssumeCapacity(info.ast.then_expr);
+                block_candidates.appendAssumeCapacity(.{ .node = info.ast.then_expr, .label = "while body" });
                 if (info.ast.else_expr.unwrap()) |n| {
-                    expr_nodes.appendAssumeCapacity(n);
+                    block_candidates.appendAssumeCapacity(.{ .node = n, .label = "while else" });
                 }
             },
             .@"for" => |info| {
-                expr_nodes.appendAssumeCapacity(info.ast.then_expr);
+                block_candidates.appendAssumeCapacity(.{ .node = info.ast.then_expr, .label = "for body" });
                 if (info.ast.else_expr.unwrap()) |n| {
-                    expr_nodes.appendAssumeCapacity(n);
+                    block_candidates.appendAssumeCapacity(.{ .node = n, .label = "for else" });
                 }
             },
-            .switch_case => |info| expr_nodes.appendAssumeCapacity(info.ast.target_expr),
-            .@"catch" => |expr_node| expr_nodes.appendAssumeCapacity(expr_node),
-            .@"defer" => |expr_node| expr_nodes.appendAssumeCapacity(expr_node),
-            .@"errdefer" => |expr_node| expr_nodes.appendAssumeCapacity(expr_node),
+            .switch_case => |info| block_candidates.appendAssumeCapacity(.{ .node = info.ast.target_expr, .label = "switch case" }),
+            .@"catch" => |expr_node| block_candidates.appendAssumeCapacity(.{ .node = expr_node, .label = "catch" }),
+            .@"defer" => |expr_node| block_candidates.appendAssumeCapacity(.{ .node = expr_node, .label = "defer" }),
+            .@"errdefer" => |expr_node| block_candidates.appendAssumeCapacity(.{ .node = expr_node, .label = "errdefer" }),
         }
 
-        expr_nodes: for (expr_nodes.items) |expr_node| {
-            // Ignore here as it'll be processed in the outer loop.
-            if (zlinter.ast.fullStatement(tree, expr_node) != null) continue :expr_nodes;
+        block_candidates: for (block_candidates.items) |candidate| {
+            const expr_node = candidate.node;
 
-            if (!isWhitespaceOnlyBlock(tree, expr_node)) continue :expr_nodes;
+            // Ignore here as it'll be processed in the outer loop.
+            if (zlinter.ast.fullStatement(tree, expr_node) != null) continue :block_candidates;
+
+            if (!isWhitespaceOnlyBlock(tree, expr_node)) continue :block_candidates;
 
             try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
@@ -165,7 +167,7 @@ fn run(
                 .message = try std.fmt.allocPrint(
                     session_arena,
                     problem_msg_template,
-                    .{statement.name()},
+                    .{candidate.label},
                 ),
             });
         }
@@ -227,6 +229,11 @@ const DeclBlock = struct {
     };
 };
 
+const BlockCandidate = struct {
+    node: Ast.Node.Index,
+    label: []const u8,
+};
+
 fn declBlock(tree: Ast, node: Ast.Node.Index) ?DeclBlock {
     return switch (tree.nodeTag(node)) {
         .fn_decl => .{
@@ -252,23 +259,13 @@ test {
 test "if blocks" {
     const source =
         \\pub fn main() void {
-        \\ if (true) {}
-        \\ else {}
-        \\
-        \\ if (false) {
-        \\ } else {
-        \\ 
-        \\ }
-        \\
-        \\ if (false) {
+        \\ if (true) {} else {
         \\  // Deliberate
-        \\ } else {
-        \\  // Ignore
         \\ }
         \\
-        \\ if (true) {
+        \\ if (false) {
         \\  return;
-        \\ }
+        \\ } else {}
         \\}
     ;
     inline for (&.{ .warning, .@"error" }) |severity| {
@@ -281,33 +278,14 @@ test "if blocks" {
                 .{
                     .rule_id = "no_empty_block",
                     .severity = severity,
-                    .slice =
-                    \\{
-                    \\ }
-                    ,
-                    .message = "Empty if blocks are discouraged. If deliberately empty, include a comment inside the block.",
-                },
-                .{
-                    .rule_id = "no_empty_block",
-                    .severity = severity,
-                    .slice =
-                    \\{
-                    \\ 
-                    \\ }
-                    ,
-                    .message = "Empty if blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                    .slice = "{}",
+                    .message = "Empty if else blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
                 .{
                     .rule_id = "no_empty_block",
                     .severity = severity,
                     .slice = "{}",
-                    .message = "Empty if blocks are discouraged. If deliberately empty, include a comment inside the block.",
-                },
-                .{
-                    .rule_id = "no_empty_block",
-                    .severity = severity,
-                    .slice = "{}",
-                    .message = "Empty if blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                    .message = "Empty if body blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
             },
         );
@@ -327,16 +305,11 @@ test "while blocks" {
     const source =
         \\pub fn main() void {
         \\ var i: u32 = 0;
-        \\ while (i > 1) {}
-        \\ 
-        \\ while (i > 1) {
-        \\
-        \\ }
-        \\
-        \\ while (i < 10) : (i += 1) {}
+        \\ while (i > 1) {} else {}
         \\
         \\ while (i < 10) : (i += 1) {
         \\   // deliberate
+        \\ } else {
         \\ }
         \\}
     ;
@@ -350,24 +323,23 @@ test "while blocks" {
                 .{
                     .rule_id = "no_empty_block",
                     .severity = severity,
-                    .slice = "{}",
-                    .message = "Empty while blocks are discouraged. If deliberately empty, include a comment inside the block.",
-                },
-                .{
-                    .rule_id = "no_empty_block",
-                    .severity = severity,
                     .slice =
                     \\{
-                    \\
                     \\ }
                     ,
-                    .message = "Empty while blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                    .message = "Empty while else blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
                 .{
                     .rule_id = "no_empty_block",
                     .severity = severity,
                     .slice = "{}",
-                    .message = "Empty while blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                    .message = "Empty while body blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                },
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty while else blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
             },
         );
@@ -386,14 +358,11 @@ test "while blocks" {
 test "for blocks" {
     const source =
         \\pub fn main() void {
-        \\ for (0..1) |_| {}
-        \\ 
-        \\ for (0..1) |_| {
-        \\
-        \\ }
+        \\ for (0..1) |_| {} else {}
         \\
         \\ for (0..1) |_| {
         \\  // deliberate
+        \\ } else {
         \\ }
         \\}
     ;
@@ -409,16 +378,21 @@ test "for blocks" {
                     .severity = severity,
                     .slice =
                     \\{
-                    \\
                     \\ }
                     ,
-                    .message = "Empty for blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                    .message = "Empty for else blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
                 .{
                     .rule_id = "no_empty_block",
                     .severity = severity,
                     .slice = "{}",
-                    .message = "Empty for blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                    .message = "Empty for body blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                },
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty for else blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
             },
         );
@@ -458,37 +432,37 @@ test "nested statement bodies" {
                     .rule_id = "no_empty_block",
                     .severity = severity,
                     .slice = "{}",
-                    .message = "Empty if blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                    .message = "Empty if body blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
                 .{
                     .rule_id = "no_empty_block",
                     .severity = severity,
                     .slice = "{}",
-                    .message = "Empty if blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                    .message = "Empty if else blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
                 .{
                     .rule_id = "no_empty_block",
                     .severity = severity,
                     .slice = "{}",
-                    .message = "Empty if blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                    .message = "Empty if body blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
                 .{
                     .rule_id = "no_empty_block",
                     .severity = severity,
                     .slice = "{}",
-                    .message = "Empty if blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                    .message = "Empty if else blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
                 .{
                     .rule_id = "no_empty_block",
                     .severity = severity,
                     .slice = "{}",
-                    .message = "Empty if blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                    .message = "Empty if body blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
                 .{
                     .rule_id = "no_empty_block",
                     .severity = severity,
                     .slice = "{}",
-                    .message = "Empty if blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                    .message = "Empty if else blocks are discouraged. If deliberately empty, include a comment inside the block.",
                 },
             },
         );
