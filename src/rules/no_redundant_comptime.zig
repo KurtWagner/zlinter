@@ -213,6 +213,37 @@ test "no_redundant_comptime" {
         },
     );
 
+    // Bad: redundant comptime on discard parameters
+    try zlinter.testing.testRunRule(
+        rule,
+        \\fn f(comptime _: type) void {}
+        \\fn g(comptime _: comptime_int) void {}
+        \\fn h(comptime _: comptime_float) void {}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_redundant_comptime",
+                .severity = .warning,
+                .slice = "comptime _: type",
+                .message = "Redundant `comptime` on parameter of type `type` - parameters of this type are always comptime",
+            },
+            .{
+                .rule_id = "no_redundant_comptime",
+                .severity = .warning,
+                .slice = "comptime _: comptime_int",
+                .message = "Redundant `comptime` on parameter of type `comptime_int` - parameters of this type are always comptime",
+            },
+            .{
+                .rule_id = "no_redundant_comptime",
+                .severity = .warning,
+                .slice = "comptime _: comptime_float",
+                .message = "Redundant `comptime` on parameter of type `comptime_float` - parameters of this type are always comptime",
+            },
+        },
+    );
+
     // Bad: two redundant comptime params separated by a non-comptime param
     try zlinter.testing.testRunRule(
         rule,
@@ -250,6 +281,7 @@ test "no_redundant_comptime" {
     try zlinter.testing.testRunRule(
         rule,
         \\fn foo(comptime n: usize) void {}
+        \\fn keep(comptime _: usize) void {}
     ,
         .{},
         Config{},
