@@ -74,6 +74,39 @@ fn unwrapLiteralWrapperExpression(tree: Ast, node: Ast.Node.Index) Ast.Node.Inde
     }
 }
 
+fn calleeName(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
+    const unwrapped = unwrapLiteralWrapperExpression(tree, node);
+    return switch (tree.nodeTag(unwrapped)) {
+        // e.g., `parseInt(u32, "10", 10)`
+        .identifier => tree.tokenSlice(tree.nodeMainToken(unwrapped)),
+        // e.g., `.init()` or `Enum.init()`
+        .enum_literal => blk: {
+            const token = tree.nodeMainToken(unwrapped);
+            if (tree.tokenTag(token) != .identifier) break :blk null;
+            break :blk tree.tokenSlice(token);
+        },
+        // e.g., `std.fmt.parseInt(u32, "10", 10)`
+        .field_access => fieldAccessCalleeName(tree, unwrapped),
+        else => null,
+    };
+}
+
+fn fieldAccessCalleeName(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
+    std.debug.assert(tree.nodeTag(node) == .field_access);
+
+    const node_data = tree.nodeData(node).node_and_token;
+    const lhs = node_data[0];
+    const fn_name_token = node_data[1];
+
+    if (tree.tokenTag(fn_name_token) != .identifier) return null;
+
+    const lhs_unwrapped = unwrapLiteralWrapperExpression(tree, lhs);
+    return switch (tree.nodeTag(lhs_unwrapped)) {
+        .identifier, .enum_literal, .field_access => tree.tokenSlice(fn_name_token),
+        else => null,
+    };
+}
+
 fn literalKindForNumberSign(tree: Ast, node: Ast.Node.Index) ?LiteralKind {
     const operand = unwrapLiteralWrapperExpression(tree, tree.nodeData(node).node);
     return switch (tree.nodeTag(operand)) {
@@ -141,9 +174,10 @@ fn run(
                 continue :nodes;
             }
 
-            const fn_name = tree.tokenSlice(tree.lastToken(call.ast.fn_expr));
-            for (config.exclude_fn_names) |exclude_fn_name| {
-                if (std.mem.eql(u8, exclude_fn_name, fn_name)) continue :nodes;
+            if (calleeName(tree, call.ast.fn_expr)) |fn_name| {
+                for (config.exclude_fn_names) |exclude_fn_name| {
+                    if (std.mem.eql(u8, exclude_fn_name, fn_name)) continue :nodes;
+                }
             }
 
             switch (kind) {
@@ -313,6 +347,97 @@ test "nested call does not match outer argument" {
             .detect_bool_literal = .warning,
             .detect_char_literal = .off,
             .detect_string_literal = .off,
+        },
+        &.{
+            .{
+                .rule_id = "no_literal_args",
+                .severity = .warning,
+                .slice = "true",
+                .message = "Avoid bool literal arguments as they're ambiguous.",
+            },
+        },
+    );
+}
+
+test "exclude function names for direct and field access callees" {
+    const rule = buildRule(.{});
+    const source: [:0]const u8 =
+        \\pub fn main() void {
+        \\  parseInt(u32, "10", 10);
+        \\  std.fmt.parseInt(u32, "10", 10);
+        \\  getParser().parseInt(u32, "10", 10);
+        \\}
+        \\
+        \\const Parser = struct {
+        \\  fn parseInt(self: @This(), comptime T: type, buffer: []const u8, base: u8) void {
+        \\    _ = self;
+        \\    _ = T;
+        \\    _ = buffer;
+        \\    _ = base;
+        \\  }
+        \\};
+        \\
+        \\fn getParser() Parser {
+        \\  return .{};
+        \\}
+        \\
+        \\fn parseInt(comptime T: type, buffer: []const u8, base: u8) void {
+        \\  _ = T;
+        \\  _ = buffer;
+        \\  _ = base;
+        \\}
+        \\
+        \\const std = @import("std");
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{
+            .detect_number_literal = .warning,
+            .detect_bool_literal = .off,
+            .detect_char_literal = .off,
+            .detect_string_literal = .off,
+            .exclude_fn_names = &.{"parseInt"},
+        },
+        &.{
+            .{
+                .rule_id = "no_literal_args",
+                .severity = .warning,
+                .slice = "10",
+                .message = "Avoid number literal arguments as they're ambiguous.",
+            },
+        },
+    );
+}
+
+test "complex callee does not match exclude list" {
+    const rule = buildRule(.{});
+    const source: [:0]const u8 =
+        \\pub fn main() void {
+        \\  getFn()(true);
+        \\}
+        \\
+        \\fn getFn() *const fn (bool) void {
+        \\  return doSomething;
+        \\}
+        \\
+        \\fn doSomething(value: bool) void {
+        \\  _ = value;
+        \\}
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{
+            .detect_number_literal = .off,
+            .detect_bool_literal = .warning,
+            .detect_char_literal = .off,
+            .detect_string_literal = .off,
+            .exclude_fn_names = &.{"getFn"},
         },
         &.{
             .{
