@@ -278,16 +278,20 @@ pub fn expectNodeOfTagFirst(
     return error.TestExpectedSingleNodeTag;
 }
 
+pub const TestRunOptions = struct {
+    filename: []const u8 = "path/to/test.zig",
+    allow_parse_errors: bool = false,
+};
+
 /// Builds and runs a rule with fake file name and content. Use `testRunRule`
 /// which uses this method instead of this method directly.
 fn runRule(
     rule: LintRule,
     file_name: []const u8,
     contents: [:0]const u8,
-    options: struct {
-        config: ?*anyopaque = null,
-    },
+    run_options: RunOptions,
     arena: *std.heap.ArenaAllocator,
+    allow_parse_errors: bool,
 ) !?LintResult {
     assertTestOnly();
     const io = std.testing.io;
@@ -306,22 +310,24 @@ fn runRule(
     );
 
     const tree = doc.tree(&session);
-    std.testing.expectEqual(tree.errors.len, 0) catch |err| {
-        std.debug.print("Failed to parse AST:\n{s}\n", .{contents});
-        for (tree.errors) |ast_err| {
-            var buffer: [1024]u8 = undefined;
+    if (!allow_parse_errors) {
+        std.testing.expectEqual(tree.errors.len, 0) catch |err| {
+            std.debug.print("Failed to parse AST:\n{s}\n", .{contents});
+            for (tree.errors) |ast_err| {
+                var buffer: [1024]u8 = undefined;
 
-            var writer = std.Io.File.stderr().writer(io, &buffer).interface;
-            try tree.renderError(ast_err, &writer);
-        }
-        return err;
-    };
+                var writer = std.Io.File.stderr().writer(io, &buffer).interface;
+                try tree.renderError(ast_err, &writer);
+            }
+            return err;
+        };
+    }
 
     return try rule.run(
         rule,
         &session,
         doc,
-        .{ .config = options.config },
+        run_options,
     );
 }
 
@@ -425,9 +431,7 @@ pub const LintProblemExpectation = struct {
 pub fn testRunRule(
     rule: LintRule,
     source: [:0]const u8,
-    options: struct {
-        filename: []const u8 = "path/to/test.zig",
-    },
+    options: TestRunOptions,
     config: anytype,
     expected: []const LintProblemExpectation,
 ) !void {
@@ -435,12 +439,14 @@ pub fn testRunRule(
     defer arena.deinit();
 
     var local_config = config;
+    const run_options: RunOptions = .{ .config = &local_config };
     var result = (try runRule(
         rule,
         options.filename,
         source,
-        .{ .config = &local_config },
+        run_options,
         &arena,
+        options.allow_parse_errors,
     ));
     defer if (result) |*r| r.deinit(arena.allocator());
 
@@ -459,6 +465,7 @@ const LintDocument = @import("session/LintDocument.zig");
 const LintSession = @import("session/LintSession.zig");
 const std = @import("std");
 const LintRule = @import("rules.zig").LintRule;
+const RunOptions = @import("rules.zig").RunOptions;
 const LintProblemSeverity = @import("rules.zig").LintProblemSeverity;
 const LintProblem = @import("results.zig").LintProblem;
 const LintResult = @import("results.zig").LintResult;

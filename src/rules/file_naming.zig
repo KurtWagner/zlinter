@@ -39,8 +39,17 @@ fn run(
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+
+    // TODO: I worry this pattern will be error prone if configs change often
+    // an argument is that unit tests should cover it but from reviewing rules
+    // I can see this isnt always the case
+    if (config.file_namespace.severity == .off and
+        config.file_struct.severity == .off)
+        return null;
+
     const session_arena = session.runtime.sessionArena();
     const tree = doc.tree(session);
+    if (tree.errors.len > 0) return null;
     const abs_path = doc.absPath(session);
 
     const message, const severity = msg: {
@@ -194,6 +203,30 @@ test "good cases" {
         buildRule(.{}),
         "hit_points: f32,",
         .{ .filename = zlinter.testing.paths.posix("path/to/MyFile.zig") },
+        Config{},
+        &.{},
+    );
+}
+
+test "skips malformed source" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        "pub const hit_points = ;",
+        .{
+            .filename = zlinter.testing.paths.posix("path/to/BadName.zig"),
+            .allow_parse_errors = true,
+        },
+        Config{},
+        &.{},
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        "hit_points: ,",
+        .{
+            .filename = zlinter.testing.paths.posix("path/to/bad_name.zig"),
+            .allow_parse_errors = true,
+        },
         Config{},
         &.{},
     );
