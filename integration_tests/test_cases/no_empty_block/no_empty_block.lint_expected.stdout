@@ -1,3 +1,33 @@
+warning Empty if blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:62:31] no_empty_block
+
+ 62 |     for (items) |_| if (true) {} else {};
+    |                               ^^
+
+warning Empty if blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:62:39] no_empty_block
+
+ 62 |     for (items) |_| if (true) {} else {};
+    |                                       ^^
+
+warning Empty if blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:61:28] no_empty_block
+
+ 61 |     while (true) if (true) {} else {};
+    |                            ^^
+
+warning Empty if blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:61:36] no_empty_block
+
+ 61 |     while (true) if (true) {} else {};
+    |                                    ^^
+
+warning Empty if blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:60:25] no_empty_block
+
+ 60 |     if (true) if (true) {} else {};
+    |                         ^^
+
+warning Empty if blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:60:33] no_empty_block
+
+ 60 |     if (true) if (true) {} else {};
+    |                                 ^^
+
 error Empty comptime blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:52:10] no_empty_block
 
  52 | comptime {}
@@ -54,4 +84,4 @@ warning Empty if blocks are discouraged. If deliberately empty, include a commen
    |               ^^
 
 x 5 errors
-x 6 warnings
+x 12 warnings

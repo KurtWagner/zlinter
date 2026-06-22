@@ -434,6 +434,67 @@ test "for blocks" {
     );
 }
 
+test "nested statement bodies" {
+    const source =
+        \\pub fn main() void {
+        \\    const items = [_]u8{1};
+        \\    if (true) if (true) {} else {};
+        \\    while (true) if (true) {} else {};
+        \\    for (items) |_| if (true) {} else {};
+        \\}
+    ;
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
+            source,
+            .{},
+            Config{
+                .if_block = severity,
+                .while_block = severity,
+                .for_block = severity,
+            },
+            &.{
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty if blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                },
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty if blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                },
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty if blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                },
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty if blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                },
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty if blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                },
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty if blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                },
+            },
+        );
+    }
+}
+
 test "defer blocks" {
     const source =
         \\pub fn main() void {

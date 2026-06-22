@@ -54,3 +54,10 @@ comptime {}
 comptime {
     // deliberate
 }
+
+pub fn nestedMain() void {
+    const items = [_]u8{1};
+    if (true) if (true) {} else {};
+    while (true) if (true) {} else {};
+    for (items) |_| if (true) {} else {};
+}
