@@ -375,6 +375,93 @@ test "no_swallow_error" {
     );
 }
 
+test "no_swallow_error ordinary if else does not report" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\pub fn main(cond: bool) void {
+        \\    if (cond) {} else {}
+        \\    if (cond) {} else unreachable;
+        \\}
+    ,
+        .{},
+        Config{
+            .detect_catch_unreachable = .warning,
+            .detect_empty_catch = .warning,
+            .detect_empty_else = .warning,
+            .detect_else_unreachable = .warning,
+        },
+        &.{},
+    );
+}
+
+test "no_swallow_error handled catch does not report" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const std = @import("std");
+        \\
+        \\pub fn main() !void {
+        \\    method() catch |e| {
+        \\        std.log.err("{s}", .{@errorName(e)});
+        \\    };
+        \\
+        \\    method() catch |e| return e;
+        \\}
+    ,
+        .{},
+        Config{
+            .detect_catch_unreachable = .warning,
+            .detect_empty_catch = .warning,
+            .detect_empty_else = .warning,
+            .detect_else_unreachable = .warning,
+        },
+        &.{},
+    );
+}
+
+test "no_swallow_error excludes test blocks by default" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\test "example" {
+        \\    method() catch {};
+        \\}
+    ,
+        .{},
+        Config{
+            .detect_catch_unreachable = .warning,
+            .detect_empty_catch = .warning,
+            .detect_empty_else = .warning,
+            .detect_else_unreachable = .warning,
+        },
+        &.{},
+    );
+}
+
+test "no_swallow_error reports test blocks when exclude_tests is false" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\test "example" {
+        \\    method() catch {};
+        \\}
+    ,
+        .{},
+        Config{
+            .detect_catch_unreachable = .warning,
+            .detect_empty_catch = .warning,
+            .detect_empty_else = .warning,
+            .detect_else_unreachable = .warning,
+            .exclude_tests = false,
+        },
+        &.{
+            .{
+                .rule_id = "no_swallow_error",
+                .severity = .warning,
+                .slice = "method() catch {}",
+                .message = "Avoid swallowing error with empty catch",
+            },
+        },
+    );
+}
+
 const std = @import("std");
 const zlinter = @import("zlinter");
 const Ast = std.zig.Ast;
