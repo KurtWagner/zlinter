@@ -102,7 +102,7 @@ fn run(
                 .rule_id = rule.rule_id,
                 .severity = config.severity,
                 .start = .startOfToken(tree, comptime_token),
-                .end = .endOfToken(tree, tree.lastToken(type_node)),
+                .end = .endOfToken(tree, comptime_token),
                 .message = try std.fmt.allocPrint(
                     session_arena,
                     "Redundant `comptime` on parameter of type `{s}` - parameters of this type are always comptime",
@@ -140,7 +140,7 @@ test "no_redundant_comptime" {
             .{
                 .rule_id = "no_redundant_comptime",
                 .severity = .warning,
-                .slice = "comptime T: type",
+                .slice = "comptime",
                 .message = "Redundant `comptime` on parameter of type `type` - parameters of this type are always comptime",
             },
         },
@@ -159,7 +159,7 @@ test "no_redundant_comptime" {
             .{
                 .rule_id = "no_redundant_comptime",
                 .severity = .warning,
-                .slice = "comptime T: (type)",
+                .slice = "comptime",
                 .message = "Redundant `comptime` on parameter of type `type` - parameters of this type are always comptime",
             },
         },
@@ -178,13 +178,13 @@ test "no_redundant_comptime" {
             .{
                 .rule_id = "no_redundant_comptime",
                 .severity = .warning,
-                .slice = "comptime a: comptime_int",
+                .slice = "comptime",
                 .message = "Redundant `comptime` on parameter of type `comptime_int` - parameters of this type are always comptime",
             },
             .{
                 .rule_id = "no_redundant_comptime",
                 .severity = .warning,
-                .slice = "comptime b: comptime_int",
+                .slice = "comptime",
                 .message = "Redundant `comptime` on parameter of type `comptime_int` - parameters of this type are always comptime",
             },
         },
@@ -201,13 +201,13 @@ test "no_redundant_comptime" {
             .{
                 .rule_id = "no_redundant_comptime",
                 .severity = .warning,
-                .slice = "comptime a: (comptime_int)",
+                .slice = "comptime",
                 .message = "Redundant `comptime` on parameter of type `comptime_int` - parameters of this type are always comptime",
             },
             .{
                 .rule_id = "no_redundant_comptime",
                 .severity = .warning,
-                .slice = "comptime b: (comptime_float)",
+                .slice = "comptime",
                 .message = "Redundant `comptime` on parameter of type `comptime_float` - parameters of this type are always comptime",
             },
         },
@@ -226,19 +226,19 @@ test "no_redundant_comptime" {
             .{
                 .rule_id = "no_redundant_comptime",
                 .severity = .warning,
-                .slice = "comptime _: type",
+                .slice = "comptime",
                 .message = "Redundant `comptime` on parameter of type `type` - parameters of this type are always comptime",
             },
             .{
                 .rule_id = "no_redundant_comptime",
                 .severity = .warning,
-                .slice = "comptime _: comptime_int",
+                .slice = "comptime",
                 .message = "Redundant `comptime` on parameter of type `comptime_int` - parameters of this type are always comptime",
             },
             .{
                 .rule_id = "no_redundant_comptime",
                 .severity = .warning,
-                .slice = "comptime _: comptime_float",
+                .slice = "comptime",
                 .message = "Redundant `comptime` on parameter of type `comptime_float` - parameters of this type are always comptime",
             },
         },
@@ -255,14 +255,53 @@ test "no_redundant_comptime" {
             .{
                 .rule_id = "no_redundant_comptime",
                 .severity = .warning,
-                .slice = "comptime T: type",
+                .slice = "comptime",
                 .message = "Redundant `comptime` on parameter of type `type` - parameters of this type are always comptime",
             },
             .{
                 .rule_id = "no_redundant_comptime",
                 .severity = .warning,
-                .slice = "comptime F: comptime_float",
+                .slice = "comptime",
                 .message = "Redundant `comptime` on parameter of type `comptime_float` - parameters of this type are always comptime",
+            },
+        },
+    );
+
+    // Bad: redundant comptime on multiline parameter formatting
+    try zlinter.testing.testRunRule(
+        rule,
+        \\fn List(
+        \\    comptime
+        \\    T: type,
+        \\) type {
+        \\    return struct {};
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_redundant_comptime",
+                .severity = .warning,
+                .slice = "comptime",
+                .message = "Redundant `comptime` on parameter of type `type` - parameters of this type are always comptime",
+            },
+        },
+    );
+
+    // Bad: redundant comptime in anonymous function type
+    try zlinter.testing.testRunRule(
+        rule,
+        \\const Callback = fn (comptime T: type) void;
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_redundant_comptime",
+                .severity = .warning,
+                .slice = "comptime",
+                .message = "Redundant `comptime` on parameter of type `type` - parameters of this type are always comptime",
             },
         },
     );
@@ -282,6 +321,16 @@ test "no_redundant_comptime" {
         rule,
         \\fn foo(comptime n: usize) void {}
         \\fn keep(comptime _: usize) void {}
+    ,
+        .{},
+        Config{},
+        &.{},
+    );
+
+    // Good: function type alias with non-redundant comptime parameter
+    try zlinter.testing.testRunRule(
+        rule,
+        \\const Callback = fn (comptime n: usize) void;
     ,
         .{},
         Config{},

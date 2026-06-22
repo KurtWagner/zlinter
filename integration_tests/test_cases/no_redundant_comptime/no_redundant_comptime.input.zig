@@ -31,3 +31,6 @@ fn mixed(comptime T: type, n: usize, comptime F: comptime_float) void {
 }
 
 const std = @import("std");
+
+const BadCallback = fn (comptime T: type) void;
+const GoodCallback = fn (comptime n: usize) void;

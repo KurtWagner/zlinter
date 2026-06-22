@@ -1,26 +1,31 @@
 warning Redundant `comptime` on parameter of type `type` - parameters of this type are always comptime [test_cases/no_redundant_comptime/no_redundant_comptime.input.zig:6:12] no_redundant_comptime
 
  6 | fn BadList(comptime T: type) type {
-   |            ^^^^^^^^^^^^^^^^
+   |            ^^^^^^^^
 
 warning Redundant `comptime` on parameter of type `comptime_int` - parameters of this type are always comptime [test_cases/no_redundant_comptime/no_redundant_comptime.input.zig:15:8] no_redundant_comptime
 
  15 | fn bad(comptime a: comptime_int) comptime_int {
-    |        ^^^^^^^^^^^^^^^^^^^^^^^^
+    |        ^^^^^^^^
 
 warning Redundant `comptime` on parameter of type `comptime_float` - parameters of this type are always comptime [test_cases/no_redundant_comptime/no_redundant_comptime.input.zig:19:12] no_redundant_comptime
 
  19 | fn alsobad(comptime x: comptime_float) comptime_float {
-    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |            ^^^^^^^^
 
 warning Redundant `comptime` on parameter of type `type` - parameters of this type are always comptime [test_cases/no_redundant_comptime/no_redundant_comptime.input.zig:27:10] no_redundant_comptime
 
  27 | fn mixed(comptime T: type, n: usize, comptime F: comptime_float) void {
-    |          ^^^^^^^^^^^^^^^^
+    |          ^^^^^^^^
 
 warning Redundant `comptime` on parameter of type `comptime_float` - parameters of this type are always comptime [test_cases/no_redundant_comptime/no_redundant_comptime.input.zig:27:38] no_redundant_comptime
 
  27 | fn mixed(comptime T: type, n: usize, comptime F: comptime_float) void {
-    |                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |                                      ^^^^^^^^
 
-x 5 warnings
+warning Redundant `comptime` on parameter of type `type` - parameters of this type are always comptime [test_cases/no_redundant_comptime/no_redundant_comptime.input.zig:35:25] no_redundant_comptime
+
+ 35 | const BadCallback = fn (comptime T: type) void;
+    |                         ^^^^^^^^
+
+x 6 warnings
