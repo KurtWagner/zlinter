@@ -60,6 +60,12 @@ pub const Config = struct {
     /// Severity for empty `fn` declaration blocks
     fn_decl_block: zlinter.rules.LintProblemSeverity = .@"error",
 
+    /// Allow empty function bodies for ABI/runtime/linkage stubs.
+    ///
+    /// This covers cases where an empty function exists primarily to provide
+    /// a required symbol, calling convention, export, or runtime hook.
+    allow_empty_abi_stubs: bool = true,
+
     /// Severity for empty `test` blocks
     test_block: zlinter.rules.LintProblemSeverity = .@"error",
 
@@ -89,6 +95,7 @@ fn run(
     const rule_arena = session.runtime.ruleArena();
 
     var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
+    var fn_proto_buffer: [1]Ast.Node.Index = undefined;
 
     const tree = doc.tree(session);
 
@@ -104,7 +111,12 @@ fn run(
                 .test_decl => config.test_block,
                 .comptime_block => config.comptime_block,
             };
-            if (severity != .off and isWhitespaceOnlyBlock(tree, decl_block.block)) {
+            if (severity != .off and
+                isWhitespaceOnlyBlock(tree, decl_block.block) and
+                !(decl_block.kind == .fn_decl and
+                    config.allow_empty_abi_stubs and
+                    isAbiStubFnDecl(tree, node, &fn_proto_buffer)))
+            {
                 try lint_problems.append(session_arena, .{
                     .rule_id = rule.rule_id,
                     .severity = severity,
@@ -250,6 +262,24 @@ fn isWhitespaceOnlyBlock(tree: Ast, node: Ast.Node.Index) bool {
         }
     }
     return true;
+}
+
+fn isAbiStubFnDecl(tree: Ast, node: Ast.Node.Index, fn_proto_buffer: *[1]Ast.Node.Index) bool {
+    const fn_proto = tree.fullFnProto(fn_proto_buffer, node) orelse return false;
+
+    if (fn_proto.name_token) |name_token| {
+        if (tree.tokenTag(name_token) == .identifier and
+            std.mem.startsWith(u8, tree.tokenSlice(name_token), "__"))
+            return true;
+    }
+
+    if (fn_proto.extern_export_inline_token) |token|
+        if (tree.tokenTag(token) == .keyword_export) return true;
+
+    if (fn_proto.ast.callconv_expr != .none) return true;
+    if (fn_proto.ast.section_expr != .none) return true;
+
+    return false;
 }
 
 fn blockClosingBraceToken(tree: Ast, node: Ast.Node.Index) ?Ast.TokenIndex {
@@ -904,10 +934,9 @@ test "function declaration blocks" {
     const source =
         \\pub fn empty() void {}
         \\
-        \\pub fn alsoEmpty() void {
-        \\    // Ignore
-        \\}
+        \\fn alsoEmpty() void {}
     ;
+
     inline for (&.{ .warning, .@"error" }) |severity| {
         try zlinter.testing.testRunRule(
             buildRule(.{}),
@@ -915,6 +944,12 @@ test "function declaration blocks" {
             .{},
             Config{ .fn_decl_block = severity },
             &.{
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty function declaration blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                },
                 .{
                     .rule_id = "no_empty_block",
                     .severity = severity,
@@ -932,6 +967,111 @@ test "function declaration blocks" {
         .{},
         Config{ .fn_decl_block = .off },
         &.{},
+    );
+}
+
+test "commented empty function declaration block is allowed" {
+    const source =
+        \\pub fn alsoEmpty() void {
+        \\    // Ignore
+        \\}
+    ;
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{ .fn_decl_block = .@"error" },
+        &.{},
+    );
+}
+
+test "empty ABI stubs are allowed by default" {
+    const source =
+        \\pub fn __aeabi_unwind_cpp_pr2() callconv(.{ .arm_aapcs = .{} }) void {}
+        \\export fn exported_noop() void {}
+        \\pub export fn public_exported_noop() void {}
+        \\pub fn __runtime_hook() linksection(".text.special") void {}
+    ;
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{},
+        &.{},
+    );
+}
+
+test "empty ABI stubs are reported when disabled" {
+    const source =
+        \\pub fn __aeabi_unwind_cpp_pr2() callconv(.{ .arm_aapcs = .{} }) void {}
+        \\export fn exported_noop() void {}
+        \\pub export fn public_exported_noop() void {}
+        \\pub fn __runtime_hook() linksection(".text.special") void {}
+    ;
+
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
+            source,
+            .{},
+            Config{
+                .fn_decl_block = severity,
+                .allow_empty_abi_stubs = false,
+            },
+            &.{
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty function declaration blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                },
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty function declaration blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                },
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty function declaration blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                },
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty function declaration blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                },
+            },
+        );
+    }
+}
+
+test "empty non-function blocks are still reported" {
+    const source =
+        \\pub fn main() void {
+        \\    if (true) {}
+        \\}
+    ;
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{
+            .if_block = .@"error",
+            .allow_empty_abi_stubs = true,
+        },
+        &.{
+            .{
+                .rule_id = "no_empty_block",
+                .severity = .@"error",
+                .slice = "{}",
+                .message = "Empty if body blocks are discouraged. If deliberately empty, include a comment inside the block.",
+            },
+        },
     );
 }
 

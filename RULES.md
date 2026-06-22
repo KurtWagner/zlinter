@@ -556,6 +556,12 @@ if (something) {
 
   * **Default:** `.@"error"`
 
+* `allow_empty_abi_stubs`
+
+  * Allow empty function bodies for ABI/runtime/linkage stubs.  This covers cases where an empty function exists primarily to provide a required symbol, calling convention, export, or runtime hook.
+
+  * **Default:** `true`
+
 * `test_block`
 
   * Severity for empty `test` blocks
