@@ -75,6 +75,7 @@ test "require_fmt" {
     const rule = buildRule(.{});
 
     inline for (&.{ .warning, .@"error" }) |severity| {
+        // Good:
         try zlinter.testing.testRunRule(
             rule,
             \\const foo: u32 = 67;
@@ -84,6 +85,8 @@ test "require_fmt" {
             Config{ .severity = severity },
             &.{},
         );
+
+        // Bad: Missing trailing newline
         try zlinter.testing.testRunRule(
             rule,
             \\const foo: u32 = 67;
@@ -99,6 +102,8 @@ test "require_fmt" {
                 },
             },
         );
+
+        // Bad: Unnecesary whitespae
         try zlinter.testing.testRunRule(
             rule,
             \\const foo  = 67;
@@ -115,6 +120,8 @@ test "require_fmt" {
                 },
             },
         );
+
+        // Bad: Missing indentation
         try zlinter.testing.testRunRule(
             rule,
             \\pub fn main() void {
@@ -178,4 +185,3 @@ test "require_fmt ignores invalid ast trees" {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
-const Ast = std.zig.Ast;
