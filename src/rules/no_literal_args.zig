@@ -55,6 +55,13 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 
 const LiteralKind = enum { bool, string, number, char };
 
+fn allDetectionsOff(config: Config) bool {
+    return config.detect_char_literal == .off and
+        config.detect_string_literal == .off and
+        config.detect_number_literal == .off and
+        config.detect_bool_literal == .off;
+}
+
 fn unwrapLiteralWrapperExpression(tree: Ast, node: Ast.Node.Index) Ast.Node.Index {
     var current = node;
 
@@ -107,6 +114,7 @@ fn run(
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+    if (allDetectionsOff(config)) return null;
 
     const session_arena = session.runtime.sessionArena();
     const rule_arena = session.runtime.ruleArena();
