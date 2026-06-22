@@ -30,11 +30,20 @@ pub const Config = struct {
     /// Severity for empty `if` blocks
     if_block: zlinter.rules.LintProblemSeverity = .@"error",
 
+    /// Severity for empty `if` else blocks
+    if_else_block: zlinter.rules.LintProblemSeverity = .@"error",
+
     /// Severity for empty `while` blocks
     while_block: zlinter.rules.LintProblemSeverity = .off,
 
+    /// Severity for empty `while` else blocks
+    while_else_block: zlinter.rules.LintProblemSeverity = .off,
+
     /// Severity for empty `for` blocks
     for_block: zlinter.rules.LintProblemSeverity = .@"error",
+
+    /// Severity for empty `for` else blocks
+    for_else_block: zlinter.rules.LintProblemSeverity = .@"error",
 
     /// Severity for empty `catch` blocks
     catch_block: zlinter.rules.LintProblemSeverity = .off,
@@ -112,46 +121,77 @@ fn run(
         }
 
         const statement = zlinter.ast.fullStatement(tree, node) orelse continue :nodes;
-        const severity: zlinter.rules.LintProblemSeverity = switch (statement) {
-            .@"if" => config.if_block,
-            .@"while" => config.while_block,
-            .@"for" => config.for_block,
-            .switch_case => config.switch_case_block,
-            .@"catch" => config.catch_block,
-            .@"defer" => config.defer_block,
-            .@"errdefer" => config.errdefer_block,
-        };
-        if (severity == .off) continue :nodes;
-
         var block_candidates_buffer: [2]BlockCandidate = undefined;
         var block_candidates: std.ArrayList(BlockCandidate) = .initBuffer(&block_candidates_buffer);
 
         switch (statement) {
             .@"if" => |info| {
-                block_candidates.appendAssumeCapacity(.{ .node = info.ast.then_expr, .label = "if body" });
+                block_candidates.appendAssumeCapacity(.{
+                    .node = info.ast.then_expr,
+                    .severity = config.if_block,
+                    .label = "if body",
+                });
                 if (info.ast.else_expr.unwrap()) |n| {
-                    block_candidates.appendAssumeCapacity(.{ .node = n, .label = "if else" });
+                    block_candidates.appendAssumeCapacity(.{
+                        .node = n,
+                        .severity = config.if_else_block,
+                        .label = "if else",
+                    });
                 }
             },
             .@"while" => |info| {
-                block_candidates.appendAssumeCapacity(.{ .node = info.ast.then_expr, .label = "while body" });
+                block_candidates.appendAssumeCapacity(.{
+                    .node = info.ast.then_expr,
+                    .severity = config.while_block,
+                    .label = "while body",
+                });
                 if (info.ast.else_expr.unwrap()) |n| {
-                    block_candidates.appendAssumeCapacity(.{ .node = n, .label = "while else" });
+                    block_candidates.appendAssumeCapacity(.{
+                        .node = n,
+                        .severity = config.while_else_block,
+                        .label = "while else",
+                    });
                 }
             },
             .@"for" => |info| {
-                block_candidates.appendAssumeCapacity(.{ .node = info.ast.then_expr, .label = "for body" });
+                block_candidates.appendAssumeCapacity(.{
+                    .node = info.ast.then_expr,
+                    .severity = config.for_block,
+                    .label = "for body",
+                });
                 if (info.ast.else_expr.unwrap()) |n| {
-                    block_candidates.appendAssumeCapacity(.{ .node = n, .label = "for else" });
+                    block_candidates.appendAssumeCapacity(.{
+                        .node = n,
+                        .severity = config.for_else_block,
+                        .label = "for else",
+                    });
                 }
             },
-            .switch_case => |info| block_candidates.appendAssumeCapacity(.{ .node = info.ast.target_expr, .label = "switch case" }),
-            .@"catch" => |expr_node| block_candidates.appendAssumeCapacity(.{ .node = expr_node, .label = "catch" }),
-            .@"defer" => |expr_node| block_candidates.appendAssumeCapacity(.{ .node = expr_node, .label = "defer" }),
-            .@"errdefer" => |expr_node| block_candidates.appendAssumeCapacity(.{ .node = expr_node, .label = "errdefer" }),
+            .switch_case => |info| block_candidates.appendAssumeCapacity(.{
+                .node = info.ast.target_expr,
+                .severity = config.switch_case_block,
+                .label = "switch case",
+            }),
+            .@"catch" => |expr_node| block_candidates.appendAssumeCapacity(.{
+                .node = expr_node,
+                .severity = config.catch_block,
+                .label = "catch",
+            }),
+            .@"defer" => |expr_node| block_candidates.appendAssumeCapacity(.{
+                .node = expr_node,
+                .severity = config.defer_block,
+                .label = "defer",
+            }),
+            .@"errdefer" => |expr_node| block_candidates.appendAssumeCapacity(.{
+                .node = expr_node,
+                .severity = config.errdefer_block,
+                .label = "errdefer",
+            }),
         }
 
         block_candidates: for (block_candidates.items) |candidate| {
+            if (candidate.severity == .off) continue :block_candidates;
+
             const expr_node = candidate.node;
 
             // Ignore here as it'll be processed in the outer loop.
@@ -161,7 +201,7 @@ fn run(
 
             try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
-                .severity = severity,
+                .severity = candidate.severity,
                 .start = .startOfToken(tree, tree.firstToken(expr_node)),
                 .end = .endOfToken(tree, tree.lastToken(expr_node)),
                 .message = try std.fmt.allocPrint(
@@ -247,6 +287,7 @@ const DeclBlock = struct {
 
 const BlockCandidate = struct {
     node: Ast.Node.Index,
+    severity: zlinter.rules.LintProblemSeverity,
     label: []const u8,
 };
 
@@ -289,7 +330,10 @@ test "if blocks" {
             buildRule(.{}),
             source,
             .{},
-            Config{ .if_block = severity },
+            Config{
+                .if_block = severity,
+                .if_else_block = severity,
+            },
             &.{
                 .{
                     .rule_id = "no_empty_block",
@@ -312,8 +356,52 @@ test "if blocks" {
         buildRule(.{}),
         source,
         .{},
-        Config{ .if_block = .off },
+        Config{ .if_block = .off, .if_else_block = .off },
         &.{},
+    );
+}
+
+test "if branch severities are independent" {
+    const source =
+        \\pub fn main() void {
+        \\    if (a) {} else {}
+        \\}
+    ;
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{
+            .if_block = .@"error",
+            .if_else_block = .off,
+        },
+        &.{
+            .{
+                .rule_id = "no_empty_block",
+                .severity = .@"error",
+                .slice = "{}",
+                .message = "Empty if body blocks are discouraged. If deliberately empty, include a comment inside the block.",
+            },
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{
+            .if_block = .off,
+            .if_else_block = .@"error",
+        },
+        &.{
+            .{
+                .rule_id = "no_empty_block",
+                .severity = .@"error",
+                .slice = "{}",
+                .message = "Empty if else blocks are discouraged. If deliberately empty, include a comment inside the block.",
+            },
+        },
     );
 }
 
@@ -334,7 +422,10 @@ test "while blocks" {
             buildRule(.{}),
             source,
             .{},
-            Config{ .while_block = severity },
+            Config{
+                .while_block = severity,
+                .while_else_block = severity,
+            },
             &.{
                 .{
                     .rule_id = "no_empty_block",
@@ -366,8 +457,53 @@ test "while blocks" {
         buildRule(.{}),
         source,
         .{},
-        Config{ .while_block = .off },
+        Config{ .while_block = .off, .while_else_block = .off },
         &.{},
+    );
+}
+
+test "while branch severities are independent" {
+    const source =
+        \\pub fn main() void {
+        \\    var i: u32 = 0;
+        \\    while (i < 10) : (i += 1) {} else {}
+        \\}
+    ;
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{
+            .while_block = .@"error",
+            .while_else_block = .off,
+        },
+        &.{
+            .{
+                .rule_id = "no_empty_block",
+                .severity = .@"error",
+                .slice = "{}",
+                .message = "Empty while body blocks are discouraged. If deliberately empty, include a comment inside the block.",
+            },
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{
+            .while_block = .off,
+            .while_else_block = .@"error",
+        },
+        &.{
+            .{
+                .rule_id = "no_empty_block",
+                .severity = .@"error",
+                .slice = "{}",
+                .message = "Empty while else blocks are discouraged. If deliberately empty, include a comment inside the block.",
+            },
+        },
     );
 }
 
@@ -387,7 +523,10 @@ test "for blocks" {
             buildRule(.{}),
             source,
             .{},
-            Config{ .for_block = severity },
+            Config{
+                .for_block = severity,
+                .for_else_block = severity,
+            },
             &.{
                 .{
                     .rule_id = "no_empty_block",
@@ -419,7 +558,75 @@ test "for blocks" {
         buildRule(.{}),
         source,
         .{},
-        Config{ .for_block = .off },
+        Config{ .for_block = .off, .for_else_block = .off },
+        &.{},
+    );
+}
+
+test "for branch severities are independent" {
+    const source =
+        \\pub fn main() void {
+        \\    const items = [_]u8{1};
+        \\    for (items) |_| {} else {}
+        \\}
+    ;
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{
+            .for_block = .@"error",
+            .for_else_block = .off,
+        },
+        &.{
+            .{
+                .rule_id = "no_empty_block",
+                .severity = .@"error",
+                .slice = "{}",
+                .message = "Empty for body blocks are discouraged. If deliberately empty, include a comment inside the block.",
+            },
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{
+            .for_block = .off,
+            .for_else_block = .@"error",
+        },
+        &.{
+            .{
+                .rule_id = "no_empty_block",
+                .severity = .@"error",
+                .slice = "{}",
+                .message = "Empty for else blocks are discouraged. If deliberately empty, include a comment inside the block.",
+            },
+        },
+    );
+}
+
+test "commented else block is allowed" {
+    const source =
+        \\pub fn main() void {
+        \\    if (a) {
+        \\        doThing();
+        \\    } else {
+        \\        // deliberately ignored
+        \\    }
+        \\}
+    ;
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{
+            .if_block = .@"error",
+            .if_else_block = .@"error",
+        },
         &.{},
     );
 }
@@ -442,6 +649,9 @@ test "nested statement bodies" {
                 .if_block = severity,
                 .while_block = severity,
                 .for_block = severity,
+                .if_else_block = severity,
+                .while_else_block = severity,
+                .for_else_block = severity,
             },
             &.{
                 .{
@@ -811,7 +1021,7 @@ test "blockClosingBraceToken handles trailing semicolons" {
     var tree = try Ast.parse(std.testing.allocator, source, .zig);
     defer tree.deinit(std.testing.allocator);
 
-    const block = try zlinter.testing.expectSingleNodeOfTag(tree, &.{ .block_two_semicolon });
+    const block = try zlinter.testing.expectSingleNodeOfTag(tree, &.{.block_two_semicolon});
     try std.testing.expect(blockClosingBraceToken(tree, block) != null);
     const closing_brace = blockClosingBraceToken(tree, block).?;
     try std.testing.expectEqualStrings("}", tree.tokenSlice(closing_brace));
