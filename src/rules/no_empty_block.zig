@@ -195,10 +195,12 @@ fn isWhitespaceOnlyBlock(tree: Ast, node: Ast.Node.Index) bool {
     if (!is_block) return false;
 
     const first_token = tree.firstToken(node);
-    const last_token = tree.lastToken(node);
+    if (tree.tokenTag(first_token) != .l_brace) return false;
 
-    const start = tree.tokenStart(first_token) + tree.tokenSlice(last_token).len;
+    const last_token = blockClosingBraceToken(tree, node) orelse return false;
+    const start = tree.tokenStart(first_token) + tree.tokenSlice(first_token).len;
     const end = tree.tokenStart(last_token);
+    if (start > end) return false;
 
     // Comments are intentionally treated as documentation, so any non-whitespace
     // byte between braces means the block is allowed.
@@ -208,6 +210,20 @@ fn isWhitespaceOnlyBlock(tree: Ast, node: Ast.Node.Index) bool {
         }
     }
     return true;
+}
+
+fn blockClosingBraceToken(tree: Ast, node: Ast.Node.Index) ?Ast.TokenIndex {
+    const first_token = tree.firstToken(node);
+    var token = tree.lastToken(node);
+
+    while (true) {
+        if (tree.tokenTag(token) == .r_brace or std.mem.eql(u8, tree.tokenSlice(token), "}")) {
+            return token;
+        }
+
+        if (token == first_token) return null;
+        token -= 1;
+    }
 }
 
 const DeclBlock = struct {
@@ -783,6 +799,23 @@ test "comptime blocks" {
         Config{ .comptime_block = .off },
         &.{},
     );
+}
+
+test "blockClosingBraceToken handles trailing semicolons" {
+    const source =
+        \\pub fn main() void {
+        \\    if (true) {};
+        \\}
+    ;
+
+    var tree = try Ast.parse(std.testing.allocator, source, .zig);
+    defer tree.deinit(std.testing.allocator);
+
+    const block = try zlinter.testing.expectSingleNodeOfTag(tree, &.{ .block_two_semicolon });
+    try std.testing.expect(blockClosingBraceToken(tree, block) != null);
+    const closing_brace = blockClosingBraceToken(tree, block).?;
+    try std.testing.expectEqualStrings("}", tree.tokenSlice(closing_brace));
+    try std.testing.expect(!isWhitespaceOnlyBlock(tree, block));
 }
 
 const std = @import("std");
