@@ -9,6 +9,9 @@
 //! emptiness and intentional no-op by requiring either a configuration
 //! exception or a comment.
 //!
+//! Whitespace-only blocks are reported. Blocks containing only comments are
+//! treated as documented no-op blocks and are allowed.
+//!
 //! For example,
 //!
 //! ```zig
@@ -81,7 +84,7 @@ fn run(
         const node, _ = tuple;
 
         if (fnDeclBlock(tree, node)) |block| {
-            if (config.fn_decl_block != .off and isEmptyBlock(tree, block)) {
+            if (config.fn_decl_block != .off and isWhitespaceOnlyBlock(tree, block)) {
                 try lint_problems.append(session_arena, .{
                     .rule_id = rule.rule_id,
                     .severity = config.fn_decl_block,
@@ -141,7 +144,7 @@ fn run(
             // Ignore here as it'll be processed in the outer loop.
             if (zlinter.ast.fullStatement(tree, expr_node) != null) continue :expr_nodes;
 
-            if (!isEmptyBlock(tree, expr_node)) continue :expr_nodes;
+            if (!isWhitespaceOnlyBlock(tree, expr_node)) continue :expr_nodes;
 
             try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
@@ -167,7 +170,7 @@ fn run(
         null;
 }
 
-fn isEmptyBlock(tree: Ast, node: Ast.Node.Index) bool {
+fn isWhitespaceOnlyBlock(tree: Ast, node: Ast.Node.Index) bool {
     const is_block = switch (tree.nodeTag(node)) {
         .block,
         .block_semicolon,
@@ -184,6 +187,8 @@ fn isEmptyBlock(tree: Ast, node: Ast.Node.Index) bool {
     const start = tree.tokenStart(first_token) + tree.tokenSlice(last_token).len;
     const end = tree.tokenStart(last_token);
 
+    // Comments are intentionally treated as documentation, so any non-whitespace
+    // byte between braces means the block is allowed.
     for (start..end) |i| {
         if (!std.ascii.isWhitespace(tree.source[i])) {
             return false;
