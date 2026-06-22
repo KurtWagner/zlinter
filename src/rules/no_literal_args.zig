@@ -55,18 +55,20 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 
 const LiteralKind = enum { bool, string, number, char };
 
-fn unwrapGroupedExpression(tree: Ast, node: Ast.Node.Index) Ast.Node.Index {
+fn unwrapLiteralWrapperExpression(tree: Ast, node: Ast.Node.Index) Ast.Node.Index {
     var current = node;
 
-    while (tree.nodeTag(current) == .grouped_expression) {
-        current = tree.nodeData(current).node;
+    while (true) {
+        switch (tree.nodeTag(current)) {
+            .grouped_expression => current = tree.nodeData(current).node_and_token[0],
+            .@"comptime" => current = tree.nodeData(current).node,
+            else => return current,
+        }
     }
-
-    return current;
 }
 
 fn literalKindForNumberSign(tree: Ast, node: Ast.Node.Index) ?LiteralKind {
-    const operand = unwrapGroupedExpression(tree, tree.nodeData(node).node);
+    const operand = unwrapLiteralWrapperExpression(tree, tree.nodeData(node).node);
     return switch (tree.nodeTag(operand)) {
         .number_literal => .number,
         else => null,
@@ -74,18 +76,18 @@ fn literalKindForNumberSign(tree: Ast, node: Ast.Node.Index) ?LiteralKind {
 }
 
 fn literalKindForArg(tree: Ast, node: Ast.Node.Index) ?LiteralKind {
-    return switch (tree.nodeTag(node)) {
-        .grouped_expression => literalKindForArg(tree, tree.nodeData(node).node),
+    const unwrapped = unwrapLiteralWrapperExpression(tree, node);
+    return switch (tree.nodeTag(unwrapped)) {
         .number_literal => .number,
         .string_literal, .multiline_string_literal => .string,
         .char_literal => .char,
-        .negation, .negation_wrap => literalKindForNumberSign(tree, node),
-        .identifier => switch (tree.tokens.items(.tag)[tree.nodeMainToken(node)]) {
+        .negation, .negation_wrap => literalKindForNumberSign(tree, unwrapped),
+        .identifier => switch (tree.tokens.items(.tag)[tree.nodeMainToken(unwrapped)]) {
             .string_literal, .multiline_string_literal_line => .string,
             .char_literal => .char,
             .number_literal => .number,
             else => @as(?LiteralKind, maybe_bool: {
-                const slice = tree.getNodeSource(node);
+                const slice = tree.getNodeSource(unwrapped);
                 break :maybe_bool if (std.mem.eql(u8, slice, "false") or
                     std.mem.eql(u8, slice, "true"))
                     .bool
@@ -236,6 +238,82 @@ test "bool" {
             .detect_string_literal = .off,
         },
         &.{},
+    );
+}
+
+test "wrapped literals" {
+    const rule = buildRule(.{});
+    const source: [:0]const u8 =
+        \\pub fn main() void {
+        \\  call((true), ((-1.2)), comptime 1, comptime true);
+        \\}
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{
+            .detect_number_literal = .warning,
+            .detect_bool_literal = .warning,
+            .detect_char_literal = .off,
+            .detect_string_literal = .off,
+        },
+        &.{
+            .{
+                .rule_id = "no_literal_args",
+                .severity = .warning,
+                .slice = "(true)",
+                .message = "Avoid bool literal arguments as they're ambiguous.",
+            },
+            .{
+                .rule_id = "no_literal_args",
+                .severity = .warning,
+                .slice = "((-1.2))",
+                .message = "Avoid number literal arguments as they're ambiguous.",
+            },
+            .{
+                .rule_id = "no_literal_args",
+                .severity = .warning,
+                .slice = "comptime 1",
+                .message = "Avoid number literal arguments as they're ambiguous.",
+            },
+            .{
+                .rule_id = "no_literal_args",
+                .severity = .warning,
+                .slice = "comptime true",
+                .message = "Avoid bool literal arguments as they're ambiguous.",
+            },
+        },
+    );
+}
+
+test "nested call does not match outer argument" {
+    const rule = buildRule(.{});
+    const source: [:0]const u8 =
+        \\pub fn main() void {
+        \\  call(foo(true));
+        \\}
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{
+            .detect_number_literal = .off,
+            .detect_bool_literal = .warning,
+            .detect_char_literal = .off,
+            .detect_string_literal = .off,
+        },
+        &.{
+            .{
+                .rule_id = "no_literal_args",
+                .severity = .warning,
+                .slice = "true",
+                .message = "Avoid bool literal arguments as they're ambiguous.",
+            },
+        },
     );
 }
 
