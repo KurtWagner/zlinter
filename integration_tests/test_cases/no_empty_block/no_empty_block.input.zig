@@ -40,3 +40,17 @@ pub fn emptyFn() void {}
 pub fn alsoEmptyFn() void {
     // This is ok.
 }
+
+test {}
+
+test "name" {}
+
+test "comment only" {
+    // deliberate
+}
+
+comptime {}
+
+comptime {
+    // deliberate
+}

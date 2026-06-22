@@ -50,6 +50,12 @@ pub const Config = struct {
 
     /// Severity for empty `fn` declaration blocks
     fn_decl_block: zlinter.rules.LintProblemSeverity = .@"error",
+
+    /// Severity for empty `test` blocks
+    test_block: zlinter.rules.LintProblemSeverity = .@"error",
+
+    /// Severity for empty `comptime` blocks
+    comptime_block: zlinter.rules.LintProblemSeverity = .@"error",
 };
 
 /// Builds and returns the no_empty_block rule.
@@ -83,17 +89,22 @@ fn run(
     nodes: while (try it.next()) |tuple| {
         const node, _ = tuple;
 
-        if (fnDeclBlock(tree, node)) |block| {
-            if (config.fn_decl_block != .off and isWhitespaceOnlyBlock(tree, block)) {
+        if (declBlock(tree, node)) |decl_block| {
+            const severity = switch (decl_block.kind) {
+                .fn_decl => config.fn_decl_block,
+                .test_decl => config.test_block,
+                .comptime_block => config.comptime_block,
+            };
+            if (severity != .off and isWhitespaceOnlyBlock(tree, decl_block.block)) {
                 try lint_problems.append(session_arena, .{
                     .rule_id = rule.rule_id,
-                    .severity = config.fn_decl_block,
-                    .start = .startOfToken(tree, tree.firstToken(block)),
-                    .end = .endOfToken(tree, tree.lastToken(block)),
+                    .severity = severity,
+                    .start = .startOfToken(tree, tree.firstToken(decl_block.block)),
+                    .end = .endOfToken(tree, tree.lastToken(decl_block.block)),
                     .message = try std.fmt.allocPrint(
                         session_arena,
                         problem_msg_template,
-                        .{"function declaration"},
+                        .{decl_block.kind.name()},
                     ),
                 });
             }
@@ -197,9 +208,39 @@ fn isWhitespaceOnlyBlock(tree: Ast, node: Ast.Node.Index) bool {
     return true;
 }
 
-fn fnDeclBlock(tree: Ast, node: Ast.Node.Index) ?Ast.Node.Index {
+const DeclBlock = struct {
+    block: Ast.Node.Index,
+    kind: Kind,
+
+    const Kind = enum {
+        fn_decl,
+        test_decl,
+        comptime_block,
+
+        fn name(self: Kind) []const u8 {
+            return switch (self) {
+                .fn_decl => "function declaration",
+                .test_decl => "test",
+                .comptime_block => "comptime",
+            };
+        }
+    };
+};
+
+fn declBlock(tree: Ast, node: Ast.Node.Index) ?DeclBlock {
     return switch (tree.nodeTag(node)) {
-        .fn_decl => tree.nodeData(node).node_and_node.@"1",
+        .fn_decl => .{
+            .block = tree.nodeData(node).node_and_node.@"1",
+            .kind = .fn_decl,
+        },
+        .test_decl => .{
+            .block = tree.nodeData(node).opt_token_and_node[1],
+            .kind = .test_decl,
+        },
+        .@"comptime" => .{
+            .block = tree.nodeData(node).node,
+            .kind = .comptime_block,
+        },
         else => null,
     };
 }
@@ -629,6 +670,82 @@ test "function declaration blocks" {
         source,
         .{},
         Config{ .fn_decl_block = .off },
+        &.{},
+    );
+}
+
+test "test blocks" {
+    const source =
+        \\test {}
+        \\
+        \\test "name" {}
+        \\
+        \\test {
+        \\    // deliberate
+        \\}
+    ;
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
+            source,
+            .{},
+            Config{ .test_block = severity },
+            &.{
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty test blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                },
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty test blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                },
+            },
+        );
+    }
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{ .test_block = .off },
+        &.{},
+    );
+}
+
+test "comptime blocks" {
+    const source =
+        \\comptime {}
+        \\
+        \\comptime {
+        \\    // deliberate
+        \\}
+    ;
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
+            source,
+            .{},
+            Config{ .comptime_block = severity },
+            &.{
+                .{
+                    .rule_id = "no_empty_block",
+                    .severity = severity,
+                    .slice = "{}",
+                    .message = "Empty comptime blocks are discouraged. If deliberately empty, include a comment inside the block.",
+                },
+            },
+        );
+    }
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{ .comptime_block = .off },
         &.{},
     );
 }

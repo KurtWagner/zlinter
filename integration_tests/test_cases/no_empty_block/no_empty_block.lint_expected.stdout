@@ -1,3 +1,18 @@
+error Empty comptime blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:52:10] no_empty_block
+
+ 52 | comptime {}
+    |          ^^
+
+error Empty test blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:46:13] no_empty_block
+
+ 46 | test "name" {}
+    |             ^^
+
+error Empty test blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:44:6] no_empty_block
+
+ 44 | test {}
+    |      ^^
+
 warning Empty function declaration blocks are discouraged. If deliberately empty, include a comment inside the block. [test_cases/no_empty_block/no_empty_block.input.zig:38:23] no_empty_block
 
  38 | pub fn emptyFn() void {}
@@ -38,5 +53,5 @@ warning Empty if blocks are discouraged. If deliberately empty, include a commen
  2 |     if (true) {} else {
    |               ^^
 
-x 2 errors
+x 5 errors
 x 6 warnings
