@@ -55,6 +55,48 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 
 const LiteralKind = enum { bool, string, number, char };
 
+fn unwrapGroupedExpression(tree: Ast, node: Ast.Node.Index) Ast.Node.Index {
+    var current = node;
+
+    while (tree.nodeTag(current) == .grouped_expression) {
+        current = tree.nodeData(current).node;
+    }
+
+    return current;
+}
+
+fn literalKindForNumberSign(tree: Ast, node: Ast.Node.Index) ?LiteralKind {
+    const operand = unwrapGroupedExpression(tree, tree.nodeData(node).node);
+    return switch (tree.nodeTag(operand)) {
+        .number_literal => .number,
+        else => null,
+    };
+}
+
+fn literalKindForArg(tree: Ast, node: Ast.Node.Index) ?LiteralKind {
+    return switch (tree.nodeTag(node)) {
+        .grouped_expression => literalKindForArg(tree, tree.nodeData(node).node),
+        .number_literal => .number,
+        .string_literal, .multiline_string_literal => .string,
+        .char_literal => .char,
+        .negation, .negation_wrap => literalKindForNumberSign(tree, node),
+        .identifier => switch (tree.tokens.items(.tag)[tree.nodeMainToken(node)]) {
+            .string_literal, .multiline_string_literal_line => .string,
+            .char_literal => .char,
+            .number_literal => .number,
+            else => @as(?LiteralKind, maybe_bool: {
+                const slice = tree.getNodeSource(node);
+                break :maybe_bool if (std.mem.eql(u8, slice, "false") or
+                    std.mem.eql(u8, slice, "true"))
+                    .bool
+                else
+                    null;
+            }),
+        },
+        else => null,
+    };
+}
+
 /// Runs the no_literal_args rule.
 fn run(
     rule: zlinter.rules.LintRule,
@@ -82,25 +124,7 @@ fn run(
         const call = tree.fullCall(&call_buffer, node) orelse continue :nodes;
 
         for (call.ast.params) |param_node| {
-            const kind: LiteralKind = switch (tree.nodeTag(param_node)) {
-                .number_literal => .number,
-                .string_literal, .multiline_string_literal => .string,
-                .char_literal => .char,
-                .identifier => switch (tree.tokens.items(.tag)[tree.nodeMainToken(param_node)]) {
-                    .string_literal, .multiline_string_literal_line => .string,
-                    .char_literal => .char,
-                    .number_literal => .number,
-                    else => @as(?LiteralKind, maybe_bool: {
-                        const slice = tree.getNodeSource(param_node);
-                        break :maybe_bool if (std.mem.eql(u8, slice, "false") or
-                            std.mem.eql(u8, slice, "true"))
-                            .bool
-                        else
-                            null;
-                    }),
-                },
-                else => null,
-            } orelse continue;
+            const kind = literalKindForArg(tree, param_node) orelse continue;
 
             // if configured, skip if a parent is a test block
             if (config.exclude_tests and doc.isEnclosedInTestBlock(session, node)) {
@@ -246,6 +270,59 @@ test "number" {
                     .rule_id = "no_literal_args",
                     .severity = severity,
                     .slice = "0.5",
+                    .message = "Avoid number literal arguments as they're ambiguous.",
+                },
+            },
+        );
+    }
+
+    // Off:
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{
+            .detect_number_literal = .off,
+            .detect_bool_literal = .off,
+            .detect_char_literal = .off,
+            .detect_string_literal = .off,
+        },
+        &.{},
+    );
+}
+
+test "number negatives" {
+    const rule = buildRule(.{});
+    const source: [:0]const u8 =
+        \\pub fn main() void {
+        \\  const num = 10;
+        \\  const some_var = num;
+        \\  call(-1, -0.5, -num, -some_var, ~1);
+        \\}
+    ;
+
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            rule,
+            source,
+            .{},
+            Config{
+                .detect_number_literal = severity,
+                .detect_bool_literal = .off,
+                .detect_char_literal = .off,
+                .detect_string_literal = .off,
+            },
+            &.{
+                .{
+                    .rule_id = "no_literal_args",
+                    .severity = severity,
+                    .slice = "-1",
+                    .message = "Avoid number literal arguments as they're ambiguous.",
+                },
+                .{
+                    .rule_id = "no_literal_args",
+                    .severity = severity,
+                    .slice = "-0.5",
                     .message = "Avoid number literal arguments as they're ambiguous.",
                 },
             },
