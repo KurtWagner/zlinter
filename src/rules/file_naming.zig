@@ -26,6 +26,11 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
     };
 }
 
+fn fileStem(path: []const u8) []const u8 {
+    const basename = std.fs.path.basename(path);
+    return std.fs.path.stem(basename);
+}
+
 /// Runs the file_naming rule.
 fn run(
     rule: zlinter.rules.LintRule,
@@ -36,17 +41,18 @@ fn run(
     const config = options.getConfig(Config);
     const session_arena = session.runtime.sessionArena();
     const tree = doc.tree(session);
+    const abs_path = doc.absPath(session);
 
     const message, const severity = msg: {
-        const basename = std.fs.path.basename(doc.absPath(session));
+        const stem = fileStem(abs_path);
         if (ast.isRootImplicitStruct(tree)) {
-            if (config.file_struct.severity != .off and !config.file_struct.style.check(basename)) {
+            if (config.file_struct.severity != .off and !config.file_struct.style.check(stem)) {
                 break :msg .{
                     try std.fmt.allocPrint(session_arena, "File is struct so name should be {s}", .{config.file_struct.style.name()}),
                     config.file_struct.severity,
                 };
             }
-        } else if (config.file_namespace.severity != .off and !config.file_namespace.style.check(basename)) {
+        } else if (config.file_namespace.severity != .off and !config.file_namespace.style.check(stem)) {
             break :msg .{
                 try std.fmt.allocPrint(session_arena, "File is namespace so name should be {s}", .{config.file_namespace.style.name()}),
                 config.file_namespace.severity,
@@ -65,7 +71,7 @@ fn run(
     };
     return try zlinter.results.LintResult.init(
         session_arena,
-        doc.absPath(session),
+        abs_path,
         lint_problems,
     );
 }
