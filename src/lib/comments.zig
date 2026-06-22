@@ -22,9 +22,9 @@ pub const Token = struct {
         /// e.g., `TODO`, `Todo`, or `todo`
         todo,
         /// e.g., `zlinter-disable-next-line`
-        disable_lint_current_line,
-        /// e.g., `zlinter-disable-current-line`
         disable_lint_next_line,
+        /// e.g., `zlinter-disable-current-line`
+        disable_lint_current_line,
         /// e.g., `zlinter-enable`
         enable_lint,
         /// e.g., `zlinter-disable`
@@ -70,6 +70,23 @@ const Tokenizer = struct {
     line: u32 = 0,
 };
 
+fn consumeNewline(
+    source: [:0]const u8,
+    t: *Tokenizer,
+    line_starts: *std.ArrayList(usize),
+    gpa: std.mem.Allocator,
+) error{OutOfMemory}!void {
+    const newline_len: usize = switch (source[t.i]) {
+        '\n' => 1,
+        '\r' => if (source[t.i + 1] == '\n') 2 else 1,
+        else => return,
+    };
+
+    t.i += newline_len;
+    t.line += 1;
+    try line_starts.append(gpa, t.i);
+}
+
 /// Returns tokens and line starts (line starts inclusive zero index)
 fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory}!struct { []const Token, []const usize } {
     var tokens = std.ArrayList(Token).empty;
@@ -82,7 +99,6 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
     const State = enum {
         parsing,
         consume_comment,
-        consume_newline,
         consume_forward_slash,
         string_literal,
         string_literal_backslash,
@@ -95,7 +111,10 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
     state: switch (State.parsing) {
         .parsing => switch (source[t.i]) {
             0 => {},
-            '\n' => continue :state .consume_newline,
+            '\n', '\r' => {
+                try consumeNewline(source, &t, &line_starts, gpa);
+                continue :state .parsing;
+            },
             '/' => continue :state .consume_forward_slash,
             '"' => continue :state .string_literal,
             '\'' => continue :state .char_literal,
@@ -115,12 +134,6 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
                 t.i += 1;
                 continue :state .parsing;
             },
-        },
-        .consume_newline => {
-            t.i += 1;
-            t.line += 1;
-            try line_starts.append(gpa, t.i);
-            continue :state .parsing;
         },
         .consume_comment => {
             std.debug.assert(source[t.i] == '/' and source[t.i + 1] == '/');
@@ -154,7 +167,10 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
 
                     switch (c) {
                         0 => break,
-                        '\n' => continue :state .consume_newline,
+                        '\n', '\r' => {
+                            try consumeNewline(source, &t, &line_starts, gpa);
+                            continue :state .parsing;
+                        },
                         ':' => try tokens.append(gpa, .{
                             .tag = .colon,
                             .first_byte = t.i,
@@ -173,7 +189,7 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
                             .len = 1,
                             .line = t.line,
                         }),
-                        ' ', '\t', '\r' => {},
+                        ' ', '\t' => {},
                         else => unreachable,
                     }
                     t.i += 1;
@@ -191,12 +207,8 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
                     continue :state .parsing;
                 },
                 '\\' => continue :state .string_literal_backslash,
-                '\n' => continue :state .consume_newline,
-                '\r' => {
-                    if (source[t.i + 1] == '\n') {
-                        continue :state .consume_newline;
-                    }
-                    t.i += 1;
+                '\n', '\r' => {
+                    try consumeNewline(source, &t, &line_starts, gpa);
                     continue :state .parsing;
                 },
                 else => continue :state .string_literal,
@@ -206,12 +218,8 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
             t.i += 1;
             switch (source[t.i]) {
                 0 => continue :state .parsing,
-                '\n' => continue :state .consume_newline,
-                '\r' => {
-                    if (source[t.i + 1] == '\n') {
-                        continue :state .consume_newline;
-                    }
-                    t.i += 1;
+                '\n', '\r' => {
+                    try consumeNewline(source, &t, &line_starts, gpa);
                     continue :state .parsing;
                 },
                 else => continue :state .string_literal,
@@ -226,12 +234,8 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
                     continue :state .parsing;
                 },
                 '\\' => continue :state .char_literal_backslash,
-                '\n' => continue :state .consume_newline,
-                '\r' => {
-                    if (source[t.i + 1] == '\n') {
-                        continue :state .consume_newline;
-                    }
-                    t.i += 1;
+                '\n', '\r' => {
+                    try consumeNewline(source, &t, &line_starts, gpa);
                     continue :state .parsing;
                 },
                 else => continue :state .char_literal,
@@ -241,12 +245,8 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
             t.i += 1;
             switch (source[t.i]) {
                 0 => continue :state .parsing,
-                '\n' => continue :state .consume_newline,
-                '\r' => {
-                    if (source[t.i + 1] == '\n') {
-                        continue :state .consume_newline;
-                    }
-                    t.i += 1;
+                '\n', '\r' => {
+                    try consumeNewline(source, &t, &line_starts, gpa);
                     continue :state .parsing;
                 },
                 else => continue :state .char_literal,
@@ -256,19 +256,18 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
             t.i += 1;
             switch (source[t.i]) {
                 0 => continue :state .parsing,
-                '\n' => continue :state .consume_newline,
-                '\r' => {
-                    if (source[t.i + 1] == '\n') {
-                        continue :state .consume_newline;
-                    }
-                    t.i += 1;
+                '\n', '\r' => {
+                    try consumeNewline(source, &t, &line_starts, gpa);
                     continue :state .parsing;
                 },
                 else => continue :state .multiline_string_literal_line,
             }
         },
     }
-    return .{ try tokens.toOwnedSlice(gpa), try line_starts.toOwnedSlice(gpa) };
+    const owned_tokens = try tokens.toOwnedSlice(gpa);
+    errdefer gpa.free(owned_tokens);
+    const owned_line_starts = try line_starts.toOwnedSlice(gpa);
+    return .{ owned_tokens, owned_line_starts };
 }
 
 test "tokenize line_starts" {
@@ -286,6 +285,22 @@ test "tokenize line_starts" {
         std.debug.print("Actual: {any}\n", .{line_starts});
         return e;
     };
+}
+
+fn testAllocTokenizeFailureAtomic(allocator: std.mem.Allocator) !void {
+    const source: [:0]const u8 =
+        \\// TODO: first
+        \\const a = 1;
+        \\// zlinter-disable rule_a
+    ;
+
+    const tokens, const line_starts = try allocTokenize(source, allocator);
+    defer allocator.free(tokens);
+    defer allocator.free(line_starts);
+}
+
+test "allocTokenize is failure atomic" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, testAllocTokenizeFailureAtomic, .{});
 }
 
 test "tokenize no comments" {
@@ -499,6 +514,54 @@ test "tokenize comments after strings" {
     });
 }
 
+test "tokenize comments after multiline string literal line breaks" {
+    const Case = struct {
+        name: []const u8,
+        source: [:0]const u8,
+        expected_line_starts: []const usize,
+    };
+
+    const expected_tokens = [_]struct { u32, Token.Tag, []const u8 }{
+        .{ 1, .source_comment, "//" },
+        .{ 1, .todo, "TODO" },
+        .{ 1, .colon, ":" },
+        .{ 1, .word, "after" },
+        .{ 1, .word, "multiline" },
+    };
+
+    const cases = [_]Case{
+        .{
+            .name = "LF",
+            .source = "const s = \\\\line1\n// TODO: after multiline",
+            .expected_line_starts = &.{ 0, "const s = \\\\line1\n".len },
+        },
+        .{
+            .name = "CRLF",
+            .source = "const s = \\\\line1\r\n// TODO: after multiline",
+            .expected_line_starts = &.{ 0, "const s = \\\\line1\r\n".len },
+        },
+    };
+
+    inline for (cases) |case| {
+        _ = case.name;
+        const tokens, const line_starts = try allocTokenize(case.source, std.testing.allocator);
+        defer std.testing.allocator.free(tokens);
+        defer std.testing.allocator.free(line_starts);
+
+        try std.testing.expectEqualDeep(case.expected_line_starts, line_starts);
+
+        var actual = std.ArrayList(struct { u32, Token.Tag, []const u8 }).empty;
+        defer actual.deinit(std.testing.allocator);
+        for (tokens) |token| try actual.append(std.testing.allocator, .{
+            token.line,
+            token.tag,
+            token.getSlice(case.source),
+        });
+
+        try std.testing.expectEqualDeep(&expected_tokens, actual.items);
+    }
+}
+
 test "tokenize todo" {
     try testTokenize(&.{
         "//! TODO: something a ",
@@ -592,7 +655,8 @@ fn testTokenize(
 
 pub const CommentsDocument = struct {
     tokens: []const Token,
-    /// Zero index inclusive
+    /// Zero index inclusive. Includes the start of the first line and any
+    /// empty trailing line created by a trailing newline.
     line_starts: []const usize,
     comments: []const Comment,
 
@@ -606,10 +670,19 @@ pub const CommentsDocument = struct {
     /// Returns the line number (zero-indexed) of a given byte offset from in
     /// the source of the document.
     pub fn lineNumber(self: CommentsDocument, byte_offset: usize) usize {
-        for (self.line_starts[1..], 1..) |line_start, i| {
-            if (byte_offset < line_start) return i - 1;
+        var lo: usize = 0;
+        var hi: usize = self.line_starts.len;
+
+        while (lo < hi) {
+            const mid = lo + (hi - lo) / 2;
+            if (self.line_starts[mid] <= byte_offset) {
+                lo = mid + 1;
+            } else {
+                hi = mid;
+            }
         }
-        return self.line_starts.len - 1;
+
+        return if (lo == 0) 0 else lo - 1;
     }
 
     // Returns the slice containing the text content of the comment. For example
@@ -656,6 +729,40 @@ pub const CommentsDocument = struct {
                                 .{source[token.first_byte .. token.first_byte + token.len]},
                             );
                         }
+                    }
+                },
+                .disable_lint => |disable| {
+                    std.debug.print("DISABLE:\n", .{});
+                    std.debug.print(" for {s}:{d}\n", .{ file_path, disable.line_start });
+                    if (disable.rule_ids) |rule_ids| {
+                        for (self.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
+                            std.debug.print(
+                                "- {s}\n",
+                                .{source[token.first_byte .. token.first_byte + token.len]},
+                            );
+                        }
+                    }
+                },
+                .enable_lint => |enable| {
+                    std.debug.print("ENABLE:\n", .{});
+                    std.debug.print(" for {s}:{d}\n", .{ file_path, enable.line_start });
+                    if (enable.rule_ids) |rule_ids| {
+                        for (self.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
+                            std.debug.print(
+                                "- {s}\n",
+                                .{source[token.first_byte .. token.first_byte + token.len]},
+                            );
+                        }
+                    }
+                },
+                .line => |line| {
+                    std.debug.print("LINE:\n", .{});
+                    std.debug.print(" for {s}:{d}\n", .{ file_path, self.lineNumber(self.tokens[comment.first_token].first_byte) });
+                    if (line.content) |content| {
+                        std.debug.print(
+                            "- {s}\n",
+                            .{source[self.tokens[content.first].first_byte .. self.tokens[content.last].first_byte + self.tokens[content.last].len]},
+                        );
                     }
                 },
             }
@@ -916,16 +1023,32 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
                         const inner_content: ?Comment.Range = consume_inner_content: {
                             const next = p.peek() orelse break :consume_inner_content null;
                             if (p.tokens[next].tag != .open_parenthesis) break :consume_inner_content null;
+                            const open_parenthesis = p.i;
                             p.skip();
 
                             var maybe_first: ?Token.Index = null;
                             var maybe_last: ?Token.Index = null;
+                            var found_close_parenthesis = false;
                             while (p.peek()) |token_index| {
-                                if (p.tokens[token_index].tag == .close_parenthesis) break;
-                                maybe_first = maybe_first orelse token_index;
-                                maybe_last = token_index;
+                                switch (p.tokens[token_index].tag) {
+                                    .close_parenthesis => {
+                                        found_close_parenthesis = true;
+                                        p.skip();
+                                        break;
+                                    },
+                                    else => {
+                                        if (p.tokens[token_index].tag.isComment()) break;
+                                        maybe_first = maybe_first orelse token_index;
+                                        maybe_last = token_index;
 
-                                p.skip();
+                                        p.skip();
+                                    },
+                                }
+                            }
+
+                            if (!found_close_parenthesis) {
+                                p.i = open_parenthesis;
+                                break :consume_inner_content null;
                             }
 
                             const first = maybe_first orelse break :consume_inner_content null;
@@ -937,7 +1060,8 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
                             };
                         };
 
-                        // Skip colon if present:
+                        // Allow a colon separator after the TODO directive or
+                        // parenthesized issue reference.
                         while (p.peek()) |peek| {
                             if (p.tokens[peek].tag != .colon) break;
                             p.skip();
@@ -1034,7 +1158,8 @@ test "parse - todo comments" {
             "// todo  Second todo ",
             "// Todo", // Deliberately empty
             "// TODO(#10)",
-            "// TODO(hello world) message",
+            "// TODO(inner): message",
+            "// TODO(inner) message",
             "// TODO(): message",
         },
         &.{
@@ -1078,10 +1203,6 @@ test "parse - todo comments" {
                             .first = 14,
                             .last = 14,
                         },
-                        .content = .{
-                            .first = 15,
-                            .last = 15,
-                        },
                     },
                 },
             },
@@ -1092,10 +1213,10 @@ test "parse - todo comments" {
                     .todo = .{
                         .inner_content = .{
                             .first = 19,
-                            .last = 20,
+                            .last = 19,
                         },
                         .content = .{
-                            .first = 21,
+                            .first = 22,
                             .last = 22,
                         },
                     },
@@ -1106,9 +1227,118 @@ test "parse - todo comments" {
                 .last_token = 28,
                 .kind = .{
                     .todo = .{
-                        .content = .{
+                        .inner_content = .{
                             .first = 26,
+                            .last = 26,
+                        },
+                        .content = .{
+                            .first = 28,
                             .last = 28,
+                        },
+                    },
+                },
+            },
+            .{
+                .first_token = 29,
+                .last_token = 34,
+                .kind = .{
+                    .todo = .{
+                        .content = .{
+                            .first = 34,
+                            .last = 34,
+                        },
+                    },
+                },
+            },
+        },
+    );
+}
+
+test "parse - malformed todo does not read past the comment" {
+    try testParse(
+        &.{
+            "// TODO(unclosed message",
+        },
+        &.{
+            .{
+                .first_token = 0,
+                .last_token = 4,
+                .kind = .{
+                    .todo = .{
+                        .content = .{
+                            .first = 2,
+                            .last = 4,
+                        },
+                    },
+                },
+            },
+        },
+    );
+}
+
+test "parse - directive delimiters are intentional" {
+    try testParse(
+        &.{
+            "// zlinter-disable: rule_a",
+            "// zlinter-enable: rule_a",
+            "// zlinter-disable(rule_a)",
+            "// zlinter-disable - reason",
+            "// zlinter-disable rule_a - reason",
+        },
+        &.{
+            .{
+                .first_token = 0,
+                .last_token = 3,
+                .kind = .{
+                    .disable_lint = .{
+                        .line_start = 0,
+                        .rule_ids = .{
+                            .first = 3,
+                            .last = 3,
+                        },
+                    },
+                },
+            },
+            .{
+                .first_token = 4,
+                .last_token = 7,
+                .kind = .{
+                    .enable_lint = .{
+                        .line_start = 1,
+                        .rule_ids = .{
+                            .first = 7,
+                            .last = 7,
+                        },
+                    },
+                },
+            },
+            .{
+                .first_token = 8,
+                .last_token = 12,
+                .kind = .{
+                    .disable_lint = .{
+                        .line_start = 2,
+                    },
+                },
+            },
+            .{
+                .first_token = 13,
+                .last_token = 16,
+                .kind = .{
+                    .disable_lint = .{
+                        .line_start = 3,
+                    },
+                },
+            },
+            .{
+                .first_token = 17,
+                .last_token = 21,
+                .kind = .{
+                    .disable_lint = .{
+                        .line_start = 4,
+                        .rule_ids = .{
+                            .first = 19,
+                            .last = 19,
                         },
                     },
                 },
@@ -1418,6 +1648,39 @@ test "lineNumber" {
     try std.testing.expectEqual(2, doc_comments.lineNumber(100));
 }
 
+test "lineNumber binary search coverage" {
+    const source: [:0]const u8 =
+        \\a
+        \\bb
+        \\ccc
+        \\dddd
+        \\eeeee
+        \\ffffff
+        \\ggggggg
+        \\hhhhhhhh
+        \\iiiiiiiii
+        \\jjjjjjjjjj
+        \\kkkkkkkkkkk
+        \\llllllllllll
+    ;
+
+    var doc_comments = try allocParse(source, std.testing.allocator);
+    defer doc_comments.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(usize, 12), doc_comments.line_starts.len);
+
+    for (doc_comments.line_starts, 0..) |line_start, i| {
+        try std.testing.expectEqual(i, doc_comments.lineNumber(line_start));
+
+        if (i + 1 < doc_comments.line_starts.len) {
+            try std.testing.expectEqual(i, doc_comments.lineNumber(doc_comments.line_starts[i + 1] - 1));
+        }
+    }
+
+    try std.testing.expectEqual(@as(usize, 11), doc_comments.lineNumber(source.len));
+    try std.testing.expectEqual(@as(usize, 11), doc_comments.lineNumber(source.len + 100));
+}
+
 fn testParse(
     comptime lines: []const []const u8,
     expected: []const Comment,
@@ -1490,13 +1753,13 @@ pub const LazyRuleSkipper = struct {
         return !index.all.isSet(line);
     }
 
-    fn ensureBuilt(self: *LazyRuleSkipper) error{OutOfMemory}!Index {
-        if (self.index) |index| return index;
+    fn ensureBuilt(self: *LazyRuleSkipper) error{OutOfMemory}!*Index {
+        if (self.index) |*index| return index;
 
         const line_count = self.doc.line_starts.len;
         var index: Index = .{
             .rules = .init(self.gpa),
-            .all = try .initFull(self.gpa, line_count + 1),
+            .all = try .initFull(self.gpa, line_count),
         };
         errdefer index.deinit();
 
@@ -1532,34 +1795,39 @@ pub const LazyRuleSkipper = struct {
                 },
                 else => continue,
             };
+            if (set.range.start >= line_count) continue;
+            const range: std.bit_set.Range = .{
+                .start = set.range.start,
+                .end = @min(set.range.end, line_count),
+            };
             if (set.rule_ids) |rule_ids| {
                 for (self.doc.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
                     const rule_id = self.source[token.first_byte .. token.first_byte + token.len];
 
                     const result = try index.rules.getOrPut(rule_id);
                     if (!result.found_existing) {
-                        result.value_ptr.* = try .initFull(self.gpa, line_count + 1);
+                        result.value_ptr.* = try .initFull(self.gpa, line_count);
                         for (global_ops.items) |op| {
                             result.value_ptr.setRangeValue(op.range, op.value);
                         }
                     }
-                    result.value_ptr.setRangeValue(set.range, set.value);
+                    result.value_ptr.setRangeValue(range, set.value);
                 }
             } else {
-                index.all.setRangeValue(set.range, set.value);
+                index.all.setRangeValue(range, set.value);
                 global_ops.appendAssumeCapacity(.{
-                    .range = set.range,
+                    .range = range,
                     .value = set.value,
                 });
 
                 var rule_it = index.rules.iterator();
                 while (rule_it.next()) |entry| {
-                    entry.value_ptr.setRangeValue(set.range, set.value);
+                    entry.value_ptr.setRangeValue(range, set.value);
                 }
             }
         }
         self.index = index;
-        return index;
+        return &self.index.?;
     }
 };
 
@@ -1669,6 +1937,59 @@ test "LazyRuleSkipper disable next line targets only that line" {
     try std.testing.expect(!(try skipper.shouldSkip(problem_c)));
 }
 
+test "LazyRuleSkipper disable-next-line EOF behavior" {
+    const Case = struct {
+        source: [:0]const u8,
+        expected_skip: bool,
+    };
+
+    const sources = [_]Case{
+        .{
+            .source =
+            \\const a = 1;
+            \\// zlinter-disable-next-line rule_a
+            ,
+            .expected_skip = false,
+        },
+        .{
+            .source =
+            \\const a = 1;
+            \\// zlinter-disable-next-line rule_a
+            \\
+            ,
+            .expected_skip = true,
+        },
+        .{
+            .source =
+            \\const a = 1;
+            \\// zlinter-disable-next-line rule_a
+            \\
+            \\
+            ,
+            .expected_skip = false,
+        },
+    };
+
+    inline for (sources) |case| {
+        var doc = try allocParse(case.source, std.testing.allocator);
+        defer doc.deinit(std.testing.allocator);
+
+        var skipper = LazyRuleSkipper.init(doc, case.source, std.testing.allocator);
+        defer skipper.deinit();
+
+        const problem = LintProblem{
+            .rule_id = "rule_a",
+            .severity = .warning,
+            .start = .{ .byte_offset = case.source.len },
+            .end = .{ .byte_offset = case.source.len },
+            .message = "",
+        };
+
+        try std.testing.expectEqual(case.expected_skip, try skipper.shouldSkip(problem));
+        try std.testing.expectEqual(case.expected_skip, try skipper.shouldSkip(problem));
+    }
+}
+
 test "LazyRuleSkipper rule-specific disable does not affect other rules" {
     const source: [:0]const u8 =
         \\// zlinter-disable rule_a
@@ -1700,6 +2021,46 @@ test "LazyRuleSkipper rule-specific disable does not affect other rules" {
 
     try std.testing.expect(try skipper.shouldSkip(problem_a));
     try std.testing.expect(!(try skipper.shouldSkip(problem_b)));
+}
+
+test "LazyRuleSkipper shouldSkip reuses cached index" {
+    const source: [:0]const u8 =
+        \\// zlinter-disable rule_a
+        \\const a = 1;
+    ;
+
+    var doc = try allocParse(source, std.testing.allocator);
+    defer doc.deinit(std.testing.allocator);
+
+    var skipper = LazyRuleSkipper.init(doc, source, std.testing.allocator);
+    defer skipper.deinit();
+
+    const a_offset = std.mem.indexOf(u8, source, "const a").?;
+    const problem = LintProblem{
+        .rule_id = "rule_a",
+        .severity = .warning,
+        .start = .{ .byte_offset = a_offset },
+        .end = .{ .byte_offset = a_offset },
+        .message = "",
+    };
+
+    try std.testing.expect(try skipper.shouldSkip(problem));
+    try std.testing.expect(try skipper.shouldSkip(problem));
+}
+
+test "CommentsDocument.debugPrint handles all comment kinds" {
+    const source: [:0]const u8 =
+        \\// ordinary line comment
+        \\// TODO: investigate
+        \\// zlinter-disable rule_a
+        \\// zlinter-enable rule_a
+        \\// zlinter-disable-current-line rule_a
+    ;
+
+    var doc = try allocParse(source, std.testing.allocator);
+    defer doc.deinit(std.testing.allocator);
+
+    doc.debugPrint("test.zig", source);
 }
 
 const std = @import("std");
