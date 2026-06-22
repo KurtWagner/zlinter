@@ -833,12 +833,6 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
     var comments = std.ArrayList(Comment).empty;
     defer comments.deinit(gpa);
 
-    var enables = std.ArrayList(struct { u32, []const u8 }).empty;
-    defer enables.deinit(gpa);
-
-    var disables = std.ArrayList(struct { u32, []const u8 }).empty;
-    defer disables.deinit(gpa);
-
     var p = Parser{ .tokens = tokens };
     tokens: while (p.next()) |token| {
         if (!p.tokens[token].tag.isComment()) continue :tokens;
