@@ -68,7 +68,7 @@ fn run(
                                 .severity = config.detect_catch_unreachable,
                                 .message = "Avoid swallowing error with catch unreachable",
                             },
-                        .block_two, .block_two_semicolon => switch (isEmptyOrUnreachableBlock(tree, rhs)) {
+                        .block_two, .block_two_semicolon, .block, .block_semicolon => switch (classifyBlock(tree, rhs)) {
                             .@"unreachable" => if (config.detect_catch_unreachable != .off)
                                 break :problem .{
                                     .severity = config.detect_catch_unreachable,
@@ -98,7 +98,7 @@ fn run(
                                     .severity = config.detect_else_unreachable,
                                     .message = "Avoid swallowing error with else unreachable",
                                 },
-                            .block_two, .block_two_semicolon => switch (isEmptyOrUnreachableBlock(tree, unwrapped_else)) {
+                            .block_two, .block_two_semicolon, .block, .block_semicolon => switch (classifyBlock(tree, unwrapped_else)) {
                                 .@"unreachable" => if (config.detect_else_unreachable != .off)
                                     break :problem .{
                                         .severity = config.detect_else_unreachable,
@@ -145,17 +145,34 @@ fn run(
         null;
 }
 
-fn isEmptyOrUnreachableBlock(tree: Ast, node: Ast.Node.Index) enum { none, empty, @"unreachable" } {
-    const tag = tree.nodeTag(node);
-    std.debug.assert(tag == .block_two or tag == .block_two_semicolon);
+const BlockClassification = enum { none, empty, @"unreachable" };
 
+fn classifyBlock(tree: Ast, node: Ast.Node.Index) BlockClassification {
+    return switch (tree.nodeTag(node)) {
+        .block_two, .block_two_semicolon => classifyBlockTwo(tree, node),
+        .block, .block_semicolon => classifyBlockSpan(tree, node),
+        else => .none,
+    };
+}
+
+fn classifyBlockTwo(tree: Ast, node: Ast.Node.Index) BlockClassification {
     const data = tree.nodeData(node);
     const lhs = data.opt_node_and_opt_node.@"0".unwrap();
     const rhs = data.opt_node_and_opt_node.@"1".unwrap();
 
     if (lhs == null and rhs == null) return .empty;
-    if (lhs) |lhs_node|
-        if (tree.nodeTag(lhs_node) == .unreachable_literal) return .@"unreachable";
+    if (lhs) |lhs_node| {
+        if (rhs == null and tree.nodeTag(lhs_node) == .unreachable_literal) return .@"unreachable";
+    }
+    return .none;
+}
+
+fn classifyBlockSpan(tree: Ast, node: Ast.Node.Index) BlockClassification {
+    var buffer: [2]Ast.Node.Index = undefined;
+    const statements = tree.blockStatements(&buffer, node) orelse return .none;
+
+    if (statements.len == 0) return .empty;
+    if (statements.len == 1 and tree.nodeTag(statements[0]) == .unreachable_literal) return .@"unreachable";
     return .none;
 }
 
@@ -191,6 +208,14 @@ test "no_swallow_error" {
         \\  if (method()) {} else |_| (unreachable);
         \\  if (method()) {} else |_| ({});
         \\  if (method()) {} else |_| ({ unreachable; });
+        \\  method() catch {
+        \\    std.log.err("handled", .{});
+        \\    std.log.err("handled again", .{});
+        \\  };
+        \\  if (method()) {} else |_| {
+        \\    std.log.err("handled", .{});
+        \\    std.log.err("handled again", .{});
+        \\  }
         \\  try method();
         \\  if (method()) {} else |e| { std.log.err("{s}", @errorName(e)); } 
         \\}

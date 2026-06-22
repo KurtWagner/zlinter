@@ -27,6 +27,14 @@ pub fn main() void {
     if (takeYourChances(1)) {} else |_| ({});
     if (takeYourChances(1)) {} else |_| (unreachable);
     if (takeYourChances(1)) {} else |_| ({ unreachable; });
+    takeYourChances(2) catch {
+        std.log.err("handled", .{});
+        std.log.err("handled again", .{});
+    };
+    if (takeYourChances(1)) {} else |_| {
+        std.log.err("handled", .{});
+        std.log.err("handled again", .{});
+    }
 }
 
 pub fn ordinaryControlFlow(cond: bool) void {
