@@ -1,36 +1,25 @@
-fn GoodList(T: type) type {
-    _ = T;
+fn List(comptime T: type) type {
     return struct {};
 }
 
-fn BadList(comptime T: type) type {
-    _ = T;
+fn add(comptime a: comptime_int, comptime b: comptime_float) void {}
+
+fn mixed(comptime T: type, comptime n: usize, comptime F: comptime_float) void {}
+
+fn ListParens(comptime T: (type)) type {
     return struct {};
 }
 
-fn good(comptime n: usize) void {
-    _ = n;
+fn ListMultiline(
+    comptime
+    T: type,
+) type {
+    return struct {};
 }
 
-fn bad(comptime a: comptime_int) comptime_int {
-    return a;
+fn ListComment(
+    comptime // intentionally weird formatting
+    T: type,
+) type {
+    return struct {};
 }
-
-fn alsobad(comptime x: comptime_float) comptime_float {
-    return x;
-}
-
-fn fine(comptime allocator: std.mem.Allocator) void {
-    _ = allocator;
-}
-
-fn mixed(comptime T: type, n: usize, comptime F: comptime_float) void {
-    _ = T;
-    _ = n;
-    _ = F;
-}
-
-const std = @import("std");
-
-const BadCallback = fn (comptime T: type) void;
-const GoodCallback = fn (comptime n: usize) void;

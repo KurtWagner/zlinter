@@ -841,6 +841,8 @@ fn List(comptime T: type) type { ... }
 fn add(comptime a: comptime_int, comptime b: comptime_int) comptime_int { ... }
 ```
 
+`no_redundant_comptime` supports auto fixes with the `--fix` flag. Fixes are omitted when the surrounding layout is comment-adjacent or otherwise ambiguous.
+
 **Config options:**
 
 * `severity`
