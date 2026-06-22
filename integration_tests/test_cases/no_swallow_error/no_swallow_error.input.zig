@@ -16,11 +16,17 @@ pub fn main() void {
     takeYourChances(2) catch {
         unreachable;
     };
+    takeYourChances(0) catch ({});
+    takeYourChances(2) catch (unreachable);
+    takeYourChances(2) catch ({ unreachable; });
     if (takeYourChances(1)) {} else |_| {}
     if (takeYourChances(1)) {} else |_| unreachable;
     if (takeYourChances(1)) {} else |_| {
         unreachable;
     }
+    if (takeYourChances(1)) {} else |_| ({});
+    if (takeYourChances(1)) {} else |_| (unreachable);
+    if (takeYourChances(1)) {} else |_| ({ unreachable; });
 }
 
 pub fn ordinaryControlFlow(cond: bool) void {

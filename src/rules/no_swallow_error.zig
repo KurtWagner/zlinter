@@ -60,7 +60,7 @@ fn run(
             switch (tree.nodeTag(node)) {
                 .@"catch" => {
                     const data = tree.nodeData(node);
-                    const rhs = data.node_and_node.@"1";
+                    const rhs = unwrapGroupedExpr(tree, data.node_and_node.@"1");
 
                     switch (tree.nodeTag(rhs)) {
                         .unreachable_literal => if (config.detect_catch_unreachable != .off)
@@ -90,13 +90,15 @@ fn run(
                     }
 
                     if (if_info.ast.else_expr.unwrap()) |else_node| {
-                        switch (tree.nodeTag(else_node)) {
+                        const unwrapped_else = unwrapGroupedExpr(tree, else_node);
+
+                        switch (tree.nodeTag(unwrapped_else)) {
                             .unreachable_literal => if (config.detect_else_unreachable != .off)
                                 break :problem .{
                                     .severity = config.detect_else_unreachable,
                                     .message = "Avoid swallowing error with else unreachable",
                                 },
-                            .block_two, .block_two_semicolon => switch (isEmptyOrUnreachableBlock(tree, else_node)) {
+                            .block_two, .block_two_semicolon => switch (isEmptyOrUnreachableBlock(tree, unwrapped_else)) {
                                 .@"unreachable" => if (config.detect_else_unreachable != .off)
                                     break :problem .{
                                         .severity = config.detect_else_unreachable,
@@ -157,6 +159,14 @@ fn isEmptyOrUnreachableBlock(tree: Ast, node: Ast.Node.Index) enum { none, empty
     return .none;
 }
 
+fn unwrapGroupedExpr(tree: Ast, node: Ast.Node.Index) Ast.Node.Index {
+    var current = node;
+    while (tree.nodeTag(current) == .grouped_expression) {
+        current = tree.nodeData(current).node_and_token[0];
+    }
+    return current;
+}
+
 test {
     std.testing.refAllDecls(@This());
 }
@@ -172,9 +182,15 @@ test "no_swallow_error" {
         \\  method() catch {};
         \\  method() catch unreachable;
         \\  method() catch { unreachable; };
+        \\  method() catch (unreachable);
+        \\  method() catch ({});
+        \\  method() catch ({ unreachable; });
         \\  if (method()) {} else |_| unreachable;
         \\  if (method()) {} else |_| { unreachable; }
         \\  if (method()) {} else |_| {}
+        \\  if (method()) {} else |_| (unreachable);
+        \\  if (method()) {} else |_| ({});
+        \\  if (method()) {} else |_| ({ unreachable; });
         \\  try method();
         \\  if (method()) {} else |e| { std.log.err("{s}", @errorName(e)); } 
         \\}
@@ -193,6 +209,18 @@ test "no_swallow_error" {
                 .detect_else_unreachable = .off,
             },
             &.{
+                .{
+                    .rule_id = "no_swallow_error",
+                    .severity = severity,
+                    .slice = "method() catch ({ unreachable; })",
+                    .message = "Avoid swallowing error with catch unreachable",
+                },
+                .{
+                    .rule_id = "no_swallow_error",
+                    .severity = severity,
+                    .slice = "method() catch (unreachable)",
+                    .message = "Avoid swallowing error with catch unreachable",
+                },
                 .{
                     .rule_id = "no_swallow_error",
                     .severity = severity,
@@ -222,6 +250,12 @@ test "no_swallow_error" {
                 .{
                     .rule_id = "no_swallow_error",
                     .severity = severity,
+                    .slice = "method() catch ({})",
+                    .message = "Avoid swallowing error with empty catch",
+                },
+                .{
+                    .rule_id = "no_swallow_error",
+                    .severity = severity,
                     .slice = "method() catch {}",
                     .message = "Avoid swallowing error with empty catch",
                 },
@@ -242,6 +276,12 @@ test "no_swallow_error" {
                 .{
                     .rule_id = "no_swallow_error",
                     .severity = severity,
+                    .slice = "if (method()) {} else |_| ({})",
+                    .message = "Avoid swallowing error with empty else",
+                },
+                .{
+                    .rule_id = "no_swallow_error",
+                    .severity = severity,
                     .slice = "if (method()) {} else |_| {}",
                     .message = "Avoid swallowing error with empty else",
                 },
@@ -259,6 +299,18 @@ test "no_swallow_error" {
                 .detect_else_unreachable = severity,
             },
             &.{
+                .{
+                    .rule_id = "no_swallow_error",
+                    .severity = severity,
+                    .slice = "if (method()) {} else |_| ({ unreachable; })",
+                    .message = "Avoid swallowing error with else unreachable",
+                },
+                .{
+                    .rule_id = "no_swallow_error",
+                    .severity = severity,
+                    .slice = "if (method()) {} else |_| (unreachable)",
+                    .message = "Avoid swallowing error with else unreachable",
+                },
                 .{
                     .rule_id = "no_swallow_error",
                     .severity = severity,
