@@ -325,30 +325,32 @@ that return types and `camelCase` for others.
 Enforces a consistent ordering of `@import` declarations by their local
 declaration name in Zig source files.
 
+For example: `a` < `b` and not `apple` < `zebra`.
+
+```
+const a = @import("zebra");
+const b = @import("apple");
+```
+
 Maintaining a standardized import order improves readability and reduces
 merge conflicts.
 
-`import_ordering` supports auto fixes with the `--fix` flag. It may take multiple runs with `--fix` to fix all places. Fixes may be omitted when imports have attached comments.
-
-**Auto fixing is an experimental feature so only use it if you use source control - always back up your code first!**
+`import_ordering` supports auto fixes with the `--fix` flag. It may take multiple runs with `--fix` to fix all places. Fixes may be omitted when comments are attached to imports.
 
 ### Import chunks
 
-An import chunk is a consecutive group of import declarations in the same scope.
+An import chunk is a consecutive group of import declarations in the same
+scope.
 
-When `allow_line_separated_chunks` is `true`, imports separated by one or more blank lines are treated as separate chunks, and each chunk is checked independently.
+When `allow_line_separated_chunks` is `true`, imports separated by one or
+more blank lines are treated as separate chunks, and each chunk is checked
+independently.
 
-```zig
-const a = @import("a");
-const b = @import("b");
+Comments do not split chunks. A `//` comment directly attached to an import
+is treated as part of that import's chunk. A `//!` doc comment is not treated
+as an attachable import comment.
 
-const d = @import("d");
-const c = @import("c");
-```
-
-In this example, `a`/`b` and `d`/`c` are checked as separate chunks.
-
-Comments do not split chunks. A `//` comment directly attached to an import is treated as part of that import's chunk. A `//!` doc comment is not treated as an attachable import comment.
+**Auto fixing is an experimental feature so only use it if you use source control - always back up your code first!**
 
 **Config options:**
 
@@ -366,7 +368,7 @@ Comments do not split chunks. A `//` comment directly attached to an import is t
 
 * `allow_line_separated_chunks`
 
-  * Whether or not the linter allows imports to be separated by blank lines (i.e., separate blocks), where each chunk needs to follow the linter rules or whether they must all follow as a single chunk.
+  * Whether imports separated by blank lines are treated as independent chunks. When false, all imports in the same scope must form one contiguous chunk.
 
   * **Default:** `true`
 
@@ -472,6 +474,9 @@ looping constructs). This rule helps distinguish between accidental
 emptiness and intentional no-op by requiring either a configuration
 exception or a comment.
 
+Whitespace-only blocks are reported. Blocks containing only comments are
+treated as documented no-op blocks and are allowed.
+
 For example,
 
 ```zig
@@ -491,15 +496,33 @@ if (something) {
 
   * **Default:** `.@"error"`
 
+* `if_else_block`
+
+  * Severity for empty `if` else blocks
+
+  * **Default:** `.@"error"`
+
 * `while_block`
 
   * Severity for empty `while` blocks
 
   * **Default:** `.off`
 
+* `while_else_block`
+
+  * Severity for empty `while` else blocks
+
+  * **Default:** `.off`
+
 * `for_block`
 
   * Severity for empty `for` blocks
+
+  * **Default:** `.@"error"`
+
+* `for_else_block`
+
+  * Severity for empty `for` else blocks
 
   * **Default:** `.@"error"`
 
@@ -530,6 +553,18 @@ if (something) {
 * `fn_decl_block`
 
   * Severity for empty `fn` declaration blocks
+
+  * **Default:** `.@"error"`
+
+* `test_block`
+
+  * Severity for empty `test` blocks
+
+  * **Default:** `.@"error"`
+
+* `comptime_block`
+
+  * Severity for empty `comptime` blocks
 
   * **Default:** `.@"error"`
 
@@ -857,6 +892,10 @@ lead to them being forgotten or not prioritised correctly.
 If you must leave a todo comment it's best to include a link to an issue
 in your issue tracker so it's visible, prioritized and won't be forgotten.
 
+By default, `no_todo` allows TODO comments when they include either a
+`#123`-style issue reference or an `http(s)` URL. Both checks are
+configurable.
+
 **Config options:**
 
 * `severity`
@@ -867,13 +906,13 @@ in your issue tracker so it's visible, prioritized and won't be forgotten.
 
 * `exclude_if_contains_issue_number`
 
-  * Exclude todo comments that contain a `#[0-9]+` in a word token or nested in the todo suffix. For example, `// TODO(#10): <info>` or `// TODO: Fix #10`
+  * Exclude todo comments that contain a `#[0-9]+` anywhere in the todo content. For example, `// TODO(#10): <info>` or `// TODO: Fix #10`.
 
   * **Default:** `true`
 
 * `exclude_if_contains_url`
 
-  * Exclude todo comments that contain a url in a word token or nested in the todo suffix. For example, `// TODO(http://my-issue-tracker.com/10): <info>` or `// TODO: Fix http://my-issue-tracker.com/10`
+  * Exclude todo comments that contain a URL in a word token or nested in the todo suffix. For example, `// TODO(http://my-issue-tracker.com/10): <info>` or `// TODO: Fix http://my-issue-tracker.com/10`.
 
   * **Default:** `true`
 
