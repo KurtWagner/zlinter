@@ -35,10 +35,7 @@ fn run(
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
 
-    const fmt = tree.renderAlloc(rule_arena) catch |e| {
-        std.log.err("Oh no {t}", .{e});
-        return e;
-    };
+    const fmt = try tree.renderAlloc(rule_arena);
 
     if (!std.mem.eql(u8, fmt, tree.source)) {
         const diff = firstDifference(fmt, tree.source);
