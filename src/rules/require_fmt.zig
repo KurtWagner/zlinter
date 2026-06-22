@@ -41,9 +41,12 @@ fn run(
     };
 
     if (!std.mem.eql(u8, fmt, tree.source)) {
+        const diff = firstDifference(fmt, tree.source);
+        const source_offset = if (tree.source.len == 0) 0 else @min(diff, tree.source.len - 1);
+
         try lint_problems.append(session_arena, .{
-            .start = .zero,
-            .end = .zero,
+            .start = .{ .byte_offset = source_offset },
+            .end = .{ .byte_offset = source_offset },
             .message = try session_arena.dupe(u8, "File is not formatted"),
             .rule_id = rule.rule_id,
             .severity = config.severity,
@@ -60,41 +63,75 @@ fn run(
         null;
 }
 
+fn firstDifference(a: []const u8, b: []const u8) usize {
+    const common_len = @min(a.len, b.len);
+    for (a[0..common_len], b[0..common_len], 0..) |ca, cb, i|
+        if (ca != cb) return i;
+    return common_len;
+}
+
 test {
     std.testing.refAllDecls(@This());
 }
 
 test "require_fmt" {
     const rule = buildRule(.{});
-    const formatted_source =
-        \\//! Some root source file
-        \\const foo: u32 = 67;
-        \\
-    ;
-
-    const unformatted_source =
-        \\//! Some root source file
-        \\const foo: u32 = 67;
-    ;
 
     inline for (&.{ .warning, .@"error" }) |severity| {
         try zlinter.testing.testRunRule(
             rule,
-            formatted_source,
+            \\const foo: u32 = 67;
+            \\
+        ,
             .{},
             Config{ .severity = severity },
             &.{},
         );
         try zlinter.testing.testRunRule(
             rule,
-            unformatted_source,
+            \\const foo: u32 = 67;
+        ,
             .{},
             Config{ .severity = severity },
             &.{
                 .{
                     .rule_id = "require_fmt",
                     .severity = severity,
-                    .slice = "",
+                    .slice = ";",
+                    .message = "File is not formatted",
+                },
+            },
+        );
+        try zlinter.testing.testRunRule(
+            rule,
+            \\const foo  = 67;
+            \\
+        ,
+            .{},
+            Config{ .severity = severity },
+            &.{
+                .{
+                    .rule_id = "require_fmt",
+                    .severity = severity,
+                    .slice = " ",
+                    .message = "File is not formatted",
+                },
+            },
+        );
+        try zlinter.testing.testRunRule(
+            rule,
+            \\pub fn main() void {
+            \\var x = 1;
+            \\}
+            \\
+        ,
+            .{},
+            Config{ .severity = severity },
+            &.{
+                .{
+                    .rule_id = "require_fmt",
+                    .severity = severity,
+                    .slice = "v",
                     .message = "File is not formatted",
                 },
             },
@@ -104,7 +141,8 @@ test "require_fmt" {
     // Off:
     try zlinter.testing.testRunRule(
         rule,
-        unformatted_source,
+        \\ const foo  : u32 = 67;
+    ,
         .{},
         Config{ .severity = .off },
         &.{},
@@ -125,7 +163,7 @@ test "require_fmt ignores invalid ast trees" {
         &session,
         tmp.dir,
         "test.zig",
-        "const foo = 1\n",
+        "const foo = 1\n", // Missing semicolon
         arena.allocator(),
     );
 

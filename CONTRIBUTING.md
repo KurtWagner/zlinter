@@ -18,6 +18,7 @@ For example,
 
 ```text
 fix(no_literal_args): unwrap parenthesized literal arguments
+improve(require_fmt): report first diff in fmt
 new(no_empty_block): add new empty block rule
 test(no_todo): cover TODO comments with issue links
 docs(no_globals): clarify allowed global state comments
@@ -27,6 +28,7 @@ refactor(rules): share literal expression helpers
 These commit types should cover most cases:
 
 - `fix(...)` for bug fixes or behavior changes in existing code.
+- `improve(...)` for user facing improvements to the behaviour of the linter.
 - `new(...)` for new rules, config options, or user-facing features.
 - `test(...)` for test-only changes.
 - `docs(...)` for documentation-only changes.
