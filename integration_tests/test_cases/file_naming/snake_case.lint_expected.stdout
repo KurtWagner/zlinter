@@ -1,4 +1,4 @@
-error File is struct so name should be TitleCase [test_cases/file_naming/snake_case.input.zig:1:1] file_naming
+error File `snake_case.input.zig` is an implicit struct, so its name should be TitleCase [test_cases/file_naming/snake_case.input.zig:1:1] file_naming
 
  1 | field_a: u32 = 1,
    | ^

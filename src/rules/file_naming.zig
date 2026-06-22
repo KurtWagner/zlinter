@@ -26,11 +26,6 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
     };
 }
 
-fn fileStem(path: []const u8) []const u8 {
-    const basename = std.fs.path.basename(path);
-    return std.fs.path.stem(basename);
-}
-
 /// Runs the file_naming rule.
 fn run(
     rule: zlinter.rules.LintRule,
@@ -51,22 +46,33 @@ fn run(
     const tree = doc.tree(session);
     if (tree.errors.len > 0) return null;
     const abs_path = doc.absPath(session);
+    const basename = std.fs.path.basename(abs_path);
+    const stem = std.fs.path.stem(basename);
+    const check_name = stem;
 
     const message, const severity = msg: {
-        const stem = fileStem(abs_path);
         if (ast.isRootImplicitStruct(tree)) {
-            if (config.file_struct.severity != .off and !config.file_struct.style.check(stem)) {
+            if (config.file_struct.severity != .off and
+                !config.file_struct.style.check(check_name))
                 break :msg .{
-                    try std.fmt.allocPrint(session_arena, "File is struct so name should be {s}", .{config.file_struct.style.name()}),
+                    try std.fmt.allocPrint(
+                        session_arena,
+                        "File `{s}` is an implicit struct, so its name should be {s}",
+                        .{ basename, config.file_struct.style.name() },
+                    ),
                     config.file_struct.severity,
                 };
-            }
-        } else if (config.file_namespace.severity != .off and !config.file_namespace.style.check(stem)) {
+        } else if (config.file_namespace.severity != .off and
+            !config.file_namespace.style.check(check_name))
             break :msg .{
-                try std.fmt.allocPrint(session_arena, "File is namespace so name should be {s}", .{config.file_namespace.style.name()}),
+                try std.fmt.allocPrint(
+                    session_arena,
+                    "File `{s}` is a namespace, so its name should be {s}",
+                    .{ basename, config.file_namespace.style.name() },
+                ),
                 config.file_namespace.severity,
             };
-        }
+
         return null;
     };
 
@@ -114,7 +120,7 @@ test "severity" {
                 .rule_id = "file_naming",
                 .severity = severity,
                 .slice = "",
-                .message = "File is struct so name should be TitleCase",
+                .message = "File `snake_case.zig` is an implicit struct, so its name should be TitleCase",
             }},
         );
 
@@ -134,7 +140,7 @@ test "severity" {
                 .rule_id = "file_naming",
                 .severity = severity,
                 .slice = "",
-                .message = "File is namespace so name should be snake_case",
+                .message = "File `TitleCase.zig` is a namespace, so its name should be snake_case",
             }},
         );
     }
@@ -245,7 +251,7 @@ test "expects snake_case with TitleCase" {
                 .rule_id = "file_naming",
                 .severity = .@"error",
                 .slice = "",
-                .message = "File is namespace so name should be snake_case",
+                .message = "File `File.zig` is a namespace, so its name should be snake_case",
             },
         },
     );
@@ -264,7 +270,7 @@ test "expects snake_case with camelCase" {
                 .rule_id = "file_naming",
                 .severity = .@"error",
                 .slice = "",
-                .message = "File is namespace so name should be snake_case",
+                .message = "File `myFile.zig` is a namespace, so its name should be snake_case",
             },
         },
     );
@@ -283,7 +289,7 @@ test "expects TitleCase with snake_case" {
                 .rule_id = "file_naming",
                 .severity = .warning,
                 .slice = "",
-                .message = "File is struct so name should be TitleCase",
+                .message = "File `myFile.zig` is an implicit struct, so its name should be TitleCase",
             },
         },
     );
@@ -302,7 +308,7 @@ test "expects TitleCase with under_score" {
                 .rule_id = "file_naming",
                 .severity = .@"error",
                 .slice = "",
-                .message = "File is struct so name should be TitleCase",
+                .message = "File `my_file.zig` is an implicit struct, so its name should be TitleCase",
             },
         },
     );
