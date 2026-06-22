@@ -39,6 +39,14 @@ fn run(
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
+    if (config.detect_catch_unreachable == .off and
+        config.detect_empty_catch == .off and
+        config.detect_empty_else == .off and
+        config.detect_else_unreachable == .off)
+    {
+        return null;
+    }
+
     const session_arena = session.runtime.sessionArena();
     const rule_arena = session.runtime.ruleArena();
 
