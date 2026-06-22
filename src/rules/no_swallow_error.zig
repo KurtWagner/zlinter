@@ -85,6 +85,10 @@ fn run(
                     }
                 },
                 else => if (tree.fullIf(node)) |if_info| {
+                    if (if_info.error_token == null) {
+                        continue :nodes;
+                    }
+
                     if (if_info.ast.else_expr.unwrap()) |else_node| {
                         switch (tree.nodeTag(else_node)) {
                             .unreachable_literal => if (config.detect_else_unreachable != .off)
@@ -159,6 +163,11 @@ test {
 
 test "no_swallow_error" {
     const no_swallow_error_source: [:0]const u8 =
+        \\pub fn ordinaryControlFlow(cond: bool) void {
+        \\  if (cond) {} else {}
+        \\  if (cond) {} else unreachable;
+        \\}
+        \\
         \\pub fn main() !void {
         \\  method() catch {};
         \\  method() catch unreachable;

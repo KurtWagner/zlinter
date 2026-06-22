@@ -23,6 +23,11 @@ pub fn main() void {
     }
 }
 
+pub fn ordinaryControlFlow(cond: bool) void {
+    if (cond) {} else {}
+    if (cond) {} else unreachable;
+}
+
 test {
     // Ok as in test which is excluded by default
     takeYourChances(0) catch {};
