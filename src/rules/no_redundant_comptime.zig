@@ -38,9 +38,21 @@ const redundant_types = [_][]const u8{
     "comptime_float",
 };
 
+fn unwrapParens(tree: Ast, node: Ast.Node.Index) Ast.Node.Index {
+    var current = node;
+
+    while (tree.nodeTag(current) == .grouped_expression) {
+        current = tree.nodeData(current).node_and_token[0];
+    }
+
+    return current;
+}
+
 fn isRedundantComptimeType(tree: Ast, type_expr: Ast.Node.Index) bool {
-    if (tree.nodeTag(type_expr) != .identifier) return false;
-    const slice = tree.tokenSlice(tree.firstToken(type_expr));
+    const unwrapped = unwrapParens(tree, type_expr);
+    if (tree.nodeTag(unwrapped) != .identifier) return false;
+
+    const slice = tree.tokenSlice(tree.firstToken(unwrapped));
     for (redundant_types) |t| {
         if (std.mem.eql(u8, slice, t)) return true;
     }
@@ -84,7 +96,8 @@ fn run(
             const type_node = param.type_expr orelse continue;
             if (!isRedundantComptimeType(tree, type_node)) continue;
 
-            const type_slice = tree.tokenSlice(tree.firstToken(type_node));
+            const unwrapped_type_node = unwrapParens(tree, type_node);
+            const type_slice = tree.tokenSlice(tree.firstToken(unwrapped_type_node));
             try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
                 .severity = config.severity,
@@ -133,6 +146,25 @@ test "no_redundant_comptime" {
         },
     );
 
+    // Bad: redundant comptime on parenthesized type parameter
+    try zlinter.testing.testRunRule(
+        rule,
+        \\fn List(comptime T: (type)) type {
+        \\    return struct {};
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_redundant_comptime",
+                .severity = .warning,
+                .slice = "comptime T: (type)",
+                .message = "Redundant `comptime` on parameter of type `type` - parameters of this type are always comptime",
+            },
+        },
+    );
+
     // Bad: redundant comptime on comptime_int
     try zlinter.testing.testRunRule(
         rule,
@@ -154,6 +186,29 @@ test "no_redundant_comptime" {
                 .severity = .warning,
                 .slice = "comptime b: comptime_int",
                 .message = "Redundant `comptime` on parameter of type `comptime_int` - parameters of this type are always comptime",
+            },
+        },
+    );
+
+    // Bad: redundant comptime on parenthesized comptime_int and comptime_float
+    try zlinter.testing.testRunRule(
+        rule,
+        \\fn add(comptime a: (comptime_int), comptime b: (comptime_float)) void {}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_redundant_comptime",
+                .severity = .warning,
+                .slice = "comptime a: (comptime_int)",
+                .message = "Redundant `comptime` on parameter of type `comptime_int` - parameters of this type are always comptime",
+            },
+            .{
+                .rule_id = "no_redundant_comptime",
+                .severity = .warning,
+                .slice = "comptime b: (comptime_float)",
+                .message = "Redundant `comptime` on parameter of type `comptime_float` - parameters of this type are always comptime",
             },
         },
     );
@@ -195,6 +250,17 @@ test "no_redundant_comptime" {
     try zlinter.testing.testRunRule(
         rule,
         \\fn foo(comptime n: usize) void {}
+    ,
+        .{},
+        Config{},
+        &.{},
+    );
+
+    // Good: parenthesized non-redundant types
+    try zlinter.testing.testRunRule(
+        rule,
+        \\fn foo(comptime n: (usize)) void {}
+        \\fn wrap(comptime x: (@TypeOf(value))) void {}
     ,
         .{},
         Config{},
