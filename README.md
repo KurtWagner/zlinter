@@ -383,60 +383,7 @@ This may change, especially when `zig` is "stable" at `1.x`. If you have opinion
 
 ## Contributing
 
-### Contributions
-
-Contributions and new rules or formatters are very welcome.
-
-Rules are per project configurable so I don't see any problems if new opinionated ones are added (assuming they're not completely bespoke).
-
-If you notice breaking changes in `zig` that will not be picked up by a `Deprecated:` comment then consider contributing to the `no_deprecated.zig` rule, with a specific check for the change. For example, `zig` removed `usingnamespace` in `0.15` so `no_deprecated.zig` will explicitly check and report the usage of `usingnamespace` keyword in `0.14` runs.
-
-### Dependencies
-
-Zlinter avoids dependencies. It's just too much of a burden right now to depend
-on something written for Zig when Zig isn't 1.x.
-
-The AST Explorer provided with Zlinter will be similar and aims to be minimal.
-Ideally no build system, no dependencies, just plain JS and CSS targetting
-modern browers as the target audience should all have access to such things.
-
-### Run tests
-
-Unit tests:
-
-```shell
-zig build unit-test
-```
-
-Integration tests:
-
-```shell
-zig build integration-test
-```
-
-All tests:
-
-```shell
-zig build test
-```
-
-To focus on a single rule when running integration tests:
-
-```shell
-zig build integration-test -Dtest_focus_on_rule=require_braces
-```
-
-### Run lint on self
-
-```shell
-zig build lint
-```
-
-### Regenerate documentation
-
-```shell
-zig build docs
-```
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for contribution guidance, commit message format, test commands, and repository maintenance notes.
 
 ### Build and serve website (with AST explorer)
 
