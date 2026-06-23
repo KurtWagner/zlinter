@@ -1,11 +1,11 @@
-warning `@panic` forcibly stops the program at runtime and should be avoided [test_cases/no_panic/include_tests_and_content_exemption.input.zig:8:5] no_panic
+warning `@panic` forcibly stops the program at runtime and should be avoided [test_cases/no_panic/include_tests_and_content_exemption.input.zig:22:5] no_panic
 
- 8 |     @panic("test fail");
-   |     ^^^^^^^^^^^^^^^^^^^
+ 22 |     @panic("test fail");
+    |     ^^^^^^^^^^^^^^^^^^^
 
-warning `@panic` forcibly stops the program at runtime and should be avoided [test_cases/no_panic/include_tests_and_content_exemption.input.zig:3:5] no_panic
+warning `@panic` forcibly stops the program at runtime and should be avoided [test_cases/no_panic/include_tests_and_content_exemption.input.zig:18:5] no_panic
 
- 3 |     @panic("other");
-   |     ^^^^^^^^^^^^^^^
+ 18 |     @panic("other");
+    |     ^^^^^^^^^^^^^^^
 
 x 2 warnings

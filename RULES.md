@@ -816,7 +816,7 @@ pub fn divide(x: i32, y: i32) i32 {
 
 * `exclude_panic_with_content`
 
-  * Skip `@panic(...)` calls where the content equals a given string (case sensitive). For example, maybe your application is happy to panic on OOM, so it would be reasonable to add "OOM" to the list here so `@panic("OOM")` is allowed.
+  * Skip `@panic(...)` calls where the decoded string content equals a given string (case sensitive). For example, maybe your application is happy to panic on OOM, so it would be reasonable to add "OOM" to the list here so `@panic("OOM")` is allowed.
 
   * **Default:** `&.{}`
 

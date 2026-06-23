@@ -43,7 +43,7 @@ pub const Config = struct {
     /// Skip if found within `test { ... }` block.
     exclude_tests: bool = true,
 
-    /// Skip `@panic(...)` calls where the content equals a given string (case sensitive).
+    /// Skip `@panic(...)` calls where the decoded string content equals a given string (case sensitive).
     /// For example, maybe your application is happy to panic on OOM, so it
     /// would be reasonable to add "OOM" to the list here so `@panic("OOM")`
     /// is allowed.
@@ -102,7 +102,8 @@ fn run(
             continue :nodes;
 
         // if configured, skip if panic has case sensitive string content matching
-        if (builtinHasParamContent(
+        if (try builtinHasParamContent(
+            rule_arena,
             tree,
             node,
             config.exclude_panic_with_content,
@@ -127,14 +128,16 @@ fn run(
         null;
 }
 
-/// Returns trye if the built call has a single argument that matches one of the
-/// given contents. e.g., `@panic("OOM")` would match `&.{"OOM"}`.
+/// Returns true if the built call has a single argument that matches one of the
+/// given contents after decoding the string literal. e.g., `@panic("OOM")`
+/// and `@panic("O\x4fM")` both match `&.{"OOM"}`.
 /// Contents are case sensitive
 fn builtinHasParamContent(
+    arena: std.mem.Allocator,
     tree: Ast,
     node: Ast.Node.Index,
     contents: []const []const u8,
-) bool {
+) !bool {
     if (contents.len == 0) return false;
 
     var buffer: [2]Ast.Node.Index = undefined;
@@ -145,12 +148,28 @@ fn builtinHasParamContent(
     const tag = tree.nodeTag(param);
     if (tag != .string_literal) return false;
 
-    const param_slice = tree.tokenSlice(tree.nodeMainToken(param));
     for (contents) |c| {
-        // offset 1 on either side to factor in quotes
-        if (std.mem.eql(u8, param_slice[1 .. param_slice.len - 1], c)) return true;
+        if (try stringLiteralContentEquals(arena, tree, param, c)) return true;
     }
     return false;
+}
+
+fn stringLiteralContentEquals(
+    arena: std.mem.Allocator,
+    tree: Ast,
+    string_node: Ast.Node.Index,
+    expected: []const u8,
+) !bool {
+    const token = tree.nodeMainToken(string_node);
+    const raw = tree.tokenSlice(token);
+    if (raw.len < 2 or raw[0] != '"' or raw[raw.len - 1] != '"') return false;
+
+    const decoded = std.zig.string_literal.parseAlloc(arena, raw) catch |err| switch (err) {
+        error.InvalidLiteral => return false,
+        error.OutOfMemory => return error.OutOfMemory,
+    };
+
+    return std.mem.eql(u8, decoded, expected);
 }
 
 test "excludes based on configurable contents" {
@@ -201,9 +220,42 @@ test "excludes based on configurable contents" {
         },
     );
 
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ pub fn main() void {
+        \\  @panic("O\x4fM");
+        \\  @panic("");
+        \\  @panic("a\"b");
+        \\  @panic("OPM");
+        \\}
+    ,
+        .{},
+        Config{
+            .exclude_panic_with_content = &.{
+                "OOM", "", "a\"b",
+            },
+        },
+        &.{
+            .{
+                .rule_id = "no_panic",
+                .severity = .warning,
+                .slice =
+                \\@panic("OPM")
+                ,
+                .message = "`@panic` forcibly stops the program at runtime and should be avoided",
+            },
+        },
+    );
+
     // Good cases:
     inline for (&.{
         \\ @panic("OOM");
+        ,
+        \\ @panic("O\x4fM");
+        ,
+        \\ @panic("");
+        ,
+        \\ @panic("a\"b");
         ,
         \\ @panic("other");
         ,
@@ -215,7 +267,7 @@ test "excludes based on configurable contents" {
             .{},
             Config{
                 .exclude_panic_with_content = &.{
-                    "OOM", "other",
+                    "OOM", "other", "", "a\"b",
                 },
             },
             &.{},
