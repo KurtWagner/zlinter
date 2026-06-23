@@ -84,18 +84,7 @@ fn run(
         const node, const connections = tuple;
         _ = connections;
 
-        const tag = tree.nodeTag(node);
-        switch (tag) {
-            .builtin_call_two,
-            .builtin_call_two_comma,
-            .builtin_call,
-            .builtin_call_comma,
-            => {
-                const main_token = tree.nodeMainToken(node);
-                if (!std.mem.eql(u8, tree.tokenSlice(main_token), "@panic")) continue :nodes;
-            },
-            else => continue :nodes,
-        }
+        if (!zlinter.ast.isBuiltinCallNamed(tree, node, "@panic")) continue :nodes;
 
         // if configured, skip if a parent is a test block
         if (config.exclude_tests and doc.isEnclosedInTestBlock(session, node))
