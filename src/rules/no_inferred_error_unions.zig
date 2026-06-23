@@ -34,6 +34,12 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
     };
 }
 
+fn isInferredErrorUnionReturn(tree: Ast, return_type: Ast.Node.Index) bool {
+    const first = tree.firstToken(return_type);
+    if (first == 0) return false;
+    return tree.tokens.items(.tag)[first - 1] == .bang;
+}
+
 /// Runs the no_inferred_error_unions rule.
 fn run(
     rule: zlinter.rules.LintRule,
@@ -70,16 +76,14 @@ fn run(
         const return_type = fn_decl.ast.return_type.unwrap() orelse
             continue :nodes;
 
-        const return_type_tag = tree.nodeTag(return_type);
-        switch (return_type_tag) {
-            .error_union => if (config.allow_anyerror or
+        if (tree.nodeTag(return_type) == .error_union) {
+            if (config.allow_anyerror or
                 !std.mem.eql(u8, tree.tokenSlice(tree.firstToken(return_type)), "anyerror"))
-                continue :nodes,
-            .identifier => switch (tree.tokens.items(.tag)[tree.firstToken(return_type) - 1]) {
-                .bang => {},
-                else => continue :nodes,
-            },
-            else => continue :nodes,
+            {
+                continue :nodes;
+            }
+        } else if (!isInferredErrorUnionReturn(tree, return_type)) {
+            continue :nodes;
         }
 
         try lint_problems.append(session_arena, .{
@@ -113,6 +117,14 @@ test "no_inferred_error_unions - valid function declarations" {
         ,
         \\const Errors = error{Always};
         \\pub fn pubGood() Errors!void {
+        \\  return error.Always;
+        \\}
+        ,
+        \\pub fn pubGoodBytes() error{Always}![]const u8 {
+        \\  return error.Always;
+        \\}
+        ,
+        \\pub fn pubGoodMaybePtr() Errors!?*Thing {
         \\  return error.Always;
         \\}
         ,
@@ -163,6 +175,63 @@ test "no_inferred_error_unions - Invalid function declarations - defaults" {
                 .rule_id = "no_inferred_error_unions",
                 .severity = .warning,
                 .slice = "pub fn inferred() !void",
+                .message = "Function returns an inferred error union. Prefer an explicit error set",
+            },
+        },
+    );
+}
+
+test "no_inferred_error_unions - Invalid function declarations - complex payloads" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const Thing = struct {};
+        \\pub fn bytes() ![]const u8 {
+        \\  return error.Always;
+        \\}
+        \\pub fn maybePtr() !?*Thing {
+        \\  return error.Always;
+        \\}
+        \\pub fn ptr() !*Thing {
+        \\  return error.Always;
+        \\}
+        \\pub fn array() ![4]u8 {
+        \\  return error.Always;
+        \\}
+        \\pub fn namespaced() !std.ArrayList(u8) {
+        \\  return error.Always;
+        \\}
+        ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_inferred_error_unions",
+                .severity = .warning,
+                .slice = "pub fn namespaced() !std.ArrayList(u8)",
+                .message = "Function returns an inferred error union. Prefer an explicit error set",
+            },
+            .{
+                .rule_id = "no_inferred_error_unions",
+                .severity = .warning,
+                .slice = "pub fn array() ![4]u8",
+                .message = "Function returns an inferred error union. Prefer an explicit error set",
+            },
+            .{
+                .rule_id = "no_inferred_error_unions",
+                .severity = .warning,
+                .slice = "pub fn ptr() !*Thing",
+                .message = "Function returns an inferred error union. Prefer an explicit error set",
+            },
+            .{
+                .rule_id = "no_inferred_error_unions",
+                .severity = .warning,
+                .slice = "pub fn maybePtr() !?*Thing",
+                .message = "Function returns an inferred error union. Prefer an explicit error set",
+            },
+            .{
+                .rule_id = "no_inferred_error_unions",
+                .severity = .warning,
+                .slice = "pub fn bytes() ![]const u8",
                 .message = "Function returns an inferred error union. Prefer an explicit error set",
             },
         },
