@@ -24,6 +24,11 @@ pub const Config = struct {
     allow_anyerror: bool = true,
 };
 
+const ReturnProblem = enum {
+    inferred_error_union,
+    anyerror_error_union,
+};
+
 /// Builds and returns the no_inferred_error_unions rule.
 pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
     _ = options;
@@ -38,6 +43,24 @@ fn isInferredErrorUnionReturn(tree: Ast, return_type: Ast.Node.Index) bool {
     const first = tree.firstToken(return_type);
     if (first == 0) return false;
     return tree.tokens.items(.tag)[first - 1] == .bang;
+}
+
+fn classifyReturnProblem(
+    tree: Ast,
+    return_type: Ast.Node.Index,
+    config: Config,
+) ?ReturnProblem {
+    if (tree.nodeTag(return_type) == .error_union) {
+        if (config.allow_anyerror or
+            !std.mem.eql(u8, tree.tokenSlice(tree.firstToken(return_type)), "anyerror"))
+            return null;
+
+        return .anyerror_error_union;
+    }
+
+    if (!isInferredErrorUnionReturn(tree, return_type))
+        return null;
+    return .inferred_error_union;
 }
 
 /// Runs the no_inferred_error_unions rule.
@@ -76,22 +99,21 @@ fn run(
         const return_type = fn_decl.ast.return_type.unwrap() orelse
             continue :nodes;
 
-        if (tree.nodeTag(return_type) == .error_union) {
-            if (config.allow_anyerror or
-                !std.mem.eql(u8, tree.tokenSlice(tree.firstToken(return_type)), "anyerror"))
-            {
-                continue :nodes;
-            }
-        } else if (!isInferredErrorUnionReturn(tree, return_type)) {
+        const problem = classifyReturnProblem(tree, return_type, config) orelse {
             continue :nodes;
-        }
+        };
+
+        const message = switch (problem) {
+            .inferred_error_union => "Function returns an inferred error union. Prefer an explicit error set",
+            .anyerror_error_union => "Function returns anyerror. Prefer a specific error set",
+        };
 
         try lint_problems.append(session_arena, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
             .start = .startOfToken(tree, tree.firstToken(node)),
             .end = .endOfNode(tree, return_type),
-            .message = try session_arena.dupe(u8, "Function returns an inferred error union. Prefer an explicit error set"),
+            .message = try session_arena.dupe(u8, message),
         });
     }
 
@@ -200,7 +222,7 @@ test "no_inferred_error_unions - Invalid function declarations - complex payload
         \\pub fn namespaced() !std.ArrayList(u8) {
         \\  return error.Always;
         \\}
-        ,
+    ,
         .{},
         Config{},
         &.{
@@ -272,7 +294,7 @@ test "no_inferred_error_unions - Invalid function declarations - allow_anyerror 
                 .rule_id = "no_inferred_error_unions",
                 .severity = .@"error",
                 .slice = "pub fn inferred() anyerror!void",
-                .message = "Function returns an inferred error union. Prefer an explicit error set",
+                .message = "Function returns anyerror. Prefer a specific error set",
             },
         },
     );
