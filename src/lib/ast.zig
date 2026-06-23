@@ -242,6 +242,19 @@ pub fn isContainerNamespace(tree: Ast, container_decl: Ast.full.ContainerDecl) b
     return true;
 }
 
+/// Returns true when a node is a direct member of the container API.
+///
+/// This includes declarations whose direct parent is the root node or a
+/// container declaration node, and excludes locals nested inside blocks and
+/// statement bodies.
+pub fn isContainerMember(tree: Ast, connections: NodeConnections) bool {
+    const parent = connections.parent orelse return false;
+    if (parent == .root) return true;
+
+    var container_decl_buffer: [2]Ast.Node.Index = undefined;
+    return tree.fullContainerDecl(&container_decl_buffer, parent) != null;
+}
+
 test "deferBlock - has expected children" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();

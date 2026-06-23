@@ -62,28 +62,27 @@ fn run(
 
         nodes: while (try it.next()) |tuple| {
             const node, const connections = tuple;
-            _ = connections;
 
-            if (tree.nodeTag(node) != .fn_decl) {
-                if (tree.fullFnProto(&fn_decl_buffer, node)) |fn_decl| {
-                    const severity, const label = switch (zlinter.ast.fnProtoVisibility(tree, fn_decl)) {
-                        .private => .{ config.private_severity, "Private" },
-                        .public => .{ config.public_severity, "Public" },
-                    };
-                    if (severity == .off) continue :nodes;
+            if (!zlinter.ast.isContainerMember(tree, connections)) continue :nodes;
 
-                    if (hasDocComments(tree, node))
-                        continue :nodes;
+            if (tree.fullFnProto(&fn_decl_buffer, node)) |fn_decl| {
+                const severity, const label = switch (zlinter.ast.fnProtoVisibility(tree, fn_decl)) {
+                    .private => .{ config.private_severity, "Private" },
+                    .public => .{ config.public_severity, "Public" },
+                };
+                if (severity == .off) continue :nodes;
 
-                    try lint_problems.append(session_arena, .{
-                        .rule_id = rule.rule_id,
-                        .severity = severity,
-                        .start = .startOfToken(tree, tree.firstToken(node)),
-                        .end = .endOfNode(tree, fn_decl.ast.proto_node),
-                        .message = try std.fmt.allocPrint(session_arena, "{s} function is missing a doc comment", .{label}),
-                    });
+                if (hasDocComments(tree, node))
                     continue :nodes;
-                }
+
+                try lint_problems.append(session_arena, .{
+                    .rule_id = rule.rule_id,
+                    .severity = severity,
+                    .start = .startOfToken(tree, tree.firstToken(node)),
+                    .end = .endOfNode(tree, fn_decl.ast.proto_node),
+                    .message = try std.fmt.allocPrint(session_arena, "{s} function is missing a doc comment", .{label}),
+                });
+                continue :nodes;
             }
 
             if (tree.fullVarDecl(node)) |var_decl| {
@@ -217,6 +216,10 @@ test "require_doc_comment - private" {
     const rule = buildRule(.{});
     const source: [:0]const u8 =
         \\fn noDoc() void {
+        \\    const local_const = 1;
+        \\    var local_var: usize = 0;
+        \\    _ = local_const;
+        \\    _ = local_var;
         \\}
         \\
         \\extern fn missingExternDoc(size: usize) void;
