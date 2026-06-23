@@ -59,15 +59,7 @@ fn run(
         const node: Ast.Node.Index = @enumFromInt(index);
         const fn_proto = fnProto(tree, &fn_buffer, node) orelse continue :nodes;
 
-        if (config.exclude_extern and fn_proto.extern_export_inline_token != null) {
-            const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
-            if (token_tag == .keyword_extern) continue :nodes;
-        }
-
-        if (config.exclude_export and fn_proto.extern_export_inline_token != null) {
-            const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
-            if (token_tag == .keyword_export) continue :nodes;
-        }
+        if (shouldSkipFnProto(tree, fn_proto, config)) continue :nodes;
 
         if (fn_proto.ast.params.len <= config.max) continue :nodes;
 
@@ -115,6 +107,18 @@ fn firstParamStartTokenFromParam(tree: Ast, param: Ast.full.FnProto.Param) ?Ast.
     if (param.anytype_ellipsis3) |token| return token;
     if (param.type_expr) |type_expr| return tree.firstToken(type_expr);
     return null;
+}
+
+fn shouldSkipFnProto(tree: Ast, fn_proto: Ast.full.FnProto, config: Config) bool {
+    const token = fn_proto.extern_export_inline_token orelse return false;
+    const token_tag = tree.tokens.items(.tag)[token];
+
+    return switch (token_tag) {
+        .keyword_extern => config.exclude_extern,
+        .keyword_export => config.exclude_export,
+        .keyword_inline => false,
+        else => false,
+    };
 }
 
 test {
@@ -168,6 +172,24 @@ test "extern included" {
     ,
         .{},
         Config{ .exclude_extern = false, .max = 1 },
+        &.{
+            .{
+                .rule_id = "max_positional_args",
+                .severity = .warning,
+                .slice = "u32, u32",
+                .message = "Exceeded maximum positional arguments of 1.",
+            },
+        },
+    );
+}
+
+test "inline included" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\inline fn inlineToManyArgs(u32, u32) void {}
+    ,
+        .{},
+        Config{ .exclude_extern = true, .exclude_export = true, .max = 1 },
         &.{
             .{
                 .rule_id = "max_positional_args",
