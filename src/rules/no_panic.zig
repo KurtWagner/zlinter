@@ -322,6 +322,30 @@ test "no_panic" {
     );
 }
 
+test "no_panic reports test block panics when exclude_tests is false" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\test {
+        \\    @panic("test not implemented");
+        \\}
+    ,
+        .{},
+        Config{
+            .exclude_tests = false,
+        },
+        &.{
+            .{
+                .rule_id = "no_panic",
+                .severity = .warning,
+                .slice =
+                \\@panic("test not implemented")
+                ,
+                .message = "`@panic` forcibly stops the program at runtime and should be avoided",
+            },
+        },
+    );
+}
+
 const std = @import("std");
 const zlinter = @import("zlinter");
 const Ast = std.zig.Ast;
