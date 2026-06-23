@@ -19,8 +19,8 @@
 //! **Good:**
 //!
 //! ```zig
-//! pub fn divide(x: i32, y: i32) i32 {
-//!   if (y == 0) @panic("Divide by zero!");
+//! pub fn divide(x: i32, y: i32) !i32 {
+//!   if (y == 0) return error.DivideByZero;
 //!   return x / y;
 //! }
 //! ```
@@ -28,8 +28,8 @@
 //! **Bad:**
 //!
 //! ```zig
-//! pub fn divide(x: i32, y: i32) !i32 {
-//!   if (y == 0) return error.DivideByZero;
+//! pub fn divide(x: i32, y: i32) i32 {
+//!   if (y == 0) @panic("Divide by zero!");
 //!   return x / y;
 //! }
 //! ```

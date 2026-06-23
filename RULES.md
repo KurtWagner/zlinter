@@ -785,8 +785,8 @@ By default this will not flag `@panic` found in `test` blocks.
 **Good:**
 
 ```zig
-pub fn divide(x: i32, y: i32) i32 {
-  if (y == 0) @panic("Divide by zero!");
+pub fn divide(x: i32, y: i32) !i32 {
+  if (y == 0) return error.DivideByZero;
   return x / y;
 }
 ```
@@ -794,8 +794,8 @@ pub fn divide(x: i32, y: i32) i32 {
 **Bad:**
 
 ```zig
-pub fn divide(x: i32, y: i32) !i32 {
-  if (y == 0) return error.DivideByZero;
+pub fn divide(x: i32, y: i32) i32 {
+  if (y == 0) @panic("Divide by zero!");
   return x / y;
 }
 ```
@@ -841,7 +841,8 @@ fn List(comptime T: type) type { ... }
 fn add(comptime a: comptime_int, comptime b: comptime_int) comptime_int { ... }
 ```
 
-`no_redundant_comptime` supports auto fixes with the `--fix` flag. Fixes are omitted when the surrounding layout is comment-adjacent or otherwise ambiguous.
+`no_redundant_comptime` supports auto fixes with the `--fix` flag.
+Fixes are not applied when the surrounding layout is comment-adjacent or otherwise ambiguous.
 
 **Config options:**
 
