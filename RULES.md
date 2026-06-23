@@ -399,13 +399,13 @@ appropriate defaults.
 
 * `exclude_extern`
 
-  * Exclude extern / foreign functions. An extern function refers to a foreign function — typically defined outside of Zig, such as in a C library or other system-provided binary. You typically don't want to enforce naming conventions on these functions.
+  * Exclude extern / foreign functions. An extern function signature is usually dictated by a foreign API, so its parameter count may be fixed by an external boundary rather than by local code style.
 
   * **Default:** `true`
 
 * `exclude_export`
 
-  * Exclude exported functions. Export makes the symbol visible to external code, such as C or other languages that might link against your Zig code. You may prefer to rely on the naming conventions of the code being linked, in which case, you may set this to true.
+  * Exclude exported functions. Exported signatures may be constrained by an external ABI or consumer at the call boundary. Project-owned export APIs can still choose to enforce this rule if they control the shape of the interface.
 
   * **Default:** `false`
 
