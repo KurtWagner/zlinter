@@ -68,7 +68,7 @@ fn run(
             .severity = config.severity,
             .start = .startOfToken(tree, firstParamStartToken(tree, fn_proto) orelse tree.firstToken(fn_proto.ast.params[0])),
             .end = .endOfNode(tree, fn_proto.ast.params[fn_proto.ast.params.len - 1]),
-            .message = try std.fmt.allocPrint(session_arena, "Exceeded maximum positional arguments of {d}.", .{config.max}),
+            .message = try std.fmt.allocPrint(session_arena, "Exceeded maximum positional arguments of {d}, found {d}.", .{ config.max, fn_proto.ast.params.len }),
         });
     }
 
@@ -148,7 +148,7 @@ test "export included" {
                 .rule_id = "max_positional_args",
                 .severity = .warning,
                 .slice = "u32, u32",
-                .message = "Exceeded maximum positional arguments of 1.",
+                .message = "Exceeded maximum positional arguments of 1, found 2.",
             },
         },
     );
@@ -177,7 +177,7 @@ test "extern included" {
                 .rule_id = "max_positional_args",
                 .severity = .warning,
                 .slice = "u32, u32",
-                .message = "Exceeded maximum positional arguments of 1.",
+                .message = "Exceeded maximum positional arguments of 1, found 2.",
             },
         },
     );
@@ -195,7 +195,7 @@ test "inline included" {
                 .rule_id = "max_positional_args",
                 .severity = .warning,
                 .slice = "u32, u32",
-                .message = "Exceeded maximum positional arguments of 1.",
+                .message = "Exceeded maximum positional arguments of 1, found 2.",
             },
         },
     );
@@ -215,7 +215,7 @@ test "general" {
                 .rule_id = "max_positional_args",
                 .severity = .@"error",
                 .slice = "a1:u32, a2:u32, a3:u32, a4:u32, a5:u32, a6:u32",
-                .message = "Exceeded maximum positional arguments of 5.",
+                .message = "Exceeded maximum positional arguments of 5, found 6.",
             },
         },
     );
@@ -241,7 +241,7 @@ test "multiline named parameters" {
                 \\    noalias buf: []u8,
                 \\    count: usize
                 ,
-                .message = "Exceeded maximum positional arguments of 1.",
+                .message = "Exceeded maximum positional arguments of 1, found 3.",
             },
         },
     );
@@ -259,7 +259,7 @@ test "single line parameters" {
                 .rule_id = "max_positional_args",
                 .severity = .@"error",
                 .slice = "noalias buf: []u8, src: []const u8",
-                .message = "Exceeded maximum positional arguments of 1.",
+                .message = "Exceeded maximum positional arguments of 1, found 2.",
             },
         },
     );
@@ -277,7 +277,7 @@ test "anytype parameter" {
                 .rule_id = "max_positional_args",
                 .severity = .@"error",
                 .slice = "value: anytype, first: u8, second: u8",
-                .message = "Exceeded maximum positional arguments of 1.",
+                .message = "Exceeded maximum positional arguments of 1, found 2.",
             },
         },
     );
@@ -291,6 +291,24 @@ test "exact maximum with modifiers" {
         .{},
         Config{ .severity = .@"error", .max = 2 },
         &.{},
+    );
+}
+
+test "zero max one parameter" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\fn tooMany(a: u32) void {}
+    ,
+        .{},
+        Config{ .severity = .@"error", .max = 0 },
+        &.{
+            .{
+                .rule_id = "max_positional_args",
+                .severity = .@"error",
+                .slice = "a: u32",
+                .message = "Exceeded maximum positional arguments of 0, found 1.",
+            },
+        },
     );
 }
 
