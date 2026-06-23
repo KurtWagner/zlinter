@@ -1,0 +1,6 @@
+warning Public function is missing a doc comment [test_cases/require_doc_comment/detached_doc_comment.input.zig:3:1] require_doc_comment
+
+ 3 | pub fn missingDoc() void {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+x 1 warnings

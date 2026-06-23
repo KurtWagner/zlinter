@@ -146,10 +146,42 @@ fn hasAttachedDocComment(tree: Ast, node: Ast.Node.Index) bool {
         => has_doc_comments: {
             const first = tree.firstToken(node);
             if (first == 0) break :has_doc_comments false;
-            break :has_doc_comments tree.tokenTag(first - 1) == .doc_comment;
+            if (tree.tokenTag(first - 1) != .doc_comment) break :has_doc_comments false;
+
+            const prev_end = tree.tokenStart(first - 1) + tree.tokenSlice(first - 1).len;
+            const first_start = tree.tokenStart(first);
+            if (prev_end >= first_start) break :has_doc_comments true;
+
+            break :has_doc_comments !containsBlankLine(tree.source[prev_end..first_start]);
         },
         else => false,
     };
+}
+
+fn containsBlankLine(bytes: []const u8) bool {
+    var line_has_non_whitespace = false;
+    var saw_newline = false;
+
+    var i: usize = 0;
+    while (i < bytes.len) : (i += 1) {
+        switch (bytes[i]) {
+            '\n' => {
+                if (saw_newline and !line_has_non_whitespace) return true;
+                saw_newline = true;
+                line_has_non_whitespace = false;
+            },
+            '\r' => {
+                if (saw_newline and !line_has_non_whitespace) return true;
+                saw_newline = true;
+                line_has_non_whitespace = false;
+                if (i + 1 < bytes.len and bytes[i + 1] == '\n') i += 1;
+            },
+            ' ', '\t' => {},
+            else => line_has_non_whitespace = true,
+        }
+    }
+
+    return false;
 }
 
 test "require_doc_comment - public" {
@@ -369,6 +401,114 @@ test "hasDocComments - unsupported nodes return false" {
 
     const test_decl = try zlinter.testing.expectSingleNodeOfTag(tree, &.{.test_decl});
     try std.testing.expect(!hasDocComments(tree, test_decl));
+}
+
+test "hasAttachedDocComment - attached single-line comment" {
+    const source: [:0]const u8 =
+        \\/// Attached.
+        \\pub fn hasDoc() void;
+    ;
+
+    var tree = try Ast.parse(std.testing.allocator, source, .zig);
+    defer tree.deinit(std.testing.allocator);
+
+    const node = try zlinter.testing.expectSingleNodeOfTag(
+        tree,
+        &.{ .fn_proto, .fn_proto_multi, .fn_proto_one, .fn_proto_simple },
+    );
+    try std.testing.expect(hasAttachedDocComment(tree, node));
+}
+
+test "hasAttachedDocComment - attached multi-line comment" {
+    const source: [:0]const u8 =
+        \\/// Line 1
+        \\/// Line 2
+        \\pub fn hasMultiDoc() void;
+    ;
+
+    var tree = try Ast.parse(std.testing.allocator, source, .zig);
+    defer tree.deinit(std.testing.allocator);
+
+    const node = try zlinter.testing.expectSingleNodeOfTag(
+        tree,
+        &.{ .fn_proto, .fn_proto_multi, .fn_proto_one, .fn_proto_simple },
+    );
+    try std.testing.expect(hasAttachedDocComment(tree, node));
+}
+
+test "hasAttachedDocComment - detached comment" {
+    const source: [:0]const u8 =
+        \\/// Detached doc comment.
+        \\
+        \\pub fn missingDoc() void;
+    ;
+
+    var tree = try Ast.parse(std.testing.allocator, source, .zig);
+    defer tree.deinit(std.testing.allocator);
+
+    const node = try zlinter.testing.expectSingleNodeOfTag(
+        tree,
+        &.{ .fn_proto, .fn_proto_multi, .fn_proto_one, .fn_proto_simple },
+    );
+    try std.testing.expect(!hasAttachedDocComment(tree, node));
+}
+
+test "hasAttachedDocComment - crlf line endings" {
+    const raw = "/// Attached.\r\npub fn hasDoc() void;\r\n";
+    const source = try std.testing.allocator.alloc(u8, raw.len + 1);
+    defer std.testing.allocator.free(source);
+    @memcpy(source[0..raw.len], raw);
+    source[raw.len] = 0;
+    const source_z: [:0]const u8 = source[0..raw.len :0];
+
+    var tree = try Ast.parse(std.testing.allocator, source_z, .zig);
+    defer tree.deinit(std.testing.allocator);
+
+    const node = try zlinter.testing.expectSingleNodeOfTag(
+        tree,
+        &.{ .fn_proto, .fn_proto_multi, .fn_proto_one, .fn_proto_simple },
+    );
+    try std.testing.expect(hasAttachedDocComment(tree, node));
+}
+
+test "require_doc_comment - detached doc comment still reports" {
+    const rule = buildRule(.{});
+    const source: [:0]const u8 =
+        \\/// Detached doc comment.
+        \\
+        \\pub fn missingDoc() void;
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .public_severity = .warning },
+        &.{
+            .{
+                .rule_id = "require_doc_comment",
+                .severity = .warning,
+                .slice = "pub fn missingDoc() void",
+                .message = "Public function is missing a doc comment",
+            },
+        },
+    );
+}
+
+test "require_doc_comment - attached doc comment suppresses report" {
+    const rule = buildRule(.{});
+    const source: [:0]const u8 =
+        \\/// Attached.
+        \\pub fn hasDoc() void;
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .public_severity = .warning },
+        &.{},
+    );
 }
 
 fn expectPrototypeHasDocComment(source: [:0]const u8) !void {
