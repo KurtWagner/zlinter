@@ -225,6 +225,53 @@ test "multiline named parameters" {
     );
 }
 
+test "single line parameters" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\fn write(noalias buf: []u8, src: []const u8) void {}
+    ,
+        .{},
+        Config{ .severity = .@"error", .max = 1 },
+        &.{
+            .{
+                .rule_id = "max_positional_args",
+                .severity = .@"error",
+                .slice = "noalias buf: []u8, src: []const u8",
+                .message = "Exceeded maximum positional arguments of 1.",
+            },
+        },
+    );
+}
+
+test "anytype parameter" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\fn read(value: anytype, first: u8, second: u8) void {}
+    ,
+        .{},
+        Config{ .severity = .@"error", .max = 1 },
+        &.{
+            .{
+                .rule_id = "max_positional_args",
+                .severity = .@"error",
+                .slice = "value: anytype, first: u8, second: u8",
+                .message = "Exceeded maximum positional arguments of 1.",
+            },
+        },
+    );
+}
+
+test "exact maximum with modifiers" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\fn exact(comptime T: type, value: T) void {}
+    ,
+        .{},
+        Config{ .severity = .@"error", .max = 2 },
+        &.{},
+    );
+}
+
 const std = @import("std");
 const zlinter = @import("zlinter");
 const Ast = std.zig.Ast;
