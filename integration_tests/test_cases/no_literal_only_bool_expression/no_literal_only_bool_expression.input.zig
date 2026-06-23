@@ -29,4 +29,10 @@ pub fn main() void {
     if (1 == 2) {}
     if (2 >= 1) {}
     if (1 == 2 or (1 > 10 and age < 10)) {}
+    if ((1) == (1)) {}
+    if ((true)) {}
+    if ('a' == 'c') {}
+    if ('a' == 'b') {}
+    while ((false)) {}
+    while ((true)) {}
 }
