@@ -1,0 +1,11 @@
+warning Avoid code in comments [test_cases/no_comment_out_code/first_comment_group_statement.input.zig:1:1] no_comment_out_code
+
+ 1 | // std.debug.print("hello", .{});
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Avoid code in comments [test_cases/no_comment_out_code/first_comment_group_statement.input.zig:8:1] no_comment_out_code
+
+ 8 | // std.debug.print("world", .{});
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+x 2 warnings

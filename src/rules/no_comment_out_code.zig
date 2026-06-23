@@ -68,31 +68,24 @@ fn run(
         const line = doc.comments.tokens[comment.first_token].line;
         defer prev_line = line;
 
-        if (content_accumulator.items.len == 0 or prev_line == line - 1) {
-            if (content_accumulator.items.len == 0) {
-                try content_accumulator.appendSlice(rule_arena, "fn container() void {");
+        if (content_accumulator.items.len > 0 and prev_line != line - 1) {
+            if (try looksLikeCode(content_accumulator.items[0..], session_arena)) {
+                try lint_problems.append(session_arena, .{
+                    .rule_id = rule.rule_id,
+                    .severity = config.severity,
+                    .start = .startOfComment(doc.comments, first_comment.?),
+                    .end = .endOfComment(doc.comments, last_comment.?),
+                    .message = try session_arena.dupe(u8, "Avoid code in comments"),
+                });
             }
-            try content_accumulator.appendSlice(rule_arena, contents);
-            try content_accumulator.append(rule_arena, '\n');
-        } else {
-            if (content_accumulator.items.len > 0) {
-                if (try looksLikeCode(content_accumulator.items[0..], session_arena)) {
-                    try lint_problems.append(session_arena, .{
-                        .rule_id = rule.rule_id,
-                        .severity = config.severity,
-                        .start = .startOfComment(doc.comments, first_comment.?),
-                        .end = .endOfComment(doc.comments, last_comment.?),
-                        .message = try session_arena.dupe(u8, "Avoid code in comments"),
-                    });
-                }
 
-                content_accumulator.clearAndFree(rule_arena);
-                first_comment = null;
-                last_comment = null;
-            }
-            try content_accumulator.appendSlice(rule_arena, contents);
-            try content_accumulator.append(rule_arena, '\n');
+            content_accumulator.clearAndFree(rule_arena);
+            first_comment = null;
+            last_comment = null;
         }
+
+        try content_accumulator.appendSlice(rule_arena, contents);
+        try content_accumulator.append(rule_arena, '\n');
 
         first_comment = first_comment orelse comment;
         last_comment = comment;
