@@ -53,54 +53,56 @@ fn run(
             });
         }
     }
-    if (config.private_severity == .off and config.public_severity == .off) return null;
 
-    var it = try doc.nodeLineageIterator(root, rule_arena);
+    const should_check_decls = config.private_severity != .off or config.public_severity != .off;
+    if (should_check_decls) {
+        var it = try doc.nodeLineageIterator(root, rule_arena);
 
-    var fn_decl_buffer: [1]Ast.Node.Index = undefined;
+        var fn_decl_buffer: [1]Ast.Node.Index = undefined;
 
-    nodes: while (try it.next()) |tuple| {
-        const node, const connections = tuple;
-        _ = connections;
+        nodes: while (try it.next()) |tuple| {
+            const node, const connections = tuple;
+            _ = connections;
 
-        if (tree.nodeTag(node) != .fn_decl) {
-            if (tree.fullFnProto(&fn_decl_buffer, node)) |fn_decl| {
-                const severity, const label = switch (zlinter.ast.fnProtoVisibility(tree, fn_decl)) {
+            if (tree.nodeTag(node) != .fn_decl) {
+                if (tree.fullFnProto(&fn_decl_buffer, node)) |fn_decl| {
+                    const severity, const label = switch (zlinter.ast.fnProtoVisibility(tree, fn_decl)) {
+                        .private => .{ config.private_severity, "Private" },
+                        .public => .{ config.public_severity, "Public" },
+                    };
+                    if (severity == .off) continue :nodes;
+
+                    if (hasDocComments(tree, node))
+                        continue :nodes;
+
+                    try lint_problems.append(session_arena, .{
+                        .rule_id = rule.rule_id,
+                        .severity = severity,
+                        .start = .startOfToken(tree, tree.firstToken(node)),
+                        .end = .endOfNode(tree, fn_decl.ast.proto_node),
+                        .message = try std.fmt.allocPrint(session_arena, "{s} function is missing a doc comment", .{label}),
+                    });
+                    continue :nodes;
+                }
+            }
+
+            if (tree.fullVarDecl(node)) |var_decl| {
+                const severity, const label = switch (zlinter.ast.varDeclVisibility(tree, var_decl)) {
                     .private => .{ config.private_severity, "Private" },
                     .public => .{ config.public_severity, "Public" },
                 };
                 if (severity == .off) continue :nodes;
 
-                if (hasDocComments(tree, node))
-                    continue :nodes;
+                if (hasDocComments(tree, node)) continue :nodes;
 
                 try lint_problems.append(session_arena, .{
                     .rule_id = rule.rule_id,
                     .severity = severity,
                     .start = .startOfToken(tree, tree.firstToken(node)),
-                    .end = .endOfNode(tree, fn_decl.ast.proto_node),
-                    .message = try std.fmt.allocPrint(session_arena, "{s} function is missing a doc comment", .{label}),
+                    .end = .endOfToken(tree, var_decl.ast.mut_token + 1),
+                    .message = try std.fmt.allocPrint(session_arena, "{s} declaration is missing a doc comment", .{label}),
                 });
-                continue :nodes;
             }
-        }
-
-        if (tree.fullVarDecl(node)) |var_decl| {
-            const severity, const label = switch (zlinter.ast.varDeclVisibility(tree, var_decl)) {
-                .private => .{ config.private_severity, "Private" },
-                .public => .{ config.public_severity, "Public" },
-            };
-            if (severity == .off) continue :nodes;
-
-            if (hasDocComments(tree, node)) continue :nodes;
-
-            try lint_problems.append(session_arena, .{
-                .rule_id = rule.rule_id,
-                .severity = severity,
-                .start = .startOfToken(tree, tree.firstToken(node)),
-                .end = .endOfToken(tree, var_decl.ast.mut_token + 1),
-                .message = try std.fmt.allocPrint(session_arena, "{s} declaration is missing a doc comment", .{label}),
-            });
         }
     }
 
@@ -300,6 +302,34 @@ test "require_doc_comment - file" {
         Config{ .file_severity = .off },
         &.{},
     );
+}
+
+test "require_doc_comment - file only" {
+    const rule = buildRule(.{});
+    const source: [:0]const u8 =
+        \\
+    ;
+
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            rule,
+            source,
+            .{},
+            Config{
+                .file_severity = severity,
+                .public_severity = .off,
+                .private_severity = .off,
+            },
+            &.{
+                .{
+                    .rule_id = "require_doc_comment",
+                    .severity = severity,
+                    .slice = "",
+                    .message = "File is missing a doc comment",
+                },
+            },
+        );
+    }
 }
 
 test "hasDocComments - function prototype without params" {
