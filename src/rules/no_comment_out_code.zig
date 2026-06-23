@@ -68,7 +68,9 @@ fn run(
         const line = doc.comments.tokens[comment.first_token].line;
         defer prev_line = line;
 
-        if (content_accumulator.items.len > 0 and prev_line != line - 1) {
+        if (content_accumulator.items.len > 0 and
+            !isNextLine(prev_line, line))
+        {
             if (try looksLikeCode(content_accumulator.items[0..], session_arena)) {
                 try lint_problems.append(session_arena, .{
                     .rule_id = rule.rule_id,
@@ -115,6 +117,13 @@ fn run(
         )
     else
         null;
+}
+
+fn isNextLine(prev_line: u32, line: u32) bool {
+    if (prev_line == 0) return false;
+
+    const next_line = std.math.add(u32, prev_line, 1) catch return false;
+    return next_line == line;
 }
 
 fn looksLikeCode(content: []const u8, gpa: std.mem.Allocator) !bool {
@@ -180,6 +189,12 @@ fn looksLikeCode(content: []const u8, gpa: std.mem.Allocator) !bool {
         break :looks_like_declaration false;
     };
     return looks_like_declaration;
+}
+
+test "isNextLine" {
+    try std.testing.expect(isNextLine(1, 2));
+    try std.testing.expect(!isNextLine(1, 3));
+    try std.testing.expect(!isNextLine(0, 0));
 }
 
 test "looksLikeCode when true" {
