@@ -145,8 +145,7 @@ fn builtinHasParamContent(
     if (params.len != 1) return false;
 
     const param = params[0];
-    const tag = tree.nodeTag(param);
-    if (tag != .string_literal) return false;
+    if (tree.nodeTag(param) != .string_literal) return false;
 
     for (contents) |c| {
         if (try stringLiteralContentEquals(arena, tree, param, c)) return true;
@@ -273,6 +272,68 @@ test "excludes based on configurable contents" {
             &.{},
         );
     }
+}
+
+test "no_panic reports malformed and unusual builtin calls" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\pub fn main() void {
+        \\    @panic();
+        \\}
+        \\
+        \\pub fn main2() void {
+        \\    @panic("a", "b");
+        \\}
+        \\
+        \\pub fn main3() void {
+        \\    @panic(foo);
+        \\}
+        \\
+        \\pub fn main4() void {
+        \\    @panic(.{});
+        \\}
+        \\
+        \\pub fn main5() void {
+        \\    @abs();
+        \\}
+    ,
+        .{ .allow_parse_errors = true },
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_panic",
+                .severity = .warning,
+                .slice =
+                \\@panic(.{})
+                ,
+                .message = "`@panic` forcibly stops the program at runtime and should be avoided",
+            },
+            .{
+                .rule_id = "no_panic",
+                .severity = .warning,
+                .slice =
+                \\@panic(foo)
+                ,
+                .message = "`@panic` forcibly stops the program at runtime and should be avoided",
+            },
+            .{
+                .rule_id = "no_panic",
+                .severity = .warning,
+                .slice =
+                \\@panic("a", "b")
+                ,
+                .message = "`@panic` forcibly stops the program at runtime and should be avoided",
+            },
+            .{
+                .rule_id = "no_panic",
+                .severity = .warning,
+                .slice =
+                \\@panic()
+                ,
+                .message = "`@panic` forcibly stops the program at runtime and should be avoided",
+            },
+        },
+    );
 }
 
 test "no_panic" {
