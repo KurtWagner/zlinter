@@ -124,7 +124,7 @@ test "severity" {
             }},
         );
 
-        // namespace struct file:
+        // namespace file:
         try zlinter.testing.testRunRule(
             buildRule(.{}),
             \\ pub const a = 1;
@@ -163,7 +163,7 @@ test "severity" {
             &.{},
         );
 
-        // namespace struct file:
+        // namespace file:
         try zlinter.testing.testRunRule(
             buildRule(.{}),
             \\ pub const a = 1;
@@ -276,7 +276,7 @@ test "expects snake_case with camelCase" {
     );
 }
 
-test "expects TitleCase with snake_case" {
+test "expects TitleCase with camelCase" {
     try zlinter.testing.testRunRule(
         buildRule(.{}),
         "hit_points: f32,",
@@ -295,7 +295,7 @@ test "expects TitleCase with snake_case" {
     );
 }
 
-test "expects TitleCase with under_score" {
+test "expects TitleCase with snake_case" {
     try zlinter.testing.testRunRule(
         buildRule(.{}),
         "hit_points: f32,",
