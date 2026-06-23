@@ -75,7 +75,7 @@ fn run(
         try lint_problems.append(session_arena, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
-            .start = .startOfNode(tree, fn_proto.ast.params[0]),
+            .start = .startOfToken(tree, firstParamStartToken(tree, fn_proto) orelse tree.firstToken(fn_proto.ast.params[0])),
             .end = .endOfNode(tree, fn_proto.ast.params[fn_proto.ast.params.len - 1]),
             .message = try std.fmt.allocPrint(session_arena, "Exceeded maximum positional arguments of {d}.", .{config.max}),
         });
@@ -99,6 +99,23 @@ inline fn fnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?
         .fn_proto_simple => tree.fnProtoSimple(buffer, node),
         else => null,
     };
+}
+
+fn firstParamStartToken(tree: Ast, fn_proto: Ast.full.FnProto) ?Ast.TokenIndex {
+    if (fn_proto.ast.params.len == 0) return null;
+
+    var it = fn_proto.iterate(&tree);
+    const first_param = it.next() orelse return null;
+
+    return firstParamStartTokenFromParam(tree, first_param);
+}
+
+fn firstParamStartTokenFromParam(tree: Ast, param: Ast.full.FnProto.Param) ?Ast.TokenIndex {
+    if (param.comptime_noalias) |token| return token;
+    if (param.name_token) |token| return token;
+    if (param.anytype_ellipsis3) |token| return token;
+    if (param.type_expr) |type_expr| return tree.firstToken(type_expr);
+    return null;
 }
 
 test {
@@ -176,8 +193,34 @@ test "general" {
             .{
                 .rule_id = "max_positional_args",
                 .severity = .@"error",
-                .slice = "u32, a2:u32, a3:u32, a4:u32, a5:u32, a6:u32",
+                .slice = "a1:u32, a2:u32, a3:u32, a4:u32, a5:u32, a6:u32",
                 .message = "Exceeded maximum positional arguments of 5.",
+            },
+        },
+    );
+}
+
+test "multiline named parameters" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\fn f(
+        \\    comptime T: type,
+        \\    noalias buf: []u8,
+        \\    count: usize
+        \\) void {}
+    ,
+        .{},
+        Config{ .severity = .@"error", .max = 1 },
+        &.{
+            .{
+                .rule_id = "max_positional_args",
+                .severity = .@"error",
+                .slice =
+                \\comptime T: type,
+                \\    noalias buf: []u8,
+                \\    count: usize
+                ,
+                .message = "Exceeded maximum positional arguments of 1.",
             },
         },
     );
