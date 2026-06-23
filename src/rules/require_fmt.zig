@@ -36,10 +36,14 @@ fn run(
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
 
     const fmt = try tree.renderAlloc(rule_arena);
+    const normalized_source = try normalizeNewLinesAlloc(tree.source, rule_arena);
 
-    if (!std.mem.eql(u8, fmt, tree.source)) {
-        const diff = firstDifference(fmt, tree.source);
-        const source_offset = if (tree.source.len == 0) 0 else @min(diff, tree.source.len - 1);
+    if (!std.mem.eql(u8, fmt, normalized_source)) {
+        const diff = firstDifference(fmt, normalized_source);
+        const source_offset = normalizedOffsetToSourceOffset(
+            tree.source,
+            diff,
+        );
 
         try lint_problems.append(session_arena, .{
             .start = .{ .byte_offset = source_offset },
@@ -65,6 +69,28 @@ fn firstDifference(a: []const u8, b: []const u8) usize {
     for (a[0..common_len], b[0..common_len], 0..) |ca, cb, i|
         if (ca != cb) return i;
     return common_len;
+}
+
+fn normalizeNewLinesAlloc(input: []const u8, allocator: std.mem.Allocator) ![]const u8 {
+    var result: std.ArrayList(u8) = try .initCapacity(allocator, input.len);
+    for (input) |c|
+        if (c != '\r') result.appendAssumeCapacity(c);
+    return result.toOwnedSlice(allocator);
+}
+
+fn normalizedOffsetToSourceOffset(source: []const u8, normalized_offset: usize) usize {
+    if (source.len == 0) return 0;
+
+    var source_offset: usize = 0;
+    var normalized_index: usize = 0;
+
+    while (source_offset < source.len) : (source_offset += 1) {
+        if (source[source_offset] == '\r') continue;
+        if (normalized_index == normalized_offset) return source_offset;
+        normalized_index += 1;
+    }
+
+    return source.len - 1;
 }
 
 test {
@@ -181,6 +207,25 @@ test "require_fmt ignores invalid ast trees" {
         .{ .config = &config },
     );
     try std.testing.expect(result == null);
+}
+
+test "require_fmt ignores crlf line endings when reporting formatting differences" {
+    const rule = buildRule(.{});
+
+    try zlinter.testing.testRunRule(
+        rule,
+        "//! Comment 1\r\nconst foo:u32 = 67;\r\n",
+        .{},
+        Config{ .severity = .warning },
+        &.{
+            .{
+                .rule_id = "require_fmt",
+                .severity = .warning,
+                .slice = "u",
+                .message = "File is not formatted",
+            },
+        },
+    );
 }
 
 const std = @import("std");
