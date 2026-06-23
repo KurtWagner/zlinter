@@ -201,21 +201,66 @@ test "inline included" {
     );
 }
 
-test "general" {
+test "zero parameters are accepted" {
     try zlinter.testing.testRunRule(
         buildRule(.{}),
-        \\fn ok() void {}
-        \\fn alsoOk(a1:u32, a2:u32, a3:u32, a4:u32, a5:u32) void {}
-        \\fn noOk(a1:u32, a2:u32, a3:u32, a4:u32, a5:u32, a6:u32) void {}
+        \\fn zero() void {}
     ,
         .{},
-        Config{ .severity = .@"error" },
+        Config{ .severity = .@"error", .max = 0 },
+        &.{},
+    );
+}
+
+test "one parameter exceeds zero max" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\fn one(a: u32) void {}
+    ,
+        .{},
+        Config{ .severity = .@"error", .max = 0 },
         &.{
             .{
                 .rule_id = "max_positional_args",
                 .severity = .@"error",
-                .slice = "a1:u32, a2:u32, a3:u32, a4:u32, a5:u32, a6:u32",
-                .message = "Exceeded maximum positional arguments of 5, found 6.",
+                .slice = "a: u32",
+                .message = "Exceeded maximum positional arguments of 0, found 1.",
+            },
+        },
+    );
+}
+
+test "many parameters exceed low max" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\fn many(a: u32, b: u32) void {}
+    ,
+        .{},
+        Config{ .severity = .@"error", .max = 1 },
+        &.{
+            .{
+                .rule_id = "max_positional_args",
+                .severity = .@"error",
+                .slice = "a: u32, b: u32",
+                .message = "Exceeded maximum positional arguments of 1, found 2.",
+            },
+        },
+    );
+}
+
+test "declaration-only prototype is linted" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\fn declared(a: u32, b: u32) void;
+    ,
+        .{},
+        Config{ .severity = .@"error", .max = 1 },
+        &.{
+            .{
+                .rule_id = "max_positional_args",
+                .severity = .@"error",
+                .slice = "a: u32, b: u32",
+                .message = "Exceeded maximum positional arguments of 1, found 2.",
             },
         },
     );
