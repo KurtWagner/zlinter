@@ -43,7 +43,7 @@ fn run(
     const root: Ast.Node.Index = .root;
 
     if (config.file_severity != .off) {
-        if (!try hasDocComments(tree, root)) {
+        if (!hasDocComments(tree, root)) {
             try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
                 .severity = config.file_severity,
@@ -71,7 +71,7 @@ fn run(
                 };
                 if (severity == .off) continue :nodes;
 
-                if (try hasDocComments(tree, node))
+                if (hasDocComments(tree, node))
                     continue :nodes;
 
                 try lint_problems.append(session_arena, .{
@@ -92,7 +92,7 @@ fn run(
             };
             if (severity == .off) continue :nodes;
 
-            if (try hasDocComments(tree, node)) continue :nodes;
+            if (hasDocComments(tree, node)) continue :nodes;
 
             try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
@@ -114,24 +114,40 @@ fn run(
         null;
 }
 
-fn hasDocComments(tree: Ast, node: Ast.Node.Index) !bool {
+fn hasDocComments(tree: Ast, node: Ast.Node.Index) bool {
     return switch (tree.nodeTag(node)) {
         .root => tree.tokenTag(0) == .container_doc_comment,
         .global_var_decl,
         .local_var_decl,
         .aligned_var_decl,
         .simple_var_decl,
+        .fn_decl,
         .fn_proto,
         .fn_proto_multi,
         .fn_proto_one,
         .fn_proto_simple,
+        => hasAttachedDocComment(tree, node),
+        else => false,
+    };
+}
+
+fn hasAttachedDocComment(tree: Ast, node: Ast.Node.Index) bool {
+    return switch (tree.nodeTag(node)) {
+        .global_var_decl,
+        .local_var_decl,
+        .aligned_var_decl,
+        .simple_var_decl,
         .fn_decl,
+        .fn_proto,
+        .fn_proto_multi,
+        .fn_proto_one,
+        .fn_proto_simple,
         => has_doc_comments: {
             const first = tree.firstToken(node);
             if (first == 0) break :has_doc_comments false;
             break :has_doc_comments tree.tokenTag(first - 1) == .doc_comment;
         },
-        inline else => |v| @panic("Unhandled tag " ++ @tagName(v)),
+        else => false,
     };
 }
 
@@ -284,6 +300,53 @@ test "require_doc_comment - file" {
         Config{ .file_severity = .off },
         &.{},
     );
+}
+
+test "hasDocComments - function prototype without params" {
+    try expectPrototypeHasDocComment(
+        \\/// Doc comment
+        \\extern fn simple() void;
+    );
+}
+
+test "hasDocComments - function prototype with one param" {
+    try expectPrototypeHasDocComment(
+        \\/// Doc comment
+        \\pub fn one(arg: u8) void;
+    );
+}
+
+test "hasDocComments - function prototype with many params" {
+    try expectPrototypeHasDocComment(
+        \\/// Doc comment
+        \\pub fn multi(first: u8, second: u8) void;
+    );
+}
+
+test "hasDocComments - unsupported nodes return false" {
+    const source: [:0]const u8 =
+        \\test "does not matter" {
+        \\    const value = 1;
+        \\    _ = value;
+        \\}
+    ;
+
+    var tree = try Ast.parse(std.testing.allocator, source, .zig);
+    defer tree.deinit(std.testing.allocator);
+
+    const test_decl = try zlinter.testing.expectSingleNodeOfTag(tree, &.{.test_decl});
+    try std.testing.expect(!hasDocComments(tree, test_decl));
+}
+
+fn expectPrototypeHasDocComment(source: [:0]const u8) !void {
+    var tree = try Ast.parse(std.testing.allocator, source, .zig);
+    defer tree.deinit(std.testing.allocator);
+
+    const node = try zlinter.testing.expectSingleNodeOfTag(
+        tree,
+        &.{ .fn_proto, .fn_proto_multi, .fn_proto_one, .fn_proto_simple },
+    );
+    try std.testing.expect(hasDocComments(tree, node));
 }
 
 const std = @import("std");
