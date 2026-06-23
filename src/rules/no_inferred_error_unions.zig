@@ -111,7 +111,10 @@ fn run(
         try lint_problems.append(session_arena, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
-            .start = .startOfToken(tree, tree.firstToken(node)),
+            .start = switch (problem) {
+                .inferred_error_union => .startOfToken(tree, tree.firstToken(return_type) - 1),
+                .anyerror_error_union => .startOfNode(tree, return_type),
+            },
             .end = .endOfNode(tree, return_type),
             .message = try session_arena.dupe(u8, message),
         });
@@ -196,7 +199,7 @@ test "no_inferred_error_unions - Invalid function declarations - defaults" {
             .{
                 .rule_id = "no_inferred_error_unions",
                 .severity = .warning,
-                .slice = "pub fn inferred() !void",
+                .slice = "!void",
                 .message = "Function returns an inferred error union. Prefer an explicit error set",
             },
         },
@@ -229,31 +232,31 @@ test "no_inferred_error_unions - Invalid function declarations - complex payload
             .{
                 .rule_id = "no_inferred_error_unions",
                 .severity = .warning,
-                .slice = "pub fn namespaced() !std.ArrayList(u8)",
+                .slice = "!std.ArrayList(u8)",
                 .message = "Function returns an inferred error union. Prefer an explicit error set",
             },
             .{
                 .rule_id = "no_inferred_error_unions",
                 .severity = .warning,
-                .slice = "pub fn array() ![4]u8",
+                .slice = "![4]u8",
                 .message = "Function returns an inferred error union. Prefer an explicit error set",
             },
             .{
                 .rule_id = "no_inferred_error_unions",
                 .severity = .warning,
-                .slice = "pub fn ptr() !*Thing",
+                .slice = "!*Thing",
                 .message = "Function returns an inferred error union. Prefer an explicit error set",
             },
             .{
                 .rule_id = "no_inferred_error_unions",
                 .severity = .warning,
-                .slice = "pub fn maybePtr() !?*Thing",
+                .slice = "!?*Thing",
                 .message = "Function returns an inferred error union. Prefer an explicit error set",
             },
             .{
                 .rule_id = "no_inferred_error_unions",
                 .severity = .warning,
-                .slice = "pub fn bytes() ![]const u8",
+                .slice = "![]const u8",
                 .message = "Function returns an inferred error union. Prefer an explicit error set",
             },
         },
@@ -273,7 +276,7 @@ test "no_inferred_error_unions - Invalid function declarations - allow_private =
             .{
                 .rule_id = "no_inferred_error_unions",
                 .severity = .warning,
-                .slice = "fn inferred() !void",
+                .slice = "!void",
                 .message = "Function returns an inferred error union. Prefer an explicit error set",
             },
         },
@@ -293,7 +296,7 @@ test "no_inferred_error_unions - Invalid function declarations - allow_anyerror 
             .{
                 .rule_id = "no_inferred_error_unions",
                 .severity = .@"error",
-                .slice = "pub fn inferred() anyerror!void",
+                .slice = "anyerror!void",
                 .message = "Function returns anyerror. Prefer a specific error set",
             },
         },
