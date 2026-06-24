@@ -161,13 +161,12 @@ fn referencedDeclName(
     {
         var decl_candidates = session.resolveDeclCandidatesOfNode(allocator, doc, node) catch return null;
         defer decl_candidates.deinit(allocator);
-        for (decl_candidates.items) |candidate| {
-            if (session.decl_store.declFileId(candidate.decl_id) != doc.file_id)
-                continue;
-
-            const name_token = session.decl_store.declNameToken(candidate.decl_id) orelse continue;
-            return tree.tokenSlice(name_token);
-        }
+        if (referencedDeclNameFromCandidates(
+            session,
+            doc,
+            decl_candidates.items,
+        )) |name|
+            return name;
     }
 
     const lhs, const member_token = tree.nodeData(node).node_and_token;
@@ -181,14 +180,12 @@ fn referencedDeclName(
             member_name,
         ) catch return null;
         defer member_candidates.deinit(allocator);
-        for (member_candidates.items) |candidate| {
-            const decl_id = candidate.decl_id;
-            if (session.decl_store.declFileId(decl_id) != doc.file_id)
-                continue;
-
-            const name_token = session.decl_store.declNameToken(decl_id) orelse return null;
-            return tree.tokenSlice(name_token);
-        }
+        if (referencedDeclNameFromCandidates(
+            session,
+            doc,
+            member_candidates.items,
+        )) |name|
+            return name;
     }
 
     {
@@ -200,6 +197,23 @@ fn referencedDeclName(
                     return member_name;
             }
         }
+    }
+    return null;
+}
+
+fn referencedDeclNameFromCandidates(
+    session: *zlinter.session.LintSession,
+    doc: *const zlinter.session.LintDocument,
+    candidates: []const zlinter.session.LintSession.DeclCandidate,
+) ?[]const u8 {
+    const tree = doc.tree(session);
+    for (candidates) |candidate| {
+        if (session.decl_store.declFileId(candidate.decl_id) != doc.file_id)
+            continue;
+
+        const name_token = session.decl_store.declNameToken(candidate.decl_id) orelse
+            continue;
+        return tree.tokenSlice(name_token);
     }
     return null;
 }
@@ -332,6 +346,27 @@ test "no_unused" {
     try zlinter.testing.testRunRule(
         rule,
         \\const Store = @This();
+        \\
+        \\pub fn main(store: *Store) void {
+        \\    store.used();
+        \\}
+        \\
+        \\fn used(self: *Store) void {
+        \\    _ = self;
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{},
+    );
+
+    // Rule-level regression: unsupported declarations in the same file should
+    // not stop later same-file members from resolving as used.
+    try zlinter.testing.testRunRule(
+        rule,
+        \\const Store = @This();
+        \\
+        \\extern fn () void;
         \\
         \\pub fn main(store: *Store) void {
         \\    store.used();
