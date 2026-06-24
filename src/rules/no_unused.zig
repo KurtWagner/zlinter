@@ -67,9 +67,11 @@ fn run(
                 if (zlinter.ast.varDeclVisibility(tree, var_decl) == .public)
                     break :problem null;
 
-                if (var_decl.extern_export_token) |extern_export_token|
-                    if (token_tags[extern_export_token] == .keyword_export)
-                        break :problem null;
+                if (hasExternalLinkage(
+                    token_tags,
+                    var_decl.extern_export_token,
+                ))
+                    break :problem null;
 
                 if (!container_references.contains(tree.tokenSlice(var_decl.ast.mut_token + 1)))
                     break :problem .{
@@ -81,9 +83,11 @@ fn run(
                 if (namedFnDeclProto(tree, &buffer, decl)) |fn_proto| {
                     if (zlinter.ast.fnProtoVisibility(tree, fn_proto) == .public) break :problem null;
 
-                    if (fn_proto.extern_export_inline_token) |token|
-                        if (token_tags[token] == .keyword_export)
-                            break :problem null;
+                    if (hasExternalLinkage(
+                        token_tags,
+                        fn_proto.extern_export_inline_token,
+                    ))
+                        break :problem null;
 
                     if (!container_references.contains(tree.tokenSlice(fn_proto.name_token.?)))
                         break :problem .{
@@ -147,6 +151,14 @@ fn namedFnDeclProto(
         if (fn_proto.name_token != null) return fn_proto;
     }
     return null;
+}
+
+fn hasExternalLinkage(
+    token_tags: []const std.zig.Token.Tag,
+    token: ?Ast.TokenIndex,
+) bool {
+    const t = token orelse return false;
+    return token_tags[t] == .keyword_export or token_tags[t] == .keyword_extern;
 }
 
 fn referencedDeclName(
@@ -379,6 +391,39 @@ test "no_unused" {
         .{},
         Config{},
         &.{},
+    );
+}
+
+test "no_unused - extern declarations" {
+    std.testing.refAllDecls(@This());
+
+    const rule = buildRule(.{});
+    try zlinter.testing.testRunRule(
+        rule,
+        \\extern fn puts([*:0]const u8) c_int;
+        \\extern var errno: c_int;
+        \\export fn exported_fn() void {}
+        \\export const exported_var = 1;
+        \\
+        \\fn unused_private() void {}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_unused",
+                .severity = .warning,
+                .slice =
+                \\fn unused_private() void {}
+                ,
+                .message = "Unused declaration",
+                .fix = .{
+                    .start = 126,
+                    .end = 153,
+                    .text = "",
+                },
+            },
+        },
     );
 }
 
