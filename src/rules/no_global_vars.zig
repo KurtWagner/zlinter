@@ -51,8 +51,7 @@ fn run(
         const parent: Ast.Node.Index = @enumFromInt(index);
         const container = tree.fullContainerDecl(&buf, parent) orelse continue;
         for (container.ast.members) |node| {
-            const decl = tree.fullVarDecl(node) orelse continue;
-            if (tree.tokenTag(decl.ast.mut_token) != .keyword_var) continue;
+            if (!isContainerMemberGlobalVar(tree, node)) continue;
             try lint_problems.append(session_arena, .{
                 .start = .startOfNode(tree, node),
                 .end = .endOfNode(tree, node),
@@ -71,6 +70,11 @@ fn run(
         )
     else
         null;
+}
+
+fn isContainerMemberGlobalVar(tree: Ast, node: Ast.Node.Index) bool {
+    const decl = tree.fullVarDecl(node) orelse return false;
+    return tree.tokenTag(decl.ast.mut_token) == .keyword_var;
 }
 
 test {
@@ -134,6 +138,79 @@ test "no_global_vars" {
         Config{ .severity = .off },
         &.{},
     );
+}
+
+test "no_global_vars - modifier forms" {
+    const rule = buildRule(.{});
+    const source =
+        \\pub var pub_global: u32 = 1;
+        \\threadlocal var thread_local_global: u32 = 2;
+        \\extern var extern_global: u32;
+        \\export var export_global: u32 = 4;
+    ;
+
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            rule,
+            source,
+            .{},
+            Config{ .severity = severity },
+            &.{
+                .{
+                    .rule_id = rule.rule_id,
+                    .severity = severity,
+                    .slice = "pub var pub_global: u32 = 1",
+                    .message = "Global `var` reduces testability and makes the program harder to reason about",
+                },
+                .{
+                    .rule_id = rule.rule_id,
+                    .severity = severity,
+                    .slice = "threadlocal var thread_local_global: u32 = 2",
+                    .message = "Global `var` reduces testability and makes the program harder to reason about",
+                },
+                .{
+                    .rule_id = rule.rule_id,
+                    .severity = severity,
+                    .slice = "extern var extern_global: u32",
+                    .message = "Global `var` reduces testability and makes the program harder to reason about",
+                },
+                .{
+                    .rule_id = rule.rule_id,
+                    .severity = severity,
+                    .slice = "export var export_global: u32 = 4",
+                    .message = "Global `var` reduces testability and makes the program harder to reason about",
+                },
+            },
+        );
+    }
+}
+
+test "no_global_vars - nested container vars" {
+    const rule = buildRule(.{});
+    const source =
+        \\const Outer = struct {
+        \\    const Inner = struct {
+        \\        var nested_global: u32 = 3;
+        \\    };
+        \\};
+    ;
+
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            rule,
+            source,
+            .{},
+            Config{ .severity = severity },
+            &.{
+                .{
+                    .rule_id = rule.rule_id,
+                    .severity = severity,
+                    .slice = "var nested_global: u32 = 3",
+                    .message = "Global `var` reduces testability and makes the program harder to reason about",
+                },
+            },
+        );
+    }
 }
 
 const std = @import("std");
