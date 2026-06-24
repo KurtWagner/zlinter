@@ -201,6 +201,8 @@ fn run(
                 },
             };
 
+        if (style_with_severity.severity == .off) continue :nodes;
+
         if (!style_with_severity.style.check(name)) {
             try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
@@ -558,6 +560,84 @@ test "name lengths" {
             },
         },
         &.{},
+    );
+}
+
+test "declaration_naming style off still checks const declaration length" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        "const BadName = 1;",
+        .{},
+        Config{
+            .const_decl = .{
+                .style = .snake_case,
+                .severity = .off,
+            },
+            .decl_name_max_len = .{
+                .severity = .warning,
+                .len = 3,
+            },
+        },
+        &.{
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .warning,
+                .slice = "BadName",
+                .message = "Declaration names should have a length less or equal to 3",
+            },
+        },
+    );
+}
+
+test "declaration_naming style off still checks type declaration length" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        "const bad_type = u32;",
+        .{},
+        Config{
+            .decl_that_is_type = .{
+                .style = .title_case,
+                .severity = .off,
+            },
+            .decl_name_max_len = .{
+                .severity = .warning,
+                .len = 3,
+            },
+        },
+        &.{
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .warning,
+                .slice = "bad_type",
+                .message = "Declaration names should have a length less or equal to 3",
+            },
+        },
+    );
+}
+
+test "declaration_naming style off still checks function declaration length" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        "const BadFn = fn () void {};",
+        .{},
+        Config{
+            .decl_that_is_fn = .{
+                .style = .camel_case,
+                .severity = .off,
+            },
+            .decl_name_max_len = .{
+                .severity = .warning,
+                .len = 3,
+            },
+        },
+        &.{
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .warning,
+                .slice = "BadFn",
+                .message = "Declaration names should have a length less or equal to 3",
+            },
+        },
     );
 }
 
