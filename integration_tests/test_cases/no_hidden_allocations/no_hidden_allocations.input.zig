@@ -36,3 +36,19 @@ test {
 const DebugAllocator = heap.DebugAllocator(.{});
 const heap = std.heap;
 const std = @import("std");
+
+fn hiddenAllocationCallVariants() !void {
+    try std.heap.page_allocator.alloc(u8, 1);
+    try (std.heap.page_allocator).alloc(u8, 1);
+}
+
+fn allocationReferencesOnly() void {
+    const alloc_fn = std.heap.page_allocator.alloc;
+    _ = std.heap.page_allocator.alloc;
+    _ = alloc_fn;
+}
+
+test "allocator method references are ignored" {
+    const alloc_fn = std.heap.page_allocator.alloc;
+    _ = alloc_fn;
+}

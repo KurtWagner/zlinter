@@ -1,3 +1,13 @@
+warning Avoid hidden heap memory management. Instead pass in an Allocator so that the caller knows where memory is being allocated. [test_cases/no_hidden_allocations/no_hidden_allocations.input.zig:42:9] no_hidden_allocations
+
+ 42 |     try (std.heap.page_allocator).alloc(u8, 1);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Avoid hidden heap memory management. Instead pass in an Allocator so that the caller knows where memory is being allocated. [test_cases/no_hidden_allocations/no_hidden_allocations.input.zig:41:9] no_hidden_allocations
+
+ 41 |     try std.heap.page_allocator.alloc(u8, 1);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 warning Avoid hidden heap memory management. Instead pass in an Allocator so that the caller knows where memory is being allocated. [test_cases/no_hidden_allocations/no_hidden_allocations.input.zig:7:11] no_hidden_allocations
 
  7 |     defer heap.page_allocator.free(bad_b);
@@ -18,4 +28,4 @@ warning Avoid hidden heap memory management. Instead pass in an Allocator so tha
  3 |     const bad_a = try std.heap.c_allocator.create(u32);
    |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-x 4 warnings
+x 6 warnings

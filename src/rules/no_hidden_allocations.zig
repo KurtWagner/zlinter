@@ -73,6 +73,9 @@ fn run(
 
         if (tree.nodeTag(node) != .field_access) continue :nodes;
 
+        const call_node = isCalleeOfCall(tree, doc, node) orelse continue :nodes;
+        _ = call_node;
+
         // if configured, skip if a parent is a test block
         if (config.exclude_tests and doc.isEnclosedInTestBlock(session, node)) {
             continue :nodes;
@@ -101,7 +104,7 @@ fn run(
         const decl_id = resolveAllocatorDecl(
             session,
             doc,
-            lhs,
+            unwrapGroupedExpression(tree, lhs),
         ) orelse continue :nodes;
         const decl_file_id = session.decl_store.declFileId(decl_id);
         const decl_tree = session.file_store.fileTree(decl_file_id);
@@ -139,6 +142,24 @@ fn run(
         null;
 }
 
+fn isCalleeOfCall(
+    tree: Ast,
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+) ?Ast.Node.Index {
+    var current = node;
+    var ancestors = doc.nodeAncestorIterator(node);
+    while (ancestors.next()) |parent| {
+        var call_buffer: [1]Ast.Node.Index = undefined;
+        if (tree.fullCall(&call_buffer, parent)) |call| {
+            return if (call.ast.fn_expr == current) parent else null;
+        }
+        current = parent;
+    }
+
+    return null;
+}
+
 fn resolveAllocatorDecl(
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
@@ -152,6 +173,14 @@ fn resolveAllocatorDecl(
         return session.resolveDeclAliasCandidate(candidate).decl_id;
     }
     return null;
+}
+
+fn unwrapGroupedExpression(tree: Ast, node: Ast.Node.Index) Ast.Node.Index {
+    var current = node;
+    while (tree.nodeTag(current) == .grouped_expression) {
+        current = tree.nodeData(current).node_and_token[0];
+    }
+    return current;
 }
 
 fn pathEndsWith(path: []const u8, suffix: []const u8) bool {
@@ -180,6 +209,28 @@ test pathEndsWith {
     try std.testing.expect(!pathEndsWith("/opt/zig/lib/std/mem.zig", "/std/heap.zig"));
     try std.testing.expect(!pathEndsWith("/opt/zig/lib/my_std/heap.zig", "/std/heap.zig"));
     try std.testing.expect(!pathEndsWith("/lib/my_std/heap.zig", "/opt/zig/lib/my_std/heap.zig"));
+}
+
+test "no_hidden_allocations ignores allocator method references" {
+    const rule = buildRule(.{});
+
+    try zlinter.testing.testRunRule(
+        rule,
+        \\fn main() void {
+        \\    const alloc_fn = std.heap.page_allocator.alloc;
+        \\    _ = std.heap.page_allocator.alloc;
+        \\    _ = alloc_fn;
+        \\}
+        \\
+        \\test {
+        \\    const alloc_fn = std.heap.page_allocator.alloc;
+        \\    _ = alloc_fn;
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{},
+    );
 }
 
 test {
