@@ -85,3 +85,11 @@ const Normal = struct {
     b: u32,
     a: u32,
 };
+
+const EnumWithInlineComments = enum {
+    A,
+    c, // comment after c comma
+    // comment before a
+    a, // comment after a comma
+    b // comment after b without comma
+};

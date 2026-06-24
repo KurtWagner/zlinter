@@ -1,3 +1,16 @@
+warning Enum fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:90:7] field_ordering
+
+ 90 |     A,
+    |       
+ 91 |     c, // comment after c comma
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 92 |     // comment before a
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+ 93 |     a, // comment after a comma
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 94 |     b // comment after b without comma
+    | ^^^^^
+
 error Struct fields should be in reverse alphabetical order [test_cases/field_ordering/field_ordering.input.zig:58:16] field_ordering
 
  58 |     c: struct { x: u32, y: u32, w: u32, h: u32 },
@@ -103,4 +116,4 @@ error Struct fields should be in reverse alphabetical order [test_cases/field_or
     | ^^^^^^^^^^^^^^^^^
 
 x 8 errors
-x 2 warnings
+x 3 warnings

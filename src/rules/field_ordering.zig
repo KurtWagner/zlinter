@@ -142,6 +142,7 @@ fn run(
 
         if (maybe_first_problem_index) |first_problem_index| {
             const last_problem_index = maybe_last_problem_index.?;
+            const container_end_token = tree.lastToken(node);
 
             const actual_start, const actual_end =
                 nodeSpanIncludingComments(
@@ -152,36 +153,39 @@ fn run(
                         .consume_trailing_comma = true,
                     },
                 );
+            const first_fix_segment = fieldSegmentForFix(
+                tree,
+                actual_order.items[first_problem_index],
+                container_end_token,
+            );
+            const last_fix_segment = fieldSegmentForFix(
+                tree,
+                actual_order.items[last_problem_index],
+                container_end_token,
+            );
 
             var expected_writer: std.Io.Writer.Allocating = .init(session_arena);
 
             const last_node = expected_order.items[expected_order.items.len - 1];
             for (expected_order.items[first_problem_index .. last_problem_index + 1]) |current_node| {
                 const is_last_field = current_node == last_node;
-
-                const expected_start, const expected_end = nodeSpanIncludingComments(
+                const segment = fieldSegmentForFix(
                     tree,
                     current_node,
-                    current_node,
-                    .{},
+                    container_end_token,
                 );
-                const is_multiline = is_multiline: {
-                    for (expected_start.byte_offset..expected_end.byte_offset + 1) |byte| {
-                        if (tree.source[byte] == '\n') break :is_multiline true;
-                    }
-                    break :is_multiline false;
-                };
+                const needs_comma = !segment.had_trailing_comma and (!is_last_field or segment.is_multiline);
+                const remove_comma = segment.had_trailing_comma and is_last_field and !segment.is_multiline;
 
-                expected_writer.writer.writeAll(
-                    tree.source[expected_start.byte_offset .. expected_end.byte_offset + 1],
+                writeFieldSegmentForFix(
+                    &expected_writer.writer,
+                    tree.source,
+                    segment,
+                    needs_comma,
+                    remove_comma,
                 ) catch |err| switch (err) {
                     error.WriteFailed => return error.OutOfMemory,
                 };
-                if (!is_last_field or is_multiline) {
-                    expected_writer.writer.writeByte(',') catch |err| switch (err) {
-                        error.WriteFailed => return error.OutOfMemory,
-                    };
-                }
             }
 
             try lint_problems.append(session_arena, .{
@@ -194,8 +198,8 @@ fn run(
                     order_with_severity.order.name(),
                 }),
                 .fix = .{
-                    .start = actual_start.byte_offset,
-                    .end = actual_end.byte_offset + 1, // + 1 as fix is exclusive
+                    .start = first_fix_segment.start,
+                    .end = last_fix_segment.end_exclusive,
                     .text = try expected_writer.toOwnedSlice(),
                 },
             });
@@ -234,6 +238,183 @@ fn nodeSpanIncludingComments(
     const end: zlinter.results.LintProblemLocation = .endOfToken(tree, last_token);
 
     return .{ start, end };
+}
+
+const FieldSegment = struct {
+    start: usize,
+    end_exclusive: usize,
+    had_trailing_comma: bool,
+    trailing_comma_start: ?usize,
+    is_multiline: bool,
+    trailing_comment_start: ?usize,
+};
+
+fn fieldSegmentForFix(
+    tree: Ast,
+    field_node: Ast.Node.Index,
+    container_end_token: Ast.TokenIndex,
+) FieldSegment {
+    const source = tree.source;
+    const container_end = tree.tokenStart(container_end_token);
+
+    const start = fieldSegmentStart(
+        source,
+        tree.tokenStart(tree.firstToken(field_node)),
+    );
+    const last_token = tree.lastToken(field_node);
+    const token_end = tree.tokenStart(last_token) +
+        tree.tokenSlice(last_token).len;
+
+    var end = token_end;
+    var had_trailing_comma = false;
+    var trailing_comma_start: ?usize = null;
+    var trailing_comment_start: ?usize = null;
+
+    var cursor = token_end;
+    while (cursor < container_end and
+        isHorizontalWhitespace(source[cursor])) : (cursor += 1)
+    {}
+
+    if (cursor < container_end and source[cursor] == ',') {
+        had_trailing_comma = true;
+        trailing_comma_start = cursor;
+        cursor += 1;
+        end = cursor;
+
+        while (cursor < container_end and isHorizontalWhitespace(source[cursor])) : (cursor += 1) {}
+        if (startsLineComment(source, cursor)) {
+            trailing_comment_start = cursor;
+            end = lineEndIncludingNewline(source, cursor);
+        } else {
+            if (cursor < container_end and source[cursor] == '\r') {
+                cursor += 1;
+                if (cursor < container_end and source[cursor] == '\n') cursor += 1;
+                end = cursor;
+            } else if (cursor < container_end and source[cursor] == '\n')
+                end = cursor + 1;
+        }
+    } else if (startsLineComment(source, cursor)) {
+        trailing_comment_start = cursor;
+        end = lineEndIncludingNewline(source, cursor);
+    }
+
+    return .{
+        .start = start,
+        .end_exclusive = end,
+        .had_trailing_comma = had_trailing_comma,
+        .trailing_comma_start = trailing_comma_start,
+        .is_multiline = std.mem.indexOfScalar(
+            u8,
+            source[start..end],
+            '\n',
+        ) != null,
+        .trailing_comment_start = trailing_comment_start,
+    };
+}
+
+fn writeFieldSegmentForFix(
+    writer: *std.Io.Writer,
+    source: []const u8,
+    segment: FieldSegment,
+    insert_comma: bool,
+    remove_comma: bool,
+) std.Io.Writer.Error!void {
+    const segment_source = source[segment.start..segment.end_exclusive];
+    if (remove_comma) {
+        const comma_start = segment.trailing_comma_start.?;
+        try writer.writeAll(source[segment.start..comma_start]);
+        return writer.writeAll(source[comma_start + 1 .. segment.end_exclusive]);
+    }
+
+    if (!insert_comma)
+        return writer.writeAll(segment_source);
+
+    const insert_at = if (segment.trailing_comment_start) |comment_start|
+        trimHorizontalWhitespaceEnd(source, segment.start, comment_start)
+    else
+        trimLineEndingAndHorizontalWhitespaceEnd(
+            source,
+            segment.start,
+            segment.end_exclusive,
+        );
+
+    try writer.writeAll(source[segment.start..insert_at]);
+    try writer.writeByte(',');
+    try writer.writeAll(source[insert_at..segment.end_exclusive]);
+}
+
+fn fieldSegmentStart(source: []const u8, field_token_start: usize) usize {
+    const line_start = lineStart(source, field_token_start);
+    var inline_start = field_token_start;
+
+    while (inline_start > line_start and
+        isHorizontalWhitespace(source[inline_start - 1])) : (inline_start -= 1)
+    {}
+    if (inline_start > line_start) return inline_start;
+
+    var start = line_start;
+    var cursor = line_start;
+
+    while (cursor > 0) {
+        const previous_line_end = cursor - 1;
+        const previous_line_start = lineStart(source, previous_line_end);
+        const previous_line = trimLine(source[previous_line_start..previous_line_end]);
+
+        if (std.mem.startsWith(u8, previous_line, "//")) {
+            start = previous_line_start;
+            cursor = previous_line_start;
+            continue;
+        }
+
+        if (previous_line.len == 0) {
+            start = previous_line_start;
+            cursor = previous_line_start;
+            continue;
+        }
+
+        break;
+    }
+
+    return start;
+}
+
+fn lineStart(source: []const u8, offset: usize) usize {
+    var cursor = offset;
+    while (cursor > 0 and source[cursor - 1] != '\n') : (cursor -= 1) {}
+    return cursor;
+}
+
+fn lineEndIncludingNewline(source: []const u8, offset: usize) usize {
+    var cursor = offset;
+    while (cursor < source.len and source[cursor] != '\n') : (cursor += 1) {}
+    return if (cursor < source.len) cursor + 1 else cursor;
+}
+
+fn trimLine(line: []const u8) []const u8 {
+    return std.mem.trim(u8, line, " \t\r");
+}
+
+fn trimHorizontalWhitespaceEnd(source: []const u8, start: usize, end: usize) usize {
+    var cursor = end;
+    while (cursor > start and
+        isHorizontalWhitespace(source[cursor - 1])) : (cursor -= 1)
+    {}
+    return cursor;
+}
+
+fn trimLineEndingAndHorizontalWhitespaceEnd(source: []const u8, start: usize, end: usize) usize {
+    var cursor = end;
+    if (cursor > start and source[cursor - 1] == '\n') cursor -= 1;
+    if (cursor > start and source[cursor - 1] == '\r') cursor -= 1;
+    return trimHorizontalWhitespaceEnd(source, start, cursor);
+}
+
+fn isHorizontalWhitespace(byte: u8) bool {
+    return byte == ' ' or byte == '\t';
+}
+
+fn startsLineComment(source: []const u8, offset: usize) bool {
+    return offset + 1 < source.len and source[offset] == '/' and source[offset + 1] == '/';
 }
 
 fn firstTokenIncludingComments(tree: Ast, node: Ast.Node.Index) Ast.TokenIndex {
