@@ -1,8 +1,6 @@
 //! Enforces use of `.?` over `orelse unreachable` as `.?` offers comptime checks
 //! as it does not control flow.
 
-// TODO: Should this catch `const g = h orelse { unreachable; };`
-
 /// Config for no_orelse_unreachable rule.
 pub const Config = struct {
     /// The severity (off, warning, error).
@@ -43,8 +41,7 @@ fn run(
         const data = tree.nodeData(node);
         const rhs = data.node_and_node.@"1";
 
-        const rhs_tag = tree.nodeTag(rhs);
-        if (rhs_tag != .unreachable_literal and !isUnreachableBlock(tree, rhs)) continue;
+        if (!isUnreachableExpr(tree, rhs)) continue;
 
         try lint_problems.append(session_arena, .{
             .rule_id = rule.rule_id,
@@ -63,6 +60,19 @@ fn run(
         )
     else
         null;
+}
+
+fn isUnreachableExpr(tree: Ast, node: Ast.Node.Index) bool {
+    const unwrapped = unwrapGroupedExpression(tree, node);
+    return tree.nodeTag(unwrapped) == .unreachable_literal or
+        isUnreachableBlock(tree, unwrapped);
+}
+
+fn unwrapGroupedExpression(tree: Ast, node: Ast.Node.Index) Ast.Node.Index {
+    var current = node;
+    while (tree.nodeTag(current) == .grouped_expression)
+        current = tree.nodeData(current).node_and_token[0];
+    return current;
 }
 
 fn isUnreachableBlock(tree: Ast, node: Ast.Node.Index) bool {
@@ -88,8 +98,11 @@ test "no_orelse_unreachable" {
     const source: [:0]const u8 =
         \\const a = b orelse unreachable;
         \\const d = e orelse { unreachable; };
+        \\const g = h orelse (unreachable);
+        \\const i = j orelse ({ unreachable; });
         \\const c = d.?;
         \\const e = f orelse 1;
+        \\const k = l orelse (1);
     ;
 
     inline for (&.{ .warning, .@"error" }) |severity| {
@@ -111,6 +124,18 @@ test "no_orelse_unreachable" {
                     .rule_id = "no_orelse_unreachable",
                     .severity = severity,
                     .slice = "e orelse { unreachable; }",
+                    .message = "Prefer `.?` over `orelse unreachable`",
+                },
+                .{
+                    .rule_id = "no_orelse_unreachable",
+                    .severity = severity,
+                    .slice = "h orelse (unreachable)",
+                    .message = "Prefer `.?` over `orelse unreachable`",
+                },
+                .{
+                    .rule_id = "no_orelse_unreachable",
+                    .severity = severity,
+                    .slice = "j orelse ({ unreachable; })",
                     .message = "Prefer `.?` over `orelse unreachable`",
                 },
             },
