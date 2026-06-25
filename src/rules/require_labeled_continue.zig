@@ -51,7 +51,7 @@ fn run(
 
         if (hasContinueLabel(tree, node)) continue;
 
-        const depth = loopDepth(doc, tree, node);
+        const depth = loopDepthInCurrentControlFlow(doc, tree, node);
         if (depth <= config.max_unlabeled_depth) continue;
 
         const continue_token = tree.nodeMainToken(node);
@@ -77,14 +77,27 @@ fn run(
         null;
 }
 
-fn loopDepth(doc: *const zlinter.session.LintDocument, tree: Ast, node: Ast.Node.Index) u32 {
+fn loopDepthInCurrentControlFlow(doc: *const zlinter.session.LintDocument, tree: Ast, node: Ast.Node.Index) u32 {
     var depth: u32 = 0;
     var it = doc.nodeAncestorIterator(node);
     while (it.next()) |ancestor| {
         if (ancestor == .root) break;
+        if (isControlFlowBoundary(tree, ancestor)) break;
         if (isLoopNode(tree, ancestor)) depth += 1;
     }
     return depth;
+}
+
+fn isControlFlowBoundary(tree: Ast, node: Ast.Node.Index) bool {
+    var fn_proto_buffer: [1]Ast.Node.Index = undefined;
+    if (tree.fullFnProto(&fn_proto_buffer, node) != null)
+        return true;
+
+    var container_decl_buffer: [2]Ast.Node.Index = undefined;
+    if (tree.fullContainerDecl(&container_decl_buffer, node) != null)
+        return true;
+
+    return false;
 }
 
 fn isLoopNode(tree: Ast, node: Ast.Node.Index) bool {
@@ -185,6 +198,55 @@ test "require_labeled_continue" {
         .{},
         Config{ .max_unlabeled_depth = 2 },
         &.{},
+    );
+
+    try zlinter.testing.testRunRule(
+        rule,
+        \\pub fn main() void {
+        \\    while (true) {
+        \\        const S = struct {
+        \\            fn f() void {
+        \\                while (true) {
+        \\                    continue;
+        \\                }
+        \\            }
+        \\        };
+        \\        _ = S;
+        \\    }
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{},
+    );
+
+    try zlinter.testing.testRunRule(
+        rule,
+        \\pub fn main() void {
+        \\    while (true) {
+        \\        const S = struct {
+        \\            fn f() void {
+        \\                while (true) {
+        \\                    while (true) {
+        \\                        continue;
+        \\                    }
+        \\                }
+        \\            }
+        \\        };
+        \\        _ = S;
+        \\    }
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "require_labeled_continue",
+                .severity = .@"error",
+                .slice = "continue",
+                .message = "Unlabeled `continue` inside nested loop is ambiguous. Use a loop label to make the control flow explicit.",
+            },
+        },
     );
 }
 

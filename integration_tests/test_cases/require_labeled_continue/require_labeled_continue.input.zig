@@ -16,4 +16,28 @@ pub fn main() void {
             continue;
         }
     }
+
+    while (true) {
+        const SingleLoop = struct {
+            fn f() void {
+                while (true) {
+                    continue;
+                }
+            }
+        };
+        _ = SingleLoop;
+    }
+
+    while (true) {
+        const NestedLoop = struct {
+            fn f() void {
+                while (true) {
+                    while (true) {
+                        continue;
+                    }
+                }
+            }
+        };
+        _ = NestedLoop;
+    }
 }
