@@ -160,10 +160,12 @@ fn run(
         const tag = tree.nodeTag(node);
         if (tag == .error_set_decl) {
             const node_data = tree.nodeData(node);
+            const lbrace = node_data.token_and_token.@"0";
             const rbrace = node_data.token_and_token.@"1";
 
-            var token = rbrace - 1;
-            tokens: while (token >= tree.firstToken(node)) : (token -= 1) {
+            var token = rbrace;
+            tokens: while (token > lbrace) {
+                token -= 1;
                 switch (tree.tokens.items(.tag)[token]) {
                     .identifier => {
                         const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(token));
@@ -449,6 +451,53 @@ test "run - error container" {
                 .severity = .@"error",
                 .slice = "not_good",
                 .message = "Error fields should be TitleCase",
+            },
+        },
+    );
+}
+
+test "run - error container at start of file" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const E = error{A};
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "field_naming",
+                .severity = .warning,
+                .slice = "A",
+                .message = "Error field names should have a length greater or equal to 3",
+            },
+        },
+    );
+}
+
+test "run - empty error container at start of file" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const E = error{};
+    ,
+        .{},
+        Config{},
+        &.{},
+    );
+}
+
+test "run - malformed error container at start of file" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\error{A}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "field_naming",
+                .severity = .warning,
+                .slice = "A",
+                .message = "Error field names should have a length greater or equal to 3",
             },
         },
     );
