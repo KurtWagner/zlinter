@@ -129,6 +129,33 @@ pub fn isBuiltinCallNamed(tree: Ast, node: Ast.Node.Index, name: []const u8) boo
         std.mem.eql(u8, tree.tokenSlice(tree.nodeMainToken(node)), name);
 }
 
+/// Returns true if node is a call whose callee is `identifier.method(...)`.
+pub fn isMethodCallOnIdentifier(
+    tree: Ast,
+    node: Ast.Node.Index,
+    identifier_name: []const u8,
+    method_names: []const []const u8,
+) bool {
+    var call_buffer: [1]Ast.Node.Index = undefined;
+    const call = tree.fullCall(&call_buffer, node) orelse
+        return false;
+
+    if (tree.nodeTag(call.ast.fn_expr) != .field_access)
+        return false;
+
+    const lhs_node, const field_token = tree.nodeData(call.ast.fn_expr)
+        .node_and_token;
+    if (tree.nodeTag(lhs_node) != .identifier) return false;
+    if (!std.mem.eql(u8, tree.getNodeSource(lhs_node), identifier_name))
+        return false;
+
+    const field_name = tree.tokenSlice(field_token);
+    for (method_names) |method_name|
+        if (std.mem.eql(u8, field_name, method_name)) return true;
+
+    return false;
+}
+
 test "isBuiltinCall - matches builtin call node kinds" {
     var tree = try Ast.parse(
         std.testing.allocator,

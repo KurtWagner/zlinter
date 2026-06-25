@@ -124,21 +124,12 @@ fn run(
 
                     while (try block_it.next()) |block_tuple| {
                         const block_node, _ = block_tuple;
-                        if (tree.nodeTag(block_node) == .field_access) {
-                            const node_data = tree.nodeData(block_node);
-                            const lhs_node, const identifier_token = .{
-                                node_data.node_and_token.@"0",
-                                node_data.node_and_token.@"1",
-                            };
-                            const lhs_source = tree.getNodeSource(lhs_node);
-                            if (std.mem.eql(u8, lhs_source, var_name)) {
-                                const identifier_name = tree.tokenSlice(identifier_token);
-                                for (config.init_method_names) |init_name| {
-                                    if (std.mem.eql(u8, identifier_name, init_name))
-                                        continue :nodes;
-                                }
-                            }
-                        }
+                        if (zlinter.ast.isMethodCallOnIdentifier(
+                            tree,
+                            block_node,
+                            var_name,
+                            config.init_method_names,
+                        )) continue :nodes;
                     }
                 }
             }
@@ -255,7 +246,7 @@ test "exclude in fn" {
             .{},
             Config{
                 .severity = severity,
-                .exclude_in_fn = &.{"cleanup", "teardown"},
+                .exclude_in_fn = &.{ "cleanup", "teardown" },
             },
             &.{
                 .{
@@ -355,6 +346,72 @@ test "init methods" {
         Config{
             .severity = .warning,
             .init_method_names = &.{ "init", "initialize" },
+        },
+        &.{},
+    );
+}
+
+test "init method exemption requires call" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ pub fn main() void {
+        \\     var assigned_field: SomeType = undefined;
+        \\     _ = assigned_field.init;
+        \\
+        \\     var captured_field: SomeType = undefined;
+        \\     const f = captured_field.init;
+        \\     _ = f;
+        \\
+        \\     var condition_field: SomeType = undefined;
+        \\     if (condition_field.init) {}
+        \\ }
+    ,
+        .{},
+        Config{
+            .severity = .warning,
+            .init_method_names = &.{"init"},
+        },
+        &.{
+            .{
+                .rule_id = "no_undefined",
+                .severity = .warning,
+                .slice = "undefined",
+                .message = "Take care when using `undefined`",
+            },
+            .{
+                .rule_id = "no_undefined",
+                .severity = .warning,
+                .slice = "undefined",
+                .message = "Take care when using `undefined`",
+            },
+            .{
+                .rule_id = "no_undefined",
+                .severity = .warning,
+                .slice = "undefined",
+                .message = "Take care when using `undefined`",
+            },
+        },
+    );
+}
+
+test "init method exemption allows call forms" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ pub fn main() !void {
+        \\     var direct_call: SomeType = undefined;
+        \\     direct_call.init();
+        \\
+        \\     var try_call: SomeType = undefined;
+        \\     try try_call.init();
+        \\
+        \\     var assigned_call: SomeType = undefined;
+        \\     _ = assigned_call.init();
+        \\ }
+    ,
+        .{},
+        Config{
+            .severity = .warning,
+            .init_method_names = &.{"init"},
         },
         &.{},
     );
