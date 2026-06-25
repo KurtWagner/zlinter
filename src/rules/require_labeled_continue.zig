@@ -1,6 +1,6 @@
-//! Enforces explicit loop labels for `continue` statements in nested loops.
+//! Enforces explicit loop labels for `continue` statements beyond an allowed loop depth.
 //!
-//! Unlabeled `continue` is allowed only when loop depth is exactly 1.
+//! Unlabeled `continue` is allowed only when loop depth does not exceed the configured maximum.
 
 /// Config for require_labeled_continue rule.
 pub const Config = struct {
@@ -8,6 +8,7 @@ pub const Config = struct {
     severity: zlinter.rules.LintProblemSeverity = .@"error",
 
     /// Maximum allowed loop depth for unlabeled `continue`.
+    /// Depth 0 means all `continue` statements must be labeled.
     /// Depth 1 means a single enclosing loop.
     /// Default 1 allows unlabeled `continue` only at depth 1.
     max_unlabeled_depth: u32 = 1,
@@ -62,7 +63,7 @@ fn run(
             .end = .endOfToken(tree, continue_token),
             .message = try session_arena.dupe(
                 u8,
-                "Unlabeled `continue` inside nested loop is ambiguous. Use a loop label to make the control flow explicit.",
+                "Unlabeled `continue` exceeds the configured allowed loop depth. Use a loop label to make the control flow explicit.",
             ),
         });
     }
@@ -136,7 +137,7 @@ const expected_nested_continue = [_]zlinter.testing.LintProblemExpectation{.{
     .rule_id = "require_labeled_continue",
     .severity = .@"error",
     .slice = "continue",
-    .message = "Unlabeled `continue` inside nested loop is ambiguous. Use a loop label to make the control flow explicit.",
+    .message = "Unlabeled `continue` exceeds the configured allowed loop depth. Use a loop label to make the control flow explicit.",
 }};
 
 test "require_labeled_continue allows unlabeled continue in a single while loop" {
@@ -210,6 +211,23 @@ test "require_labeled_continue respects configured maximum unlabeled loop depth"
         .{},
         Config{ .max_unlabeled_depth = 2 },
         &.{},
+    );
+}
+
+test "require_labeled_continue reports single-loop continue when maximum unlabeled depth is zero" {
+    const rule = buildRule(.{});
+
+    try zlinter.testing.testRunRule(
+        rule,
+        \\pub fn main() void {
+        \\    while (true) {
+        \\        continue;
+        \\    }
+        \\}
+    ,
+        .{},
+        Config{ .max_unlabeled_depth = 0 },
+        &expected_nested_continue,
     );
 }
 

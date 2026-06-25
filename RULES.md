@@ -1196,9 +1196,9 @@ Require the source code to be formatted with zig fmt
 
 ## `require_labeled_continue`
 
-Enforces explicit loop labels for `continue` statements in nested loops.
+Enforces explicit loop labels for `continue` statements beyond an allowed loop depth.
 
-Unlabeled `continue` is allowed only when loop depth is exactly 1.
+Unlabeled `continue` is allowed only when loop depth does not exceed the configured maximum.
 
 **Config options:**
 
@@ -1210,7 +1210,7 @@ Unlabeled `continue` is allowed only when loop depth is exactly 1.
 
 * `max_unlabeled_depth`
 
-  * Maximum allowed loop depth for unlabeled `continue`. Depth 1 means a single enclosing loop. Default 1 allows unlabeled `continue` only at depth 1.
+  * Maximum allowed loop depth for unlabeled `continue`. Depth 0 means all `continue` statements must be labeled. Depth 1 means a single enclosing loop. Default 1 allows unlabeled `continue` only at depth 1.
 
   * **Default:** `1`
 
