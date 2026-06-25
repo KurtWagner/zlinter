@@ -64,16 +64,11 @@ fn run(
     for (tree.rootDecls()) |decl| {
         const problem: ?struct { first: Ast.TokenIndex, last: Ast.TokenIndex } = problem: {
             if (tree.fullVarDecl(decl)) |var_decl| {
-                if (zlinter.ast.varDeclVisibility(tree, var_decl) == .public)
+                if (isPublicVarDecl(tree, var_decl) or hasExternOrExport(token_tags, var_decl.extern_export_token))
                     break :problem null;
 
-                if (hasExternalLinkage(
-                    token_tags,
-                    var_decl.extern_export_token,
-                ))
-                    break :problem null;
-
-                if (!container_references.contains(tree.tokenSlice(var_decl.ast.mut_token + 1)))
+                const name_token = varDeclNameToken(var_decl);
+                if (!container_references.contains(tree.tokenSlice(name_token)))
                     break :problem .{
                         .first = tree.firstToken(decl),
                         .last = tree.lastToken(decl) + 1, // "+ 1" to consume the semicolon for this statement
@@ -81,15 +76,11 @@ fn run(
             } else {
                 var buffer: [1]Ast.Node.Index = undefined;
                 if (namedFnDeclProto(tree, &buffer, decl)) |fn_proto| {
-                    if (zlinter.ast.fnProtoVisibility(tree, fn_proto) == .public) break :problem null;
-
-                    if (hasExternalLinkage(
-                        token_tags,
-                        fn_proto.extern_export_inline_token,
-                    ))
+                    if (isPublicFnProto(tree, fn_proto) or hasExternOrExport(token_tags, fn_proto.extern_export_inline_token))
                         break :problem null;
 
-                    if (!container_references.contains(tree.tokenSlice(fn_proto.name_token.?)))
+                    const name_token = fnDeclNameToken(fn_proto) orelse break :problem null;
+                    if (!container_references.contains(tree.tokenSlice(name_token)))
                         break :problem .{
                             .first = tree.firstToken(decl),
                             .last = tree.lastToken(decl),
@@ -153,12 +144,28 @@ fn namedFnDeclProto(
     return null;
 }
 
-fn hasExternalLinkage(
+fn varDeclNameToken(var_decl: Ast.full.VarDecl) Ast.TokenIndex {
+    return var_decl.ast.mut_token + 1;
+}
+
+fn fnDeclNameToken(fn_proto: Ast.full.FnProto) ?Ast.TokenIndex {
+    return fn_proto.name_token;
+}
+
+fn hasExternOrExport(
     token_tags: []const std.zig.Token.Tag,
     token: ?Ast.TokenIndex,
 ) bool {
     const t = token orelse return false;
     return token_tags[t] == .keyword_export or token_tags[t] == .keyword_extern;
+}
+
+fn isPublicVarDecl(tree: Ast, var_decl: Ast.full.VarDecl) bool {
+    return zlinter.ast.varDeclVisibility(tree, var_decl) == .public;
+}
+
+fn isPublicFnProto(tree: Ast, fn_proto: Ast.full.FnProto) bool {
+    return zlinter.ast.fnProtoVisibility(tree, fn_proto) == .public;
 }
 
 fn referencedDeclName(
