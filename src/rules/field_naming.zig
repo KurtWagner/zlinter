@@ -199,7 +199,7 @@ fn run(
                             });
                         }
 
-                        if (!config.error_field.style.check(name)) {
+                        if (config.error_field.severity != .off and !config.error_field.style.check(name)) {
                             try lint_problems.append(session_arena, .{
                                 .rule_id = rule.rule_id,
                                 .severity = config.error_field.severity,
@@ -294,7 +294,7 @@ fn run(
                         });
                     }
 
-                    if (!style_with_severity.style.check(name)) {
+                    if (style_with_severity.severity != .off and !style_with_severity.style.check(name)) {
                         try lint_problems.append(session_arena, .{
                             .rule_id = rule.rule_id,
                             .severity = style_with_severity.severity,
@@ -451,6 +451,51 @@ test "run - error container" {
                 .message = "Error fields should be TitleCase",
             },
         },
+    );
+}
+
+test "run - style checks honor off severity" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\
+        \\const namespace = struct { const value = 1; };
+        \\const bad_errors = error {
+        \\    not_title_case,
+        \\};
+        \\const BadEnum = enum {
+        \\    NotSnakeCase,
+        \\};
+        \\const BadUnion = union {
+        \\    NotSnakeCase: u32,
+        \\};
+        \\const BadStruct = struct {
+        \\    NotSnakeCase: u32,
+        \\    bad_type: type,
+        \\    NamespaceValue: namespace,
+        \\    bad_fn: *const fn () void,
+        \\    bad_type_fn: *const fn () type,
+        \\};
+    ,
+        .{},
+        Config{
+            .error_field = .{ .style = .title_case, .severity = .off },
+            .enum_field = .{ .style = .snake_case, .severity = .off },
+            .struct_field = .{ .style = .snake_case, .severity = .off },
+            .struct_field_that_is_type = .{ .style = .title_case, .severity = .off },
+            .struct_field_that_is_namespace = .{ .style = .snake_case, .severity = .off },
+            .struct_field_that_is_fn = .{ .style = .camel_case, .severity = .off },
+            .struct_field_that_is_type_fn = .{ .style = .title_case, .severity = .off },
+            .union_field = .{ .style = .snake_case, .severity = .off },
+            .error_field_min_len = .{ .len = 0, .severity = .off },
+            .error_field_max_len = .{ .len = 0, .severity = .off },
+            .enum_field_min_len = .{ .len = 0, .severity = .off },
+            .enum_field_max_len = .{ .len = 0, .severity = .off },
+            .struct_field_min_len = .{ .len = 0, .severity = .off },
+            .struct_field_max_len = .{ .len = 0, .severity = .off },
+            .union_field_min_len = .{ .len = 0, .severity = .off },
+            .union_field_max_len = .{ .len = 0, .severity = .off },
+        },
+        &.{},
     );
 }
 
