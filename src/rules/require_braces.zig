@@ -117,16 +117,13 @@ fn run(
         const statement = zlinter.ast.fullStatement(tree, node) orelse
             continue :nodes;
 
-        // Skip if part of an assignment or return statement as braces are omitted
-        switch (tree.nodeTag(connections.parent.?)) {
-            .@"return",
-            .simple_var_decl,
-            .local_var_decl,
-            .global_var_decl,
-            .aligned_var_decl,
-            => continue :nodes,
-            else => {},
-        }
+        if (!isStatementBodyContext(
+            tree,
+            doc,
+            node,
+            connections,
+        ))
+            continue :nodes;
 
         const req_and_severity: RequirementAndSeverity = switch (statement) {
             .@"if" => config.if_statement,
@@ -243,6 +240,162 @@ fn run(
         )
     else
         null;
+}
+
+/// Returns true when `node` is control flow whose body is acting as a
+/// statement body, and false when the same syntax is only part of an expression.
+///
+/// Checked:
+///
+/// ```zig
+/// if (ok)
+///     doThing();
+///
+/// if (ok)
+///     if (nested)
+///         doThing();
+/// ```
+///
+/// Ignored:
+///
+/// ```zig
+/// consume(if (ok) 1 else 2);
+/// const value = (if (ok) 1 else 2) + 3;
+/// ```
+fn isStatementBodyContext(
+    tree: Ast,
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+    connections: zlinter.ast.NodeConnections,
+) bool {
+    const parent = connections.parent orelse return false;
+
+    if (zlinter.ast.isBlock(tree, parent))
+        return true;
+
+    if (isSwitchCaseNode(tree, node) and
+        isSwitchNode(tree, parent))
+        return isNodeInStatementBodyContext(tree, doc, parent);
+
+    return isBodyExprOfStatement(tree, parent, node) and
+        isNodeInStatementBodyContext(tree, doc, parent);
+}
+
+/// Re-runs statement-body context detection for an ancestor node.
+///
+/// This lets nested body syntax inherit the outer statement context:
+///
+/// ```zig
+/// if (ok)
+///     switch (mode) {
+///         .a => doA(),
+///         else => doB(),
+///     };
+/// ```
+///
+/// But an expression-valued ancestor still blocks linting:
+///
+/// ```zig
+/// const value = switch (mode) {
+///     .a => if (ok) 1 else 2,
+///     else => 3,
+/// };
+/// ```
+fn isNodeInStatementBodyContext(
+    tree: Ast,
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+) bool {
+    return isStatementBodyContext(
+        tree,
+        doc,
+        node,
+        doc.lineage.get(@intFromEnum(node)),
+    );
+}
+
+/// Returns true when `body_node` is the body-like child of `statement_node`,
+/// rather than a condition, payload, switch value, or other expression child.
+///
+/// Checked children include:
+///
+/// ```zig
+/// if (ok)
+///     doThing() // then body
+/// else
+///     doOther(); // else body
+///
+/// defer doThing(); // defer expression
+/// ```
+fn isBodyExprOfStatement(tree: Ast, statement_node: Ast.Node.Index, body_node: Ast.Node.Index) bool {
+    const statement = zlinter.ast.fullStatement(tree, statement_node) orelse
+        return false;
+
+    return switch (statement) {
+        .@"if" => |info| body_node == info.ast.then_expr or
+            optionalNodeEquals(info.ast.else_expr, body_node),
+        .@"while" => |info| body_node == info.ast.then_expr or
+            optionalNodeEquals(info.ast.else_expr, body_node),
+        .@"for" => |info| body_node == info.ast.then_expr or
+            optionalNodeEquals(info.ast.else_expr, body_node),
+        .switch_case => |info| body_node == info.ast.target_expr,
+        .@"catch" => |expr_node| body_node == expr_node,
+        .@"defer" => |expr_node| body_node == expr_node,
+        .@"errdefer" => |expr_node| body_node == expr_node,
+    };
+}
+
+/// Compares optional AST children such as `if` / `while` / `for` else bodies.
+///
+/// ```zig
+/// if (ok)
+///     doThing()
+/// else
+///     doOther(); // compared through Ast.Node.OptionalIndex
+/// ```
+fn optionalNodeEquals(optional_node: Ast.Node.OptionalIndex, node: Ast.Node.Index) bool {
+    return if (optional_node.unwrap()) |unwrapped|
+        unwrapped == node
+    else
+        false;
+}
+
+/// Returns true for switch expression nodes that own switch case nodes.
+///
+/// ```zig
+/// switch (mode) {
+///     .a => doA(),
+///     else => doB(),
+/// }
+/// ```
+fn isSwitchNode(tree: Ast, node: Ast.Node.Index) bool {
+    return switch (tree.nodeTag(node)) {
+        .@"switch",
+        .switch_comma,
+        => true,
+        else => false,
+    };
+}
+
+/// Returns true for every switch case node shape, including single-item and
+/// inline cases.
+///
+/// ```zig
+/// switch (mode) {
+///     .a => doA(), // switch case
+///     inline .b => doB(), // inline switch case
+///     else => doOther(),
+/// }
+/// ```
+fn isSwitchCaseNode(tree: Ast, node: Ast.Node.Index) bool {
+    return switch (tree.nodeTag(node)) {
+        .switch_case_one,
+        .switch_case_inline_one,
+        .switch_case,
+        .switch_case_inline,
+        => true,
+        else => false,
+    };
 }
 
 test "if statements" {
@@ -384,6 +537,75 @@ test "if statements" {
                 .message = "Expects no braces when there's only one statement",
             },
         },
+    );
+}
+
+test "if expressions in non-statement positions are ignored" {
+    const source =
+        \\const Item = struct {
+        \\    value: u32,
+        \\};
+        \\
+        \\fn consume(_: u32) void {}
+        \\
+        \\pub fn main() void {
+        \\    const a = true;
+        \\    const b = false;
+        \\
+        \\    consume(if (a)
+        \\        1
+        \\    else
+        \\        2);
+        \\
+        \\    const item = Item{
+        \\        .value = if (a)
+        \\            1
+        \\        else
+        \\            2,
+        \\    };
+        \\
+        \\    const array = [_]u32{
+        \\        if (a)
+        \\            1
+        \\        else
+        \\            2,
+        \\        if (b) 3 else 4,
+        \\    };
+        \\
+        \\    const sum = (if (a)
+        \\        1
+        \\    else
+        \\        2) + (if (b) 3 else 4);
+        \\
+        \\    const indexed = array[if (a) 0 else 1];
+        \\    const unwrapped = (if (a) @as(?u32, 1) else null) orelse 0;
+        \\    _ = .{ item, indexed, unwrapped, sum };
+        \\
+        \\    _ = switch (sum) {
+        \\        0 => if (a)
+        \\            1
+        \\        else
+        \\            2,
+        \\        else => 3,
+        \\    };
+        \\}
+    ;
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{
+            .if_statement = .{
+                .requirement = .all,
+                .severity = .warning,
+            },
+            .switch_case_statement = .{
+                .requirement = .all,
+                .severity = .warning,
+            },
+        },
+        &.{},
     );
 }
 
