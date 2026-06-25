@@ -134,7 +134,7 @@ fn run(
             }
         }
 
-        if (else_case_node != null) {
+        if (else_case_node) |case_node| {
             missing_tags.clearRetainingCapacity();
 
             for (complete_tags.items) |tag| {
@@ -144,11 +144,12 @@ fn run(
                 );
             }
 
+            const else_token = elseCaseToken(tree, case_node);
             try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
                 .severity = config.severity,
-                .start = .startOfToken(tree, tree.firstToken(node)),
-                .end = .endOfToken(tree, tree.firstToken(node)),
+                .start = .startOfToken(tree, else_token),
+                .end = .endOfToken(tree, else_token),
                 .message = buildProblemMessage(
                     missing_tags.items,
                     session_arena,
@@ -165,6 +166,15 @@ fn run(
         )
     else
         null;
+}
+
+/// Returns the `else` keyword token for an else switch case.
+/// For `inline else => |tag| tag`, this returns the `else` token, not `inline`.
+fn elseCaseToken(tree: Ast, case_node: Ast.Node.Index) Ast.TokenIndex {
+    const switch_case = tree.fullSwitchCase(case_node) orelse return tree.firstToken(case_node);
+    const token_before_arrow = switch_case.ast.arrow_token - 1;
+    if (tree.tokenTag(token_before_arrow) == .keyword_else) return token_before_arrow;
+    return tree.firstToken(case_node);
 }
 
 fn buildProblemMessage(missing: []const []const u8, gpa: std.mem.Allocator) ![]const u8 {
@@ -236,7 +246,7 @@ test "require_exhaustive_enum_switch" {
             .{
                 .rule_id = "require_exhaustive_enum_switch",
                 .severity = .warning,
-                .slice = "switch",
+                .slice = "else",
                 .message = "Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .stopped)",
             },
         },
@@ -273,7 +283,7 @@ test "require_exhaustive_enum_switch" {
             .{
                 .rule_id = "require_exhaustive_enum_switch",
                 .severity = .warning,
-                .slice = "switch",
+                .slice = "else",
                 .message = "Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .running, .stopped)",
             },
         },
@@ -315,7 +325,7 @@ test "require_exhaustive_enum_switch" {
             .{
                 .rule_id = "require_exhaustive_enum_switch",
                 .severity = .warning,
-                .slice = "switch",
+                .slice = "else",
                 .message = "Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .d)",
             },
         },
