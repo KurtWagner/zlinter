@@ -66,46 +66,20 @@ fn run(
         break :map references;
     };
 
-    for (tree.rootDecls()) |decl| {
-        const problem: ?struct { first: Ast.TokenIndex, last: Ast.TokenIndex } = problem: {
-            const first_token = tree.firstToken(decl);
-            const last_token = tree.lastToken(decl);
-            if (tree.fullVarDecl(decl)) |var_decl| {
-                if (isPublicVarDecl(tree, var_decl) or hasExternOrExport(token_tags, var_decl.extern_export_token))
-                    break :problem null;
+    const candidate_decls = try containerDeclarationCandidates(
+        rule_arena,
+        tree,
+        token_tags,
+        container_references.items,
+    );
 
-                const name_token = varDeclNameToken(var_decl);
-                if (!hasExternalReference(
-                    container_references.items,
-                    tree.tokenSlice(name_token),
-                    first_token,
-                    last_token,
-                ))
-                    break :problem .{
-                        .first = first_token,
-                        .last = last_token + 1, // "+ 1" to consume the semicolon for this statement
-                    };
-            } else {
-                var buffer: [1]Ast.Node.Index = undefined;
-                if (namedFnDeclProto(tree, &buffer, decl)) |fn_proto| {
-                    if (isPublicFnProto(tree, fn_proto) or hasExternOrExport(token_tags, fn_proto.extern_export_inline_token))
-                        break :problem null;
-
-                    const name_token = fnDeclNameToken(fn_proto) orelse break :problem null;
-                    if (!hasExternalReference(
-                        container_references.items,
-                        tree.tokenSlice(name_token),
-                        first_token,
-                        last_token,
-                    ))
-                        break :problem .{
-                            .first = first_token,
-                            .last = last_token,
-                        };
-                }
-            }
-            break :problem null;
-        };
+    for (candidate_decls.items) |decl| {
+        const problem = unusedDeclarationProblem(
+            tree,
+            token_tags,
+            container_references.items,
+            decl,
+        );
 
         if (problem) |p| {
             const first_token = p.first;
@@ -148,6 +122,151 @@ const DeclReference = struct {
     node: Ast.Node.Index,
     token: Ast.TokenIndex,
 };
+
+const DeclarationProblem = struct {
+    first: Ast.TokenIndex,
+    last: Ast.TokenIndex,
+};
+
+fn containerDeclarationCandidates(
+    allocator: std.mem.Allocator,
+    tree: Ast,
+    token_tags: []const std.zig.Token.Tag,
+    references: []const DeclReference,
+) !std.ArrayList(Ast.Node.Index) {
+    var candidates = std.ArrayList(Ast.Node.Index).empty;
+    try appendContainerDeclarationCandidates(
+        allocator,
+        tree,
+        token_tags,
+        references,
+        tree.rootDecls(),
+        &candidates,
+    );
+    return candidates;
+}
+
+fn appendContainerDeclarationCandidates(
+    allocator: std.mem.Allocator,
+    tree: Ast,
+    token_tags: []const std.zig.Token.Tag,
+    references: []const DeclReference,
+    members: []const Ast.Node.Index,
+    candidates: *std.ArrayList(Ast.Node.Index),
+) !void {
+    for (members) |member| {
+        try candidates.append(allocator, member);
+
+        if (!shouldDescendIntoDeclaration(
+            tree,
+            token_tags,
+            references,
+            member,
+        ))
+            continue;
+
+        const container_node = declarationContainerNode(
+            tree,
+            member,
+        ) orelse
+            continue;
+
+        var buffer: [2]Ast.Node.Index = undefined;
+        const container_decl = tree.fullContainerDecl(
+            &buffer,
+            container_node,
+        ) orelse
+            continue;
+
+        try appendContainerDeclarationCandidates(
+            allocator,
+            tree,
+            token_tags,
+            references,
+            container_decl.ast.members,
+            candidates,
+        );
+    }
+}
+
+fn shouldDescendIntoDeclaration(
+    tree: Ast,
+    token_tags: []const std.zig.Token.Tag,
+    references: []const DeclReference,
+    decl: Ast.Node.Index,
+) bool {
+    return unusedDeclarationProblem(
+        tree,
+        token_tags,
+        references,
+        decl,
+    ) == null;
+}
+
+fn declarationContainerNode(tree: Ast, decl: Ast.Node.Index) ?Ast.Node.Index {
+    const var_decl = tree.fullVarDecl(decl) orelse
+        return null;
+    const init_node = var_decl.ast.init_node.unwrap() orelse
+        return null;
+
+    var buffer: [2]Ast.Node.Index = undefined;
+    if (tree.fullContainerDecl(&buffer, init_node) != null)
+        return init_node;
+
+    return null;
+}
+
+fn unusedDeclarationProblem(
+    tree: Ast,
+    token_tags: []const std.zig.Token.Tag,
+    references: []const DeclReference,
+    decl: Ast.Node.Index,
+) ?DeclarationProblem {
+    const first_token = tree.firstToken(decl);
+    const last_token = tree.lastToken(decl);
+
+    if (tree.fullVarDecl(decl)) |var_decl| {
+        if (isPublicVarDecl(tree, var_decl) or
+            hasExternOrExport(token_tags, var_decl.extern_export_token))
+            return null;
+
+        const name_token = varDeclNameToken(var_decl);
+        if (!hasExternalReference(
+            references,
+            tree.tokenSlice(name_token),
+            first_token,
+            last_token,
+        ))
+            return .{
+                .first = first_token,
+                .last = last_token + 1, // "+ 1" to consume the semicolon for this statement
+            };
+    } else {
+        var buffer: [1]Ast.Node.Index = undefined;
+        if (namedFnDeclProto(
+            tree,
+            &buffer,
+            decl,
+        )) |fn_proto| {
+            if (isPublicFnProto(tree, fn_proto) or
+                hasExternOrExport(token_tags, fn_proto.extern_export_inline_token))
+                return null;
+
+            const name_token = fnDeclNameToken(fn_proto) orelse return null;
+            if (!hasExternalReference(
+                references,
+                tree.tokenSlice(name_token),
+                first_token,
+                last_token,
+            ))
+                return .{
+                    .first = first_token,
+                    .last = last_token,
+                };
+        }
+    }
+    return null;
+}
 
 fn hasExternalReference(
     references: []const DeclReference,
@@ -485,6 +604,109 @@ test "no_unused" {
         \\
         \\pub fn main() void {
         \\    helper();
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{},
+    );
+
+    // Private declarations inside public containers are checked.
+    try zlinter.testing.testRunRule(
+        rule,
+        \\pub const Parser = struct {
+        \\    fn unusedHelper() void {}
+        \\
+        \\    pub fn parse() void {}
+        \\};
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_unused",
+                .severity = .warning,
+                .slice = "fn unusedHelper() void {}",
+                .message = "Unused declaration",
+                .fix = .{
+                    .start = 28,
+                    .end = 58,
+                    .text = "",
+                },
+            },
+        },
+    );
+
+    // References from another declaration in the same container count.
+    try zlinter.testing.testRunRule(
+        rule,
+        \\pub const Parser = struct {
+        \\    fn helper() void {}
+        \\
+        \\    pub fn parse() void {
+        \\        helper();
+        \\    }
+        \\};
+    ,
+        .{},
+        Config{},
+        &.{},
+    );
+
+    // An unused private root container is still reported only at the root.
+    try zlinter.testing.testRunRule(
+        rule,
+        \\const Parser = struct {
+        \\    fn unusedHelper() void {}
+        \\
+        \\    pub fn parse() void {}
+        \\};
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_unused",
+                .severity = .warning,
+                .slice =
+                \\const Parser = struct {
+                \\    fn unusedHelper() void {}
+                \\
+                \\    pub fn parse() void {}
+                \\};
+                ,
+                .message = "Unused declaration",
+                .fix = .{
+                    .start = 0,
+                    .end = 84,
+                    .text = "",
+                },
+            },
+        },
+    );
+
+    // Public nested declarations are skipped like public root declarations.
+    try zlinter.testing.testRunRule(
+        rule,
+        \\pub const Parser = struct {
+        \\    pub fn helper() void {}
+        \\
+        \\    pub const Nested = struct {};
+        \\};
+    ,
+        .{},
+        Config{},
+        &.{},
+    );
+
+    // Function-local declarations are not treated as container declarations.
+    try zlinter.testing.testRunRule(
+        rule,
+        \\pub fn main() void {
+        \\    const Local = struct {
+        \\        fn unusedHelper() void {}
+        \\    };
+        \\    _ = Local;
         \\}
     ,
         .{},

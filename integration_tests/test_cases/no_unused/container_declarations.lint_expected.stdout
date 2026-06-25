@@ -1,0 +1,6 @@
+warning Unused declaration [test_cases/no_unused/container_declarations.input.zig:2:5] no_unused
+
+ 2 |     fn unusedHelper() void {}
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+x 1 warnings
