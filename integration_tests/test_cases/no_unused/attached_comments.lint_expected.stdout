@@ -1,0 +1,29 @@
+warning Unused declaration [test_cases/no_unused/attached_comments.input.zig:2:1] no_unused
+
+ 2 | fn oldParser() void {}
+   | ^^^^^^^^^^^^^^^^^^^^^^
+
+warning Unused declaration [test_cases/no_unused/attached_comments.input.zig:6:1] no_unused
+
+ 6 | fn separatedSection() void {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning Unused declaration [test_cases/no_unused/attached_comments.input.zig:9:1] no_unused
+
+ 9 | fn oldParserWithArgs(
+   | ^^^^^^^^^^^^^^^^^^^^^
+ 10 |     input: []const u8,
+    | ^^^^^^^^^^^^^^^^^^^^^^
+ 11 | ) void {
+    | ^^^^^^^^
+ 12 |     _ = input;
+    | ^^^^^^^^^^^^^^
+ 13 | }
+    | ^
+
+warning Unused declaration [test_cases/no_unused/attached_comments.input.zig:16:1] no_unused
+
+ 16 | fn adjacentUnused() void {}
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+x 4 warnings

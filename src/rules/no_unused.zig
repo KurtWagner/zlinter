@@ -84,13 +84,11 @@ fn run(
         if (problem) |p| {
             const first_token = p.first;
             const last_token = p.last;
-
-            const start = tree.tokenLocation(0, first_token);
-            const end = tree.tokenLocation(0, last_token);
-
-            const start_newline: bool = if (first_token > 0) tree.tokenLocation(0, first_token - 1).line < start.line else true;
-            const end_newline: bool = if (last_token + 1 < tree.tokens.len) tree.tokenLocation(0, last_token + 1).line > end.line else true;
-            const end_offset: usize = if (start_newline and end_newline) 1 else 0;
+            const removal_range = declarationRemovalRange(
+                tree,
+                decl,
+                last_token,
+            );
 
             try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
@@ -99,8 +97,8 @@ fn run(
                 .end = .endOfToken(tree, last_token),
                 .message = try session_arena.dupe(u8, "Unused declaration"),
                 .fix = .{
-                    .start = start.line_start,
-                    .end = end.line_end + end_offset,
+                    .start = removal_range.start,
+                    .end = removal_range.end,
                     .text = "",
                 },
             });
@@ -127,6 +125,94 @@ const DeclarationProblem = struct {
     first: Ast.TokenIndex,
     last: Ast.TokenIndex,
 };
+
+const RemovalRange = struct {
+    start: usize,
+    end: usize,
+};
+
+fn declarationRemovalRange(
+    tree: Ast,
+    decl: Ast.Node.Index,
+    last_token: Ast.TokenIndex,
+) RemovalRange {
+    const first_token = firstTokenIncludingAttachedDocComments(
+        tree,
+        tree.firstToken(decl),
+    );
+
+    const start = tree.tokenLocation(0, first_token);
+    const end = tree.tokenLocation(0, last_token);
+
+    const start_newline: bool = if (first_token > 0)
+        tree.tokenLocation(0, first_token - 1).line < start.line
+    else
+        true;
+
+    const end_newline: bool = if (last_token + 1 < tree.tokens.len)
+        tree.tokenLocation(0, last_token + 1).line > end.line
+    else
+        true;
+
+    const end_offset: usize = if (start_newline and end_newline) 1 else 0;
+
+    return .{
+        .start = start.line_start,
+        .end = end.line_end + end_offset,
+    };
+}
+
+fn firstTokenIncludingAttachedDocComments(
+    tree: Ast,
+    first_token: Ast.TokenIndex,
+) Ast.TokenIndex {
+    var token = first_token;
+
+    while (token > 0 and
+        tree.tokenTag(token - 1) == .doc_comment and
+        tokensAreAttachedWithoutBlankLine(
+            tree,
+            token - 1,
+            token,
+        ))
+        token -= 1;
+
+    return token;
+}
+
+fn tokensAreAttachedWithoutBlankLine(
+    tree: Ast,
+    first_token: Ast.TokenIndex,
+    second_token: Ast.TokenIndex,
+) bool {
+    const first_end = tree.tokenStart(first_token) +
+        tree.tokenSlice(first_token).len;
+    const second_start = tree.tokenStart(second_token);
+
+    if (first_end >= second_start) return true;
+
+    return !containsBlankLine(tree.source[first_end..second_start]);
+}
+
+fn containsBlankLine(bytes: []const u8) bool {
+    var line_has_non_whitespace = false;
+    var saw_newline = false;
+
+    var i: usize = 0;
+    while (i < bytes.len) : (i += 1) {
+        switch (bytes[i]) {
+            '\n' => {
+                if (saw_newline and !line_has_non_whitespace) return true;
+                saw_newline = true;
+                line_has_non_whitespace = false;
+            },
+            '\r', ' ', '\t' => {},
+            else => line_has_non_whitespace = true,
+        }
+    }
+
+    return false;
+}
 
 fn containerDeclarationCandidates(
     allocator: std.mem.Allocator,
@@ -723,6 +809,144 @@ test "no_unused" {
         .{ .allow_parse_errors = true },
         Config{},
         &.{},
+    );
+}
+
+test "no_unused - fix removes attached doc comments" {
+    std.testing.refAllDecls(@This());
+
+    const rule = buildRule(.{});
+    try zlinter.testing.testRunRule(
+        rule,
+        \\/// Internal helper used by old parser.
+        \\fn oldParser() void {}
+        \\
+        \\pub fn main() void {}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_unused",
+                .severity = .warning,
+                .slice =
+                \\fn oldParser() void {}
+                ,
+                .message = "Unused declaration",
+                .fix = .{
+                    .start = 0,
+                    .end = 63,
+                    .text = "",
+                },
+            },
+        },
+    );
+}
+
+test "no_unused - fix preserves separated section comments" {
+    std.testing.refAllDecls(@This());
+
+    const rule = buildRule(.{});
+    try zlinter.testing.testRunRule(
+        rule,
+        \\// Parser helpers
+        \\
+        \\fn oldParser() void {}
+        \\
+        \\pub fn main() void {}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_unused",
+                .severity = .warning,
+                .slice =
+                \\fn oldParser() void {}
+                ,
+                .message = "Unused declaration",
+                .fix = .{
+                    .start = 19,
+                    .end = 42,
+                    .text = "",
+                },
+            },
+        },
+    );
+}
+
+test "no_unused - fix preserves comments for adjacent used declarations" {
+    std.testing.refAllDecls(@This());
+
+    const rule = buildRule(.{});
+    try zlinter.testing.testRunRule(
+        rule,
+        \\/// Remove me.
+        \\fn oldParser() void {}
+        \\
+        \\/// Keep me.
+        \\fn helper() void {}
+        \\
+        \\pub fn main() void {
+        \\    helper();
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_unused",
+                .severity = .warning,
+                .slice =
+                \\fn oldParser() void {}
+                ,
+                .message = "Unused declaration",
+                .fix = .{
+                    .start = 0,
+                    .end = 38,
+                    .text = "",
+                },
+            },
+        },
+    );
+}
+
+test "no_unused - fix removes attached doc comments for multi-line declarations" {
+    std.testing.refAllDecls(@This());
+
+    const rule = buildRule(.{});
+    try zlinter.testing.testRunRule(
+        rule,
+        \\/// Remove parser.
+        \\fn oldParser(
+        \\    input: []const u8,
+        \\) void {
+        \\    _ = input;
+        \\}
+        \\
+        \\pub fn main() void {}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_unused",
+                .severity = .warning,
+                .slice =
+                \\fn oldParser(
+                \\    input: []const u8,
+                \\) void {
+                \\    _ = input;
+                \\}
+                ,
+                .message = "Unused declaration",
+                .fix = .{
+                    .start = 0,
+                    .end = 82,
+                    .text = "",
+                },
+            },
+        },
     );
 }
 
