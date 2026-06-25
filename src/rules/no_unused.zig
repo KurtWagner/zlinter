@@ -38,40 +38,52 @@ fn run(
     const tree = doc.tree(session);
     const token_tags = tree.tokens.items(.tag);
 
-    // Store an index of referenced identifiers and field accesses on the
-    // container, this is then used to check whether a root declaration is
-    // being used.
-    var container_references = map: {
-        var map: std.StringHashMapUnmanaged(void) = .empty;
+    // Store referenced identifiers and field accesses on the container with
+    // their source locations. This lets a declaration ignore references from
+    // inside its own body (i.e., recursive calls).
+    const container_references = map: {
+        var references = std.ArrayList(DeclReference).empty;
 
         var index: u32 = @intFromEnum(Ast.Node.Index.root);
         while (index < tree.nodes.len) : (index += 1) {
             const node: Ast.Node.Index = @enumFromInt(index);
             switch (tree.nodeTag(node)) {
-                .identifier => try map.put(
+                .identifier => try references.append(rule_arena, .{
+                    .name = tree.tokenSlice(tree.nodeMainToken(node)),
+                    .node = node,
+                    .token = tree.nodeMainToken(node),
+                }),
+                .field_access => if (referencedDeclReference(
+                    session,
+                    doc,
                     rule_arena,
-                    tree.tokenSlice(tree.nodeMainToken(node)),
-                    {},
-                ),
-                .field_access => if (referencedDeclName(session, doc, rule_arena, node)) |name|
-                    try map.put(rule_arena, name, {}),
+                    node,
+                )) |reference|
+                    try references.append(rule_arena, reference),
                 else => {},
             }
         }
-        break :map map;
+        break :map references;
     };
 
     for (tree.rootDecls()) |decl| {
         const problem: ?struct { first: Ast.TokenIndex, last: Ast.TokenIndex } = problem: {
+            const first_token = tree.firstToken(decl);
+            const last_token = tree.lastToken(decl);
             if (tree.fullVarDecl(decl)) |var_decl| {
                 if (isPublicVarDecl(tree, var_decl) or hasExternOrExport(token_tags, var_decl.extern_export_token))
                     break :problem null;
 
                 const name_token = varDeclNameToken(var_decl);
-                if (!container_references.contains(tree.tokenSlice(name_token)))
+                if (!hasExternalReference(
+                    container_references.items,
+                    tree.tokenSlice(name_token),
+                    first_token,
+                    last_token,
+                ))
                     break :problem .{
-                        .first = tree.firstToken(decl),
-                        .last = tree.lastToken(decl) + 1, // "+ 1" to consume the semicolon for this statement
+                        .first = first_token,
+                        .last = last_token + 1, // "+ 1" to consume the semicolon for this statement
                     };
             } else {
                 var buffer: [1]Ast.Node.Index = undefined;
@@ -80,10 +92,15 @@ fn run(
                         break :problem null;
 
                     const name_token = fnDeclNameToken(fn_proto) orelse break :problem null;
-                    if (!container_references.contains(tree.tokenSlice(name_token)))
+                    if (!hasExternalReference(
+                        container_references.items,
+                        tree.tokenSlice(name_token),
+                        first_token,
+                        last_token,
+                    ))
                         break :problem .{
-                            .first = tree.firstToken(decl),
-                            .last = tree.lastToken(decl),
+                            .first = first_token,
+                            .last = last_token,
                         };
                 }
             }
@@ -124,6 +141,30 @@ fn run(
         )
     else
         null;
+}
+
+const DeclReference = struct {
+    name: []const u8,
+    node: Ast.Node.Index,
+    token: Ast.TokenIndex,
+};
+
+fn hasExternalReference(
+    references: []const DeclReference,
+    name: []const u8,
+    first_token: Ast.TokenIndex,
+    last_token: Ast.TokenIndex,
+) bool {
+    for (references) |reference| {
+        if (!std.mem.eql(u8, reference.name, name))
+            continue;
+
+        if (reference.token >= first_token and reference.token <= last_token)
+            continue;
+
+        return true;
+    }
+    return false;
 }
 
 /// Returns fn proto if node is fn declaration and has a name token.
@@ -168,12 +209,12 @@ fn isPublicFnProto(tree: Ast, fn_proto: Ast.full.FnProto) bool {
     return zlinter.ast.fnProtoVisibility(tree, fn_proto) == .public;
 }
 
-fn referencedDeclName(
+fn referencedDeclReference(
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     rule_arena: std.mem.Allocator,
     node: Ast.Node.Index,
-) ?[]const u8 {
+) ?DeclReference {
     const tree = doc.tree(session);
     std.debug.assert(tree.nodeTag(node) == .field_access);
 
@@ -184,7 +225,11 @@ fn referencedDeclName(
             doc,
             decl_candidates.items,
         )) |name|
-            return name;
+            return .{
+                .name = name,
+                .node = node,
+                .token = tree.nodeMainToken(node),
+            };
     }
 
     const lhs, const member_token = tree.nodeData(node).node_and_token;
@@ -202,7 +247,11 @@ fn referencedDeclName(
             doc,
             member_candidates.items,
         )) |name|
-            return name;
+            return .{
+                .name = name,
+                .node = node,
+                .token = member_token,
+            };
     }
 
     {
@@ -210,7 +259,11 @@ fn referencedDeclName(
         if (session.decl_store.rootDecl(doc.file_id)) |root_decl_id| {
             for (type_candidates.items) |candidate| {
                 if (candidate.type.decl_id == root_decl_id)
-                    return member_name;
+                    return .{
+                        .name = member_name,
+                        .node = node,
+                        .token = member_token,
+                    };
             }
         }
     }
@@ -393,6 +446,59 @@ test "no_unused" {
         \\}
     ,
         .{},
+        Config{},
+        &.{},
+    );
+
+    // A declaration's own body should not be enough to mark it used.
+    try zlinter.testing.testRunRule(
+        rule,
+        \\fn recurse() void {
+        \\    recurse();
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_unused",
+                .severity = .warning,
+                .slice =
+                \\fn recurse() void {
+                \\    recurse();
+                \\}
+                ,
+                .message = "Unused declaration",
+                .fix = .{
+                    .start = 0,
+                    .end = 36,
+                    .text = "",
+                },
+            },
+        },
+    );
+
+    // Ordinary references from another root declaration still count.
+    try zlinter.testing.testRunRule(
+        rule,
+        \\fn helper() void {}
+        \\
+        \\pub fn main() void {
+        \\    helper();
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{},
+    );
+
+    // Self references in a malformed initializer should not crash or mark the
+    // declaration used.
+    try zlinter.testing.testRunRule(
+        rule,
+        \\const bad = bad
+    ,
+        .{ .allow_parse_errors = true },
         Config{},
         &.{},
     );
