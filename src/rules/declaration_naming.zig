@@ -122,9 +122,13 @@ fn run(
             doc.file_id,
             node,
         ) orelse continue :nodes;
-        if (var_decl.ast.init_node.unwrap()) |init_node| {
-            if (isThisBuiltinCall(tree, init_node)) continue :nodes;
-        }
+        const name_token = var_decl.ast.mut_token + 1;
+        const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
+
+        const init_is_this_builtin = if (var_decl.ast.init_node.unwrap()) |init_node|
+            isThisBuiltinCall(tree, init_node)
+        else
+            false;
 
         var type_summary: zlinter.session.TypeStore.TypeSummary = .other;
         const summary_candidates = try session.resolveDeclValueSummaryCandidates(rule_arena, decl_id);
@@ -132,8 +136,10 @@ fn run(
             type_summary = candidate.summary;
             break;
         }
-        const name_token = var_decl.ast.mut_token + 1;
-        const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
+        if (init_is_this_builtin) {
+            // TODO: Move @This() value classification into the declaration type resolver.
+            type_summary = .{ .type = .unknown };
+        }
 
         if (config.exclude_aliases) {
             if (var_decl.ast.init_node.unwrap()) |init_node| {
@@ -372,6 +378,43 @@ test "declaration_naming classifies declaration values, not annotated instance t
                 .severity = .@"error",
                 .slice = "goodTypeFunc",
                 .message = "Type function declaration should be TitleCase",
+            },
+        },
+    );
+}
+
+test "declaration_naming classifies @This aliases as types" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        "const Thing = struct { const Self = @This(); field: u32, };",
+        .{},
+        Config{},
+        &.{},
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\
+        \\const Thing = struct {
+        \\    const bad_self = @This();
+        \\    const THIS_IS_NOT_OK = @This();
+        \\    field: u32,
+        \\};
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "bad_self",
+                .message = "Type declaration should be TitleCase",
+            },
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "THIS_IS_NOT_OK",
+                .message = "Type declaration should be TitleCase",
             },
         },
     );
