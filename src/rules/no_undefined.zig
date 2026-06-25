@@ -6,7 +6,8 @@ pub const Config = struct {
     /// The severity (off, warning, error).
     severity: zlinter.rules.LintProblemSeverity = .warning,
 
-    /// Skip if found in a function call (case-insenstive).
+    /// Skip if found inside an enclosing function whose name exactly matches
+    /// one of these names, case-insensitively.
     exclude_in_fn: []const []const u8 = &.{"deinit"},
 
     /// Skip if found within `test { ... }` block.
@@ -94,16 +95,14 @@ fn run(
 
         var next_parent = connections.parent;
         while (next_parent) |parent| {
-            // If assigned undefined in a deinit, ignore as it's a common pattern
-            // assign undefined after freeing memory
+            // If assigned undefined in an exempt function, ignore as it's a
+            // common pattern to assign undefined after freeing memory.
             if (config.exclude_in_fn.len > 0) {
                 if (tree.fullFnProto(&fn_proto_buffer, parent)) |fn_proto| {
                     if (fn_proto.name_token) |name_token| {
                         for (config.exclude_in_fn) |skip_fn_name| {
-                            if (std.ascii.endsWithIgnoreCase(
-                                tree.tokenSlice(name_token),
-                                skip_fn_name,
-                            )) continue :nodes;
+                            if (std.ascii.eqlIgnoreCase(tree.tokenSlice(name_token), skip_fn_name))
+                                continue :nodes;
                         }
                     }
                 }
@@ -190,6 +189,73 @@ test "exclude configs" {
                 .exclude_var_decl_name_equals = &.{"buffer"},
                 .exclude_var_decl_name_ends_with = &.{"excluded"},
                 .exclude_in_fn = &.{"meExcluded"},
+            },
+            &.{
+                .{
+                    .rule_id = "no_undefined",
+                    .severity = severity,
+                    .slice = "undefined",
+                    .message = "Take care when using `undefined`",
+                },
+            },
+        );
+    }
+}
+
+test "exclude in fn" {
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
+            \\fn deinit() void {
+            \\  var ok: u32 = undefined;
+            \\}
+            \\
+            \\fn notDeinit() void {
+            \\  var should_warn: u32 = undefined;
+            \\}
+            \\
+            \\fn my_deinit_helper() void {
+            \\  var also_warn: u32 = undefined;
+            \\}
+        ,
+            .{},
+            Config{
+                .severity = severity,
+            },
+            &.{
+                .{
+                    .rule_id = "no_undefined",
+                    .severity = severity,
+                    .slice = "undefined",
+                    .message = "Take care when using `undefined`",
+                },
+                .{
+                    .rule_id = "no_undefined",
+                    .severity = severity,
+                    .slice = "undefined",
+                    .message = "Take care when using `undefined`",
+                },
+            },
+        );
+
+        try zlinter.testing.testRunRule(
+            buildRule(.{}),
+            \\fn cleanup() void {
+            \\  var ok: u32 = undefined;
+            \\}
+            \\
+            \\fn teardown() void {
+            \\  var also_ok: u32 = undefined;
+            \\}
+            \\
+            \\fn cleanupNow() void {
+            \\  var should_warn: u32 = undefined;
+            \\}
+        ,
+            .{},
+            Config{
+                .severity = severity,
+                .exclude_in_fn = &.{"cleanup", "teardown"},
             },
             &.{
                 .{

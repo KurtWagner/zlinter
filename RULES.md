@@ -940,7 +940,7 @@ case uses should disable the line with an explanation.
 
 * `exclude_in_fn`
 
-  * Skip if found in a function call (case-insenstive).
+  * Skip if found inside an enclosing function whose name exactly matches one of these names, case-insensitively.
 
   * **Default:** `&.{"deinit"}`
 
