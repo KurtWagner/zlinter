@@ -511,6 +511,60 @@ pub fn fullStatement(tree: Ast, node: Ast.Node.Index) ?Statement {
     };
 }
 
+/// Returns true if the node is an `else` switch prong.
+pub fn isSwitchElseProng(tree: Ast, node: Ast.Node.Index) bool {
+    const switch_case = tree.fullSwitchCase(node) orelse return false;
+    return switch_case.ast.values.len == 0;
+}
+
+test "isSwitchElseProng - identifies else and rejects value prongs" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        \\fn value(input: u8) u8 {
+        \\    return switch (input) {
+        \\        else => 0,
+        \\        1 => 1,
+        \\        1, 2 => 2,
+        \\        1...5 => 5,
+        \\    };
+        \\}
+    ,
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    var switch_node: ?Ast.Node.Index = null;
+    var i: u32 = @intFromEnum(Ast.Node.Index.root);
+    while (i < tree.nodes.len) : (i += 1) {
+        const node: Ast.Node.Index = @enumFromInt(i);
+        if (tree.fullSwitch(node) != null) {
+            switch_node = node;
+            break;
+        }
+    }
+
+    const cases = tree.fullSwitch(switch_node.?).?.ast.cases;
+    try std.testing.expectEqual(@as(usize, 4), cases.len);
+    try std.testing.expect(isSwitchElseProng(tree, cases[0]));
+    try std.testing.expect(!isSwitchElseProng(tree, cases[1]));
+    try std.testing.expect(!isSwitchElseProng(tree, cases[2]));
+    try std.testing.expect(!isSwitchElseProng(tree, cases[3]));
+}
+
+test "isSwitchElseProng - rejects non switch case nodes" {
+    var tree = try Ast.parse(
+        std.testing.allocator,
+        "const value: u8 = 1;",
+        .zig,
+    );
+    defer tree.deinit(std.testing.allocator);
+
+    try std.testing.expect(!isSwitchElseProng(tree, .root));
+
+    const var_decl = try testing.expectVarDecl(tree, "value");
+    try std.testing.expect(!isSwitchElseProng(tree, var_decl));
+}
+
 /// Visibility of a node in the AST (e.g., a function or variable declaration).
 pub const Visibility = enum { public, private };
 

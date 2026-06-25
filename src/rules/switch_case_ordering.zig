@@ -37,10 +37,7 @@ fn run(
         const switch_info = tree.fullSwitch(node) orelse continue;
 
         for (switch_info.ast.cases, 0..) |case_node, i| {
-            const switch_case = tree.fullSwitchCase(case_node).?;
-
-            // If values is empty, this is an else case
-            if (switch_case.ast.values.len == 0) {
+            if (zlinter.ast.isSwitchElseProng(tree, case_node)) {
                 if (i != switch_info.ast.cases.len - 1) {
                     try lint_problems.append(session_arena, .{
                         .rule_id = rule.rule_id,
@@ -101,6 +98,54 @@ test "switch_case_ordering else is last" {
         source,
         .{},
         Config{ .else_is_last = .off },
+        &.{},
+    );
+}
+
+test "switch_case_ordering allows else last and absent" {
+    const rule = buildRule(.{});
+    const source =
+        \\fn values(input: u8) u8 {
+        \\    const first = switch (input) {
+        \\        1 => 1,
+        \\        1, 2 => 2,
+        \\        1...5 => 5,
+        \\        else => 0,
+        \\    };
+        \\    const second = switch (input) {
+        \\        1 => 1,
+        \\        1, 2 => 2,
+        \\        1...5 => 5,
+        \\    };
+        \\    return first + second;
+        \\}
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{},
+        &.{},
+    );
+}
+
+test "switch_case_ordering tolerates parser recovery input" {
+    const rule = buildRule(.{});
+    const source =
+        \\fn value(input: u8) u8 {
+        \\    return switch (input) {
+        \\        else => ,
+        \\        1 => 1,
+        \\    };
+        \\}
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{ .allow_parse_errors = true },
+        Config{},
         &.{},
     );
 }
