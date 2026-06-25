@@ -27,6 +27,11 @@ warning Expects braces whether on a single or across multiple lines [test_cases/
  37 |     for (0..1) |i| val += i;
     |                    ^^^^^^^^
 
+error Expects braces when over multiple lines [test_cases/require_braces/require_braces.input.zig:30:9] require_braces
+
+ 30 |         val += 1;
+    |         ^^^^^^^^
+
 error Expects no braces when on a single line [test_cases/require_braces/require_braces.input.zig:24:22] require_braces
 
  24 |     while (val < 10) { val += 1; }
@@ -55,5 +60,5 @@ warning Expects no braces when there's only one statement [test_cases/require_br
  7 |     if (val < 10) { val += 1; }
    |                   ^^^^^^^^^^^^^
 
-x 2 errors
+x 3 errors
 x 7 warnings

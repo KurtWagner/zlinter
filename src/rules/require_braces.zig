@@ -202,21 +202,22 @@ fn run(
                     },
                     .multi_line_only => {
                         const on_single_line = tree.tokensOnSameLine(first_token, last_token);
-                        if (on_single_line) {
-                            const children = doc.lineage.items(.children)[@intFromEnum(expr_node)] orelse &.{};
-                            if (has_braces and children.len > 0) // We allow empy blocks / no children
+                        if (on_single_line and has_braces) {
+                            const children = doc.lineage.items(.children)[@intFromEnum(expr_node)] orelse
+                                &.{};
+                            if (children.len > 0) // We allow empy blocks / no children
                                 break :error_msg try session_arena.dupe(
                                     u8,
                                     "Expects no braces when on a single line",
                                 );
-                        } else if (!has_braces) {
-                            const starts_on_same_line = tree.tokensOnSameLine(first_token - 1, first_token);
-                            if (!starts_on_same_line)
-                                break :error_msg try session_arena.dupe(
-                                    u8,
-                                    "Expects braces when over multiple lines",
-                                );
                         }
+
+                        if (!has_braces and
+                            bodyStartsOnNewLine(tree, expr_node))
+                            break :error_msg try session_arena.dupe(
+                                u8,
+                                "Expects braces when over multiple lines",
+                            );
                     },
                 }
                 continue :expr_nodes;
@@ -360,6 +361,15 @@ fn optionalNodeEquals(optional_node: Ast.Node.OptionalIndex, node: Ast.Node.Inde
         false;
 }
 
+/// Returns true when a body expression starts on a different line than the token
+/// immediately before it.
+fn bodyStartsOnNewLine(tree: Ast, body_node: Ast.Node.Index) bool {
+    const first_token = tree.firstToken(body_node);
+    if (first_token == 0)
+        return false;
+    return !tree.tokensOnSameLine(first_token - 1, first_token);
+}
+
 /// Returns true for switch expression nodes that own switch case nodes.
 ///
 /// ```zig
@@ -488,7 +498,14 @@ test "if statements" {
                 .severity = .@"error",
             },
         },
-        &.{},
+        &.{
+            .{
+                .rule_id = "require_braces",
+                .severity = .@"error",
+                .slice = "a = 4",
+                .message = "Expects braces when over multiple lines",
+            },
+        },
     );
 
     // if statement with 'multi_statement_only' requirement
@@ -535,6 +552,126 @@ test "if statements" {
                 \\     }
                 ,
                 .message = "Expects no braces when there's only one statement",
+            },
+        },
+    );
+}
+
+test "multi_line_only reports one-line bodies that start on the next line" {
+    const source =
+        \\fn enabled() bool {
+        \\    return true;
+        \\}
+        \\
+        \\fn items() []const u8 {
+        \\    return "abc";
+        \\}
+        \\
+        \\fn fallible() !u8 {
+        \\    return error.Fail;
+        \\}
+        \\
+        \\fn ifBody() void {}
+        \\fn elseBody() void {}
+        \\fn whileBody() void {}
+        \\fn forBody() void {}
+        \\fn catchBody() u8 { return 0; }
+        \\fn deferBody() void {}
+        \\fn errdeferBody() void {}
+        \\
+        \\pub fn main() void {
+        \\    if (enabled())
+        \\        ifBody();
+        \\
+        \\    if (enabled()) {
+        \\        ifBody();
+        \\    } else
+        \\        elseBody();
+        \\
+        \\    while (enabled())
+        \\        whileBody();
+        \\
+        \\    for (items()) |_|
+        \\        forBody();
+        \\
+        \\    fallible() catch
+        \\        catchBody();
+        \\
+        \\    defer
+        \\        deferBody();
+        \\
+        \\    errdefer
+        \\        errdeferBody();
+        \\
+        \\    if (enabled()) { ifBody(); }
+        \\}
+    ;
+
+    const multi_line_only = RequirementAndSeverity{
+        .requirement = .multi_line_only,
+        .severity = .warning,
+    };
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{
+            .if_statement = multi_line_only,
+            .while_statement = multi_line_only,
+            .for_statement = multi_line_only,
+            .catch_statement = multi_line_only,
+            .defer_statement = multi_line_only,
+            .errdefer_statement = multi_line_only,
+        },
+        &.{
+            .{
+                .rule_id = "require_braces",
+                .severity = .warning,
+                .slice = "{ ifBody(); }",
+                .message = "Expects no braces when on a single line",
+            },
+            .{
+                .rule_id = "require_braces",
+                .severity = .warning,
+                .slice = "errdeferBody()",
+                .message = "Expects braces when over multiple lines",
+            },
+            .{
+                .rule_id = "require_braces",
+                .severity = .warning,
+                .slice = "deferBody()",
+                .message = "Expects braces when over multiple lines",
+            },
+            .{
+                .rule_id = "require_braces",
+                .severity = .warning,
+                .slice = "catchBody()",
+                .message = "Expects braces when over multiple lines",
+            },
+            .{
+                .rule_id = "require_braces",
+                .severity = .warning,
+                .slice = "forBody()",
+                .message = "Expects braces when over multiple lines",
+            },
+            .{
+                .rule_id = "require_braces",
+                .severity = .warning,
+                .slice = "whileBody()",
+                .message = "Expects braces when over multiple lines",
+            },
+            .{
+                .rule_id = "require_braces",
+                .severity = .warning,
+                .slice = "elseBody()",
+                .message = "Expects braces when over multiple lines",
+            },
+            .{
+                .rule_id = "require_braces",
+                .severity = .warning,
+                .slice = "ifBody()",
+                .message = "Expects braces when over multiple lines",
             },
         },
     );
