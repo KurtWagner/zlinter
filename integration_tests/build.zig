@@ -121,6 +121,7 @@ fn createCompiledUnits(
     // dependency graphs of compiled units.
     for ([_][]const u8{
         "test_cases/no_deprecated/sub_module_resolution.input.zig",
+        "test_cases/require_exhaustive_enum_switch/ambiguous_enum_candidates.input.zig",
     }) |rel_path| {
         const path = b.path(rel_path);
 

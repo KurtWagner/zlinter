@@ -71,9 +71,6 @@ fn run(
     const root: Ast.Node.Index = .root;
     var it = try doc.nodeLineageIterator(root, rule_arena);
 
-    // Holds all tags within an enum used in a switch statement.
-    var complete_tags = std.ArrayList([]const u8).empty;
-
     // Tracks only the used enum tags within a switch statement
     var used_tag_set = std.StringHashMap(void).init(rule_arena);
 
@@ -85,74 +82,71 @@ fn run(
 
         const switch_info = tree.fullSwitch(node) orelse continue :nodes;
 
-        defer complete_tags.clearRetainingCapacity();
         const enum_candidates = try session.resolveEnumCandidatesOfNode(
             rule_arena,
             doc,
             switch_info.ast.condition,
         );
-        for (enum_candidates.items) |candidate| {
-            const switch_expr_enum = session.enumInfo(candidate.decl_id) orelse continue;
-            if (switch_expr_enum.is_non_exhaustive) continue;
-
-            var enum_member_buffer: [2]Ast.Node.Index = undefined;
-            const enum_container_decl = switch_expr_enum.containerDecl(session, &enum_member_buffer) orelse
-                continue;
-            for (enum_container_decl.ast.members) |member| {
-                const tag = switch_expr_enum.tagName(session, member) orelse continue;
-                if (!containsString(complete_tags.items, tag)) try complete_tags.append(rule_arena, tag);
-            }
-        }
-        if (complete_tags.items.len == 0) continue :nodes;
+        const enum_tag_sets = try enumTagSets(
+            session,
+            rule_arena,
+            enum_candidates.items,
+        );
+        if (enum_tag_sets.items.len == 0)
+            continue :nodes;
 
         // Set if an else case exists in switch
         var else_case_node: ?Ast.Node.Index = null;
 
-        defer used_tag_set.clearRetainingCapacity();
-        for (switch_info.ast.cases) |case_node| {
-            const switch_case = tree.fullSwitchCase(case_node).?;
+        for (enum_tag_sets.items) |enum_tag_set| {
+            const complete_tags = enum_tag_set.tags;
+            used_tag_set.clearRetainingCapacity();
+            for (switch_info.ast.cases) |case_node| {
+                const switch_case = tree.fullSwitchCase(case_node).?;
 
-            if (switch_case.ast.values.len == 0) {
-                if (else_case_node == null) else_case_node = case_node;
-            } else {
-                case_values: for (switch_case.ast.values) |value_node| {
-                    const tag_candidates = try session.resolveEnumTagNameCandidatesOfNode(
-                        rule_arena,
-                        doc,
-                        value_node,
-                    );
+                if (switch_case.ast.values.len == 0) {
+                    if (else_case_node == null) else_case_node = case_node;
+                } else {
+                    case_values: for (switch_case.ast.values) |value_node| {
+                        const tag_candidates = try session.resolveEnumTagNameCandidatesOfNode(
+                            rule_arena,
+                            doc,
+                            value_node,
+                        );
 
-                    for (tag_candidates.items) |tag_name| {
-                        if (containsString(complete_tags.items, tag_name)) {
-                            try used_tag_set.put(tag_name, {});
-                            continue :case_values;
+                        for (tag_candidates.items) |tag_name| {
+                            if (containsString(complete_tags, tag_name)) {
+                                try used_tag_set.put(tag_name, {});
+                                continue :case_values;
+                            }
                         }
                     }
                 }
             }
-        }
 
-        if (else_case_node) |case_node| {
-            missing_tags.clearRetainingCapacity();
+            if (else_case_node) |case_node| {
+                missing_tags.clearRetainingCapacity();
 
-            for (complete_tags.items) |tag| {
-                if (!used_tag_set.contains(tag)) try missing_tags.append(
-                    rule_arena,
-                    tag,
-                );
+                for (complete_tags) |tag| {
+                    if (!used_tag_set.contains(tag)) try missing_tags.append(
+                        rule_arena,
+                        tag,
+                    );
+                }
+
+                const else_token = elseCaseToken(tree, case_node);
+                try lint_problems.append(session_arena, .{
+                    .rule_id = rule.rule_id,
+                    .severity = config.severity,
+                    .start = .startOfToken(tree, else_token),
+                    .end = .endOfToken(tree, else_token),
+                    .notes = try allocEnumDeclNotes(session_arena, session, enum_tag_set.decl_id),
+                    .message = buildProblemMessage(
+                        missing_tags.items,
+                        session_arena,
+                    ) catch "Error building linter message",
+                });
             }
-
-            const else_token = elseCaseToken(tree, case_node);
-            try lint_problems.append(session_arena, .{
-                .rule_id = rule.rule_id,
-                .severity = config.severity,
-                .start = .startOfToken(tree, else_token),
-                .end = .endOfToken(tree, else_token),
-                .message = buildProblemMessage(
-                    missing_tags.items,
-                    session_arena,
-                ) catch "Error building linter message",
-            });
         }
     }
 
@@ -191,6 +185,89 @@ fn buildProblemMessage(missing: []const []const u8, session_arena: std.mem.Alloc
     }
 
     return try aw.toOwnedSlice();
+}
+
+const EnumTagSet = struct {
+    decl_id: zlinter.session.DeclStore.DeclId,
+    tags: []const []const u8,
+};
+
+fn enumTagSets(
+    session: *zlinter.session.LintSession,
+    allocator: std.mem.Allocator,
+    candidates: []const zlinter.session.LintSession.EnumCandidate,
+) !std.ArrayList(EnumTagSet) {
+    var seen_decl_ids: std.AutoHashMap(
+        zlinter.session.DeclStore.DeclId,
+        void,
+    ) = .init(allocator);
+
+    var tag_sets: std.ArrayList(EnumTagSet) = .empty;
+
+    for (candidates) |candidate| {
+        const gop = try seen_decl_ids.getOrPut(candidate.decl_id);
+        if (gop.found_existing) continue;
+
+        const tags = try enumTags(
+            session,
+            allocator,
+            candidate.decl_id,
+        ) orelse
+            continue;
+
+        if (tags.len == 0) continue;
+
+        try tag_sets.append(allocator, .{
+            .decl_id = candidate.decl_id,
+            .tags = tags,
+        });
+    }
+
+    return tag_sets;
+}
+
+fn enumTags(
+    session: *zlinter.session.LintSession,
+    allocator: std.mem.Allocator,
+    decl_id: zlinter.session.DeclStore.DeclId,
+) !?[]const []const u8 {
+    const switch_expr_enum = session.enumInfo(decl_id) orelse return null;
+    if (switch_expr_enum.is_non_exhaustive) return null;
+
+    var enum_member_buffer: [2]Ast.Node.Index = undefined;
+    const enum_container_decl = switch_expr_enum.containerDecl(
+        session,
+        &enum_member_buffer,
+    ) orelse
+        return null;
+
+    var tags: std.ArrayList([]const u8) = .empty;
+    for (enum_container_decl.ast.members) |member| {
+        const tag = switch_expr_enum.tagName(session, member) orelse
+            continue;
+        try tags.append(allocator, tag);
+    }
+
+    return try tags.toOwnedSlice(allocator);
+}
+
+fn allocEnumDeclNotes(
+    session_arena: std.mem.Allocator,
+    session: *zlinter.session.LintSession,
+    decl_id: zlinter.session.DeclStore.DeclId,
+) !?[]zlinter.results.LintProblemNote {
+    const decl_location = session.declLocation(decl_id) orelse return null;
+
+    const notes = try session_arena.alloc(zlinter.results.LintProblemNote, 1);
+    notes[0] = .{
+        .abs_path = try session_arena.dupe(u8, decl_location.abs_path),
+        .start = decl_location.start,
+        .end = decl_location.end,
+        .line = decl_location.line,
+        .column = decl_location.column,
+        .message = try session_arena.dupe(u8, "enum declaration is here"),
+    };
+    return notes;
 }
 
 fn containsString(haystack: []const []const u8, needle: []const u8) bool {
@@ -325,6 +402,31 @@ test "require_exhaustive_enum_switch" {
                 .severity = .warning,
                 .slice = "else",
                 .message = "Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .d)",
+            },
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        rule,
+        \\const State = enum { idle, running, stopped };
+        \\const StateAlias = State;
+        \\
+        \\pub fn handle(state: StateAlias) void {
+        \\    switch (state) {
+        \\        .idle => {},
+        \\        .running => {},
+        \\        else => {},
+        \\    }
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "require_exhaustive_enum_switch",
+                .severity = .warning,
+                .slice = "else",
+                .message = "Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .stopped)",
             },
         },
     );

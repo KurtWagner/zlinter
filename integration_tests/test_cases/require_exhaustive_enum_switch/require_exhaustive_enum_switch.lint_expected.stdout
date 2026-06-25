@@ -1,14 +1,17 @@
 warning Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .d) [test_cases/require_exhaustive_enum_switch/require_exhaustive_enum_switch.input.zig:61:9] require_exhaustive_enum_switch
+  ↳ note enum declaration is here [test_cases/require_exhaustive_enum_switch/require_exhaustive_enum_switch.input.zig:51:11]
 
  61 |         else => {},
     |         ^^^^
 
 warning Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .running, .stopped) [test_cases/require_exhaustive_enum_switch/require_exhaustive_enum_switch.input.zig:32:9] require_exhaustive_enum_switch
+  ↳ note enum declaration is here [test_cases/require_exhaustive_enum_switch/require_exhaustive_enum_switch.input.zig:1:7]
 
  32 |         else => {},
     |         ^^^^
 
 warning Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .stopped) [test_cases/require_exhaustive_enum_switch/require_exhaustive_enum_switch.input.zig:25:9] require_exhaustive_enum_switch
+  ↳ note enum declaration is here [test_cases/require_exhaustive_enum_switch/require_exhaustive_enum_switch.input.zig:1:7]
 
  25 |         else => {},
     |         ^^^^
