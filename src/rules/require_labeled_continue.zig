@@ -132,7 +132,14 @@ test {
     std.testing.refAllDecls(@This());
 }
 
-test "require_labeled_continue" {
+const expected_nested_continue = [_]zlinter.testing.LintProblemExpectation{.{
+    .rule_id = "require_labeled_continue",
+    .severity = .@"error",
+    .slice = "continue",
+    .message = "Unlabeled `continue` inside nested loop is ambiguous. Use a loop label to make the control flow explicit.",
+}};
+
+test "require_labeled_continue allows unlabeled continue in a single while loop" {
     const rule = buildRule(.{});
 
     try zlinter.testing.testRunRule(
@@ -147,6 +154,10 @@ test "require_labeled_continue" {
         Config{},
         &.{},
     );
+}
+
+test "require_labeled_continue reports unlabeled continue in nested while loops" {
+    const rule = buildRule(.{});
 
     try zlinter.testing.testRunRule(
         rule,
@@ -160,15 +171,12 @@ test "require_labeled_continue" {
     ,
         .{},
         Config{},
-        &.{
-            .{
-                .rule_id = "require_labeled_continue",
-                .severity = .@"error",
-                .slice = "continue",
-                .message = "Unlabeled `continue` inside nested loop is ambiguous. Use a loop label to make the control flow explicit.",
-            },
-        },
+        &expected_nested_continue,
     );
+}
+
+test "require_labeled_continue allows labeled continue in nested while loops" {
+    const rule = buildRule(.{});
 
     try zlinter.testing.testRunRule(
         rule,
@@ -184,6 +192,10 @@ test "require_labeled_continue" {
         Config{},
         &.{},
     );
+}
+
+test "require_labeled_continue respects configured maximum unlabeled loop depth" {
+    const rule = buildRule(.{});
 
     try zlinter.testing.testRunRule(
         rule,
@@ -199,6 +211,10 @@ test "require_labeled_continue" {
         Config{ .max_unlabeled_depth = 2 },
         &.{},
     );
+}
+
+test "require_labeled_continue does not count loops across function boundaries" {
+    const rule = buildRule(.{});
 
     try zlinter.testing.testRunRule(
         rule,
@@ -219,6 +235,10 @@ test "require_labeled_continue" {
         Config{},
         &.{},
     );
+}
+
+test "require_labeled_continue reports nested loops inside nested function boundary" {
+    const rule = buildRule(.{});
 
     try zlinter.testing.testRunRule(
         rule,
@@ -239,14 +259,127 @@ test "require_labeled_continue" {
     ,
         .{},
         Config{},
-        &.{
-            .{
-                .rule_id = "require_labeled_continue",
-                .severity = .@"error",
-                .slice = "continue",
-                .message = "Unlabeled `continue` inside nested loop is ambiguous. Use a loop label to make the control flow explicit.",
-            },
-        },
+        &expected_nested_continue,
+    );
+}
+
+test "require_labeled_continue reports unlabeled continue in nested for loops" {
+    const rule = buildRule(.{});
+
+    try zlinter.testing.testRunRule(
+        rule,
+        \\pub fn main() void {
+        \\    const items = [_]u8{ 1, 2, 3 };
+        \\    for (items) |_| {
+        \\        for (items) |_| {
+        \\            continue;
+        \\        }
+        \\    }
+        \\}
+    ,
+        .{},
+        Config{},
+        &expected_nested_continue,
+    );
+}
+
+test "require_labeled_continue reports unlabeled continue in mixed for and while loops" {
+    const rule = buildRule(.{});
+
+    try zlinter.testing.testRunRule(
+        rule,
+        \\pub fn main() void {
+        \\    const items = [_]u8{ 1, 2, 3 };
+        \\    for (items) |_| {
+        \\        while (true) {
+        \\            continue;
+        \\        }
+        \\    }
+        \\}
+    ,
+        .{},
+        Config{},
+        &expected_nested_continue,
+    );
+}
+
+test "require_labeled_continue reports unlabeled continue in while loop with continue expression" {
+    const rule = buildRule(.{});
+
+    try zlinter.testing.testRunRule(
+        rule,
+        \\pub fn main() void {
+        \\    var i: usize = 0;
+        \\    while (i < 10) : (i += 1) {
+        \\        while (i < 10) {
+        \\            continue;
+        \\        }
+        \\    }
+        \\}
+    ,
+        .{},
+        Config{},
+        &expected_nested_continue,
+    );
+}
+
+test "require_labeled_continue allows labeled continue in nested for loops" {
+    const rule = buildRule(.{});
+
+    try zlinter.testing.testRunRule(
+        rule,
+        \\pub fn main() void {
+        \\    const items = [_]u8{ 1, 2, 3 };
+        \\    outer: for (items) |_| {
+        \\        for (items) |_| {
+        \\            continue :outer;
+        \\        }
+        \\    }
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{},
+    );
+}
+
+test "require_labeled_continue allows labeled continue in mixed for and while loops" {
+    const rule = buildRule(.{});
+
+    try zlinter.testing.testRunRule(
+        rule,
+        \\pub fn main() void {
+        \\    const items = [_]u8{ 1, 2, 3 };
+        \\    outer: for (items) |_| {
+        \\        while (true) {
+        \\            continue :outer;
+        \\        }
+        \\    }
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{},
+    );
+}
+
+test "require_labeled_continue allows labeled continue in while loop with continue expression" {
+    const rule = buildRule(.{});
+
+    try zlinter.testing.testRunRule(
+        rule,
+        \\pub fn main() void {
+        \\    var i: usize = 0;
+        \\    outer: while (i < 10) : (i += 1) {
+        \\        while (i < 10) {
+        \\            continue :outer;
+        \\        }
+        \\    }
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{},
     );
 }
 
