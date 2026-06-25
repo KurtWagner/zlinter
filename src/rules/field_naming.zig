@@ -164,7 +164,7 @@ fn run(
             const rbrace = node_data.token_and_token.@"1";
 
             var token = rbrace;
-            tokens: while (token > lbrace) {
+            while (token > lbrace) {
                 token -= 1;
                 switch (tree.tokens.items(.tag)[token]) {
                     .identifier => {
@@ -174,12 +174,15 @@ fn run(
                         const min_len = config.error_field_min_len;
                         const max_len = config.error_field_max_len;
                         const exclude_len = config.error_field_exclude_len;
-
-                        if (min_len.severity != .off and name_len < min_len.len) {
-                            for (exclude_len) |exclude_name| {
-                                if (std.mem.eql(u8, name, exclude_name)) continue :tokens;
+                        var is_len_excluded = false;
+                        for (exclude_len) |exclude_name| {
+                            if (std.mem.eql(u8, name, exclude_name)) {
+                                is_len_excluded = true;
+                                break;
                             }
+                        }
 
+                        if (!is_len_excluded and min_len.severity != .off and name_len < min_len.len) {
                             try lint_problems.append(session_arena, .{
                                 .rule_id = rule.rule_id,
                                 .severity = min_len.severity,
@@ -187,11 +190,9 @@ fn run(
                                 .end = .endOfToken(tree, token),
                                 .message = try std.fmt.allocPrint(session_arena, "Error field names should have a length greater or equal to {d}", .{min_len.len}),
                             });
-                        } else if (max_len.severity != .off and name_len > max_len.len) {
-                            for (exclude_len) |exclude_name| {
-                                if (std.mem.eql(u8, name, exclude_name)) continue :tokens;
-                            }
-
+                        } else if (!is_len_excluded and
+                            max_len.severity != .off and
+                            name_len > max_len.len)
                             try lint_problems.append(session_arena, .{
                                 .rule_id = rule.rule_id,
                                 .severity = max_len.severity,
@@ -199,7 +200,6 @@ fn run(
                                 .end = .endOfToken(tree, token),
                                 .message = try std.fmt.allocPrint(session_arena, "Error field names should have a length less or equal to {d}", .{max_len.len}),
                             });
-                        }
 
                         if (config.error_field.severity != .off and !config.error_field.style.check(name)) {
                             try lint_problems.append(session_arena, .{
@@ -262,6 +262,13 @@ fn run(
                         // the tuple may become way too noisy and less cohesive
                         else => unreachable,
                     };
+                    var is_len_excluded = false;
+                    for (exclude_len) |exclude_name| {
+                        if (std.mem.eql(u8, name, exclude_name)) {
+                            is_len_excluded = true;
+                            break;
+                        }
+                    }
                     const container_name: []const u8 = switch (container_tag) {
                         .keyword_struct => "Struct",
                         .keyword_enum => "Enum",
@@ -269,11 +276,7 @@ fn run(
                         else => unreachable,
                     };
 
-                    if (min_len.severity != .off and name_len < min_len.len) {
-                        for (exclude_len) |exclude_name| {
-                            if (std.mem.eql(u8, name, exclude_name)) continue :fields;
-                        }
-
+                    if (!is_len_excluded and min_len.severity != .off and name_len < min_len.len) {
                         try lint_problems.append(session_arena, .{
                             .rule_id = rule.rule_id,
                             .severity = min_len.severity,
@@ -281,11 +284,9 @@ fn run(
                             .end = .endOfToken(tree, name_token),
                             .message = try std.fmt.allocPrint(session_arena, "{s} field names should have a length greater or equal to {d}", .{ container_name, min_len.len }),
                         });
-                    } else if (max_len.severity != .off and name_len > max_len.len) {
-                        for (exclude_len) |exclude_name| {
-                            if (std.mem.eql(u8, name, exclude_name)) continue :fields;
-                        }
-
+                    } else if (!is_len_excluded and
+                        max_len.severity != .off and
+                        name_len > max_len.len)
                         try lint_problems.append(session_arena, .{
                             .rule_id = rule.rule_id,
                             .severity = max_len.severity,
@@ -293,7 +294,6 @@ fn run(
                             .end = .endOfToken(tree, name_token),
                             .message = try std.fmt.allocPrint(session_arena, "{s} field names should have a length less or equal to {d}", .{ container_name, max_len.len }),
                         });
-                    }
 
                     if (style_with_severity.severity != .off and !style_with_severity.style.check(name)) {
                         try lint_problems.append(session_arena, .{
@@ -738,6 +738,70 @@ test "name lengths" {
                 \\A
                 ,
                 .message = "Error field names should have a length greater or equal to 2",
+            },
+        },
+    );
+}
+
+test "length exclusions do not skip struct style checks" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const Struct = struct {
+        \\  BadName: u8,
+        \\ };
+    ,
+        .{},
+        Config{
+            .struct_field_min_len = .{
+                .severity = .warning,
+                .len = 20,
+            },
+            .struct_field_max_len = .{
+                .severity = .warning,
+                .len = 3,
+            },
+            .struct_field_exclude_len = &.{"BadName"},
+        },
+        &.{
+            .{
+                .rule_id = "field_naming",
+                .severity = .@"error",
+                .slice = "BadName",
+                .message = "Struct fields should be snake_case",
+            },
+        },
+    );
+}
+
+test "length exclusions do not skip error style checks" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const Errors = error {
+        \\  BadName,
+        \\ };
+    ,
+        .{},
+        Config{
+            .error_field = .{
+                .style = .snake_case,
+                .severity = .@"error",
+            },
+            .error_field_min_len = .{
+                .severity = .warning,
+                .len = 20,
+            },
+            .error_field_max_len = .{
+                .severity = .warning,
+                .len = 3,
+            },
+            .error_field_exclude_len = &.{"BadName"},
+        },
+        &.{
+            .{
+                .rule_id = "field_naming",
+                .severity = .@"error",
+                .slice = "BadName",
+                .message = "Error fields should be snake_case",
             },
         },
     );
