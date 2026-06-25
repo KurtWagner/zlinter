@@ -24,6 +24,7 @@ fn run(
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
+    if (config.else_is_last == .off) return null;
 
     const session_arena = session.runtime.sessionArena();
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
@@ -40,7 +41,7 @@ fn run(
 
             // If values is empty, this is an else case
             if (switch_case.ast.values.len == 0) {
-                if (config.else_is_last != .off and i != switch_info.ast.cases.len - 1) {
+                if (i != switch_info.ast.cases.len - 1) {
                     try lint_problems.append(session_arena, .{
                         .rule_id = rule.rule_id,
                         .severity = config.else_is_last,
@@ -65,6 +66,43 @@ fn run(
 
 test {
     std.testing.refAllDecls(@This());
+}
+
+test "switch_case_ordering else is last" {
+    const rule = buildRule(.{});
+    const source =
+        \\fn value(input: u8) u8 {
+        \\    return switch (input) {
+        \\        else => 0,
+        \\        1 => 1,
+        \\    };
+        \\}
+    ;
+
+    inline for (&.{ .warning, .@"error" }) |severity| {
+        try zlinter.testing.testRunRule(
+            rule,
+            source,
+            .{},
+            Config{ .else_is_last = severity },
+            &.{
+                .{
+                    .rule_id = rule.rule_id,
+                    .severity = severity,
+                    .slice = "else => 0",
+                    .message = "`else` should be last in switch statements",
+                },
+            },
+        );
+    }
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .else_is_last = .off },
+        &.{},
+    );
 }
 
 const std = @import("std");
