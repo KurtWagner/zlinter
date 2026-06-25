@@ -91,5 +91,7 @@ const EnumWithInlineComments = enum {
     c, // comment after c comma
     // comment before a
     a, // comment after a comma
-    b // comment after b without comma
+    b, // comment after b without comma
 };
+
+const DuplicateFields = struct { a: u32 = 1, a: u32 = 2, b: u32, z: u32 };

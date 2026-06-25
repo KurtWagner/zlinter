@@ -106,6 +106,7 @@ fn run(
         ) = .initContext(.{order_with_severity.order});
 
         var seen_field: bool = false;
+        var original_index: usize = 0;
         children: for (connections.children orelse &.{}) |container_child| {
             // Declarations cannot appear between fields so once we see a field
             // simply read until we see something else to identify the chunk of
@@ -125,7 +126,9 @@ fn run(
             try sorted_queue.push(rule_arena, .{
                 .name = tree.tokenSlice(name_token),
                 .node = container_child,
+                .original_index = original_index,
             });
+            original_index += 1;
         }
 
         // Find the first and last field that are out of order (if any)
@@ -426,12 +429,38 @@ fn firstTokenIncludingComments(tree: Ast, node: Ast.Node.Index) Ast.TokenIndex {
 const Field = struct {
     name: []const u8,
     node: Ast.Node.Index,
+    original_index: usize,
 
     fn cmp(session: struct { zlinter.rules.LintTextOrder }, lhs: Field, rhs: Field) std.math.Order {
         const order = session.@"0";
-        return order.cmp(lhs.name, rhs.name);
+        return switch (order.cmp(lhs.name, rhs.name)) {
+            .eq => std.math.order(lhs.original_index, rhs.original_index),
+            else => |name_order| name_order,
+        };
     }
 };
+
+test "Field.cmp preserves source order for equal names" {
+    const first: Field = .{
+        .name = "duplicate",
+        .node = .root,
+        .original_index = 0,
+    };
+    const second: Field = .{
+        .name = "duplicate",
+        .node = .root,
+        .original_index = 1,
+    };
+
+    try std.testing.expectEqual(
+        std.math.Order.lt,
+        Field.cmp(.{.alphabetical_ascending}, first, second),
+    );
+    try std.testing.expectEqual(
+        std.math.Order.gt,
+        Field.cmp(.{.alphabetical_descending}, second, first),
+    );
+}
 
 test {
     std.testing.refAllDecls(@This());

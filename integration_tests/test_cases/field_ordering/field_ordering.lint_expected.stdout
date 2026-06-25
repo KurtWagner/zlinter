@@ -1,3 +1,8 @@
+error Struct fields should be in reverse alphabetical order [test_cases/field_ordering/field_ordering.input.zig:97:33] field_ordering
+
+ 97 | const DuplicateFields = struct { a: u32 = 1, a: u32 = 2, b: u32, z: u32 };
+    |                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 warning Enum fields should be in alphabetical order [test_cases/field_ordering/field_ordering.input.zig:90:7] field_ordering
 
  90 |     A,
@@ -8,8 +13,8 @@ warning Enum fields should be in alphabetical order [test_cases/field_ordering/f
     | ^^^^^^^^^^^^^^^^^^^^^^^
  93 |     a, // comment after a comma
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
- 94 |     b // comment after b without comma
-    | ^^^^^
+ 94 |     b, // comment after b without comma
+    | ^^^^^^
 
 error Struct fields should be in reverse alphabetical order [test_cases/field_ordering/field_ordering.input.zig:58:16] field_ordering
 
@@ -115,5 +120,5 @@ error Struct fields should be in reverse alphabetical order [test_cases/field_or
  13 |     field_c: u32,
     | ^^^^^^^^^^^^^^^^^
 
-x 8 errors
+x 9 errors
 x 3 warnings
