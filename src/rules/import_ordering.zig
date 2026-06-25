@@ -200,7 +200,7 @@ fn swapImportBlocksFix(
     session: *const zlinter.session.LintSession,
     first: Ast.Node.Index,
     second: Ast.Node.Index,
-    gpa: std.mem.Allocator,
+    session_arena: std.mem.Allocator,
 ) error{OutOfMemory}!?zlinter.results.LintProblemFix {
     const tree = doc.tree(session);
     const source = tree.source;
@@ -226,26 +226,26 @@ fn swapImportBlocksFix(
         return null;
 
     var text = try std.ArrayList(u8).initCapacity(
-        gpa,
+        session_arena,
         second_range.end_offset + 1 - first_range.start_offset,
     );
-    errdefer text.deinit(gpa);
+    errdefer text.deinit(session_arena);
 
     try text.appendSlice(
-        gpa,
+        session_arena,
         source[second_range.start_offset..second_range.end_offset],
     );
     try text.appendSlice(
-        gpa,
+        session_arena,
         source[first_range.end_offset..second_range.start_offset],
     );
     try text.appendSlice(
-        gpa,
+        session_arena,
         source[first_range.start_offset..first_range.end_offset],
     );
 
     return .{
-        .text = try text.toOwnedSlice(gpa),
+        .text = try text.toOwnedSlice(session_arena),
         .start = first_range.start_offset,
         .end = second_range.end_offset,
     };
@@ -359,13 +359,13 @@ fn isAttachableImportCommentLine(line: []const u8) bool {
 fn resolveScopedImports(
     doc: *const zlinter.session.LintDocument,
     session: *const zlinter.session.LintSession,
-    gpa: std.mem.Allocator,
+    rule_arena: std.mem.Allocator,
 ) !std.array_hash_map.Auto(Ast.Node.Index, ImportsQueueLinesAscending) {
     const tree = doc.tree(session);
     var import_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
 
     const root: Ast.Node.Index = .root;
-    var node_it = try doc.nodeLineageIterator(root, gpa);
+    var node_it = try doc.nodeLineageIterator(root, rule_arena);
     defer node_it.deinit();
 
     var scoped_imports: std.array_hash_map.Auto(Ast.Node.Index, ImportsQueueLinesAscending) = .empty;
@@ -398,14 +398,13 @@ fn resolveScopedImports(
             .end_offset = tree.tokenStart(tree.lastToken(node)) + tree.tokenSlice(tree.lastToken(node)).len,
         };
 
-        var gop = try scoped_imports.getOrPut(gpa, parent);
+        var gop = try scoped_imports.getOrPut(rule_arena, parent);
         if (gop.found_existing) {
-            try gop.value_ptr.push(gpa, import);
+            try gop.value_ptr.push(rule_arena, import);
         } else {
             var imports: ImportsQueueLinesAscending = .empty;
-            errdefer imports.deinit(gpa);
 
-            try imports.push(gpa, import);
+            try imports.push(rule_arena, import);
             gop.value_ptr.* = imports;
         }
     }

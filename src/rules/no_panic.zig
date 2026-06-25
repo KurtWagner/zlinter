@@ -122,7 +122,7 @@ fn run(
 /// and `@panic("O\x4fM")` both match `&.{"OOM"}`.
 /// Contents are case sensitive
 fn builtinHasParamContent(
-    arena: std.mem.Allocator,
+    rule_arena: std.mem.Allocator,
     tree: Ast,
     node: Ast.Node.Index,
     contents: []const []const u8,
@@ -137,13 +137,13 @@ fn builtinHasParamContent(
     if (tree.nodeTag(param) != .string_literal) return false;
 
     for (contents) |c| {
-        if (try stringLiteralContentEquals(arena, tree, param, c)) return true;
+        if (try stringLiteralContentEquals(rule_arena, tree, param, c)) return true;
     }
     return false;
 }
 
 fn stringLiteralContentEquals(
-    arena: std.mem.Allocator,
+    rule_arena: std.mem.Allocator,
     tree: Ast,
     string_node: Ast.Node.Index,
     expected: []const u8,
@@ -152,7 +152,7 @@ fn stringLiteralContentEquals(
     const raw = tree.tokenSlice(token);
     if (raw.len < 2 or raw[0] != '"' or raw[raw.len - 1] != '"') return false;
 
-    const decoded = std.zig.string_literal.parseAlloc(arena, raw) catch |err| switch (err) {
+    const decoded = std.zig.string_literal.parseAlloc(rule_arena, raw) catch |err| switch (err) {
         error.InvalidLiteral => return false,
         error.OutOfMemory => return error.OutOfMemory,
     };

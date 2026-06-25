@@ -282,14 +282,12 @@ fn classifyParamTypeKind(
         }
     }
 
-    const arena = session.runtime.ruleArena();
-    var decl_candidates = session.resolveDeclCandidatesOfNode(arena, doc, param_type_node) catch return type_summary;
-    defer decl_candidates.deinit(arena);
-    var summary_candidates = session.resolveDeclValueSummaryCandidatesFromCandidates(
-        arena,
+    const rule_arena = session.runtime.ruleArena();
+    const decl_candidates = session.resolveDeclCandidatesOfNode(rule_arena, doc, param_type_node) catch return type_summary;
+    const summary_candidates = session.resolveDeclValueSummaryCandidatesFromCandidates(
+        rule_arena,
         decl_candidates.items,
     ) catch return type_summary;
-    defer summary_candidates.deinit(arena);
     for (summary_candidates.items) |candidate| {
         type_summary = candidate.summary;
         break;

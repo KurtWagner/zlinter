@@ -71,11 +71,11 @@ fn firstDifference(a: []const u8, b: []const u8) usize {
     return common_len;
 }
 
-fn normalizeNewLinesAlloc(input: []const u8, allocator: std.mem.Allocator) ![]const u8 {
-    var result: std.ArrayList(u8) = try .initCapacity(allocator, input.len);
+fn normalizeNewLinesAlloc(input: []const u8, rule_arena: std.mem.Allocator) ![]const u8 {
+    var result: std.ArrayList(u8) = try .initCapacity(rule_arena, input.len);
     for (input) |c|
         if (c != '\r') result.appendAssumeCapacity(c);
-    return result.toOwnedSlice(allocator);
+    return result.toOwnedSlice(rule_arena);
 }
 
 fn normalizedOffsetToSourceOffset(source: []const u8, normalized_offset: usize) usize {

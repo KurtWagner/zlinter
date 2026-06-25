@@ -105,8 +105,7 @@ fn handleIdentifierAccess(
 ) !void {
     const tree = doc.tree(session);
 
-    var decl_candidates = try session.resolveDeclCandidatesOfNode(rule_arena, doc, node_index);
-    defer decl_candidates.deinit(rule_arena);
+    const decl_candidates = try session.resolveDeclCandidatesOfNode(rule_arena, doc, node_index);
     for (decl_candidates.items) |candidate| {
         // Check whether the identifier is itself the declaration, in which case
         // we should skip as its not the usage but the declaration of it and we
@@ -144,14 +143,13 @@ fn handleEnumLiteral(
     config: Config,
 ) !void {
     const tree = doc.tree(session);
-    var decl_candidates = try resolveEnumLiteralDeclCandidates(
+    const decl_candidates = try resolveEnumLiteralDeclCandidates(
         session,
         rule_arena,
         doc,
         node_index,
         tree.tokenSlice(identifier_token),
     );
-    defer decl_candidates.deinit(rule_arena);
     for (decl_candidates.items) |candidate| {
         try appendDeprecatedProblem(
             rule,
@@ -182,8 +180,7 @@ fn handleFieldAccess(
     const tree = doc.tree(session);
     _ = identifier_token;
 
-    var decl_candidates = try session.resolveDeclCandidatesOfNode(rule_arena, doc, node_index);
-    defer decl_candidates.deinit(rule_arena);
+    const decl_candidates = try session.resolveDeclCandidatesOfNode(rule_arena, doc, node_index);
     for (decl_candidates.items) |candidate| {
         try appendDeprecatedProblem(
             rule,
@@ -252,13 +249,12 @@ fn resolveEnumLiteralDeclCandidates(
     node: Ast.Node.Index,
     name: []const u8,
 ) !std.ArrayList(zlinter.session.LintSession.DeclCandidate) {
-    var enum_candidates = try resolveEnumLiteralContextTypeDeclCandidates(
+    const enum_candidates = try resolveEnumLiteralContextTypeDeclCandidates(
         session,
         rule_arena,
         doc,
         node,
     );
-    defer enum_candidates.deinit(rule_arena);
 
     return session.resolveDeclMemberCandidatesFromCandidates(
         rule_arena,
@@ -283,7 +279,7 @@ fn resolveEnumLiteralContextTypeDeclCandidates(
 
         if (tree.fullStructInit(&struct_init_buffer, ancestor)) |struct_init| {
             if (structInitFieldNameToken(tree, struct_init, current)) |field_name_token| {
-                var struct_candidates = if (struct_init.ast.type_expr.unwrap()) |type_expr|
+                const struct_candidates = if (struct_init.ast.type_expr.unwrap()) |type_expr|
                     try session.resolveDeclCandidatesOfNode(rule_arena, doc, type_expr)
                 else
                     try resolveEnumLiteralContextTypeDeclCandidates(
@@ -292,14 +288,12 @@ fn resolveEnumLiteralContextTypeDeclCandidates(
                         doc,
                         ancestor,
                     );
-                defer struct_candidates.deinit(rule_arena);
 
-                var field_candidates = try session.resolveDeclMemberCandidatesFromCandidates(
+                const field_candidates = try session.resolveDeclMemberCandidatesFromCandidates(
                     rule_arena,
                     struct_candidates.items,
                     tree.tokenSlice(field_name_token),
                 );
-                defer field_candidates.deinit(rule_arena);
 
                 return session.resolveDeclTypeDeclCandidatesFromCandidates(
                     rule_arena,

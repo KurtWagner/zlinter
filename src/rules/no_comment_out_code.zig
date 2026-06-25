@@ -71,7 +71,7 @@ fn run(
         if (content_accumulator.items.len > 0 and
             !isNextLine(prev_line, line))
         {
-            if (try looksLikeCode(content_accumulator.items[0..], session_arena)) {
+            if (try looksLikeCode(content_accumulator.items[0..], rule_arena)) {
                 try lint_problems.append(session_arena, .{
                     .rule_id = rule.rule_id,
                     .severity = config.severity,
@@ -94,7 +94,7 @@ fn run(
     }
 
     if (content_accumulator.items.len > 0) {
-        if (try looksLikeCode(content_accumulator.items[0..], session_arena)) {
+        if (try looksLikeCode(content_accumulator.items[0..], rule_arena)) {
             try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
                 .severity = config.severity,
@@ -126,20 +126,19 @@ fn isNextLine(prev_line: u32, line: u32) bool {
     return next_line == line;
 }
 
-fn looksLikeCode(content: []const u8, gpa: std.mem.Allocator) !bool {
+fn looksLikeCode(content: []const u8, rule_arena: std.mem.Allocator) !bool {
     if (content.len == 0) return false;
     if (std.mem.containsAtLeastScalar(u8, content, 1, '`')) return false;
 
     const statement_container_fmt = "fn wrap() void {{\n{s}\n}}\n";
     const declaration_container_fmt = "{s}";
 
-    const buffer = try gpa.allocSentinel(u8, content.len + @max(statement_container_fmt.len, declaration_container_fmt.len) + 1, 0);
-    defer gpa.free(buffer);
+    const buffer = try rule_arena.allocSentinel(u8, content.len + @max(statement_container_fmt.len, declaration_container_fmt.len) + 1, 0);
+    defer rule_arena.free(buffer);
 
     const looks_like_statement = looks_like_statement: {
         const container_code = std.fmt.bufPrintSentinel(buffer, statement_container_fmt, .{content}, 0) catch unreachable;
-        var tree = try Ast.parse(gpa, container_code, .zig);
-        defer tree.deinit(gpa);
+        const tree = try Ast.parse(rule_arena, container_code, .zig);
 
         const root_and_wrap_fn_nodes = 5;
         if (tree.nodes.len <= root_and_wrap_fn_nodes) break :looks_like_statement false;
@@ -150,8 +149,7 @@ fn looksLikeCode(content: []const u8, gpa: std.mem.Allocator) !bool {
 
     const looks_like_declaration = looks_like_declaration: {
         const root_code = std.fmt.bufPrintSentinel(buffer, declaration_container_fmt, .{content}, 0) catch unreachable;
-        var tree = try Ast.parse(gpa, root_code, .zig);
-        defer tree.deinit(gpa);
+        const tree = try Ast.parse(rule_arena, root_code, .zig);
 
         const root_node = 1;
         if (tree.nodes.len <= root_node) break :looks_like_declaration false;
@@ -212,7 +210,10 @@ test "looksLikeCode when true" {
         // ,
         // \\ field: u32 = 1,
     }) |content| {
-        std.testing.expect(try looksLikeCode(content, std.testing.allocator)) catch |e| {
+        var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+        defer arena.deinit();
+
+        std.testing.expect(try looksLikeCode(content, arena.allocator())) catch |e| {
             std.debug.print("Expected is code: '{s}'\n", .{content});
             return e;
         };
@@ -232,7 +233,10 @@ test "looksLikeCode when false" {
         ,
         \\ field = 1,
     }) |content| {
-        std.testing.expect(!(try looksLikeCode(content, std.testing.allocator))) catch |e| {
+        var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+        defer arena.deinit();
+
+        std.testing.expect(!(try looksLikeCode(content, arena.allocator()))) catch |e| {
             std.debug.print("Expected not code: '{s}'\n", .{content});
             return e;
         };

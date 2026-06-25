@@ -220,8 +220,7 @@ fn run(
             fields: for (container_decl.ast.members) |member| {
                 if (tree.fullContainerField(member)) |container_field| {
                     const type_summary = if (session.decl_store.declIdByNode(doc.file_id, member)) |decl_id| summary: {
-                        var summary_candidates = try session.resolveDeclValueSummaryCandidates(rule_arena, decl_id);
-                        defer summary_candidates.deinit(rule_arena);
+                        const summary_candidates = try session.resolveDeclValueSummaryCandidates(rule_arena, decl_id);
                         for (summary_candidates.items) |candidate| {
                             break :summary candidate.summary;
                         }

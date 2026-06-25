@@ -164,15 +164,14 @@ fn hasExternalLinkage(
 fn referencedDeclName(
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
-    allocator: std.mem.Allocator,
+    rule_arena: std.mem.Allocator,
     node: Ast.Node.Index,
 ) ?[]const u8 {
     const tree = doc.tree(session);
     std.debug.assert(tree.nodeTag(node) == .field_access);
 
     {
-        var decl_candidates = session.resolveDeclCandidatesOfNode(allocator, doc, node) catch return null;
-        defer decl_candidates.deinit(allocator);
+        const decl_candidates = session.resolveDeclCandidatesOfNode(rule_arena, doc, node) catch return null;
         if (referencedDeclNameFromCandidates(
             session,
             doc,
@@ -186,12 +185,11 @@ fn referencedDeclName(
 
     if (isCallCallee(tree, doc, node)) {
         const root_decl_id = session.decl_store.rootDecl(doc.file_id) orelse return null;
-        var member_candidates = session.resolveDeclMemberCandidates(
-            allocator,
+        const member_candidates = session.resolveDeclMemberCandidates(
+            rule_arena,
             root_decl_id,
             member_name,
         ) catch return null;
-        defer member_candidates.deinit(allocator);
         if (referencedDeclNameFromCandidates(
             session,
             doc,
@@ -201,8 +199,7 @@ fn referencedDeclName(
     }
 
     {
-        var type_candidates = session.resolveTypeCandidatesOfNode(allocator, doc, lhs) catch return null;
-        defer type_candidates.deinit(allocator);
+        const type_candidates = session.resolveTypeCandidatesOfNode(rule_arena, doc, lhs) catch return null;
         if (session.decl_store.rootDecl(doc.file_id)) |root_decl_id| {
             for (type_candidates.items) |candidate| {
                 if (candidate.type.decl_id == root_decl_id)

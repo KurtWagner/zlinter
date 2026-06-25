@@ -165,9 +165,8 @@ fn resolveAllocatorDecl(
     doc: *const zlinter.session.LintDocument,
     lhs: Ast.Node.Index,
 ) ?zlinter.session.DeclStore.DeclId {
-    const arena = session.runtime.ruleArena();
-    var decl_candidates = session.resolveDeclCandidatesOfNode(arena, doc, lhs) catch return null;
-    defer decl_candidates.deinit(arena);
+    const rule_arena = session.runtime.ruleArena();
+    const decl_candidates = session.resolveDeclCandidatesOfNode(rule_arena, doc, lhs) catch return null;
 
     for (decl_candidates.items) |candidate| {
         return session.resolveDeclAliasCandidate(candidate).decl_id;

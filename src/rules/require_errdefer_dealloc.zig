@@ -95,7 +95,6 @@ fn run(
             doc,
             fn_decl.block,
             &problem_nodes,
-            session_arena,
             rule_arena,
         );
     }
@@ -127,27 +126,26 @@ fn processBlock(
     doc: *const zlinter.session.LintDocument,
     block_node: Ast.Node.Index,
     problems: *std.ArrayList(Ast.Node.Index),
-    gpa: std.mem.Allocator,
-    arena: std.mem.Allocator,
+    rule_arena: std.mem.Allocator,
 ) !void {
     const tree = doc.tree(session);
 
     // Populated with declarations that look like they should be cleaned up.
-    var cleanup_symbols: std.StringHashMap(Ast.Node.Index) = .init(arena);
+    var cleanup_symbols: std.StringHashMap(Ast.Node.Index) = .init(rule_arena);
 
     var call_buffer: [1]Ast.Node.Index = undefined;
 
     for (doc.lineage.items(.children)[@intFromEnum(block_node)] orelse &.{}) |child_node| {
-        if (try declRequiringCleanup(session, doc, arena, child_node)) |decl_ref| {
+        if (try declRequiringCleanup(session, doc, rule_arena, child_node)) |decl_ref| {
             try cleanup_symbols.put(
-                try arena.dupe(u8, tree.tokenSlice(decl_ref.decl_name_token)),
+                try rule_arena.dupe(u8, tree.tokenSlice(decl_ref.decl_name_token)),
                 child_node,
             );
         } else if (try zlinter.ast.deferBlock(
             doc,
             &session.file_store,
             child_node,
-            arena,
+            rule_arena,
         )) |defer_block| {
             // Remove any tracked declarations that are cleaned up within defer/errdefer
             for (defer_block.children) |defer_block_child| {
@@ -172,15 +170,14 @@ fn processBlock(
                 doc,
                 child_node,
                 problems,
-                gpa,
-                arena,
+                rule_arena,
             );
         }
     }
 
     var remaining_it = cleanup_symbols.valueIterator();
     while (remaining_it.next()) |node| {
-        try problems.append(gpa, node.*);
+        try problems.append(rule_arena, node.*);
     }
 }
 
@@ -193,7 +190,7 @@ const DeclRef = struct {
 fn declRequiringCleanup(
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
-    allocator: std.mem.Allocator,
+    rule_arena: std.mem.Allocator,
     maybe_var_decl_node: Ast.Node.Index,
 ) !?DeclRef {
     const tree = doc.tree(session);
@@ -237,12 +234,11 @@ fn declRequiringCleanup(
         doc.file_id,
         maybe_var_decl_node,
     ) orelse return null;
-    var deinit_candidates = try session.resolveDeclTypeMemberCandidates(
-        allocator,
+    const deinit_candidates = try session.resolveDeclTypeMemberCandidates(
+        rule_arena,
         var_decl_id,
         "deinit",
     );
-    defer deinit_candidates.deinit(allocator);
     for (deinit_candidates.items) |candidate| {
         if (declIsPublicDeinit(session, candidate.decl_id)) {
             return .{ .decl_name_token = var_decl.ast.mut_token + 1 };

@@ -86,12 +86,11 @@ fn run(
         const switch_info = tree.fullSwitch(node) orelse continue :nodes;
 
         defer complete_tags.clearRetainingCapacity();
-        var enum_candidates = try session.resolveEnumCandidatesOfNode(
+        const enum_candidates = try session.resolveEnumCandidatesOfNode(
             rule_arena,
             doc,
             switch_info.ast.condition,
         );
-        defer enum_candidates.deinit(rule_arena);
         for (enum_candidates.items) |candidate| {
             const switch_expr_enum = session.enumInfo(candidate.decl_id) orelse continue;
             if (switch_expr_enum.is_non_exhaustive) continue;
@@ -117,12 +116,11 @@ fn run(
                 if (else_case_node == null) else_case_node = case_node;
             } else {
                 case_values: for (switch_case.ast.values) |value_node| {
-                    var tag_candidates = try session.resolveEnumTagNameCandidatesOfNode(
+                    const tag_candidates = try session.resolveEnumTagNameCandidatesOfNode(
                         rule_arena,
                         doc,
                         value_node,
                     );
-                    defer tag_candidates.deinit(rule_arena);
 
                     for (tag_candidates.items) |tag_name| {
                         if (containsString(complete_tags.items, tag_name)) {
@@ -177,8 +175,8 @@ fn elseCaseToken(tree: Ast, case_node: Ast.Node.Index) Ast.TokenIndex {
     return tree.firstToken(case_node);
 }
 
-fn buildProblemMessage(missing: []const []const u8, gpa: std.mem.Allocator) ![]const u8 {
-    var aw = std.Io.Writer.Allocating.init(gpa);
+fn buildProblemMessage(missing: []const []const u8, session_arena: std.mem.Allocator) ![]const u8 {
+    var aw = std.Io.Writer.Allocating.init(session_arena);
     defer aw.deinit();
 
     try aw.writer.writeAll("Enum switch over exhaustive enum must list every tag explicitly; else is not allowed");
