@@ -4,6 +4,12 @@ warning Deprecated: - Super dooper deprecated [test_cases/no_deprecated/cross_fi
  6 |     const data = refs2.MyDeprecatedData{
    |                  ^^^^^^^^^^^^^^^^^^^^^^
 
+warning Deprecated: - big time [test_cases/no_deprecated/cross_file_alias_chain.input.zig:7:10] no_deprecated
+  ↳ note deprecated declaration is here [src/test_case_references.zig:17:5]
+
+ 7 |         .deprecated_field = 1,
+   |          ^^^^^^^^^^^^^^^^
+
 warning Deprecated: - big time [test_cases/no_deprecated/cross_file_alias_chain.input.zig:11:9] no_deprecated
   ↳ note deprecated declaration is here [src/test_case_references.zig:17:5]
 
@@ -22,4 +28,4 @@ warning Deprecated: Don't call this [test_cases/no_deprecated/cross_file_alias_c
  16 |     _ = refs2.doNotCallDeprecated();
     |         ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-x 4 warnings
+x 5 warnings

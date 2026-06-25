@@ -40,6 +40,22 @@ fn run(
         const tree = doc.tree(session);
         const node: Ast.Node.Index = @enumFromInt(index);
         const tag = tree.nodeTag(node);
+
+        var struct_init_buffer: [2]Ast.Node.Index = undefined;
+        if (tree.fullStructInit(&struct_init_buffer, node)) |struct_init| {
+            try handleStructInit(
+                rule,
+                session_arena,
+                rule_arena,
+                session,
+                doc,
+                node,
+                struct_init,
+                &lint_problems,
+                config,
+            );
+        }
+
         switch (tag) {
             .enum_literal => try handleEnumLiteral(
                 rule,
@@ -90,6 +106,68 @@ fn run(
         )
     else
         null;
+}
+
+fn handleStructInit(
+    rule: zlinter.rules.LintRule,
+    session_arena: std.mem.Allocator,
+    rule_arena: std.mem.Allocator,
+    session: *zlinter.session.LintSession,
+    doc: *const zlinter.session.LintDocument,
+    node_index: Ast.Node.Index,
+    struct_init: Ast.full.StructInit,
+    lint_problems: *std.ArrayList(zlinter.results.LintProblem),
+    config: Config,
+) !void {
+    const tree = doc.tree(session);
+    const struct_candidates = try resolveStructInitTypeDeclCandidates(
+        session,
+        rule_arena,
+        doc,
+        node_index,
+        struct_init,
+    );
+
+    for (struct_init.ast.fields) |field_node| {
+        const field_name_token = structInitFieldNameTokenFromField(
+            tree,
+            field_node,
+        ) orelse
+            continue;
+
+        const field_candidates = try session.resolveDeclMemberCandidatesFromCandidates(
+            rule_arena,
+            struct_candidates.items,
+            tree.tokenSlice(field_name_token),
+        );
+
+        for (field_candidates.items) |candidate| {
+            const doc_comment = try session.allocDeclDocComments(
+                rule_arena,
+                candidate.decl_id,
+            ) orelse
+                continue;
+            const deprecated_message = getDeprecationFromDoc(doc_comment) orelse continue;
+            const notes = try allocDeprecatedDeclNotes(
+                session_arena,
+                session,
+                candidate.decl_id,
+            );
+
+            try lint_problems.append(session_arena, .{
+                .start = .startOfToken(tree, field_name_token),
+                .end = .endOfToken(tree, field_name_token),
+                .message = try std.fmt.allocPrint(
+                    session_arena,
+                    "Deprecated: {s}",
+                    .{deprecated_message},
+                ),
+                .notes = notes,
+                .rule_id = rule.rule_id,
+                .severity = config.severity,
+            });
+        }
+    }
 }
 
 fn handleIdentifierAccess(
@@ -263,6 +341,24 @@ fn resolveEnumLiteralDeclCandidates(
     );
 }
 
+fn resolveStructInitTypeDeclCandidates(
+    session: *zlinter.session.LintSession,
+    rule_arena: std.mem.Allocator,
+    doc: *const zlinter.session.LintDocument,
+    node: Ast.Node.Index,
+    struct_init: Ast.full.StructInit,
+) !std.ArrayList(zlinter.session.LintSession.DeclCandidate) {
+    if (struct_init.ast.type_expr.unwrap()) |type_expr|
+        return session.resolveDeclCandidatesOfNode(rule_arena, doc, type_expr);
+
+    return resolveEnumLiteralContextTypeDeclCandidates(
+        session,
+        rule_arena,
+        doc,
+        node,
+    );
+}
+
 fn resolveEnumLiteralContextTypeDeclCandidates(
     session: *zlinter.session.LintSession,
     rule_arena: std.mem.Allocator,
@@ -338,14 +434,25 @@ fn structInitFieldNameToken(
     for (struct_init.ast.fields) |field_node| {
         if (!nodeWithin(tree, field_node, node)) continue;
 
-        const field_first_token = tree.firstToken(field_node);
-        if (field_first_token < 2) return null;
-
-        const field_name_token = field_first_token - 2;
-        if (tree.tokenTag(field_name_token) != .identifier) return null;
-        return field_name_token;
+        return structInitFieldNameTokenFromField(
+            tree,
+            field_node,
+        );
     }
     return null;
+}
+
+fn structInitFieldNameTokenFromField(
+    tree: Ast,
+    field_node: Ast.Node.Index,
+) ?Ast.TokenIndex {
+    const field_first_token = tree.firstToken(field_node);
+    if (field_first_token < 2) return null;
+
+    const field_name_token = field_first_token - 2;
+    if (tree.tokenTag(field_name_token) != .identifier) return null;
+    if (tree.tokenTag(field_name_token - 1) != .period) return null;
+    return field_name_token;
 }
 
 fn nodeWithin(tree: Ast, container: Ast.Node.Index, node: Ast.Node.Index) bool {
@@ -445,6 +552,72 @@ test "no_deprecated - identifier diagnostic uses colon prefix consistently" {
                 .severity = .warning,
                 .slice = "old_name",
                 .message = "Deprecated: use replacement instead",
+            },
+        },
+    );
+}
+
+test "no_deprecated - reports deprecated struct init field designators" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const S = struct {
+        \\    /// Deprecated: use new
+        \\    old: u32 = 0,
+        \\    new: u32 = 0,
+        \\};
+        \\
+        \\const x = S{ .old = 1 };
+    ,
+        .{},
+        Config{ .severity = .warning },
+        &.{
+            .{
+                .rule_id = "no_deprecated",
+                .severity = .warning,
+                .slice = "old",
+                .message = "Deprecated: use new",
+            },
+        },
+    );
+}
+
+test "no_deprecated - ignores non-deprecated and unknown struct init field designators" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const S = struct {
+        \\    /// Deprecated: use new
+        \\    old: u32 = 0,
+        \\    new: u32 = 0,
+        \\};
+        \\
+        \\const x = S{ .new = 1 };
+        \\const y = S{ .missing = 1 };
+    ,
+        .{},
+        Config{ .severity = .warning },
+        &.{},
+    );
+}
+
+test "no_deprecated - reports deprecated inferred struct init field designators" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const S = struct {
+        \\    /// Deprecated: use new
+        \\    old: u32 = 0,
+        \\    new: u32 = 0,
+        \\};
+        \\
+        \\const x: S = .{ .old = 1 };
+    ,
+        .{},
+        Config{ .severity = .warning },
+        &.{
+            .{
+                .rule_id = "no_deprecated",
+                .severity = .warning,
+                .slice = "old",
+                .message = "Deprecated: use new",
             },
         },
     );

@@ -34,6 +34,12 @@ warning Deprecated: - Super dooper deprecated [test_cases/no_deprecated/no_depre
  38 |     const data = test_case_references.MyDeprecatedData{
     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+warning Deprecated: - big time [test_cases/no_deprecated/no_deprecated.input.zig:39:10] no_deprecated
+  ↳ note deprecated declaration is here [src/test_case_references.zig:17:5]
+
+ 39 |         .deprecated_field = 10,
+    |          ^^^^^^^^^^^^^^^^
+
 warning Deprecated: don't use this [test_cases/no_deprecated/no_deprecated.input.zig:43:44] no_deprecated
   ↳ note deprecated declaration is here [test_cases/no_deprecated/no_deprecated.input.zig:12:7]
 
@@ -88,4 +94,4 @@ warning Deprecated: Don't call this [test_cases/no_deprecated/no_deprecated.inpu
  57 |     std.log.err("Hello {s}", .{test_case_references.doNotCallDeprecated()});
     |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-x 15 warnings
+x 16 warnings
