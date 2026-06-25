@@ -271,6 +271,13 @@ fn isStatementBodyContext(
 ) bool {
     const parent = connections.parent orelse return false;
 
+    if (isExpressionContextToSkip(
+        tree,
+        node,
+        connections,
+    ))
+        return false;
+
     if (zlinter.ast.isBlock(tree, parent))
         return true;
 
@@ -313,6 +320,46 @@ fn isNodeInStatementBodyContext(
         node,
         doc.lineage.get(@intFromEnum(node)),
     );
+}
+
+/// Returns true when `node` is an expression value position that this rule
+/// intentionally ignores.
+fn isExpressionContextToSkip(
+    tree: Ast,
+    node: Ast.Node.Index,
+    connections: zlinter.ast.NodeConnections,
+) bool {
+    const parent = connections.parent orelse return false;
+
+    return switch (tree.nodeTag(parent)) {
+        .@"return" => optionalNodeEquals(tree.nodeData(parent).opt_node, node),
+        .global_var_decl,
+        .local_var_decl,
+        .simple_var_decl,
+        .aligned_var_decl,
+        => optionalNodeEquals(tree.fullVarDecl(parent).?.ast.init_node, node),
+        .assign_mul,
+        .assign_div,
+        .assign_mod,
+        .assign_add,
+        .assign_sub,
+        .assign_shl,
+        .assign_shl_sat,
+        .assign_shr,
+        .assign_bit_and,
+        .assign_bit_xor,
+        .assign_bit_or,
+        .assign_mul_wrap,
+        .assign_add_wrap,
+        .assign_sub_wrap,
+        .assign_mul_sat,
+        .assign_add_sat,
+        .assign_sub_sat,
+        .assign,
+        => tree.nodeData(parent).node_and_node[1] == node,
+        .assign_destructure => tree.nodeData(parent).extra_and_node[1] == node,
+        else => false,
+    };
 }
 
 /// Returns true when `body_node` is the body-like child of `statement_node`,
@@ -408,43 +455,42 @@ fn isSwitchCaseNode(tree: Ast, node: Ast.Node.Index) bool {
     };
 }
 
-test "if statements" {
-    const source =
-        \\ pub fn main() u32 {
-        \\     var a: u32 = 1;
-        \\     if (a == 1) {
-        \\         a = 2;
-        \\     } else if (a == 2)
-        \\         a = 4
-        \\     else switch (mode) {
-        \\         .on => a = 5,
-        \\         else => a = 3,
-        \\     }
-        \\
-        \\     if (a == 2) {
-        \\         a = 3;
-        \\     } else {
-        \\         switch (mode) {
-        \\             .on => a = 5,
-        \\             else => a = 3,
-        \\         }
-        \\     }
-        \\
-        \\     const b = if (a == 3) 10 else 11;
-        \\
-        \\     const c = if (a == 3)
-        \\         10
-        \\     else
-        \\         11;
-        \\
-        \\     return if (b == 10 or c == 11) 12 else 13;
-        \\ }
-    ;
+const if_statement_source =
+    \\ pub fn main() u32 {
+    \\     var a: u32 = 1;
+    \\     if (a == 1) {
+    \\         a = 2;
+    \\     } else if (a == 2)
+    \\         a = 4
+    \\     else switch (mode) {
+    \\         .on => a = 5,
+    \\         else => a = 3,
+    \\     }
+    \\
+    \\     if (a == 2) {
+    \\         a = 3;
+    \\     } else {
+    \\         switch (mode) {
+    \\             .on => a = 5,
+    \\             else => a = 3,
+    \\         }
+    \\     }
+    \\
+    \\     const b = if (a == 3) 10 else 11;
+    \\
+    \\     const c = if (a == 3)
+    \\         10
+    \\     else
+    \\         11;
+    \\
+    \\     return if (b == 10 or c == 11) 12 else 13;
+    \\ }
+;
 
-    // if statement with 'all' requirement
+test "if_statement all reports unbraced statement bodies" {
     try zlinter.testing.testRunRule(
         buildRule(.{}),
-        source,
+        if_statement_source,
         .{},
         Config{
             .if_statement = .{
@@ -472,11 +518,12 @@ test "if statements" {
             },
         },
     );
+}
 
-    // if statement with 'all' requirement but off
+test "if_statement off reports no problems" {
     try zlinter.testing.testRunRule(
         buildRule(.{}),
-        source,
+        if_statement_source,
         .{},
         Config{
             .if_statement = .{
@@ -486,11 +533,12 @@ test "if statements" {
         },
         &.{},
     );
+}
 
-    // if statement with 'multi_line_only' requirement
+test "if_statement multi_line_only reports bodies that start on new lines" {
     try zlinter.testing.testRunRule(
         buildRule(.{}),
-        source,
+        if_statement_source,
         .{},
         Config{
             .if_statement = .{
@@ -507,11 +555,12 @@ test "if statements" {
             },
         },
     );
+}
 
-    // if statement with 'multi_statement_only' requirement
+test "if_statement multi_statement_only reports single-statement blocks" {
     try zlinter.testing.testRunRule(
         buildRule(.{}),
-        source,
+        if_statement_source,
         .{},
         Config{
             .if_statement = .{
@@ -725,6 +774,68 @@ test "if expressions in non-statement positions are ignored" {
         \\            2,
         \\        else => 3,
         \\    };
+        \\}
+    ;
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{
+            .if_statement = .{
+                .requirement = .all,
+                .severity = .warning,
+            },
+            .switch_case_statement = .{
+                .requirement = .all,
+                .severity = .warning,
+            },
+        },
+        &.{},
+    );
+}
+
+test "control-flow expressions in assignment values are ignored" {
+    const source =
+        \\pub fn main() void {
+        \\    const a = true;
+        \\    const b = false;
+        \\    var assigned: u32 = 0;
+        \\
+        \\    assigned = if (a)
+        \\        1
+        \\    else
+        \\        2;
+        \\
+        \\    assigned += if (b)
+        \\        3
+        \\    else
+        \\        4;
+        \\
+        \\    assigned = if (a)
+        \\        if (b)
+        \\            5
+        \\        else
+        \\            6
+        \\    else
+        \\        7;
+        \\
+        \\    var left: u32 = 0;
+        \\    var right: u32 = 0;
+        \\    left, right = if (a)
+        \\        .{ 8, 9 }
+        \\    else
+        \\        .{ 10, 11 };
+        \\
+        \\    assigned = switch (assigned) {
+        \\        0 => if (a)
+        \\            1
+        \\        else
+        \\            2,
+        \\        else => 3,
+        \\    };
+        \\
+        \\    _ = .{ assigned, left, right };
         \\}
     ;
 
