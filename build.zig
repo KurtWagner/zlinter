@@ -1,4 +1,4 @@
-const @"build.zig" = @This();
+const Self = @This();
 
 pub const BuiltinLintRule = enum {
     field_naming,
@@ -198,7 +198,7 @@ const StepBuilder = struct {
             self.rules.items,
             .{
                 .dependency = b.dependencyFromBuildZig(
-                    @"build.zig",
+                    Self,
                     .{},
                 ),
             },
