@@ -125,7 +125,7 @@ fn handleIdentifierAccess(
             tree,
             node_index,
             candidate.decl_id,
-            "Deprecated - {s}",
+            "Deprecated: {s}",
             lint_problems,
             config,
         );
@@ -430,6 +430,27 @@ test "no_deprecated - regression test for #36" {
                 .severity = .@"error",
                 .slice = ".Stdcall",
                 .message = "Deprecated: Don't use",
+            },
+        },
+    );
+}
+
+test "no_deprecated - identifier diagnostic uses colon prefix consistently" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\/// Deprecated: use replacement instead
+        \\const old_name = 1;
+        \\
+        \\const value = old_name;
+    ,
+        .{},
+        Config{ .severity = .warning },
+        &.{
+            .{
+                .rule_id = "no_deprecated",
+                .severity = .warning,
+                .slice = "old_name",
+                .message = "Deprecated: use replacement instead",
             },
         },
     );

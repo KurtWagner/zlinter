@@ -10,13 +10,13 @@ warning Deprecated: - please no more [test_cases/no_deprecated/no_deprecated.inp
  25 |     state: test_case_references.State = .really_deprecated,
     |                                         ^^^^^^^^^^^^^^^^^^
 
-warning Deprecated - Just because [test_cases/no_deprecated/no_deprecated.input.zig:27:28] no_deprecated
+warning Deprecated: Just because [test_cases/no_deprecated/no_deprecated.input.zig:27:28] no_deprecated
   ↳ note deprecated declaration is here [test_cases/no_deprecated/no_deprecated.input.zig:15:11]
 
  27 |     deprecated_enum_field: MyDeprecatedEnum = .a,
     |                            ^^^^^^^^^^^^^^^^
 
-warning Deprecated - Just because [test_cases/no_deprecated/no_deprecated.input.zig:29:38] no_deprecated
+warning Deprecated: Just because [test_cases/no_deprecated/no_deprecated.input.zig:29:38] no_deprecated
   ↳ note deprecated declaration is here [test_cases/no_deprecated/no_deprecated.input.zig:15:11]
 
  29 |     const deprecated_container_decl: MyDeprecatedEnum = .b;
@@ -34,7 +34,7 @@ warning Deprecated: - Super dooper deprecated [test_cases/no_deprecated/no_depre
  38 |     const data = test_case_references.MyDeprecatedData{
     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-warning Deprecated - don't use this [test_cases/no_deprecated/no_deprecated.input.zig:43:44] no_deprecated
+warning Deprecated: don't use this [test_cases/no_deprecated/no_deprecated.input.zig:43:44] no_deprecated
   ↳ note deprecated declaration is here [test_cases/no_deprecated/no_deprecated.input.zig:12:7]
 
  43 |     std.log.err("Message: {s} {d} {d}", .{ message, data.deprecated_field, data.ok_field });
@@ -46,13 +46,13 @@ warning Deprecated: - big time [test_cases/no_deprecated/no_deprecated.input.zig
  43 |     std.log.err("Message: {s} {d} {d}", .{ message, data.deprecated_field, data.ok_field });
     |                                                     ^^^^^^^^^^^^^^^^^^^^^
 
-warning Deprecated - don't use this [test_cases/no_deprecated/no_deprecated.input.zig:45:25] no_deprecated
+warning Deprecated: don't use this [test_cases/no_deprecated/no_deprecated.input.zig:45:25] no_deprecated
   ↳ note deprecated declaration is here [test_cases/no_deprecated/no_deprecated.input.zig:12:7]
 
  45 |     const indirection = message;
     |                         ^^^^^^^
 
-warning Deprecated - - function not good [test_cases/no_deprecated/no_deprecated.input.zig:48:5] no_deprecated
+warning Deprecated: - function not good [test_cases/no_deprecated/no_deprecated.input.zig:48:5] no_deprecated
   ↳ note deprecated declaration is here [test_cases/no_deprecated/no_deprecated.input.zig:18:4]
 
  48 |     doNothing();
