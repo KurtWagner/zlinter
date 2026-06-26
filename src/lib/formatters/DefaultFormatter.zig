@@ -192,38 +192,38 @@ fn isStdLibPath(abs_path: []const u8, zig_lib_directory: []const u8) bool {
 
 test "isStdLibPath matches paths inside zig lib std directory" {
     try std.testing.expect(isStdLibPath(
-        "/opt/zig/lib/std/math.zig",
-        "/opt/zig/lib",
+        zlinter.testing.paths.posix("/opt/zig/lib/std/math.zig"),
+        zlinter.testing.paths.posix("/opt/zig/lib"),
     ));
     try std.testing.expect(isStdLibPath(
-        "/opt/zig/lib/std/zig/tokenizer.zig",
-        "/opt/zig/lib",
+        zlinter.testing.paths.posix("/opt/zig/lib/std/zig/tokenizer.zig"),
+        zlinter.testing.paths.posix("/opt/zig/lib"),
     ));
 }
 
 test "isStdLibPath matches when zig lib directory has trailing separator" {
     try std.testing.expect(isStdLibPath(
-        "/opt/zig/lib/std/math.zig",
-        "/opt/zig/lib/",
+        zlinter.testing.paths.posix("/opt/zig/lib/std/math.zig"),
+        zlinter.testing.paths.posix("/opt/zig/lib/"),
     ));
 }
 
 test "isStdLibPath rejects paths outside zig lib std directory" {
     try std.testing.expect(!isStdLibPath(
-        "/opt/zig/lib/compiler_rt.zig",
-        "/opt/zig/lib",
+        zlinter.testing.paths.posix("/opt/zig/lib/compiler_rt.zig"),
+        zlinter.testing.paths.posix("/opt/zig/lib"),
     ));
     try std.testing.expect(!isStdLibPath(
-        "/opt/zig/lib/stdx/math.zig",
-        "/opt/zig/lib",
+        zlinter.testing.paths.posix("/opt/zig/lib/stdx/math.zig"),
+        zlinter.testing.paths.posix("/opt/zig/lib"),
     ));
     try std.testing.expect(!isStdLibPath(
-        "/other/zig/lib/std/math.zig",
-        "/opt/zig/lib",
+        zlinter.testing.paths.posix("/other/zig/lib/std/math.zig"),
+        zlinter.testing.paths.posix("/opt/zig/lib"),
     ));
     try std.testing.expect(!isStdLibPath(
-        "/opt/zig/lib",
-        "/opt/zig/lib",
+        zlinter.testing.paths.posix("/opt/zig/lib"),
+        zlinter.testing.paths.posix("/opt/zig/lib"),
     ));
 }
 
