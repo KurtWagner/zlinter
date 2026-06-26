@@ -97,13 +97,10 @@ test {
     std.testing.refAllDecls(@This());
 }
 
-test "require_fmt" {
-    const rule = buildRule(.{});
-
+test "require_fmt respects severity" {
     inline for (&.{ .warning, .@"error" }) |severity| {
-        // Good:
         try zlinter.testing.testRunRule(
-            rule,
+            buildRule(.{}),
             \\const foo: u32 = 67;
             \\
         ,
@@ -112,65 +109,61 @@ test "require_fmt" {
             &.{},
         );
 
-        // Bad: Missing trailing newline
         try zlinter.testing.testRunRule(
-            rule,
+            buildRule(.{}),
             \\const foo: u32 = 67;
         ,
             .{},
             Config{ .severity = severity },
-            &.{
-                .{
-                    .rule_id = "require_fmt",
-                    .severity = severity,
-                    .slice = ";",
-                    .message = "File is not formatted",
-                },
-            },
-        );
-
-        // Bad: Unnecesary whitespae
-        try zlinter.testing.testRunRule(
-            rule,
-            \\const foo  = 67;
-            \\
-        ,
-            .{},
-            Config{ .severity = severity },
-            &.{
-                .{
-                    .rule_id = "require_fmt",
-                    .severity = severity,
-                    .slice = " ",
-                    .message = "File is not formatted",
-                },
-            },
-        );
-
-        // Bad: Missing indentation
-        try zlinter.testing.testRunRule(
-            rule,
-            \\pub fn main() void {
-            \\var x = 1;
-            \\}
-            \\
-        ,
-            .{},
-            Config{ .severity = severity },
-            &.{
-                .{
-                    .rule_id = "require_fmt",
-                    .severity = severity,
-                    .slice = "v",
-                    .message = "File is not formatted",
-                },
-            },
+            &.{.{
+                .rule_id = "require_fmt",
+                .severity = severity,
+                .slice = ";",
+                .message = "File is not formatted",
+            }},
         );
     }
+}
 
-    // Off:
+test "require_fmt reports extra whitespace" {
     try zlinter.testing.testRunRule(
-        rule,
+        buildRule(.{}),
+        \\const foo  = 67;
+        \\
+    ,
+        .{},
+        Config{ .severity = .warning },
+        &.{.{
+            .rule_id = "require_fmt",
+            .severity = .warning,
+            .slice = " ",
+            .message = "File is not formatted",
+        }},
+    );
+}
+
+test "require_fmt reports missing indentation" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\pub fn main() void {
+        \\var x = 1;
+        \\}
+        \\
+    ,
+        .{},
+        Config{ .severity = .warning },
+        &.{.{
+            .rule_id = "require_fmt",
+            .severity = .warning,
+            .slice = "v",
+            .message = "File is not formatted",
+        }},
+    );
+}
+
+test "require_fmt severity off suppresses reports" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
         \\ const foo  : u32 = 67;
     ,
         .{},
@@ -210,21 +203,17 @@ test "require_fmt ignores invalid ast trees" {
 }
 
 test "require_fmt ignores crlf line endings when reporting formatting differences" {
-    const rule = buildRule(.{});
-
     try zlinter.testing.testRunRule(
-        rule,
+        buildRule(.{}),
         "//! Comment 1\r\nconst foo:u32 = 67;\r\n",
         .{},
         Config{ .severity = .warning },
-        &.{
-            .{
-                .rule_id = "require_fmt",
-                .severity = .warning,
-                .slice = "u",
-                .message = "File is not formatted",
-            },
-        },
+        &.{.{
+            .rule_id = "require_fmt",
+            .severity = .warning,
+            .slice = "u",
+            .message = "File is not formatted",
+        }},
     );
 }
 

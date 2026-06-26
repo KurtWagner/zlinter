@@ -281,11 +281,9 @@ test {
     std.testing.refAllDecls(@This());
 }
 
-test "require_exhaustive_enum_switch" {
-    const rule = buildRule(.{});
-
+test "require_exhaustive_enum_switch allows explicit exhaustive cases" {
     try zlinter.testing.testRunRule(
-        rule,
+        buildRule(.{}),
         \\const State = enum {
         \\    idle,
         \\    running,
@@ -303,9 +301,11 @@ test "require_exhaustive_enum_switch" {
         Config{},
         &.{},
     );
+}
 
+test "require_exhaustive_enum_switch reports else when one tag is missing" {
     try zlinter.testing.testRunRule(
-        rule,
+        buildRule(.{}),
         \\const State = enum { idle, running, stopped };
         \\pub fn handle(state: State) void {
         \\    switch (state) {
@@ -317,18 +317,18 @@ test "require_exhaustive_enum_switch" {
     ,
         .{},
         Config{},
-        &.{
-            .{
-                .rule_id = "require_exhaustive_enum_switch",
-                .severity = .warning,
-                .slice = "else",
-                .message = "Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .stopped)",
-            },
-        },
+        &.{.{
+            .rule_id = "require_exhaustive_enum_switch",
+            .severity = .warning,
+            .slice = "else",
+            .message = "Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .stopped)",
+        }},
     );
+}
 
+test "require_exhaustive_enum_switch allows missing explicit cases without else" {
     try zlinter.testing.testRunRule(
-        rule,
+        buildRule(.{}),
         \\const State = enum { idle, running, stopped };
         \\pub fn handle(state: State) void {
         \\    switch (state) {
@@ -341,9 +341,11 @@ test "require_exhaustive_enum_switch" {
         Config{},
         &.{},
     );
+}
 
+test "require_exhaustive_enum_switch reports else when multiple tags are missing" {
     try zlinter.testing.testRunRule(
-        rule,
+        buildRule(.{}),
         \\const State = enum { idle, running, stopped };
         \\pub fn handle(state: State) void {
         \\    switch (state) {
@@ -354,18 +356,18 @@ test "require_exhaustive_enum_switch" {
     ,
         .{},
         Config{},
-        &.{
-            .{
-                .rule_id = "require_exhaustive_enum_switch",
-                .severity = .warning,
-                .slice = "else",
-                .message = "Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .running, .stopped)",
-            },
-        },
+        &.{.{
+            .rule_id = "require_exhaustive_enum_switch",
+            .severity = .warning,
+            .slice = "else",
+            .message = "Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .running, .stopped)",
+        }},
     );
+}
 
+test "require_exhaustive_enum_switch ignores non-exhaustive enums" {
     try zlinter.testing.testRunRule(
-        rule,
+        buildRule(.{}),
         \\const Number = enum(u8) { one, two, three, _ };
         \\pub fn handle(number: Number) void {
         \\    switch (number) {
@@ -378,9 +380,11 @@ test "require_exhaustive_enum_switch" {
         Config{},
         &.{},
     );
+}
 
+test "require_exhaustive_enum_switch resolves referenced enum tags" {
     try zlinter.testing.testRunRule(
-        rule,
+        buildRule(.{}),
         \\const Ok = enum { a, b, c, d };
         \\const b = Ok.a;
         \\const Other = Ok;
@@ -396,18 +400,18 @@ test "require_exhaustive_enum_switch" {
     ,
         .{},
         Config{},
-        &.{
-            .{
-                .rule_id = "require_exhaustive_enum_switch",
-                .severity = .warning,
-                .slice = "else",
-                .message = "Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .d)",
-            },
-        },
+        &.{.{
+            .rule_id = "require_exhaustive_enum_switch",
+            .severity = .warning,
+            .slice = "else",
+            .message = "Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .d)",
+        }},
     );
+}
 
+test "require_exhaustive_enum_switch resolves enum aliases in switch conditions" {
     try zlinter.testing.testRunRule(
-        rule,
+        buildRule(.{}),
         \\const State = enum { idle, running, stopped };
         \\const StateAlias = State;
         \\
@@ -421,14 +425,52 @@ test "require_exhaustive_enum_switch" {
     ,
         .{},
         Config{},
-        &.{
-            .{
-                .rule_id = "require_exhaustive_enum_switch",
-                .severity = .warning,
-                .slice = "else",
-                .message = "Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .stopped)",
-            },
-        },
+        &.{.{
+            .rule_id = "require_exhaustive_enum_switch",
+            .severity = .warning,
+            .slice = "else",
+            .message = "Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .stopped)",
+        }},
+    );
+}
+
+test "require_exhaustive_enum_switch reports inline else on exhaustive enums" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const State = enum { idle, running, stopped };
+        \\pub fn handle(state: State) void {
+        \\    switch (state) {
+        \\        .idle => {},
+        \\        .running => {},
+        \\        inline else => |tag| _ = tag,
+        \\    }
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{.{
+            .rule_id = "require_exhaustive_enum_switch",
+            .severity = .warning,
+            .slice = "else",
+            .message = "Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .stopped)",
+        }},
+    );
+}
+
+test "require_exhaustive_enum_switch severity off suppresses reports" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const State = enum { idle, running, stopped };
+        \\pub fn handle(state: State) void {
+        \\    switch (state) {
+        \\        .idle => {},
+        \\        else => {},
+        \\    }
+        \\}
+    ,
+        .{},
+        Config{ .severity = .off },
+        &.{},
     );
 }
 

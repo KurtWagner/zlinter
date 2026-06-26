@@ -81,30 +81,27 @@ test {
     std.testing.refAllDecls(@This());
 }
 
-test "no_global_vars" {
+test "no_global_vars reports top-level and nested container vars" {
     const rule = buildRule(.{});
-    const source =
-        \\var i_am_a_global_var: u32 = 67;
-        \\
-        \\const Foo = struct {
-        \\    var so_am_i: u64 = 69;
-        \\    const Bar = enum {
-        \\        none,
-        \\        var dont_forget_me: ?noreturn = null;
-        \\        const im_fine_since_im_no_const: bool = true;
-        \\    };
-        \\};
-        \\
-        \\fn me_just_a_fn() void {
-        \\    var surely_you_wont_mind_me: ?*anyopaque = null;
-        \\    _ = surely_you_wont_mind_me;
-        \\}
-    ;
-
     inline for (&.{ .warning, .@"error" }) |severity| {
         try zlinter.testing.testRunRule(
             rule,
-            source,
+            \\var i_am_a_global_var: u32 = 67;
+            \\
+            \\const Foo = struct {
+            \\    var so_am_i: u64 = 69;
+            \\    const Bar = enum {
+            \\        none,
+            \\        var dont_forget_me: ?noreturn = null;
+            \\        const im_fine_since_im_no_const: bool = true;
+            \\    };
+            \\};
+            \\
+            \\fn me_just_a_fn() void {
+            \\    var surely_you_wont_mind_me: ?*anyopaque = null;
+            \\    _ = surely_you_wont_mind_me;
+            \\}
+        ,
             .{},
             Config{ .severity = severity },
             &.{
@@ -129,30 +126,29 @@ test "no_global_vars" {
             },
         );
     }
+}
 
-    // Off:
+test "no_global_vars severity off suppresses reports" {
     try zlinter.testing.testRunRule(
-        rule,
-        source,
+        buildRule(.{}),
+        \\var i_am_a_global_var: u32 = 67;
+    ,
         .{},
         Config{ .severity = .off },
         &.{},
     );
 }
 
-test "no_global_vars - modifier forms" {
+test "no_global_vars reports modifier forms" {
     const rule = buildRule(.{});
-    const source =
-        \\pub var pub_global: u32 = 1;
-        \\threadlocal var thread_local_global: u32 = 2;
-        \\extern var extern_global: u32;
-        \\export var export_global: u32 = 4;
-    ;
-
     inline for (&.{ .warning, .@"error" }) |severity| {
         try zlinter.testing.testRunRule(
             rule,
-            source,
+            \\pub var pub_global: u32 = 1;
+            \\threadlocal var thread_local_global: u32 = 2;
+            \\extern var extern_global: u32;
+            \\export var export_global: u32 = 4;
+        ,
             .{},
             Config{ .severity = severity },
             &.{
@@ -185,32 +181,45 @@ test "no_global_vars - modifier forms" {
     }
 }
 
-test "no_global_vars - nested container vars" {
+test "no_global_vars reports nested container vars" {
     const rule = buildRule(.{});
-    const source =
-        \\const Outer = struct {
-        \\    const Inner = struct {
-        \\        var nested_global: u32 = 3;
-        \\    };
-        \\};
-    ;
-
     inline for (&.{ .warning, .@"error" }) |severity| {
         try zlinter.testing.testRunRule(
             rule,
-            source,
+            \\const Outer = struct {
+            \\    const Inner = struct {
+            \\        var nested_global: u32 = 3;
+            \\    };
+            \\};
+        ,
             .{},
             Config{ .severity = severity },
-            &.{
-                .{
-                    .rule_id = rule.rule_id,
-                    .severity = severity,
-                    .slice = "var nested_global: u32 = 3",
-                    .message = "Global `var` reduces testability and makes the program harder to reason about",
-                },
-            },
+            &.{.{
+                .rule_id = rule.rule_id,
+                .severity = severity,
+                .slice = "var nested_global: u32 = 3",
+                .message = "Global `var` reduces testability and makes the program harder to reason about",
+            }},
         );
     }
+}
+
+test "no_global_vars ignores local vars and const container members" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const Foo = struct {
+        \\    const stable_value: u32 = 1;
+        \\};
+        \\
+        \\fn me_just_a_fn() void {
+        \\    var local_value: ?*anyopaque = null;
+        \\    _ = local_value;
+        \\}
+    ,
+        .{},
+        Config{ .severity = .warning },
+        &.{},
+    );
 }
 
 const std = @import("std");
