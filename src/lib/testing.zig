@@ -381,6 +381,8 @@ pub const LintProblemExpectation = struct {
     severity: LintProblemSeverity,
     slice: []const u8,
     message: []const u8,
+    /// When null, notes are ignored. Use &.{} to assert that no notes exist.
+    notes: ?[]const []const u8 = null,
     disabled_by_comment: bool = false,
     fix: ?LintProblemFix = null,
 
@@ -393,6 +395,23 @@ pub const LintProblemExpectation = struct {
             .disabled_by_comment = problem.disabled_by_comment,
             .fix = problem.fix,
         };
+    }
+
+    pub fn initWithNotes(problem: LintProblem, source: [:0]const u8) Self {
+        var expectation = init(problem, source);
+        expectation.notes = if (problem.notes) |notes| note_messages: {
+            const messages = std.testing.allocator.alloc([]const u8, notes.len) catch @panic("failed to allocate note messages");
+            for (notes, 0..) |note, i| messages[i] = note.message;
+            break :note_messages messages;
+        } else &.{};
+        return expectation;
+    }
+
+    pub fn deinit(self: *Self) void {
+        if (self.notes) |notes| {
+            if (notes.len > 0) std.testing.allocator.free(notes);
+        }
+        self.* = undefined;
     }
 
     pub fn debugPrint(self: Self, writer: anytype) void {
@@ -412,6 +431,12 @@ pub const LintProblemExpectation = struct {
         writer.print("{s},\n", .{if (has_newline or has_quote) "\n" else ""});
 
         writer.print("  .message = \"{s}\",\n", .{self.message});
+
+        if (self.notes) |notes| {
+            writer.print("  .notes = &.{{\n", .{});
+            for (notes) |note| writer.print("    \"{s}\",\n", .{note});
+            writer.print("  }},\n", .{});
+        }
 
         if (self.disabled_by_comment) {
             writer.print("  .disabled_by_comment = {},\n", .{self.disabled_by_comment});
@@ -451,10 +476,20 @@ pub fn testRunRule(
     defer if (result) |*r| r.deinit(arena.allocator());
 
     var actual = std.ArrayList(LintProblemExpectation).empty;
-    defer actual.deinit(std.testing.allocator);
+    defer {
+        for (actual.items) |*problem| problem.deinit();
+        actual.deinit(std.testing.allocator);
+    }
 
-    for (if (result) |r| r.problems else &.{}) |problem| {
-        try actual.append(std.testing.allocator, LintProblemExpectation.init(problem, source));
+    for (if (result) |r| r.problems else &.{}, 0..) |problem, i| {
+        const expect_notes = i < expected.len and expected[i].notes != null;
+        try actual.append(
+            std.testing.allocator,
+            if (expect_notes)
+                LintProblemExpectation.initWithNotes(problem, source)
+            else
+                LintProblemExpectation.init(problem, source),
+        );
     }
 
     try expectDeepEquals(LintProblemExpectation, expected, actual.items);

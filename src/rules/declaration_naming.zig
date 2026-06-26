@@ -130,15 +130,29 @@ fn run(
         else
             false;
 
-        var type_summary: zlinter.session.TypeStore.TypeSummary = .other;
+        var resolved_summaries: std.ArrayList(ResolvedSummary) = .empty;
         const summary_candidates = try session.resolveDeclValueSummaryCandidates(rule_arena, decl_id);
         for (summary_candidates.items) |candidate| {
-            type_summary = candidate.summary;
-            break;
+            const resolved_summary: ResolvedSummary = .{
+                .summary = candidate.summary,
+                .source_decl_id = try resolvedSummarySourceDeclId(
+                    rule_arena,
+                    session,
+                    doc,
+                    var_decl,
+                    decl_id,
+                    candidate.module_id,
+                ),
+            };
+            try resolved_summaries.append(rule_arena, resolved_summary);
+        }
+        if (resolved_summaries.items.len == 0) {
+            try resolved_summaries.append(rule_arena, .{ .summary = .other });
         }
         if (init_is_this_builtin) {
             // TODO: Move @This() value classification into the declaration type resolver.
-            type_summary = .{ .type = .unknown };
+            resolved_summaries.clearRetainingCapacity();
+            try resolved_summaries.append(rule_arena, .{ .summary = .{ .type = .unknown } });
         }
 
         if (config.exclude_aliases) {
@@ -179,42 +193,25 @@ fn run(
         }
 
         // Check name style:
-        const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const var_desc: []const u8 =
-            switch (type_summary) {
-                .fn_returns_type => .{ config.decl_that_is_type_fn, "Type function" },
-                .@"fn" => .{ config.decl_that_is_fn, "Function" },
-                .type => |type_value| switch (type_value.kind) {
-                    .namespace => .{ config.decl_that_is_namespace, "Namespace" },
-                    .@"fn", .fn_returns_type => .{ config.decl_that_is_type, "Function type" },
-                    .@"struct" => .{ config.decl_that_is_type, "Struct" },
-                    .@"enum" => .{ config.decl_that_is_type, "Enum" },
-                    .@"union" => .{ config.decl_that_is_type, "Union" },
-                    .@"opaque" => .{ config.decl_that_is_type, "Opaque" },
-                    .error_set => .{ config.decl_that_is_type, "Error" },
-                    .unknown, .primitive => .{ config.decl_that_is_type, "Type" },
-                },
-                .unknown,
-                .other,
-                .primitive,
-                .instance,
-                .slice,
-                .array,
-                => switch (tree.tokens.items(.tag)[var_decl.ast.mut_token]) {
-                    .keyword_const => .{ config.const_decl, "Constant" },
-                    .keyword_var => .{ config.var_decl, "Variable" },
-                    else => unreachable,
-                },
-            };
+        for (resolved_summaries.items) |resolved_summary| {
+            const style_diagnostic = styleDiagnostic(
+                resolved_summary,
+                tree.tokens.items(.tag)[var_decl.ast.mut_token],
+                config,
+            );
+            if (style_diagnostic.style_with_severity.severity == .off) continue;
+            if (style_diagnostic.style_with_severity.style.check(name)) continue;
 
-        if (style_with_severity.severity == .off) continue :nodes;
-
-        if (!style_with_severity.style.check(name)) {
             try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
-                .severity = style_with_severity.severity,
+                .severity = style_diagnostic.style_with_severity.severity,
                 .start = .startOfToken(tree, name_token),
                 .end = .endOfToken(tree, name_token),
-                .message = try std.fmt.allocPrint(session_arena, "{s} declaration should be {s}", .{ var_desc, style_with_severity.style.name() }),
+                .message = try std.fmt.allocPrint(session_arena, "{s} declaration should be {s}", .{
+                    style_diagnostic.var_desc,
+                    style_diagnostic.style_with_severity.style.name(),
+                }),
+                .notes = try allocResolvedDeclNotes(session_arena, session, style_diagnostic.source_decl_id),
             });
         }
     }
@@ -227,6 +224,134 @@ fn run(
         )
     else
         null;
+}
+
+const ResolvedSummary = struct {
+    summary: zlinter.session.TypeStore.TypeSummary,
+    source_decl_id: ?zlinter.session.DeclStore.DeclId = null,
+};
+
+const StyleDiagnostic = struct {
+    style_with_severity: zlinter.rules.LintTextStyleWithSeverity,
+    var_desc: []const u8,
+    source_decl_id: ?zlinter.session.DeclStore.DeclId,
+};
+
+fn styleDiagnostic(
+    resolved_summary: ResolvedSummary,
+    mut_token_tag: std.zig.Token.Tag,
+    config: Config,
+) StyleDiagnostic {
+    const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const var_desc: []const u8 =
+        switch (resolved_summary.summary) {
+            .fn_returns_type => .{ config.decl_that_is_type_fn, "Type function" },
+            .@"fn" => .{ config.decl_that_is_fn, "Function" },
+            .type => |type_value| switch (type_value.kind) {
+                .namespace => .{ config.decl_that_is_namespace, "Namespace" },
+                .@"fn", .fn_returns_type => .{ config.decl_that_is_type, "Function type" },
+                .@"struct" => .{ config.decl_that_is_type, "Struct" },
+                .@"enum" => .{ config.decl_that_is_type, "Enum" },
+                .@"union" => .{ config.decl_that_is_type, "Union" },
+                .@"opaque" => .{ config.decl_that_is_type, "Opaque" },
+                .error_set => .{ config.decl_that_is_type, "Error" },
+                .unknown, .primitive => .{ config.decl_that_is_type, "Type" },
+            },
+            .unknown,
+            .other,
+            .primitive,
+            .instance,
+            .slice,
+            .array,
+            => switch (mut_token_tag) {
+                .keyword_const => .{ config.const_decl, "Constant" },
+                .keyword_var => .{ config.var_decl, "Variable" },
+                else => unreachable,
+            },
+        };
+
+    return .{
+        .style_with_severity = style_with_severity,
+        .var_desc = var_desc,
+        .source_decl_id = resolved_summary.source_decl_id,
+    };
+}
+
+fn allocResolvedDeclNotes(
+    session_arena: std.mem.Allocator,
+    session: *zlinter.session.LintSession,
+    maybe_decl_id: ?zlinter.session.DeclStore.DeclId,
+) !?[]zlinter.results.LintProblemNote {
+    const decl_id = maybe_decl_id orelse return null;
+    const decl_location = session.declLocation(decl_id) orelse return null;
+
+    const notes = try session_arena.alloc(zlinter.results.LintProblemNote, 1);
+    notes[0] = .{
+        .abs_path = try session_arena.dupe(u8, decl_location.abs_path),
+        .start = decl_location.start,
+        .end = decl_location.end,
+        .line = decl_location.line,
+        .column = decl_location.column,
+        .message = try session_arena.dupe(u8, "resolved declaration is here"),
+    };
+    return notes;
+}
+
+fn resolvedSummarySourceDeclId(
+    rule_arena: std.mem.Allocator,
+    session: *zlinter.session.LintSession,
+    doc: *const zlinter.session.LintDocument,
+    var_decl: Ast.full.VarDecl,
+    decl_id: zlinter.session.DeclStore.DeclId,
+    module_id: zlinter.session.ModuleStore.ModuleId,
+) !?zlinter.session.DeclStore.DeclId {
+    const tree = doc.tree(session);
+    const init_node = var_decl.ast.init_node.unwrap() orelse return null;
+    const init_expr = zlinter.ast.unwrapNode(tree, init_node, .{
+        .unwrap_optional_unwrap = false,
+    });
+
+    var call_buffer: [1]Ast.Node.Index = undefined;
+    const source_node = if (tree.fullCall(&call_buffer, init_expr)) |call|
+        call.ast.fn_expr
+    else
+        init_expr;
+
+    const source_decl_id = source: {
+        const candidates = try session.resolveDeclCandidatesOfNode(
+            rule_arena,
+            doc,
+            source_node,
+        );
+        for (candidates.items) |candidate| {
+            if (candidate.module_id != module_id) continue;
+            const resolved_alias = session.resolveDeclAliasCandidate(candidate);
+            break :source resolved_alias.decl_id;
+        }
+        break :source null;
+    } orelse return null;
+
+    if (source_decl_id == decl_id) return null;
+
+    // Very basic heuristic that if on same line and file than not the
+    // same declaration and should be noted in the problems notes. e.g.,
+    // to link to the declaration that makes something the type it is.
+    if (!declLocationsDifferLineOrFile(
+        session,
+        decl_id,
+        source_decl_id,
+    )) return null;
+    return source_decl_id;
+}
+
+fn declLocationsDifferLineOrFile(
+    session: *zlinter.session.LintSession,
+    lhs_decl_id: zlinter.session.DeclStore.DeclId,
+    rhs_decl_id: zlinter.session.DeclStore.DeclId,
+) bool {
+    const lhs = session.declLocation(lhs_decl_id) orelse return true;
+    const rhs = session.declLocation(rhs_decl_id) orelse return true;
+
+    return lhs.line != rhs.line or !std.mem.eql(u8, lhs.abs_path, rhs.abs_path);
 }
 
 fn isThisBuiltinCall(tree: Ast, node: Ast.Node.Index) bool {
@@ -415,6 +540,45 @@ test "declaration_naming classifies @This aliases as types" {
                 .severity = .@"error",
                 .slice = "THIS_IS_NOT_OK",
                 .message = "Type declaration should be TitleCase",
+            },
+        },
+    );
+}
+
+test "declaration_naming notes resolved declaration used for alias classification" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\
+        \\const TypeAlias = enum { a };
+        \\const bad_name = TypeAlias;
+    ,
+        .{},
+        Config{ .exclude_aliases = false },
+        &.{
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "bad_name",
+                .message = "Enum declaration should be TitleCase",
+                .notes = &.{"resolved declaration is here"},
+            },
+        },
+    );
+}
+
+test "declaration_naming does not note local primitive classification" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        "const bad = u32;",
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "bad",
+                .message = "Type declaration should be TitleCase",
+                .notes = &.{},
             },
         },
     );

@@ -8,3 +8,11 @@ pub fn stringLength(str: []const u8) u32 {
 }
 
 pub const Type = enum { a, x };
+
+// For declaration naming tests:
+pub const EnumType = enum { a };
+pub const int_value: u32 = 1;
+pub const Person = struct { age: u32 };
+pub fn getPerson(age: u32) Person {
+    return .{ .age = age };
+}

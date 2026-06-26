@@ -4,6 +4,7 @@ error Struct declaration should be TitleCase [test_cases/declaration_naming/type
    |       ^^^^^^^^^^^
 
 error Struct declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:4:7] declaration_naming
+  ↳ note resolved declaration is here [test_cases/declaration_naming/types.input.zig:2:7]
 
  4 | const my_bad_struct = MyGoodStruct;
    |       ^^^^^^^^^^^^^
@@ -24,6 +25,7 @@ error Enum declaration should be TitleCase [test_cases/declaration_naming/types.
    |       ^^^^^^^^^
 
 error Enum declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:10:7] declaration_naming
+  ↳ note resolved declaration is here [test_cases/declaration_naming/types.input.zig:8:7]
 
  10 | const my_bad_enum = MyGoodEnum;
     |       ^^^^^^^^^^^
@@ -34,6 +36,7 @@ error Union declaration should be TitleCase [test_cases/declaration_naming/types
     |       ^^^^^^^^^^
 
 error Union declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:14:7] declaration_naming
+  ↳ note resolved declaration is here [test_cases/declaration_naming/types.input.zig:12:7]
 
  14 | const my_bad_union = MyGoodUnion;
     |       ^^^^^^^^^^^^
@@ -84,6 +87,7 @@ error Error declaration should be TitleCase [test_cases/declaration_naming/types
     |       ^^^^^^^^^^
 
 error Error declaration should be TitleCase [test_cases/declaration_naming/types.input.zig:40:7] declaration_naming
+  ↳ note resolved declaration is here [test_cases/declaration_naming/types.input.zig:38:7]
 
  40 | const my_bad_error = MyGoodError;
     |       ^^^^^^^^^^^^
@@ -109,6 +113,7 @@ error Constant declaration should be snake_case [test_cases/declaration_naming/t
     |              ^^^^^^^^^
 
 error Constant declaration should be snake_case [test_cases/declaration_naming/types.input.zig:67:7] declaration_naming
+  ↳ note resolved declaration is here [test_cases/declaration_naming/types.input.zig:59:11]
 
  67 | const NOT_ALIAS = system.FAILURE;
     |       ^^^^^^^^^
