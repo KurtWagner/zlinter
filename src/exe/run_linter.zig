@@ -545,6 +545,7 @@ fn runFormatter(
     try formatter.format(.{
         .results = try flattened.toOwnedSlice(session_arena),
         .cwd = runtime.cwd,
+        .zig_lib_directory = runtime.zig_lib_directory,
         .arena = session_arena,
         .tty = output_tty,
         .min_severity = if (quiet) .@"error" else .warning,

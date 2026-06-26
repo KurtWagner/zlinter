@@ -278,8 +278,8 @@ fn expectFileContentsEquals(
         }
     };
 
-    const normalized_expected = try normalizeNewLinesAlloc(contents, arena);
-    const normalized_actual = try normalizeNewLinesAlloc(actual, arena);
+    const normalized_expected = try normalizeOutputAlloc(contents, arena);
+    const normalized_actual = try normalizeOutputAlloc(actual, arena);
 
     std.testing.expectEqualStrings(normalized_expected, normalized_actual) catch |err| {
         switch (err) {
@@ -292,15 +292,16 @@ fn expectFileContentsEquals(
 }
 
 fn expectEqualStringsNormalized(arena: std.mem.Allocator, expected: []const u8, actual: []const u8) !void {
-    const normalized_expected = try normalizeNewLinesAlloc(expected, arena);
-    const normalized_actual = try normalizeNewLinesAlloc(actual, arena);
+    const normalized_expected = try normalizeOutputAlloc(expected, arena);
+    const normalized_actual = try normalizeOutputAlloc(actual, arena);
 
     try std.testing.expectEqualStrings(normalized_expected, normalized_actual);
 }
 
-fn normalizeNewLinesAlloc(input: []const u8, arena: std.mem.Allocator) ![]const u8 {
+fn normalizeOutputAlloc(input: []const u8, arena: std.mem.Allocator) ![]const u8 {
     var result: std.ArrayList(u8) = try .initCapacity(arena, input.len);
 
+    var normalized: std.ArrayList(u8) = try .initCapacity(arena, input.len);
     // Removes "\r". e.g., "\r\n"
     for (input) |c| {
         switch (c) {
@@ -308,9 +309,23 @@ fn normalizeNewLinesAlloc(input: []const u8, arena: std.mem.Allocator) ![]const 
             // This assumes that '\' is never in output, which is currently true
             // If this ever changes we will need something more sophisticated
             // to identify strings that look like paths
-            else => result.appendAssumeCapacity(if (std.fs.path.isSep(c)) std.fs.path.sep_posix else c),
+            else => normalized.appendAssumeCapacity(if (std.fs.path.isSep(c)) std.fs.path.sep_posix else c),
         }
     }
+
+    const normalized_input = normalized.items;
+    var index: usize = 0;
+    while (std.mem.indexOfPos(u8, normalized_input, index, "lib/std/")) |lib_std_index| {
+        var path_start = lib_std_index;
+        while (path_start > index and normalized_input[path_start - 1] != '[' and !std.ascii.isWhitespace(normalized_input[path_start - 1])) {
+            path_start -= 1;
+        }
+
+        try result.appendSlice(arena, normalized_input[index..path_start]);
+        try result.appendSlice(arena, "<stdlib>/");
+        index = lib_std_index + "lib/std/".len;
+    }
+    try result.appendSlice(arena, normalized_input[index..]);
 
     return result.toOwnedSlice(arena);
 }

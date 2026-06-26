@@ -149,24 +149,82 @@ fn renderNoteTitle(
     note: zlinter.results.LintProblemNote,
     writer: *std.Io.Writer,
 ) Formatter.Error!void {
-    const cwd_rel_path = std.fs.path.relative(
-        allocator,
-        input.cwd,
-        null,
-        input.cwd,
+    const display_path = if (isStdLibPath(
         note.abs_path,
-    ) catch return error.OutOfMemory;
+        input.zig_lib_directory,
+    ))
+        note.abs_path
+    else
+        std.fs.path.relative(
+            allocator,
+            input.cwd,
+            null,
+            input.cwd,
+            note.abs_path,
+        ) catch return error.OutOfMemory;
 
     writer.print("  {s}↳ note{s} {s} [{s}{s}:{d}:{d}{s}]\n", .{
         input.tty.ansiOrEmpty(&.{.cyan}),
         input.tty.ansiOrEmpty(&.{.reset}),
         note.message,
         input.tty.ansiOrEmpty(&.{.underline}),
-        cwd_rel_path,
+        display_path,
         note.line + 1,
         note.column + 1,
         input.tty.ansiOrEmpty(&.{.reset}),
     }) catch |e| return logAndReturnWriteFailure("Note title", e);
+}
+
+fn isStdLibPath(abs_path: []const u8, zig_lib_directory: []const u8) bool {
+    if (!std.mem.startsWith(u8, abs_path, zig_lib_directory))
+        return false;
+
+    var rest = abs_path[zig_lib_directory.len..];
+    if (rest.len == 0) return false;
+    if (std.fs.path.isSep(rest[0])) rest = rest[1..];
+
+    return std.mem.startsWith(
+        u8,
+        rest,
+        "std" ++ std.fs.path.sep_str,
+    );
+}
+
+test "isStdLibPath matches paths inside zig lib std directory" {
+    try std.testing.expect(isStdLibPath(
+        "/opt/zig/lib/std/math.zig",
+        "/opt/zig/lib",
+    ));
+    try std.testing.expect(isStdLibPath(
+        "/opt/zig/lib/std/zig/tokenizer.zig",
+        "/opt/zig/lib",
+    ));
+}
+
+test "isStdLibPath matches when zig lib directory has trailing separator" {
+    try std.testing.expect(isStdLibPath(
+        "/opt/zig/lib/std/math.zig",
+        "/opt/zig/lib/",
+    ));
+}
+
+test "isStdLibPath rejects paths outside zig lib std directory" {
+    try std.testing.expect(!isStdLibPath(
+        "/opt/zig/lib/compiler_rt.zig",
+        "/opt/zig/lib",
+    ));
+    try std.testing.expect(!isStdLibPath(
+        "/opt/zig/lib/stdx/math.zig",
+        "/opt/zig/lib",
+    ));
+    try std.testing.expect(!isStdLibPath(
+        "/other/zig/lib/std/math.zig",
+        "/opt/zig/lib",
+    ));
+    try std.testing.expect(!isStdLibPath(
+        "/opt/zig/lib",
+        "/opt/zig/lib",
+    ));
 }
 
 fn logAndReturnWriteFailure(comptime suffix: []const u8, err: anyerror) error{WriteFailure} {

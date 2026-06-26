@@ -5,6 +5,9 @@ pub const FormatInput = struct {
     /// The directory the linter ran relative to.
     cwd: []const u8,
 
+    /// Zig lib directory used for the lint run.
+    zig_lib_directory: []const u8,
+
     /// Arena allocator that is cleared after calling format.
     arena: std.mem.Allocator,
 

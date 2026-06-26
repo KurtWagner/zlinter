@@ -11,25 +11,25 @@ error Type declaration should be TitleCase [test_cases/declaration_naming/regres
     |       ^^^^^^^^^^^^^^
 
 error Type declaration should be TitleCase [test_cases/declaration_naming/regression_132.input.zig:15:7] declaration_naming
-  ↳ note resolved declaration is here [../../../../.zvm/master/lib/std/math.zig:800:8]
+  ↳ note resolved declaration is here [<stdlib>/math.zig:800:8]
 
  15 | const badInt = std.math.IntFittingRange(0, 10);
     |       ^^^^^^
 
 error Type declaration should be TitleCase [test_cases/declaration_naming/regression_132.input.zig:16:7] declaration_naming
-  ↳ note resolved declaration is here [../../../../.zvm/master/lib/std/math.zig:800:8]
+  ↳ note resolved declaration is here [<stdlib>/math.zig:800:8]
 
  16 | const bad_int = std.math.IntFittingRange(0, 10);
     |       ^^^^^^^
 
 error Type declaration should be TitleCase [test_cases/declaration_naming/regression_132.input.zig:19:7] declaration_naming
-  ↳ note resolved declaration is here [../../../../.zvm/master/lib/std/bit_set.zig:45:8]
+  ↳ note resolved declaration is here [<stdlib>/bit_set.zig:45:8]
 
  19 | const badBitSet = std.StaticBitSet(10);
     |       ^^^^^^^^^
 
 error Type declaration should be TitleCase [test_cases/declaration_naming/regression_132.input.zig:20:7] declaration_naming
-  ↳ note resolved declaration is here [../../../../.zvm/master/lib/std/bit_set.zig:45:8]
+  ↳ note resolved declaration is here [<stdlib>/bit_set.zig:45:8]
 
  20 | const bad_bit_set = std.StaticBitSet(10);
     |       ^^^^^^^^^^^
