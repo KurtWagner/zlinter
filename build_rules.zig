@@ -86,6 +86,24 @@ pub fn main(init: std.process.Init) !void {
         \\
     );
 
+    // Could also use comptime with @Struct instead but I think I prefer just
+    // generating the zig here as we're already doing a bunch with rules this way.
+    try output_file_writer.interface.writeAll(
+        \\pub const RulesConfig = struct {
+        \\
+    );
+
+    {
+        for (rule_names) |rule_name| {
+            try output_file_writer.interface.print("@\"{s}\": ?@import(\"{s}\").Config = null,\n", .{ rule_name, rule_name });
+        }
+    }
+
+    try output_file_writer.interface.writeAll(
+        \\};
+        \\
+    );
+
     try output_file_writer.interface.flush();
 
     return std.process.cleanExit(io);
