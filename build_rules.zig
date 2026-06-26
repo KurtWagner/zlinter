@@ -104,6 +104,23 @@ pub fn main(init: std.process.Init) !void {
         \\
     );
 
+    // Lookup rule name from index
+    try output_file_writer.interface.writeAll(
+        \\pub const rule_names = &.{
+        \\
+    );
+
+    {
+        for (rule_names) |rule_name| {
+            try output_file_writer.interface.print("\"{s}\",\n", .{rule_name});
+        }
+    }
+
+    try output_file_writer.interface.writeAll(
+        \\};
+        \\
+    );
+
     try output_file_writer.interface.flush();
 
     return std.process.cleanExit(io);

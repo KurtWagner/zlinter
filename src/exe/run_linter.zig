@@ -263,6 +263,7 @@ fn runLinterRules(
 
     var enabled_rules = enabledRules(args.rules);
 
+    var base_lint_config: LintConfigStore.LintConfig = .empty;
     var rule_configs: [rules.len]*anyopaque = undefined;
     {
         var rule_it = enabled_rules.iterator(.{ .direction = .forward, .kind = .set });
@@ -291,6 +292,7 @@ fn runLinterRules(
                                     }
                                     return e;
                                 };
+                                @field(base_lint_config.rule, rule_names[i]) = config.*;
                                 break :config config;
                             }
                         }
@@ -323,6 +325,11 @@ fn runLinterRules(
         };
         const file_abs_path = session.file_store.fileAbsPath(file_id);
 
+        var lint_config_accum: LintConfigAccumulator = .{
+            .rule_configs = rule_configs,
+            .arena = runtime.fileArena(),
+        };
+        lint_config_accum.apply(base_lint_config);
         if (session.root_build_config_id) |build_config_id| {
             if (std.fs.path.dirname(file_abs_path)) |parent_dir| {
                 const build_root_dir_abs_path = std.fs.path.dirname(session.build_config_store.buildRootPath(build_config_id)).?;
@@ -334,7 +341,8 @@ fn runLinterRules(
                     parent_dir,
                 );
                 while (it.next()) |config_id| {
-                    std.debug.print("TODO: apply config: {d}\n", .{config_id});
+                    const config = config_store.configs.items[config_id];
+                    lint_config_accum.apply(config);
                 }
             }
         }
@@ -410,7 +418,7 @@ fn runLinterRules(
                 rule,
                 &session,
                 &doc,
-                .{ .config = rule_configs[rule_index] },
+                .{ .config = lint_config_accum.rule_configs[rule_index] },
             )) |result| {
                 try appendDedupedResult(
                     runtime.sessionArena(),
@@ -949,6 +957,25 @@ const SlowestItemQueue = struct {
     }
 };
 
+// TODO: #150 - review this, naive merger to keep progress forward with quick hacks to get PoC working
+const LintConfigAccumulator = struct {
+    rule_configs: [rules.len]*anyopaque,
+    arena: std.mem.Allocator,
+
+    pub fn apply(
+        self: *LintConfigAccumulator,
+        input: LintConfigStore.LintConfig,
+    ) void {
+        inline for (rule_names, 0..) |rule_name, i| {
+            if (@field(input.rule, rule_name)) |value| {
+                const config = oom(self.arena.create(rules_configs_types[i]));
+                config.* = value;
+                self.rule_configs[i] = config;
+            }
+        }
+    }
+};
+
 const LintConfigStore = struct {
     pub const LintConfigId = u32;
 
@@ -1041,7 +1068,11 @@ const LintConfigStore = struct {
     const LintConfig = struct {
         const max_config_size_bytes = 10 * 1025;
 
-        rule: RulesConfig = .{},
+        rule: RulesConfig,
+
+        pub const empty: LintConfig = .{
+            .rule = .{},
+        };
 
         pub fn tryLoad(
             io: std.Io,
@@ -1106,6 +1137,7 @@ test {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+const rule_names = @import("rules").rule_names; // Generated in build_rules.zig
 const RulesConfig = @import("rules").RulesConfig; // Generated in build_rules.zig
 const rules = @import("rules").rules; // Generated in build_rules.zig
 const rules_configs = @import("rules").rules_configs; // Generated in build_rules.zig
