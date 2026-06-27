@@ -1,0 +1,9 @@
+.{
+    .rules = .{
+        .require_doc_comment = .{
+    .public_severity = .off,
+    .private_severity = .warning,
+    .file_severity = .warning,
+},
+    },
+}

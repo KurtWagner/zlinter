@@ -1,0 +1,20 @@
+error Constant declaration should be snake_case [test_cases/declaration_naming/aliases_included/aliases_included.input.zig:8:7] declaration_naming
+  ↳ note resolved declaration is here [test_cases/declaration_naming/aliases_included/aliases_included.input.zig:2:11]
+
+ 8 | const FAILURE = system.FAILURE;
+   |       ^^^^^^^
+
+error Constant declaration should be snake_case [test_cases/declaration_naming/aliases_included/aliases_included.input.zig:9:11] declaration_naming
+  ↳ note resolved declaration is here [test_cases/declaration_naming/aliases_included/aliases_included.input.zig:4:15]
+
+ 9 | pub const Uint = system.nested.Uint;
+   |           ^^^^
+
+error Constant declaration should be snake_case [test_cases/declaration_naming/aliases_included/aliases_included.input.zig:10:7] declaration_naming
+  ↳ note resolved declaration is here [test_cases/declaration_naming/aliases_included/aliases_included.input.zig:2:11]
+
+ 10 | const NOT_ALIAS = system.FAILURE;
+    |       ^^^^^^^^^
+
+x 3 errors
+x 2 skipped

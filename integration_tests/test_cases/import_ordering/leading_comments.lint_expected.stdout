@@ -1,6 +1,0 @@
-warning Import 'a' should be grouped with other imports [test_cases/import_ordering/leading_comments.input.zig:3:1] import_ordering
-
- 3 | const a = @import("a");
-   | ^^^^^^^^^^^^^^^^^^^^^^
-
-x 1 warnings

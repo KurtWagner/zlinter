@@ -1,0 +1,26 @@
+warning Function returns an inferred error union. Prefer an explicit error set [test_cases/no_inferred_error_unions/complex_payloads/complex_payloads.input.zig:20:21] no_inferred_error_unions
+
+ 20 | pub fn namespaced() !std.ArrayList(u8) {
+    |                     ^^^^^^^^^^^^^^^^^^
+
+warning Function returns an inferred error union. Prefer an explicit error set [test_cases/no_inferred_error_unions/complex_payloads/complex_payloads.input.zig:16:16] no_inferred_error_unions
+
+ 16 | pub fn array() ![4]u8 {
+    |                ^^^^^^
+
+warning Function returns an inferred error union. Prefer an explicit error set [test_cases/no_inferred_error_unions/complex_payloads/complex_payloads.input.zig:12:14] no_inferred_error_unions
+
+ 12 | pub fn ptr() !*Thing {
+    |              ^^^^^^^
+
+warning Function returns an inferred error union. Prefer an explicit error set [test_cases/no_inferred_error_unions/complex_payloads/complex_payloads.input.zig:8:19] no_inferred_error_unions
+
+ 8 | pub fn maybePtr() !?*Thing {
+   |                   ^^^^^^^^
+
+warning Function returns an inferred error union. Prefer an explicit error set [test_cases/no_inferred_error_unions/complex_payloads/complex_payloads.input.zig:4:16] no_inferred_error_unions
+
+ 4 | pub fn bytes() ![]const u8 {
+   |                ^^^^^^^^^^^
+
+x 5 warnings

@@ -1,5 +1,0 @@
-.{
-    .order = .alphabetical_ascending,
-    .severity = .warning,
-    .allow_line_separated_chunks = true,
-}

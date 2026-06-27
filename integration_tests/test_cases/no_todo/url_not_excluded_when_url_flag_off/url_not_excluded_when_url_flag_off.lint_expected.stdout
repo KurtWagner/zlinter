@@ -1,0 +1,6 @@
+warning Avoid todo comments that don't link to a tracked issue [test_cases/no_todo/url_not_excluded_when_url_flag_off/url_not_excluded_when_url_flag_off.input.zig:1:1] no_todo
+
+ 1 | // TODO: fix https://example.com/issues/123
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+x 1 warnings

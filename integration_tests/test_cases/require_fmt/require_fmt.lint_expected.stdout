@@ -1,6 +1,0 @@
-warning File is not formatted [test_cases/require_fmt/require_fmt.input.zig:2:11] require_fmt
-
- 2 | const foo:u32 = 67;
-   |           ^
-
-x 1 warnings

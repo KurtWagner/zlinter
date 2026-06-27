@@ -1,0 +1,10 @@
+.{
+    .rules = .{
+        .function_naming = .{
+    .function_that_returns_type = .{
+        .severity = .warning,
+        .style = .title_case,
+    },
+},
+    },
+}
