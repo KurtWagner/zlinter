@@ -59,7 +59,8 @@ A **linter** is a tool that automatically checks source code for style issues, b
   - [switch_case_ordering](RULES.md#switch_case_ordering)
 - [Configuration](#configuration)
   - [Paths](#configure-paths)
-  - [Rules](#configure-rules)
+  - [Rules in build.zig](#configure-rules-in-buildzig)
+  - [Rules by Directory](#configure-rules-by-directory)
   - [Disable with Comments](#disable-with-comments)
   - [Command-Line Arguments](#command-line-arguments)
   - [Optimization](#configure-optimization)
@@ -215,9 +216,10 @@ builder.addPaths(.{
 
 would lint zig files under `engine-src/` and `src/` except for `engine-src/generated.zig` and any zig files under `src/android/`.
 
-### Configure Rules
+### Configure Rules in `build.zig`
 
-`addRule` accepts an anonymous struct representing the `Config` of rule being added. For example,
+`addRule` accepts an anonymous struct representing the `Config` of the rule
+being added. These are the base configurations applied. For example,
 
 ```zig
 builder.addRule(.{ .builtin = .field_naming }, .{
@@ -232,6 +234,29 @@ builder.addRule(.{ .builtin = .no_deprecated }, .{
 ```
 
 where the `Config` structs are defined in the rule source files [`no_deprecated.Config`](./src/rules/no_deprecated.zig) and [`field_naming.Config`](./src/rules/field_naming.zig).
+
+### Configure Rules by directory
+
+Rules configured in `build.zig` can be overridden for a directory and its
+descendant source files by adding a `zlinter.zon` file in that directory. For
+example,
+
+```zig
+// src/lib/zlinter.zon
+.{
+    .rules = .{
+        .field_naming = .{
+            .enum_field = .{ .severity = .off },
+        },
+    },
+}
+```
+
+would turn off `field_naming` for enum fields in `src/lib/` and any
+directories below it. Other rule configuration fields continue to use the base
+configuration from `build.zig`.
+
+This requires the rule to already be enabled and configured in your `build.zig`.
 
 ### Disable with comments
 
