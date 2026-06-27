@@ -1225,6 +1225,9 @@ fn resolveValueAliasDecl(
     decl_id: DeclId,
     remaining_depth: u8,
 ) DeclId {
+    const zone = tracy.traceNamed(@src(), "DeclStore.resolveValueAliasDecl");
+    defer zone.end();
+
     if (remaining_depth == 0) return decl_id;
 
     const file_id = self.declFileId(decl_id);
@@ -1258,6 +1261,9 @@ fn resolveTypeExprDecl(
     decl_id: DeclId,
     type_node: std.zig.Ast.Node.Index,
 ) ?DeclId {
+    const zone = tracy.traceNamed(@src(), "DeclStore.resolveTypeExprDecl");
+    defer zone.end();
+
     const tree = ctx.file_store.fileTree(self.declFileId(decl_id));
     return self.resolveExprDecl(
         ctx,
@@ -1526,6 +1532,9 @@ fn walkNode(
     scope_id: ScopeId,
     node: std.zig.Ast.Node.Index,
 ) void {
+    const zone = tracy.traceNamed(@src(), "DeclStore.walkNode");
+    defer zone.end();
+
     switch (tree.nodeTag(node)) {
         .root => unreachable,
 
@@ -1596,6 +1605,9 @@ fn walkContainer(
     scope_id: ScopeId,
     node: std.zig.Ast.Node.Index,
 ) void {
+    const zone = tracy.traceNamed(@src(), "DeclStore.walkContainer");
+    defer zone.end();
+
     var buffer: [2]std.zig.Ast.Node.Index = undefined;
     const container_decl = tree.fullContainerDecl(&buffer, node) orelse return;
     const is_struct = node == .root or tree.tokenTag(container_decl.ast.main_token) == .keyword_struct;
@@ -1662,6 +1674,9 @@ fn walkFn(
     parent_scope_id: ScopeId,
     node: std.zig.Ast.Node.Index,
 ) void {
+    const zone = tracy.traceNamed(@src(), "DeclStore.walkFn");
+    defer zone.end();
+
     var buffer: [1]std.zig.Ast.Node.Index = undefined;
     const fn_proto = tree.fullFnProto(&buffer, node).?;
     const fn_scope_id = self.appendScope(
@@ -1720,6 +1735,9 @@ fn walkBlock(
     parent_scope_id: ScopeId,
     node: std.zig.Ast.Node.Index,
 ) void {
+    const zone = tracy.traceNamed(@src(), "DeclStore.walkBlock");
+    defer zone.end();
+
     const block_scope_id = self.appendScope(
         file_id,
         node,
@@ -1787,6 +1805,9 @@ fn walkChildren(
     scope_id: ScopeId,
     node: std.zig.Ast.Node.Index,
 ) void {
+    const zone = tracy.traceNamed(@src(), "DeclStore.walkChildren");
+    defer zone.end();
+
     var it = ast.ChildIterator.init(tree, node);
     while (it.next(tree)) |child|
         self.walkNode(

@@ -1028,6 +1028,9 @@ const LintConfigStore = struct {
     }
 
     pub fn lookup(self: *const LintConfigStore, dir_abs_path: []const u8, rule_id: RuleId) *anyopaque {
+        const zone = tracy.traceNamed(@src(), "LintConfigStore.lookup");
+        defer zone.end();
+
         std.debug.assert(std.fs.path.isAbsolute(dir_abs_path));
         std.debug.assert(dir_abs_path.len > 0);
 
@@ -1238,3 +1241,4 @@ const RuleId = @import("rules").RuleId; // Generated in build_rules.zig
 const Ast = std.zig.Ast;
 const oom = zlinter.allocations.oom;
 const LintRuntime = zlinter.session.LintRuntime;
+const tracy = zlinter.tracy;

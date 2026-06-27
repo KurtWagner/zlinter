@@ -14,6 +14,7 @@ pub const rules = @import("rules.zig");
 pub const session = @import("session.zig");
 pub const strings = @import("strings.zig");
 pub const testing = @import("testing.zig");
+pub const tracy = @import("tracy");
 pub const version = @import("version.zig");
 pub const zon = @import("zon.zig");
 

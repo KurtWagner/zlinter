@@ -129,6 +129,10 @@ const StepBuilder = struct {
                 .{
                     .optimize = self.options.optimize,
                     .target = self.options.target,
+                    .tracy = self.options.tracy,
+                    .tracy_callstack = self.options.tracy_callstack,
+                    .tracy_allocation = self.options.tracy_allocation,
+                    .tracy_callstack_depth = self.options.tracy_callstack_depth,
                 },
                 config,
             ),
@@ -199,7 +203,12 @@ const StepBuilder = struct {
             .{
                 .dependency = b.dependencyFromBuildZig(
                     Self,
-                    .{},
+                    .{
+                        .tracy = self.options.tracy,
+                        .@"tracy-callstack" = self.options.tracy_callstack,
+                        .@"tracy-allocation" = self.options.tracy_allocation,
+                        .@"tracy-callstack-depth" = self.options.tracy_callstack_depth,
+                    },
                 ),
             },
             self.include.items,
@@ -700,12 +709,22 @@ fn buildRule(
     options: struct {
         target: std.Build.ResolvedTarget,
         optimize: std.builtin.OptimizeMode,
+        tracy: bool,
+        tracy_callstack: bool,
+        tracy_allocation: bool,
+        tracy_callstack_depth: u32,
     },
     config: anytype,
 ) BuiltRule {
+    const zlinter_dependency = b.dependencyFromBuildZig(@This(), .{
+        .tracy = options.tracy,
+        .@"tracy-callstack" = options.tracy_callstack,
+        .@"tracy-allocation" = options.tracy_allocation,
+        .@"tracy-callstack-depth" = options.tracy_callstack_depth,
+    });
     const zlinter_import = std.Build.Module.Import{
         .name = "zlinter",
-        .module = b.dependencyFromBuildZig(@This(), .{}).module("zlinter"),
+        .module = zlinter_dependency.module("zlinter"),
     };
 
     return switch (source) {
@@ -715,7 +734,7 @@ fn buildRule(
             .{
                 .target = options.target,
                 .optimize = options.optimize,
-                .zlinter_dependency = b.dependencyFromBuildZig(@This(), .{}),
+                .zlinter_dependency = zlinter_dependency,
                 .zlinter_import = zlinter_import,
             },
             config,

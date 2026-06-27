@@ -403,6 +403,9 @@ fn resolveFileTypesForModule(
     file_id: FileStore.FileId,
     module_id: ModuleStore.ModuleId,
 ) void {
+    const zone = tracy.traceNamed(@src(), "LintContext.resolveFileTypesForModule");
+    defer zone.end();
+
     _ = self.decl_store.store(file_id, &self.file_store);
 
     var it = self.decl_store.fileDeclIterator(file_id);
@@ -418,6 +421,9 @@ fn cacheResolvedDeclTypeForModule(
     module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
 ) ResolvedDeclType {
+    const zone = tracy.traceNamed(@src(), "LintContext.cacheResolvedDeclTypeForModule");
+    defer zone.end();
+
     const key: ResolvedDeclTypeKey = .{
         .module_id = module_id,
         .decl_id = decl_id,
