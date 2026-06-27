@@ -22,6 +22,8 @@ pub fn main(init: std.process.Init) !void {
     try output_file_writer.interface.writeAll(
         \\const zlinter = @import("zlinter");
         \\
+        \\pub const RuleId = u32;
+        \\
         \\pub const rules = [_]zlinter.rules.LintRule{
         \\
     );
@@ -55,7 +57,7 @@ pub fn main(init: std.process.Init) !void {
     );
 
     try output_file_writer.interface.writeAll(
-        \\pub const rules_configs = [_]*anyopaque {
+        \\pub const rule_configs = [_]*anyopaque {
         \\
     );
 
@@ -71,7 +73,7 @@ pub fn main(init: std.process.Init) !void {
     );
 
     try output_file_writer.interface.writeAll(
-        \\pub const rules_configs_types = [_]type {
+        \\pub const rule_configs_types = [_]type {
         \\
     );
 

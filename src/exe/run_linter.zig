@@ -249,8 +249,6 @@ fn runLinterRules(
         item_timers.unloadAndPrint("Rules", printer);
     };
 
-    var config_store: LintConfigStore = .empty;
-
     var session: zlinter.session.LintSession = .{
         .runtime = runtime,
         .file_store = .init(runtime),
@@ -263,22 +261,22 @@ fn runLinterRules(
 
     var enabled_rules = enabledRules(args.rules);
 
-    var base_lint_config: LintConfigStore.LintConfig = .empty;
-    var rule_configs: [rules.len]*anyopaque = undefined;
+    // TODO: #150 - remove ovverides once all integration tests use new zlinter.zon
+    var rule_configs_with_overrides: [rules.len]*anyopaque = undefined;
     {
         var rule_it = enabled_rules.iterator(.{ .direction = .forward, .kind = .set });
         while (rule_it.next()) |rule_index| {
-            rule_configs[rule_index] = config: {
+            rule_configs_with_overrides[rule_index] = config: {
                 if (args.rule_config_overrides) |rule_config_overrides| {
                     if (rule_config_overrides.get(rules[rule_index].rule_id)) |zon_path| {
-                        inline for (0..rules_configs_types.len) |i| {
+                        inline for (0..rule_configs_types.len) |i| {
                             if (i == rule_index) {
-                                const config = try runtime.sessionArena().create(rules_configs_types[i]);
+                                const config = try runtime.sessionArena().create(rule_configs_types[i]);
 
                                 var diagnostics: zlinter.zon.Diagnostics = .{};
 
                                 config.* = zlinter.zon.parseFileAlloc(
-                                    rules_configs_types[i],
+                                    rule_configs_types[i],
                                     runtime,
                                     std.Io.Dir.cwd(),
                                     zon_path,
@@ -292,17 +290,21 @@ fn runLinterRules(
                                     }
                                     return e;
                                 };
-                                @field(base_lint_config.rule, rule_names[i]) = config.*;
                                 break :config config;
                             }
                         }
                         unreachable;
                     }
                 }
-                break :config rules_configs[rule_index];
+                break :config rule_configs[rule_index];
             };
         }
     }
+
+    var lint_config_store: LintConfigStore = .init(
+        runtime.sessionArena(),
+        rule_configs_with_overrides,
+    );
 
     files: for (lint_files, 0..) |lint_file, i| {
         defer runtime.resetFileArena();
@@ -325,27 +327,12 @@ fn runLinterRules(
         };
         const file_abs_path = session.file_store.fileAbsPath(file_id);
 
-        var lint_config_accum: LintConfigAccumulator = .{
-            .rule_configs = rule_configs,
-            .arena = runtime.fileArena(),
-        };
-        lint_config_accum.apply(base_lint_config);
-        if (session.root_build_config_id) |build_config_id| {
-            if (std.fs.path.dirname(file_abs_path)) |parent_dir| {
-                const build_root_dir_abs_path = std.fs.path.dirname(session.build_config_store.buildRootPath(build_config_id)).?;
-
-                var it = config_store.iterator(
-                    runtime.io,
-                    runtime.sessionArena(),
-                    build_root_dir_abs_path,
-                    parent_dir,
-                );
-                while (it.next()) |config_id| {
-                    const config = config_store.configs.items[config_id];
-                    lint_config_accum.apply(config);
-                }
-            }
-        }
+        lint_config_store.index(
+            runtime.io,
+            runtime.sessionArena(),
+            std.fs.path.dirname(file_abs_path).?,
+            std.Io.Dir.cwd(),
+        );
 
         var rule_timer = Timer.createStarted(runtime.io);
         defer {
@@ -413,12 +400,19 @@ fn runLinterRules(
         while (rule_it.next()) |rule_index| {
             defer runtime.resetRuleArena();
 
-            const rule = rules[rule_index];
+            const rule_id: RuleId = @intCast(rule_index);
+
+            const rule = rules[rule_id];
             if (try rule.run(
                 rule,
                 &session,
                 &doc,
-                .{ .config = lint_config_accum.rule_configs[rule_index] },
+                .{
+                    .config = lint_config_store.lookup(
+                        std.fs.path.dirname(file_abs_path).?,
+                        rule_id,
+                    ),
+                },
             )) |result| {
                 try appendDedupedResult(
                     runtime.sessionArena(),
@@ -957,127 +951,167 @@ const SlowestItemQueue = struct {
     }
 };
 
-// TODO: #150 - review this, naive merger to keep progress forward with quick hacks to get PoC working
-const LintConfigAccumulator = struct {
-    rule_configs: [rules.len]*anyopaque,
-    arena: std.mem.Allocator,
-
-    pub fn apply(
-        self: *LintConfigAccumulator,
-        input: LintConfigStore.LintConfig,
-    ) void {
-        inline for (rule_names, 0..) |rule_name, i| {
-            if (@field(input.rule, rule_name)) |value| {
-                const config = oom(self.arena.create(rules_configs_types[i]));
-                config.* = value;
-                self.rule_configs[i] = config;
-            }
-        }
-    }
-};
-
 const LintConfigStore = struct {
     pub const LintConfigId = u32;
 
+    base_config_id: LintConfigId,
     configs: std.ArrayList(LintConfig),
     config_by_dir_abs_path: std.StringHashMapUnmanaged(?LintConfigId),
 
-    pub const empty: LintConfigStore = .{
-        .configs = .empty,
-        .config_by_dir_abs_path = .empty,
-    };
+    pub fn init(arena: std.mem.Allocator, base_rule_configs: [rules.len]*anyopaque) LintConfigStore {
+        var self: LintConfigStore = .{
+            .configs = .empty,
+            .config_by_dir_abs_path = .empty,
+            .base_config_id = 0,
+        };
 
-    pub fn iterator(
+        oom(self.configs.append(arena, .{
+            .rule_configs = base_rule_configs,
+            .rule_configs_on = .full,
+        }));
+
+        return self;
+    }
+
+    pub fn index(
         self: *LintConfigStore,
         io: std.Io,
         arena: std.mem.Allocator,
-        build_root_dir_abs_path: []const u8,
         dir_abs_path: []const u8,
-    ) Iterator {
-        std.debug.assert(std.fs.path.isAbsolute(build_root_dir_abs_path));
+        cwd: std.Io.Dir,
+    ) void {
+        if (dir_abs_path.len == 0) return;
+
         std.debug.assert(std.fs.path.isAbsolute(dir_abs_path));
 
-        return .{
-            .io = io,
-            .lint_config_store = self,
-            .arena = arena,
-            .build_root_dir_abs_path = build_root_dir_abs_path,
-            .dir_abs_path = dir_abs_path,
-            .cwd_dir = std.Io.Dir.cwd(),
-        };
+        const trimmed = std.mem.trimEnd(
+            u8,
+            dir_abs_path,
+            std.fs.path.sep_str,
+        );
+        if (trimmed.len == 0) return;
+
+        const normalized = oom(arena.dupe(u8, trimmed));
+        for (normalized, 0..) |c, i| {
+            if (!std.fs.path.isSep(c)) continue;
+
+            const dir_abs_sub_path = normalized[0..i];
+            self.ensureIndex(
+                io,
+                arena,
+                dir_abs_sub_path,
+                cwd,
+            );
+        }
+        self.ensureIndex(
+            io,
+            arena,
+            normalized[0..],
+            cwd,
+        );
     }
 
-    const Iterator = struct {
+    fn ensureIndex(
+        self: *LintConfigStore,
         io: std.Io,
-        lint_config_store: *LintConfigStore,
         arena: std.mem.Allocator,
-        build_root_dir_abs_path: []const u8,
-        dir_abs_path: ?[]const u8,
-        cwd_dir: std.Io.Dir,
+        dir_abs_sub_path: []const u8,
+        cwd: std.Io.Dir,
+    ) void {
+        if (dir_abs_sub_path.len == 0)
+            return;
 
-        pub fn next(self: *Iterator) ?LintConfigId {
-            const dir_abs_path = self.dir_abs_path orelse return null;
-            if (!std.mem.startsWith(
-                u8,
-                dir_abs_path,
-                self.build_root_dir_abs_path,
-            )) return null;
+        if (self.config_by_dir_abs_path.contains(dir_abs_sub_path))
+            return;
 
-            if (self
-                .lint_config_store
-                .config_by_dir_abs_path
-                .get(dir_abs_path)) |config_id|
-            {
-                self.dir_abs_path = std.fs.path.dirname(dir_abs_path);
-                return config_id orelse self.next();
-            }
+        std.log.info("Index zlinter config: '{s}'", .{dir_abs_sub_path});
 
-            if (LintConfig.tryLoad(
-                self.io,
-                self.arena,
-                self.cwd_dir,
-                dir_abs_path,
-            )) |config| {
-                const config_id: LintConfigId = @intCast(self.lint_config_store.configs.items.len);
-                oom(self.lint_config_store.configs.append(self.arena, config));
-                oom(self
-                    .lint_config_store
-                    .config_by_dir_abs_path
-                    .putNoClobber(
-                    self.arena,
-                    oom(self.arena.dupe(u8, dir_abs_path)),
-                    config_id,
-                ));
-                self.dir_abs_path = std.fs.path.dirname(dir_abs_path);
-                return config_id;
-            }
-
+        if (LintConfig.tryLoad(
+            io,
+            arena,
+            cwd,
+            dir_abs_sub_path,
+        )) |config| {
+            const config_id: LintConfigId = @intCast(self.configs.items.len);
+            oom(self.configs.append(arena, config));
             oom(self
-                .lint_config_store
                 .config_by_dir_abs_path
                 .putNoClobber(
-                self.arena,
-                oom(self.arena.dupe(u8, dir_abs_path)),
+                arena,
+                dir_abs_sub_path,
+                config_id,
+            ));
+        } else {
+            oom(self
+                .config_by_dir_abs_path
+                .putNoClobber(
+                arena,
+                dir_abs_sub_path,
                 null,
             ));
-            self.dir_abs_path = std.fs.path.dirname(dir_abs_path);
-            return self.next();
         }
-    };
+    }
+
+    pub fn lookup(self: *const LintConfigStore, dir_abs_path: []const u8, rule_id: RuleId) *anyopaque {
+        std.debug.assert(std.fs.path.isAbsolute(dir_abs_path));
+        std.debug.assert(dir_abs_path.len > 0);
+
+        const normalized = std.mem.trimEnd(
+            u8,
+            dir_abs_path,
+            std.fs.path.sep_str,
+        );
+        std.debug.assert(normalized.len > 0);
+
+        if (self.configByDir(normalized)) |config| {
+            const lint_config = self.configs.items[config];
+            if (lint_config.rule_configs_on.isSet(rule_id))
+                return lint_config.rule_configs[rule_id];
+        }
+
+        var rhs = normalized.len;
+        while (rhs > 0) : (rhs -= 1) {
+            if (std.fs.path.isSep(normalized[rhs - 1])) {
+                const parent_dir = normalized[0 .. rhs - 1];
+                if (self.configByDir(parent_dir)) |config| {
+                    const lint_config = self.configs.items[config];
+                    if (lint_config.rule_configs_on.isSet(rule_id))
+                        return lint_config.rule_configs[rule_id];
+                }
+            }
+        }
+        std.log.info("No zlinter.zon for {s}", .{dir_abs_path});
+        return self.configs.items[self.base_config_id].rule_configs[rule_id];
+    }
+
+    pub fn getConfig(self: *const LintConfigStore, config_id: LintConfigId, rule_id: RuleId) *anyopaque {
+        return self.configs.items[config_id].rule_configs[rule_id];
+    }
+
+    fn configByDir(self: *const LintConfigStore, dir_abs_path: []const u8) ?LintConfigId {
+        return self.config_by_dir_abs_path.get(dir_abs_path) orelse null;
+    }
 
     const LintConfig = struct {
         const max_config_size_bytes = 10 * 1025;
 
-        rule: RulesConfig,
+        rule_configs: [rules.len]*anyopaque,
+        rule_configs_on: std.bit_set.Static(rules.len),
+
+        /// What users write in nested directories to overwrite specific rule configs.
+        const Zon = struct {
+            rules: RulesConfig,
+        };
 
         pub const empty: LintConfig = .{
-            .rule = .{},
+            .rule_configs = undefined,
+            .rule_configs_on = .empty,
         };
 
         pub fn tryLoad(
             io: std.Io,
             arena: std.mem.Allocator,
-            cwd_dir: std.Io.Dir,
+            cwd: std.Io.Dir,
             dir_abs_path: []const u8,
         ) ?LintConfig {
             var fba_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
@@ -1088,10 +1122,12 @@ const LintConfigStore = struct {
                 &.{ dir_abs_path, "zlinter.zon" },
             ) catch unreachable;
 
+            std.log.info("Looking for: '{s}'", .{lint_config_abs_path});
+
             var fba_config_buffer: [max_config_size_bytes]u8 = undefined;
             var fba_config: std.heap.FixedBufferAllocator = .init(&fba_config_buffer);
 
-            const source = cwd_dir.readFileAllocOptions(
+            const source = cwd.readFileAllocOptions(
                 io,
                 lint_config_abs_path,
                 fba_config.allocator(),
@@ -1113,8 +1149,9 @@ const LintConfigStore = struct {
 
             @setEvalBranchQuota(5000);
             var diagnostics: std.zon.parse.Diagnostics = .{};
-            return std.zon.parse.fromSliceAlloc(
-                LintConfig,
+            const zon = oom(arena.create(Zon));
+            zon.* = std.zon.parse.fromSliceAlloc(
+                Zon,
                 arena,
                 source,
                 &diagnostics,
@@ -1127,6 +1164,16 @@ const LintConfigStore = struct {
                 );
                 return null;
             };
+
+            var self: LintConfig = .empty;
+            inline for (0..rules.len) |i| {
+                if (@field(zon.rules, rule_names[i])) |*v| {
+                    self.rule_configs[i] = @alignCast(@ptrCast(v));
+                    self.rule_configs_on.set(i);
+                }
+            }
+
+            return self;
         }
     };
 };
@@ -1140,8 +1187,9 @@ const zlinter = @import("zlinter");
 const rule_names = @import("rules").rule_names; // Generated in build_rules.zig
 const RulesConfig = @import("rules").RulesConfig; // Generated in build_rules.zig
 const rules = @import("rules").rules; // Generated in build_rules.zig
-const rules_configs = @import("rules").rules_configs; // Generated in build_rules.zig
-const rules_configs_types = @import("rules").rules_configs_types; // Generated in build_rules.zig
+const rule_configs = @import("rules").rule_configs; // Generated in build_rules.zig
+const rule_configs_types = @import("rules").rule_configs_types; // Generated in build_rules.zig
+const RuleId = @import("rules").RuleId; // Generated in build_rules.zig
 const Ast = std.zig.Ast;
 const oom = zlinter.allocations.oom;
 const LintRuntime = zlinter.session.LintRuntime;

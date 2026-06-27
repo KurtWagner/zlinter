@@ -1,5 +1,5 @@
 .{
-    .rule = .{
+    .rules = .{
         .no_unused = .{ .container_declaration = .warning },
     },
 }
