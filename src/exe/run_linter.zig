@@ -261,49 +261,9 @@ fn runLinterRules(
 
     var enabled_rules = enabledRules(args.rules);
 
-    // TODO: #150 - remove ovverides once all integration tests use new zlinter.zon
-    var rule_configs_with_overrides: [rules.len]*anyopaque = undefined;
-    {
-        var rule_it = enabled_rules.iterator(.{ .direction = .forward, .kind = .set });
-        while (rule_it.next()) |rule_index| {
-            rule_configs_with_overrides[rule_index] = config: {
-                if (args.rule_config_overrides) |rule_config_overrides| {
-                    if (rule_config_overrides.get(rules[rule_index].rule_id)) |zon_path| {
-                        inline for (0..rule_configs_types.len) |i| {
-                            if (i == rule_index) {
-                                const config = try runtime.sessionArena().create(rule_configs_types[i]);
-
-                                var diagnostics: zlinter.zon.Diagnostics = .{};
-
-                                config.* = zlinter.zon.parseFileAlloc(
-                                    rule_configs_types[i],
-                                    runtime,
-                                    std.Io.Dir.cwd(),
-                                    zon_path,
-                                    &diagnostics,
-                                ) catch |e| {
-                                    switch (e) {
-                                        error.ParseZon => {
-                                            std.log.err("Failed to parse rule config: {f}", .{diagnostics});
-                                        },
-                                        else => {},
-                                    }
-                                    return e;
-                                };
-                                break :config config;
-                            }
-                        }
-                        unreachable;
-                    }
-                }
-                break :config rule_configs[rule_index];
-            };
-        }
-    }
-
     var lint_config_store: LintConfigStore = .init(
         runtime.sessionArena(),
-        rule_configs_with_overrides,
+        rule_configs,
     );
 
     files: for (lint_files, 0..) |lint_file, i| {
@@ -1168,7 +1128,7 @@ const LintConfigStore = struct {
             var self: LintConfig = .empty;
             inline for (0..rules.len) |i| {
                 if (@field(zon.rules, rule_names[i])) |*v| {
-                    self.rule_configs[i] = @alignCast(@ptrCast(v));
+                    self.rule_configs[i] = @ptrCast(@alignCast(v));
                     self.rule_configs_on.set(i);
                 }
             }
