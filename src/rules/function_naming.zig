@@ -304,17 +304,22 @@ fn classifyParamType(
         type_summary = candidate.summary;
         break;
     }
-    if (paramValueKindFromResolvedTypeAnnotation(type_summary)) |param_value_kind| {
+    const source_decl_id = if (selected_summary_candidate) |candidate|
+        resolvedParamTypeSourceDeclId(
+            session,
+            decl_candidates.items,
+            candidate.module_id,
+        )
+    else
+        null;
+    if (paramValueKindFromResolvedTypeAnnotation(
+        session,
+        source_decl_id,
+        type_summary,
+    )) |param_value_kind| {
         return .{
             .kind = param_value_kind,
-            .source_decl_id = if (selected_summary_candidate) |candidate|
-                resolvedParamTypeSourceDeclId(
-                    session,
-                    decl_candidates.items,
-                    candidate.module_id,
-                )
-            else
-                null,
+            .source_decl_id = source_decl_id,
         };
     }
 
@@ -378,6 +383,8 @@ fn paramValueKindFromTypeAnnotation(
 }
 
 fn paramValueKindFromResolvedTypeAnnotation(
+    session: *zlinter.session.LintSession,
+    source_decl_id: ?zlinter.session.DeclStore.DeclId,
     maybe_type_summary: ?zlinter.session.TypeStore.TypeSummary,
 ) ?zlinter.session.TypeStore.TypeSummary {
     const type_summary = maybe_type_summary orelse return null;
@@ -385,11 +392,33 @@ fn paramValueKindFromResolvedTypeAnnotation(
         .unknown, .other, .primitive => null,
         .@"fn", .fn_returns_type => type_summary,
         .type => |type_value| switch (type_value.kind) {
-            .unknown, .@"fn", .fn_returns_type => type_summary,
+            .unknown => if (resolvedDeclIsExplicitTypeLiteral(session, source_decl_id)) type_summary else .other,
+            .@"fn", .fn_returns_type => type_summary,
             else => .other,
         },
         .instance, .slice, .array => .other,
     };
+}
+
+fn resolvedDeclIsExplicitTypeLiteral(
+    session: *zlinter.session.LintSession,
+    maybe_decl_id: ?zlinter.session.DeclStore.DeclId,
+) bool {
+    const decl_id = maybe_decl_id orelse return false;
+
+    const file_id = session.decl_store.declFileId(decl_id);
+    const tree = session.file_store.fileTree(file_id);
+
+    const decl_node = session.decl_store.declAstNode(decl_id) orelse
+        return false;
+    const var_decl = tree.fullVarDecl(decl_node) orelse
+        return false;
+    const init_node = var_decl.ast.init_node.unwrap() orelse
+        return false;
+
+    const init_expr = zlinter.ast.unwrapNode(tree, init_node, .{});
+    return tree.nodeTag(init_expr) == .identifier and
+        std.mem.eql(u8, tree.getNodeSource(init_expr), "type");
 }
 
 fn resolvedParamTypeSourceDeclId(
@@ -700,6 +729,43 @@ test "unresolved parameter type resolution falls back without notes" {
                 .slice = "anotherBadValue",
                 .message = "Function argument should be snake_case",
                 .notes = &.{},
+            },
+        },
+    );
+}
+
+test "unknown and opaque aliases used as value parameter types remain snake_case" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\
+        \\const value: u32 = 1;
+        \\const UnknownAlias = @TypeOf(value);
+        \\const OpaqueAlias = opaque {};
+        \\
+        \\fn takesUnknownAlias(good_value: UnknownAlias, badValue: UnknownAlias) void {
+        \\    _ = good_value;
+        \\    _ = badValue;
+        \\}
+        \\
+        \\fn takesOpaqueAlias(good_value: OpaqueAlias, BadValue: OpaqueAlias) void {
+        \\    _ = good_value;
+        \\    _ = BadValue;
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "badValue",
+                .message = "Function argument should be snake_case",
+            },
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "BadValue",
+                .message = "Function argument should be snake_case",
             },
         },
     );
