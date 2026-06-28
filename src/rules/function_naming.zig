@@ -74,19 +74,14 @@ fn run(
         const node: Ast.Node.Index = @enumFromInt(index);
         var buffer: [1]Ast.Node.Index = undefined;
         if (namedFnProto(tree, &buffer, node)) |fn_proto| {
-            if (config.exclude_extern and fn_proto.extern_export_inline_token != null) {
-                const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
-                if (token_tag == .keyword_extern) continue :nodes;
-            }
-            if (config.exclude_export and fn_proto.extern_export_inline_token != null) {
-                const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
-                if (token_tag == .keyword_export) continue :nodes;
-            }
+            if (shouldSkipFnProto(tree, fn_proto, config)) continue :nodes;
 
             const fn_name_token = fn_proto.name_token.?;
             const fn_name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(fn_name_token));
 
-            const return_type = functionReturnTypeSummary(
+            const return_type = classifyReturnType(
+                session,
+                doc,
                 tree,
                 fn_proto,
             ) orelse continue :nodes;
@@ -128,17 +123,12 @@ fn run(
 
         // Check arguments:
         if (fnProto(tree, &buffer, node)) |fn_proto| {
-            if (config.exclude_extern and fn_proto.extern_export_inline_token != null) {
-                const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
-                if (token_tag == .keyword_extern) continue :nodes;
-            }
-            if (config.exclude_export and fn_proto.extern_export_inline_token != null) {
-                const token_tag = tree.tokens.items(.tag)[fn_proto.extern_export_inline_token.?];
-                if (token_tag == .keyword_export) continue :nodes;
-            }
+            if (shouldSkipFnProto(tree, fn_proto, config)) continue :nodes;
 
             var param_kinds = std.ArrayList(ParamKind).empty;
 
+            // Anonymous and nested fn prototypes are intentionally checked so
+            // callback/function-type parameter names follow the same rules.
             for (fn_proto.ast.params) |param| {
                 const colon_token = tree.firstToken(param) - 1;
                 if (tree.tokens.items(.tag)[colon_token] != .colon) continue;
@@ -218,15 +208,59 @@ fn run(
         null;
 }
 
-fn functionReturnTypeSummary(
+fn shouldSkipFnProto(tree: Ast, fn_proto: Ast.full.FnProto, config: Config) bool {
+    const token = fn_proto.extern_export_inline_token orelse
+        return false;
+
+    const tag = tree.tokens.items(.tag)[token];
+    return (config.exclude_extern and tag == .keyword_extern) or
+        (config.exclude_export and tag == .keyword_export);
+}
+
+fn classifyReturnType(
+    session: *zlinter.session.LintSession,
+    doc: *const zlinter.session.LintDocument,
     tree: Ast,
     fn_proto: Ast.full.FnProto,
 ) ?zlinter.session.TypeStore.TypeSummary {
     const return_type_node = fn_proto.ast.return_type.unwrap() orelse return null;
-    return zlinter.session.TypeStore.summarizeTypeNode(
+    const payload_node = unwrapErrorUnionPayloadTypeNode(tree, return_type_node);
+    var type_summary: ?zlinter.session.TypeStore.TypeSummary =
+        zlinter.session.TypeStore.summarizeTypeNode(tree, payload_node);
+    if (type_summary) |summary|
+        if (functionReturnsType(summary)) return summary;
+
+    const rule_arena = session.runtime.ruleArena();
+    const decl_candidates = resolveTypeDeclCandidates(
+        session,
+        rule_arena,
+        doc,
         tree,
-        unwrapErrorUnionPayloadTypeNode(tree, return_type_node),
-    );
+        payload_node,
+    ) catch return type_summary;
+    const summary_candidates = session.resolveDeclValueSummaryCandidatesFromCandidates(
+        rule_arena,
+        decl_candidates.items,
+    ) catch return type_summary;
+
+    for (summary_candidates.items) |candidate| {
+        type_summary = candidate.summary;
+        const source_decl_id = resolvedTypeSourceDeclId(
+            session,
+            decl_candidates.items,
+            candidate.module_id,
+        );
+        if (paramValueKindFromResolvedTypeAnnotation(
+            session,
+            source_decl_id,
+            type_summary,
+        )) |resolved_summary| {
+            if (functionReturnsType(resolved_summary)) return resolved_summary;
+        }
+        break;
+    }
+
+    return type_summary;
 }
 
 fn unwrapErrorUnionPayloadTypeNode(tree: Ast, node: Ast.Node.Index) Ast.Node.Index {
@@ -286,7 +320,7 @@ fn classifyParamType(
     }
 
     const rule_arena = session.runtime.ruleArena();
-    const decl_candidates = resolveParamTypeDeclCandidates(
+    const decl_candidates = resolveTypeDeclCandidates(
         session,
         rule_arena,
         doc,
@@ -305,7 +339,7 @@ fn classifyParamType(
         break;
     }
     const source_decl_id = if (selected_summary_candidate) |candidate|
-        resolvedParamTypeSourceDeclId(
+        resolvedTypeSourceDeclId(
             session,
             decl_candidates.items,
             candidate.module_id,
@@ -323,18 +357,10 @@ fn classifyParamType(
         };
     }
 
-    if (maybe_type_name) |type_name|
-        if (std.mem.endsWith(u8, type_name, "FnType"))
-            return .{
-                .kind = .{
-                    .type = .{ .kind = .fn_returns_type },
-                },
-            };
-
     return if (type_summary) |summary| .{ .kind = summary } else null;
 }
 
-fn resolveParamTypeDeclCandidates(
+fn resolveTypeDeclCandidates(
     session: *zlinter.session.LintSession,
     allocator: std.mem.Allocator,
     doc: *const zlinter.session.LintDocument,
@@ -343,7 +369,7 @@ fn resolveParamTypeDeclCandidates(
 ) !std.ArrayList(zlinter.session.LintSession.DeclCandidate) {
     if (tree.nodeTag(node) == .field_access) {
         const lhs, const member_token = tree.nodeData(node).node_and_token;
-        const lhs_candidates = try resolveParamTypeDeclCandidates(
+        const lhs_candidates = try resolveTypeDeclCandidates(
             session,
             allocator,
             doc,
@@ -421,7 +447,7 @@ fn resolvedDeclIsExplicitTypeLiteral(
         std.mem.eql(u8, tree.getNodeSource(init_expr), "type");
 }
 
-fn resolvedParamTypeSourceDeclId(
+fn resolvedTypeSourceDeclId(
     session: *zlinter.session.LintSession,
     decl_candidates: []const zlinter.session.LintSession.DeclCandidate,
     module_id: zlinter.session.ModuleStore.ModuleId,
@@ -768,6 +794,137 @@ test "unknown and opaque aliases used as value parameter types remain snake_case
                 .message = "Function argument should be snake_case",
             },
         },
+    );
+}
+
+test "aliased return type annotations are treated as returning type" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\
+        \\const ReturnsType = type;
+        \\
+        \\fn bad_name() ReturnsType {
+        \\    return u32;
+        \\}
+        \\
+        \\fn GoodName() ReturnsType {
+        \\    return u32;
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "bad_name",
+                .message = "Callable returning `type` should be TitleCase",
+            },
+        },
+    );
+}
+
+test "namespaced aliased return type annotations are treated as returning type" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\
+        \\const ns = struct {
+        \\    const ReturnsType = type;
+        \\};
+        \\
+        \\fn bad_name() ns.ReturnsType {
+        \\    return u32;
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "bad_name",
+                .message = "Callable returning `type` should be TitleCase",
+            },
+        },
+    );
+}
+
+test "ordinary return aliases are not treated as returning type" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\
+        \\const ReturnValue = u32;
+        \\const Thing = struct {};
+        \\
+        \\fn goodName() ReturnValue {
+        \\    return 1;
+        \\}
+        \\
+        \\fn alsoGood() Thing {
+        \\    return .{};
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{},
+    );
+}
+
+test "FnType suffix does not classify ordinary aliases as type functions" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\
+        \\const NotReallyFnType = u32;
+        \\
+        \\fn takesValue(good_value: NotReallyFnType, badValue: NotReallyFnType) void {
+        \\    _ = good_value;
+        \\    _ = badValue;
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "badValue",
+                .message = "Function argument should be snake_case",
+            },
+        },
+    );
+}
+
+test "nested function prototype parameters are linted" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\
+        \\fn takesCallback(callback: *const fn (BadArg: u32) void) void {
+        \\    _ = callback;
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "BadArg",
+                .message = "Function argument should be snake_case",
+            },
+        },
+    );
+}
+
+test "extern and export skips apply to function names and parameters" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\
+        \\extern fn extern_not_good(BadArg: u32) void;
+        \\export fn export_not_good(BadArg: u32) void;
+    ,
+        .{},
+        Config{ .exclude_extern = true, .exclude_export = true },
+        &.{},
     );
 }
 
