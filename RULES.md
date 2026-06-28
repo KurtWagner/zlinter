@@ -77,7 +77,7 @@ Enforces that variable declaration names use consistent naming. For example,
 
   * Exclude these declaration names from min and max declaration name checks.
 
-  * **Default:** `&.{ "x", "y", "z", "i", "b" }`
+  * **Default:** `&.{ "x", "y", "z", "i", "b", "it", "ip", "c", }`
 
 ## `field_naming`
 
