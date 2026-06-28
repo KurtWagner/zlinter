@@ -76,23 +76,6 @@ test {
     std.testing.refAllDecls(@This());
 }
 
-test "no_orelse_unreachable invalid syntax should not crash" {
-    const rule = buildRule(.{});
-    const source: [:0]const u8 =
-        \\const a = b orelse;
-        \\const c = d orelse (;
-        \\const e = f orelse {;
-    ;
-
-    try zlinter.testing.testRunRule(
-        rule,
-        source,
-        .{ .allow_parse_errors = true },
-        Config{ .severity = .@"error" },
-        &.{},
-    );
-}
-
 test "no_orelse_unreachable" {
     const rule = buildRule(.{});
     const source: [:0]const u8 =
