@@ -11,3 +11,8 @@ pub fn getPerson(age: u32) type {
         age: u32 = age,
     };
 }
+
+// For function naming tests:
+pub const CallbackFn = *const fn () void;
+pub const TypeFactoryFn = *const fn () type;
+pub const SomeTypeAlias = type;

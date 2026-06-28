@@ -84,6 +84,7 @@ error Function argument of type function should be TitleCase [test_cases/functio
     |                                        ^^^^^^
 
 error Function argument of type function should be TitleCase [test_cases/function_naming/function_naming/function_naming.input.zig:79:60] function_naming
+  ↳ note resolved declaration is here [test_cases/function_naming/function_naming/function_naming.input.zig:78:7]
 
  79 | fn exampleD(GoodFn: *const fn () type, bad_fn: fn () type, badFn: goodFnType) void {
     |                                                            ^^^^^

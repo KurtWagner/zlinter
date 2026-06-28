@@ -139,6 +139,7 @@ fn createCompiledUnits(
     // dependency graphs of compiled units.
     for ([_][]const u8{
         "test_cases/declaration_naming/sub_module_resolution/sub_module_resolution.input.zig",
+        "test_cases/function_naming/sub_module_resolution/sub_module_resolution.input.zig",
         "test_cases/no_deprecated/sub_module_resolution/sub_module_resolution.input.zig",
         "test_cases/require_exhaustive_enum_switch/ambiguous_enum_candidates/ambiguous_enum_candidates.input.zig",
     }) |rel_path| {

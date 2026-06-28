@@ -16,3 +16,8 @@ pub const Person = struct { age: u32 };
 pub fn getPerson(age: u32) Person {
     return .{ .age = age };
 }
+
+// For function naming tests:
+pub const CallbackFn = *const fn () void;
+pub const TypeFactoryFn = *const fn () type;
+pub const SomeTypeAlias = type;
