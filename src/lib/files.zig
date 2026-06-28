@@ -360,7 +360,7 @@ pub fn resolveBuildConfigurationPath(
         },
         .cwd = .{ .path = build_root_path },
         .stdout_limit = .limited(std.fs.max_path_bytes + 1),
-        .stderr_limit = .limited(128 * 1024),
+        .stderr_limit = .limited(1024 * 1024),
     });
 
     defer {

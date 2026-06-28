@@ -1,5 +1,0 @@
-.{
-    .max = 2,
-    .exclude_export = true,
-    .exclude_extern = false,
-}

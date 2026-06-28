@@ -54,10 +54,6 @@ rules: ?[][]const u8,
 /// Whether to write additional information out to stdout.
 verbose: bool,
 
-/// Contains rule id to path names for overriding the build time config for
-/// a rule. This is typically just useful for internal testing.
-rule_config_overrides: ?*std.BufMap,
-
 build_info: BuildInfo,
 
 /// Whether user has passed in the `--help` flag.
@@ -73,11 +69,6 @@ pub fn deinit(self: Args, allocator: std.mem.Allocator) void {
     allocator.free(self.zig_exe);
 
     allocator.free(self.zig_lib_directory);
-
-    if (self.rule_config_overrides) |rule_config_overrides| {
-        rule_config_overrides.deinit();
-        allocator.destroy(rule_config_overrides);
-    }
 
     inline for (&.{
         "exclude_paths",
@@ -148,13 +139,6 @@ pub fn allocParse(
     defer rules.deinit(gpa);
     errdefer for (rules.items) |r| gpa.free(r);
 
-    const rule_config_overrides = try gpa.create(std.BufMap);
-    rule_config_overrides.* = std.BufMap.init(gpa);
-    errdefer {
-        rule_config_overrides.deinit();
-        gpa.destroy(rule_config_overrides);
-    }
-
     var build_info: ?BuildInfo = null;
 
     const State = enum {
@@ -171,7 +155,6 @@ pub fn allocParse(
         filter_path_arg,
         include_path_arg,
         exclude_path_arg,
-        rule_config_arg,
         stdin_arg,
         fix_passes_arg,
         max_warnings_arg,
@@ -189,7 +172,6 @@ pub fn allocParse(
         .{ "--zig_exe", .zig_exe_arg },
         .{ "--zig_lib_directory", .zig_lib_directory_arg },
         .{ "--format", .format_arg },
-        .{ "--rule-config", .rule_config_arg },
         .{ "--stdin", .stdin_arg },
         .{ "--help", .help_arg },
         .{ "-h", .help_arg },
@@ -366,39 +348,6 @@ pub fn allocParse(
             try unknown_args.append(gpa, try gpa.dupe(u8, args[index]));
             continue :state State.parsing;
         },
-        .rule_config_arg => {
-            index += 1;
-            if (index == args.len) {
-                rendering.process_printer.println(.err, "--rule-config arg missing rule id", .{});
-                return error.InvalidArgs;
-            }
-            const rule_id = args[index];
-
-            const rule_exists: bool = exists: {
-                for (available_rules) |available_rule| {
-                    if (std.mem.eql(u8, available_rule.rule_id, args[index])) break :exists true;
-                }
-                break :exists false;
-            };
-            if (!rule_exists) {
-                rendering.process_printer.println(.err, "rule '{s}' not found", .{args[index]});
-                return error.InvalidArgs;
-            }
-
-            index += 1;
-            if (index == args.len) {
-                rendering.process_printer.println(.err, "--rule-config arg missing zon file path", .{});
-                return error.InvalidArgs;
-            }
-            const zon_file_path = args[index];
-
-            if (rule_config_overrides.get(rule_id) != null) {
-                rendering.process_printer.println(.err, "--rule-config rule id '{s}' already set", .{rule_id});
-                return error.InvalidArgs;
-            }
-            try rule_config_overrides.put(rule_id, zon_file_path);
-            continue :state State.parsing;
-        },
     }
 
     if (zig_exe == null or zig_lib_directory == null) {
@@ -422,12 +371,6 @@ pub fn allocParse(
         .unknown_args = if (unknown_args.items.len > 0) try unknown_args.toOwnedSlice(gpa) else null,
         .rules = if (rules.items.len > 0) try rules.toOwnedSlice(gpa) else null,
         .verbose = verbose,
-        .rule_config_overrides = rule_config_overrides: {
-            if (rule_config_overrides.count() > 0) break :rule_config_overrides rule_config_overrides;
-            rule_config_overrides.deinit();
-            gpa.destroy(rule_config_overrides);
-            break :rule_config_overrides null;
-        },
         .build_info = build_info orelse .default,
         .help = help,
         .fix_passes = fix_passes,
@@ -1064,81 +1007,6 @@ test "allocParse fuzz" {
     }
 }
 
-test "allocParse with rule_config arg" {
-    var stdin_fbs = std.Io.Reader.fixed("");
-
-    const args = try allocParse(
-        testing.cliArgs(&.{ "--rule-config", "my_rule", "./path/rule_config.zon" }),
-        &.{.{
-            .rule_id = "my_rule",
-            .run = undefined,
-        }},
-        std.testing.allocator,
-        &stdin_fbs,
-    );
-    defer args.deinit(std.testing.allocator);
-
-    try std.testing.expectEqual(1, args.rule_config_overrides.?.count());
-    try std.testing.expectEqualStrings("./path/rule_config.zon", args.rule_config_overrides.?.get("my_rule").?);
-}
-
-test "allocParse with invalid rule config rule id arg" {
-    var stdin_fbs = std.Io.Reader.fixed("");
-
-    var stderr_sink: std.Io.Writer.Allocating = .init(std.testing.allocator);
-    defer stderr_sink.deinit();
-    rendering.process_printer.stderr = &stderr_sink.writer;
-
-    try std.testing.expectError(error.InvalidArgs, allocParse(
-        testing.cliArgs(&.{ "--rule-config", "my_rule", "./path/rule_config.zon" }),
-        &.{.{
-            .rule_id = "another_rule",
-            .run = undefined,
-        }},
-        std.testing.allocator,
-        &stdin_fbs,
-    ));
-
-    try std.testing.expectEqualStrings("rule 'my_rule' not found\n", stderr_sink.written());
-}
-
-test "allocParse with with missing rule config rule id" {
-    var stdin_fbs = std.Io.Reader.fixed("");
-
-    var stderr_sink: std.Io.Writer.Allocating = .init(std.testing.allocator);
-    defer stderr_sink.deinit();
-    rendering.process_printer.stderr = &stderr_sink.writer;
-
-    try std.testing.expectError(error.InvalidArgs, allocParse(
-        testing.cliArgs(&.{"--rule-config"}),
-        &.{},
-        std.testing.allocator,
-        &stdin_fbs,
-    ));
-
-    try std.testing.expectEqualStrings("--rule-config arg missing rule id\n", stderr_sink.written());
-}
-
-test "allocParse with with missing rule config rule config path" {
-    var stdin_fbs = std.Io.Reader.fixed("");
-
-    var stderr_sink: std.Io.Writer.Allocating = .init(std.testing.allocator);
-    defer stderr_sink.deinit();
-    rendering.process_printer.stderr = &stderr_sink.writer;
-
-    try std.testing.expectError(error.InvalidArgs, allocParse(
-        testing.cliArgs(&.{ "--rule-config", "my_rule" }),
-        &.{.{
-            .rule_id = "my_rule",
-            .run = undefined,
-        }},
-        std.testing.allocator,
-        &stdin_fbs,
-    ));
-
-    try std.testing.expectEqualStrings("--rule-config arg missing zon file path\n", stderr_sink.written());
-}
-
 test "allocParse with min --max-warnings arg" {
     var stdin_fbs = std.Io.Reader.fixed("");
 
@@ -1249,7 +1117,6 @@ const testing = struct {
             .unknown_args = null,
             .rules = null,
             .verbose = false,
-            .rule_config_overrides = null,
             .build_info = .default,
             .help = false,
             .fix_passes = default_fix_passes,

@@ -1,0 +1,7 @@
+.{
+    .rules = .{
+        .no_swallow_error = .{
+    .exclude_tests = false,
+},
+    },
+}

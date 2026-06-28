@@ -1,0 +1,66 @@
+error Condition is always true or false [test_cases/no_literal_only_bool_expression/no_literal_only_bool_expression/no_literal_only_bool_expression.input.zig:36:13] no_literal_only_bool_expression
+
+ 36 |     while ((false)) {}
+    |             ^^^^^
+
+error Condition is always true or false [test_cases/no_literal_only_bool_expression/no_literal_only_bool_expression/no_literal_only_bool_expression.input.zig:35:9] no_literal_only_bool_expression
+
+ 35 |     if ('a' == 'b') {}
+    |         ^^^^^^^^^^
+
+error Condition is always true or false [test_cases/no_literal_only_bool_expression/no_literal_only_bool_expression/no_literal_only_bool_expression.input.zig:34:9] no_literal_only_bool_expression
+
+ 34 |     if ('a' == 'c') {}
+    |         ^^^^^^^^^^
+
+error Condition is always true or false [test_cases/no_literal_only_bool_expression/no_literal_only_bool_expression/no_literal_only_bool_expression.input.zig:33:10] no_literal_only_bool_expression
+
+ 33 |     if ((true)) {}
+    |          ^^^^
+
+error Condition is always true or false [test_cases/no_literal_only_bool_expression/no_literal_only_bool_expression/no_literal_only_bool_expression.input.zig:32:9] no_literal_only_bool_expression
+
+ 32 |     if ((1) == (1)) {}
+    |         ^^^^^^^^^^
+
+error Condition is always true or false [test_cases/no_literal_only_bool_expression/no_literal_only_bool_expression/no_literal_only_bool_expression.input.zig:31:20] no_literal_only_bool_expression
+
+ 31 |     if (1 == 2 or (1 > 10 and age < 10)) {}
+    |                    ^^^^^^
+
+error Condition is always true or false [test_cases/no_literal_only_bool_expression/no_literal_only_bool_expression/no_literal_only_bool_expression.input.zig:31:9] no_literal_only_bool_expression
+
+ 31 |     if (1 == 2 or (1 > 10 and age < 10)) {}
+    |         ^^^^^^
+
+error Condition is always true or false [test_cases/no_literal_only_bool_expression/no_literal_only_bool_expression/no_literal_only_bool_expression.input.zig:30:9] no_literal_only_bool_expression
+
+ 30 |     if (2 >= 1) {}
+    |         ^^^^^^
+
+error Condition is always true or false [test_cases/no_literal_only_bool_expression/no_literal_only_bool_expression/no_literal_only_bool_expression.input.zig:29:9] no_literal_only_bool_expression
+
+ 29 |     if (1 == 2) {}
+    |         ^^^^^^
+
+error Condition is always true or false [test_cases/no_literal_only_bool_expression/no_literal_only_bool_expression/no_literal_only_bool_expression.input.zig:19:12] no_literal_only_bool_expression
+
+ 19 |     while (1 == 1) {
+    |            ^^^^^^
+
+error Condition is always true or false [test_cases/no_literal_only_bool_expression/no_literal_only_bool_expression/no_literal_only_bool_expression.input.zig:18:12] no_literal_only_bool_expression
+
+ 18 |     while (false) {}
+    |            ^^^^^
+
+error Condition is always true or false [test_cases/no_literal_only_bool_expression/no_literal_only_bool_expression/no_literal_only_bool_expression.input.zig:5:36] no_literal_only_bool_expression
+
+ 5 |     const also_bad = age == 10 and 1 == 1;
+   |                                    ^^^^^^
+
+error Condition is always true or false [test_cases/no_literal_only_bool_expression/no_literal_only_bool_expression/no_literal_only_bool_expression.input.zig:4:17] no_literal_only_bool_expression
+
+ 4 |     const bad = 1 == 2;
+   |                 ^^^^^^
+
+x 13 errors

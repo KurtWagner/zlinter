@@ -9,7 +9,11 @@ pub fn build(b: *std.Build) !void {
     const test_step = b.step("test", "Run tests");
 
     const test_cases_path = "test_cases/";
-    var test_cases_dir = try std.Io.Dir.cwd().openDir(io, test_cases_path, .{ .iterate = true });
+    var test_cases_dir = try std.Io.Dir.cwd().openDir(
+        io,
+        test_cases_path,
+        .{ .iterate = true },
+    );
     defer test_cases_dir.close(io);
 
     var walker = try test_cases_dir.walk(b.allocator);
@@ -35,7 +39,9 @@ pub fn build(b: *std.Build) !void {
         if (item.kind != .file) continue;
         if (!std.mem.endsWith(u8, item.path, input_suffix)) continue;
 
-        // Format: <rule_name>/<test_name>.input.zig
+        const parent_dir = std.fs.path.dirname(item.path).?;
+
+        // Format: <rule_name>/<test_name>/<test_name>.input.zig
         const rule_name = item.path[0 .. std.mem.indexOfScalar(u8, item.path, std.fs.path.sep) orelse {
             std.log.err("Test case file skipped as its invalid: {s}", .{item.path});
             continue;
@@ -54,18 +60,30 @@ pub fn build(b: *std.Build) !void {
         run_integration_test.addArg(rule_name);
         run_integration_test.addArg(test_name);
 
-        var buffer: [2048]u8 = undefined;
+        var filename_buffer: [std.fs.max_name_bytes]u8 = undefined;
+        var path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+        var path_fba: std.heap.FixedBufferAllocator = .init(&path_buffer);
         inline for (&.{
             ".input.zig",
             ".lint_expected.stdout",
             ".fix_expected.stdout",
             ".fix_expected.zig",
-            ".input.zon",
         }) |suffix| {
+            const filename = std.fmt.bufPrint(
+                &filename_buffer,
+                "{s}{s}",
+                .{ test_name, suffix },
+            ) catch unreachable;
+
+            const input_path = std.fs.path.resolve(
+                path_fba.allocator(),
+                &.{ test_cases_path, parent_dir, filename },
+            ) catch unreachable;
+
             addFileArgIfExists(
                 b,
                 run_integration_test,
-                std.fmt.bufPrint(&buffer, "{s}/{s}/{s}{s}", .{ test_cases_path, rule_name, test_name, suffix }) catch unreachable,
+                input_path,
             );
         }
         try run_integration_test_steps.append(b.allocator, &run_integration_test.step);
@@ -120,9 +138,9 @@ fn createCompiledUnits(
     // for "sub_module", allowing tests to cover multiple implementations and
     // dependency graphs of compiled units.
     for ([_][]const u8{
-        "test_cases/declaration_naming/sub_module_resolution.input.zig",
-        "test_cases/no_deprecated/sub_module_resolution.input.zig",
-        "test_cases/require_exhaustive_enum_switch/ambiguous_enum_candidates.input.zig",
+        "test_cases/declaration_naming/sub_module_resolution/sub_module_resolution.input.zig",
+        "test_cases/no_deprecated/sub_module_resolution/sub_module_resolution.input.zig",
+        "test_cases/require_exhaustive_enum_switch/ambiguous_enum_candidates/ambiguous_enum_candidates.input.zig",
     }) |rel_path| {
         const path = b.path(rel_path);
 

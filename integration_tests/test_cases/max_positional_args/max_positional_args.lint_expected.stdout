@@ -1,6 +1,0 @@
-warning Exceeded maximum positional arguments of 5, found 6. [test_cases/max_positional_args/max_positional_args.input.zig:7:16] max_positional_args
-
- 7 | pub fn notGood(a: u32, b: u32, c: u32, d: u32, e: u32, f: u32) void {
-   |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-x 1 warnings

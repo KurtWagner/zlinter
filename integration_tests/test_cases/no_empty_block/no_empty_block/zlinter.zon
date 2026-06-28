@@ -1,0 +1,17 @@
+.{
+    .rules = .{
+        .no_empty_block = .{
+    .if_block = .warning,
+    .if_else_block = .warning,
+    .while_block = .warning,
+    .while_else_block = .warning,
+    .for_block = .warning,
+    .for_else_block = .warning,
+    .catch_block = .@"error",
+    .switch_case_block = .@"error",
+    .defer_block = .warning,
+    .errdefer_block = .warning,
+    .fn_decl_block = .warning,
+},
+    },
+}

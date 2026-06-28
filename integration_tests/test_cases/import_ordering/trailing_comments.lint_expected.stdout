@@ -1,6 +1,0 @@
-warning Import 'a' is not in alphabetical order [test_cases/import_ordering/trailing_comments.input.zig:2:1] import_ordering
-
- 2 | const a = @import("a"); // a import
-   | ^^^^^^^^^^^^^^^^^^^^^^
-
-x 1 warnings

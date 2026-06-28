@@ -1,0 +1,11 @@
+warning Exceeded maximum positional arguments of 2, found 3. [test_cases/max_positional_args/export_extern_matrix/export_extern_matrix.input.zig:2:25] max_positional_args
+
+ 2 | extern fn externTooMany(a: u32, b: u32, c: u32) void;
+   |                         ^^^^^^^^^^^^^^^^^^^^^^
+
+warning Exceeded maximum positional arguments of 2, found 3. [test_cases/max_positional_args/export_extern_matrix/export_extern_matrix.input.zig:4:22] max_positional_args
+
+ 4 | pub fn normalTooMany(a: u32, b: u32, c: u32) void {
+   |                      ^^^^^^^^^^^^^^^^^^^^^^
+
+x 2 warnings

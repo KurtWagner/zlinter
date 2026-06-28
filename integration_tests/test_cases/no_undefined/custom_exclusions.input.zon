@@ -1,6 +1,0 @@
-.{
-    .exclude_in_fn = .{"cleanupNow"},
-    .exclude_var_decl_name_equals = .{"special_skip"},
-    .exclude_var_decl_name_ends_with = .{"_scratch"},
-    .init_method_names = .{"boot"},
-}

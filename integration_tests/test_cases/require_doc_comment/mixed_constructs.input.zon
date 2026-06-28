@@ -1,5 +1,0 @@
-.{
-    .public_severity = .warning,
-    .private_severity = .off,
-    .file_severity = .off,
-}

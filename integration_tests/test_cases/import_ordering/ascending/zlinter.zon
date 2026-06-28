@@ -1,0 +1,9 @@
+.{
+    .rules = .{
+        .import_ordering = .{
+    .order = .alphabetical_ascending,
+    .severity = .warning,
+    .allow_line_separated_chunks = true,
+},
+    },
+}

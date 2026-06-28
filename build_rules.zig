@@ -22,6 +22,8 @@ pub fn main(init: std.process.Init) !void {
     try output_file_writer.interface.writeAll(
         \\const zlinter = @import("zlinter");
         \\
+        \\pub const RuleId = u32;
+        \\
         \\pub const rules = [_]zlinter.rules.LintRule{
         \\
     );
@@ -55,7 +57,7 @@ pub fn main(init: std.process.Init) !void {
     );
 
     try output_file_writer.interface.writeAll(
-        \\pub const rules_configs = [_]*anyopaque {
+        \\pub const rule_configs = [_]*anyopaque {
         \\
     );
 
@@ -71,13 +73,48 @@ pub fn main(init: std.process.Init) !void {
     );
 
     try output_file_writer.interface.writeAll(
-        \\pub const rules_configs_types = [_]type {
+        \\pub const rule_configs_types = [_]type {
         \\
     );
 
     {
         for (rule_names) |rule_name| {
             try output_file_writer.interface.print("@import(\"{s}\").Config,\n", .{rule_name});
+        }
+    }
+
+    try output_file_writer.interface.writeAll(
+        \\};
+        \\
+    );
+
+    // Could also use comptime with @Struct instead but I think I prefer just
+    // generating the zig here as we're already doing a bunch with rules this way.
+    try output_file_writer.interface.writeAll(
+        \\pub const RulesConfig = struct {
+        \\
+    );
+
+    {
+        for (rule_names) |rule_name| {
+            try output_file_writer.interface.print("@\"{s}\": ?@import(\"{s}\").Config = null,\n", .{ rule_name, rule_name });
+        }
+    }
+
+    try output_file_writer.interface.writeAll(
+        \\};
+        \\
+    );
+
+    // Lookup rule name from index
+    try output_file_writer.interface.writeAll(
+        \\pub const rule_names = &.{
+        \\
+    );
+
+    {
+        for (rule_names) |rule_name| {
+            try output_file_writer.interface.print("\"{s}\",\n", .{rule_name});
         }
     }
 

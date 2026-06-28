@@ -1,0 +1,6 @@
+error File `TitleCase.input.zig` is a namespace, so its name should be snake_case [test_cases/file_naming/TitleCase/TitleCase.input.zig:1:1] file_naming
+
+ 1 | pub const value = 1;
+   | ^
+
+x 1 errors

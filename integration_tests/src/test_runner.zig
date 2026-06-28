@@ -6,7 +6,6 @@ const ansi_gray = "\x1B[90m";
 
 const max_file_size_bytes = 10 * 1024 * 1024;
 const input_zig_suffix = ".input.zig";
-const input_zon_suffix = ".input.zon";
 const lint_output_suffix = ".lint_expected.stdout";
 const fix_zig_output_suffix = ".fix_expected.zig";
 const fix_stdout_output_suffix = ".fix_expected.stdout";
@@ -94,7 +93,6 @@ fn runTest(
     environ_map: std.process.Environ.Map,
 ) !void {
     var input_zig_file: ?[:0]const u8 = null;
-    var input_zon_file: ?[:0]const u8 = null;
     var lint_stdout_expected_file: ?[:0]const u8 = null;
     var fix_zig_expected_file: ?[:0]const u8 = null;
     var fix_stdout_expected_file: ?[:0]const u8 = null;
@@ -111,8 +109,6 @@ fn runTest(
             fix_zig_expected_file = arg
         else if (std.mem.endsWith(u8, arg, fix_stdout_output_suffix))
             fix_stdout_expected_file = arg
-        else if (std.mem.endsWith(u8, arg, input_zon_suffix))
-            input_zon_file = arg
         else
             std.debug.panic("Unable to handle input file: {s}", .{arg});
     }
@@ -132,12 +128,6 @@ fn runTest(
             "--include",
             input_zig_file.?,
         });
-        if (input_zon_file) |file|
-            lint_args.appendSliceAssumeCapacity(&.{
-                "--rule-config",
-                rule_name,
-                file,
-            });
 
         const lint_output = try runLintCommand(
             lint_args.items,
@@ -200,12 +190,6 @@ fn runTest(
             "--include",
             temp_path,
         });
-        if (input_zon_file) |file|
-            lint_args.appendSliceAssumeCapacity(&.{
-                "--rule-config",
-                rule_name,
-                file,
-            });
 
         const fix_output = try runLintCommand(
             lint_args.items,

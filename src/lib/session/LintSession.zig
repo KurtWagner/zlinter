@@ -12,6 +12,7 @@ decl_store: DeclStore,
 type_store: TypeStore,
 build_config_store: BuildConfigStore,
 
+root_build_config_id: ?BuildConfigStore.ConfigId = null,
 compile_contexts: std.MultiArrayList(CompileContext) = .empty,
 module_ids_by_file: std.AutoHashMapUnmanaged(FileStore.FileId, std.ArrayList(ModuleStore.ModuleId)) = .empty,
 module_file_index_built: bool = false,
@@ -148,9 +149,10 @@ pub fn init(self: *LintContext) !void {
 
     // Maybe one day we will care enough to use a fake for tests but for now
     // it's fine to ignore...
-    if (!builtin.is_test) {
-        _ = try self.initBuildConfig();
-    }
+    self.root_build_config_id = if (!builtin.is_test)
+        try self.initBuildConfig()
+    else
+        null;
 }
 
 fn initBuildConfig(self: *LintContext) !BuildConfigStore.ConfigId {

@@ -531,7 +531,10 @@ fn buildStep(
         .module => |m| .{ m, b.path("src/exe/run_linter.zig"), b.path("build_rules.zig") },
     };
 
-    const zlinter_import = std.Build.Module.Import{ .name = "zlinter", .module = zlinter_lib_module };
+    const zlinter_import = std.Build.Module.Import{
+        .name = "zlinter",
+        .module = zlinter_lib_module,
+    };
 
     // --------------------------------------------------------------------
     // Generate linter exe

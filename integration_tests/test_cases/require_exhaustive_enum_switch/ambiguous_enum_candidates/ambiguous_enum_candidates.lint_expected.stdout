@@ -1,0 +1,13 @@
+warning Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .x) [test_cases/require_exhaustive_enum_switch/ambiguous_enum_candidates/ambiguous_enum_candidates.input.zig:6:9] require_exhaustive_enum_switch
+  ↳ note enum declaration is here [sub_module_b_src/root.zig:10:11]
+
+ 6 |         else => {},
+   |         ^^^^
+
+warning Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .b, .c) [test_cases/require_exhaustive_enum_switch/ambiguous_enum_candidates/ambiguous_enum_candidates.input.zig:6:9] require_exhaustive_enum_switch
+  ↳ note enum declaration is here [sub_module_a_src/root.zig:3:11]
+
+ 6 |         else => {},
+   |         ^^^^
+
+x 2 warnings
