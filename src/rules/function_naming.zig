@@ -225,8 +225,14 @@ fn functionReturnTypeSummary(
     const return_type_node = fn_proto.ast.return_type.unwrap() orelse return null;
     return zlinter.session.TypeStore.summarizeTypeNode(
         tree,
-        return_type_node,
+        unwrapErrorUnionPayloadTypeNode(tree, return_type_node),
     );
+}
+
+fn unwrapErrorUnionPayloadTypeNode(tree: Ast, node: Ast.Node.Index) Ast.Node.Index {
+    const unwrapped_node = zlinter.ast.unwrapNode(tree, node, .{});
+    if (tree.nodeTag(unwrapped_node) != .error_union) return unwrapped_node;
+    return tree.nodeData(unwrapped_node).node_and_node[1];
 }
 
 fn functionReturnsType(return_type: zlinter.session.TypeStore.TypeSummary) bool {
@@ -291,18 +297,24 @@ fn classifyParamType(
         rule_arena,
         decl_candidates.items,
     ) catch return if (type_summary) |summary| .{ .kind = summary } else null;
+
+    var selected_summary_candidate: ?zlinter.session.LintSession.DeclValueSummaryCandidate = null;
     for (summary_candidates.items) |candidate| {
+        selected_summary_candidate = candidate;
         type_summary = candidate.summary;
         break;
     }
     if (paramValueKindFromResolvedTypeAnnotation(type_summary)) |param_value_kind| {
         return .{
             .kind = param_value_kind,
-            .source_decl_id = resolvedParamTypeSourceDeclId(
-                session,
-                decl_candidates.items,
-                summary_candidates.items[0].module_id,
-            ),
+            .source_decl_id = if (selected_summary_candidate) |candidate|
+                resolvedParamTypeSourceDeclId(
+                    session,
+                    decl_candidates.items,
+                    candidate.module_id,
+                )
+            else
+                null,
         };
     }
 
@@ -663,6 +675,36 @@ test "generic value parameters remain normal value parameters after resolver loo
     );
 }
 
+test "unresolved parameter type resolution falls back without notes" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\
+        \\fn takesUnresolved(BadValue: Missing.Type, anotherBadValue: Missing) void {
+        \\    _ = BadValue;
+        \\    _ = anotherBadValue;
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "BadValue",
+                .message = "Function argument should be snake_case",
+                .notes = &.{},
+            },
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "anotherBadValue",
+                .message = "Function argument should be snake_case",
+                .notes = &.{},
+            },
+        },
+    );
+}
+
 test "function returning error set is not treated as returning type" {
     try zlinter.testing.testRunRule(
         buildRule(.{}),
@@ -676,6 +718,45 @@ test "function returning error set is not treated as returning type" {
         .{},
         Config{},
         &.{},
+    );
+}
+
+test "fallible functions returning type are treated as returning type" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\
+        \\fn Bad_name() !type {
+        \\    return u32;
+        \\}
+        \\
+        \\fn bad_name() error{Oops}!type {
+        \\    return u32;
+        \\}
+        \\
+        \\fn badError() !void {
+        \\    return error.Oops;
+        \\}
+        \\
+        \\fn alsoBadError() error{Oops}!void {
+        \\    return error.Oops;
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "Bad_name",
+                .message = "Callable returning `type` should be TitleCase",
+            },
+            .{
+                .rule_id = "function_naming",
+                .severity = .@"error",
+                .slice = "bad_name",
+                .message = "Callable returning `type` should be TitleCase",
+            },
+        },
     );
 }
 
