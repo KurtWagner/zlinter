@@ -1,5 +1,13 @@
-//! Enforces use of `.?` over `orelse unreachable` as `.?` offers comptime checks
-//! as it does not control flow.
+//! Enforces use of optional unwrap shorthand `.?` instead of `orelse unreachable`.
+//!
+//! `.?` is the dedicated syntax for asserting that an optional is non-null.
+//!
+//! While the language reference describes `.?` as equivalent to
+//! `a orelse unreachable`, it currently treats `.?` more eagerly in some
+//! comptime-known cases, turning a null unwrap into a compile error instead of
+//! preserving `unreachable` as a runtime safety failure.
+//!
+//! Use `orelse` for real fallback values or intentional fallback control flow.
 
 // TODO: Should this catch `const g = h orelse { unreachable; };`
 
@@ -66,6 +74,23 @@ fn run(
 
 test {
     std.testing.refAllDecls(@This());
+}
+
+test "no_orelse_unreachable invalid syntax should not crash" {
+    const rule = buildRule(.{});
+    const source: [:0]const u8 =
+        \\const a = b orelse;
+        \\const c = d orelse (;
+        \\const e = f orelse {;
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{ .allow_parse_errors = true },
+        Config{ .severity = .@"error" },
+        &.{},
+    );
 }
 
 test "no_orelse_unreachable" {
