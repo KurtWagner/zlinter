@@ -4,16 +4,10 @@
 /// Config for file_naming rule.
 pub const Config = struct {
     /// Style and severity for a file that is a namespace (i.e., does not have root container fields)
-    file_namespace: zlinter.rules.LintTextStyleWithSeverity = .{
-        .style = .snake_case,
-        .severity = .@"error",
-    },
+    file_namespace: zlinter.rules.LintTextStyleWithSeverity = .{ .@"error" = .snake_case },
 
     /// Style and severity for a file that is a struct (i.e., has root container fields)
-    file_struct: zlinter.rules.LintTextStyleWithSeverity = .{
-        .style = .title_case,
-        .severity = .@"error",
-    },
+    file_struct: zlinter.rules.LintTextStyleWithSeverity = .{ .@"error" = .title_case },
 };
 
 /// Builds and returns the file_naming rule.
@@ -38,8 +32,8 @@ fn run(
     // TODO: I worry this pattern will be error prone if configs change often
     // an argument is that unit tests should cover it but from reviewing rules
     // I can see this isnt always the case
-    if (config.file_namespace.severity == .off and
-        config.file_struct.severity == .off)
+    if (config.file_namespace.severity() == .off and
+        config.file_struct.severity() == .off)
         return null;
 
     const session_arena = session.runtime.sessionArena();
@@ -52,26 +46,30 @@ fn run(
 
     const message, const severity = msg: {
         if (ast.isRootImplicitStruct(tree)) {
-            if (config.file_struct.severity != .off and
-                !config.file_struct.style.check(check_name))
+            if (config.file_struct.style()) |style| {
+                if (!style.check(check_name)) {
+                    break :msg .{
+                        try std.fmt.allocPrint(
+                            session_arena,
+                            "File `{s}` is an implicit struct, so its name should be {s}",
+                            .{ basename, style.name() },
+                        ),
+                        config.file_struct.severity(),
+                    };
+                }
+            }
+        } else if (config.file_namespace.style()) |style| {
+            if (!style.check(check_name)) {
                 break :msg .{
                     try std.fmt.allocPrint(
                         session_arena,
-                        "File `{s}` is an implicit struct, so its name should be {s}",
-                        .{ basename, config.file_struct.style.name() },
+                        "File `{s}` is a namespace, so its name should be {s}",
+                        .{ basename, style.name() },
                     ),
-                    config.file_struct.severity,
+                    config.file_namespace.severity(),
                 };
-        } else if (config.file_namespace.severity != .off and
-            !config.file_namespace.style.check(check_name))
-            break :msg .{
-                try std.fmt.allocPrint(
-                    session_arena,
-                    "File `{s}` is a namespace, so its name should be {s}",
-                    .{ basename, config.file_namespace.style.name() },
-                ),
-                config.file_namespace.severity,
-            };
+            }
+        }
 
         return null;
     };
@@ -111,9 +109,10 @@ test "severity" {
         ,
             .{ .filename = zlinter.testing.paths.posix("snake_case.zig") },
             Config{
-                .file_struct = .{
-                    .style = .title_case,
-                    .severity = severity,
+                .file_struct = switch (severity) {
+                    .off => .off,
+                    .warning => .{ .warning = .title_case },
+                    .@"error" => .{ .@"error" = .title_case },
                 },
             },
             &.{.{
@@ -131,9 +130,10 @@ test "severity" {
         ,
             .{ .filename = zlinter.testing.paths.posix("TitleCase.zig") },
             Config{
-                .file_namespace = .{
-                    .style = .snake_case,
-                    .severity = severity,
+                .file_namespace = switch (severity) {
+                    .off => .off,
+                    .warning => .{ .warning = .snake_case },
+                    .@"error" => .{ .@"error" = .snake_case },
                 },
             },
             &.{.{
@@ -146,8 +146,6 @@ test "severity" {
     }
     // Off:
     {
-        const severity: zlinter.rules.LintProblemSeverity = .off;
-
         // Implicit struct file:
         try zlinter.testing.testRunRule(
             buildRule(.{}),
@@ -155,10 +153,7 @@ test "severity" {
         ,
             .{ .filename = zlinter.testing.paths.posix("snake_case.zig") },
             Config{
-                .file_struct = .{
-                    .style = .title_case,
-                    .severity = severity,
-                },
+                .file_struct = .off,
             },
             &.{},
         );
@@ -170,10 +165,7 @@ test "severity" {
         ,
             .{ .filename = zlinter.testing.paths.posix("TitleCase.zig") },
             Config{
-                .file_namespace = .{
-                    .style = .title_case,
-                    .severity = severity,
-                },
+                .file_namespace = .off,
             },
             &.{},
         );
@@ -283,7 +275,7 @@ test "expects TitleCase with camelCase" {
         .{
             .filename = zlinter.testing.paths.posix("path/to/myFile.zig"),
         },
-        Config{ .file_struct = .{ .severity = .warning, .style = .title_case } },
+        Config{ .file_struct = .{ .warning = .title_case } },
         &.{
             .{
                 .rule_id = "file_naming",

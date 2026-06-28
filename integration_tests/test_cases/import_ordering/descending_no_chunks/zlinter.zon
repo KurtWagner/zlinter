@@ -1,9 +1,9 @@
 .{
     .rules = .{
         .import_ordering = .{
-    .order = .alphabetical_descending,
-    .severity = .@"error",
-    .allow_line_separated_chunks = false,
-},
+            .order = .alphabetical_descending,
+            .severity = .@"error",
+            .allow_line_separated_chunks = false,
+        },
     },
 }

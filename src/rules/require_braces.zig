@@ -26,51 +26,43 @@
 /// Config for require_braces rule.
 pub const Config = struct {
     /// Requirement for `if` statements
-    if_statement: RequirementAndSeverity = .{
-        .severity = .warning,
-        .requirement = .multi_line_only,
-    },
+    if_statement: RequirementAndSeverity = .{ .warning = .multi_line_only },
 
     /// Requirement for `while` statements
-    while_statement: RequirementAndSeverity = .{
-        .severity = .off,
-        .requirement = .multi_line_only,
-    },
+    while_statement: RequirementAndSeverity = .off,
 
     /// Requirement for for statements
-    for_statement: RequirementAndSeverity = .{
-        .severity = .warning,
-        .requirement = .multi_line_only,
-    },
+    for_statement: RequirementAndSeverity = .{ .warning = .multi_line_only },
 
     /// Requirement for `catch` statements
-    catch_statement: RequirementAndSeverity = .{
-        .severity = .warning,
-        .requirement = .multi_line_only,
-    },
+    catch_statement: RequirementAndSeverity = .{ .warning = .multi_line_only },
 
     /// Requirement for `switch` statements
-    switch_case_statement: RequirementAndSeverity = .{
-        .severity = .off,
-        .requirement = .multi_line_only,
-    },
+    switch_case_statement: RequirementAndSeverity = .off,
 
     /// Requirement for `defer` statements
-    defer_statement: RequirementAndSeverity = .{
-        .severity = .off,
-        .requirement = .multi_line_only,
-    },
+    defer_statement: RequirementAndSeverity = .off,
 
     /// Requirement for `errdefer` statements
-    errdefer_statement: RequirementAndSeverity = .{
-        .severity = .off,
-        .requirement = .multi_line_only,
-    },
+    errdefer_statement: RequirementAndSeverity = .off,
 };
 
-pub const RequirementAndSeverity = struct {
-    severity: zlinter.rules.LintProblemSeverity,
-    requirement: Requirement,
+pub const RequirementAndSeverity = union(zlinter.rules.LintProblemSeverity) {
+    off,
+    warning: Requirement,
+    @"error": Requirement,
+
+    fn severity(self: RequirementAndSeverity) zlinter.rules.LintProblemSeverity {
+        return std.meta.activeTag(self);
+    }
+
+    fn requirement(self: RequirementAndSeverity) ?Requirement {
+        return switch (self) {
+            .off => null,
+            .warning => |requirement_value| requirement_value,
+            .@"error" => |requirement_value| requirement_value,
+        };
+    }
 };
 
 pub const Requirement = enum {
@@ -134,7 +126,7 @@ fn run(
             .@"defer" => config.defer_statement,
             .@"errdefer" => config.errdefer_statement,
         };
-        if (req_and_severity.severity == .off) continue :nodes;
+        const requirement = req_and_severity.requirement() orelse continue :nodes;
 
         var expr_nodes_buffer: [2]Ast.Node.Index = undefined;
         var expr_nodes: std.ArrayList(Ast.Node.Index) = .initBuffer(&expr_nodes_buffer);
@@ -182,7 +174,7 @@ fn run(
             const last_token = tree.lastToken(expr_node);
 
             const error_msg = error_msg: {
-                switch (req_and_severity.requirement) {
+                switch (requirement) {
                     .all => {
                         if (!has_braces)
                             break :error_msg try session_arena.dupe(
@@ -225,7 +217,7 @@ fn run(
 
             try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
-                .severity = req_and_severity.severity,
+                .severity = req_and_severity.severity(),
                 .start = .startOfToken(tree, first_token),
                 .end = .endOfToken(tree, last_token),
                 .message = error_msg,
@@ -493,10 +485,7 @@ test "if_statement all reports unbraced statement bodies" {
         if_statement_source,
         .{},
         Config{
-            .if_statement = .{
-                .requirement = .all,
-                .severity = .warning,
-            },
+            .if_statement = .{ .warning = .all },
         },
         &.{
             .{
@@ -526,10 +515,7 @@ test "if_statement off reports no problems" {
         if_statement_source,
         .{},
         Config{
-            .if_statement = .{
-                .requirement = .all,
-                .severity = .off,
-            },
+            .if_statement = .off,
         },
         &.{},
     );
@@ -541,10 +527,7 @@ test "if_statement multi_line_only reports bodies that start on new lines" {
         if_statement_source,
         .{},
         Config{
-            .if_statement = .{
-                .requirement = .multi_line_only,
-                .severity = .@"error",
-            },
+            .if_statement = .{ .@"error" = .multi_line_only },
         },
         &.{
             .{
@@ -563,10 +546,7 @@ test "if_statement multi_statement_only reports single-statement blocks" {
         if_statement_source,
         .{},
         Config{
-            .if_statement = .{
-                .requirement = .multi_statement_only,
-                .severity = .@"error",
-            },
+            .if_statement = .{ .@"error" = .multi_statement_only },
         },
         &.{
             .{
@@ -656,10 +636,7 @@ test "multi_line_only reports one-line bodies that start on the next line" {
         \\}
     ;
 
-    const multi_line_only = RequirementAndSeverity{
-        .requirement = .multi_line_only,
-        .severity = .warning,
-    };
+    const multi_line_only = RequirementAndSeverity{ .warning = .multi_line_only };
 
     try zlinter.testing.testRunRule(
         buildRule(.{}),
@@ -782,14 +759,8 @@ test "if expressions in non-statement positions are ignored" {
         source,
         .{},
         Config{
-            .if_statement = .{
-                .requirement = .all,
-                .severity = .warning,
-            },
-            .switch_case_statement = .{
-                .requirement = .all,
-                .severity = .warning,
-            },
+            .if_statement = .{ .warning = .all },
+            .switch_case_statement = .{ .warning = .all },
         },
         &.{},
     );
@@ -844,14 +815,8 @@ test "control-flow expressions in assignment values are ignored" {
         source,
         .{},
         Config{
-            .if_statement = .{
-                .requirement = .all,
-                .severity = .warning,
-            },
-            .switch_case_statement = .{
-                .requirement = .all,
-                .severity = .warning,
-            },
+            .if_statement = .{ .warning = .all },
+            .switch_case_statement = .{ .warning = .all },
         },
         &.{},
     );

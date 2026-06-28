@@ -1,18 +1,9 @@
 .{
     .rules = .{
         .field_ordering = .{
-    .struct_field_order = .{
-        .order = .alphabetical_descending,
-        .severity = .@"error",
-    },
-    .enum_field_order = .{
-        .order = .alphabetical_ascending,
-        .severity = .warning,
-    },
-    .union_field_order = .{
-        .order = .alphabetical_ascending,
-        .severity = .@"error",
-    },
-},
+            .struct_field_order = .{ .@"error" = .alphabetical_descending },
+            .enum_field_order = .{ .warning = .alphabetical_ascending },
+            .union_field_order = .{ .@"error" = .alphabetical_ascending },
+        },
     },
 }

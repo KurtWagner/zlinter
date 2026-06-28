@@ -4,125 +4,77 @@
 /// Config for field_naming rule.
 pub const Config = struct {
     /// Style and severity for errors defined within an `error { ... }` container
-    error_field: zlinter.rules.LintTextStyleWithSeverity = .{
-        .style = .title_case,
-        .severity = .@"error",
-    },
+    error_field: zlinter.rules.LintTextStyleWithSeverity = .{ .@"error" = .title_case },
 
     /// Minimum length of an `error` field name. To exclude names from this check
     /// see `error_field_exclude_len` option. Set to `.off` to disable this
     /// check.
-    error_field_min_len: zlinter.rules.LenAndSeverity = .{
-        .len = 3,
-        .severity = .warning,
-    },
+    error_field_min_len: zlinter.rules.LenAndSeverity = .{ .warning = .{ .len = 3 } },
 
     /// Maximum length of an `error` field name. To exclude names from this check
     /// see `error_field_exclude_len` option. Set to `.off` to disable this
     /// check.
-    error_field_max_len: zlinter.rules.LenAndSeverity = .{
-        .len = 30,
-        .severity = .warning,
-    },
+    error_field_max_len: zlinter.rules.LenAndSeverity = .{ .warning = .{ .len = 30 } },
 
     /// Exclude these `error` field names from min and max `error` field name checks.
     error_field_exclude_len: []const []const u8 = &.{},
 
     /// Style and severity for enum values defined within an `enum { ... }` container
-    enum_field: zlinter.rules.LintTextStyleWithSeverity = .{
-        .style = .snake_case,
-        .severity = .@"error",
-    },
+    enum_field: zlinter.rules.LintTextStyleWithSeverity = .{ .@"error" = .snake_case },
 
     /// Minimum length of an `enum` field name. To exclude names from this check
     /// see `enum_field_exclude_len` option. Set to `.off` to disable this
     /// check.
-    enum_field_min_len: zlinter.rules.LenAndSeverity = .{
-        .len = 3,
-        .severity = .warning,
-    },
+    enum_field_min_len: zlinter.rules.LenAndSeverity = .{ .warning = .{ .len = 3 } },
 
     /// Maximum length of an `enum` field name. To exclude names from this check
     /// see `enum_field_exclude_len` option. Set to `.off` to disable this
     /// check.
-    enum_field_max_len: zlinter.rules.LenAndSeverity = .{
-        .len = 30,
-        .severity = .warning,
-    },
+    enum_field_max_len: zlinter.rules.LenAndSeverity = .{ .warning = .{ .len = 30 } },
 
     /// Exclude these `enum` field names from min and max `enum` field name checks.
     enum_field_exclude_len: []const []const u8 = &.{},
 
     /// Style and severity for struct fields defined within a `struct { ... }` container
-    struct_field: zlinter.rules.LintTextStyleWithSeverity = .{
-        .style = .snake_case,
-        .severity = .@"error",
-    },
+    struct_field: zlinter.rules.LintTextStyleWithSeverity = .{ .@"error" = .snake_case },
 
     /// Minimum length of a `struct` field name. To exclude names from this check
     /// see `struct_field_exclude_len` option. Set to `.off` to disable this
     /// check.
-    struct_field_min_len: zlinter.rules.LenAndSeverity = .{
-        .len = 3,
-        .severity = .warning,
-    },
+    struct_field_min_len: zlinter.rules.LenAndSeverity = .{ .warning = .{ .len = 3 } },
 
     /// Maximum length of a `struct` field name. To exclude names from this check
     /// see `struct_field_exclude_len` option. Set to `.off` to disable this
     /// check.
-    struct_field_max_len: zlinter.rules.LenAndSeverity = .{
-        .len = 30,
-        .severity = .warning,
-    },
+    struct_field_max_len: zlinter.rules.LenAndSeverity = .{ .warning = .{ .len = 30 } },
 
     /// Exclude these `struct` field names from min and max `struct` field name checks.
     struct_field_exclude_len: []const []const u8 = zlinter.strings.default_excluded_short_names,
 
     /// Like `struct_field` but for fields with type `type`
-    struct_field_that_is_type: zlinter.rules.LintTextStyleWithSeverity = .{
-        .style = .title_case,
-        .severity = .@"error",
-    },
+    struct_field_that_is_type: zlinter.rules.LintTextStyleWithSeverity = .{ .@"error" = .title_case },
 
     /// Like `struct_field` but for fields with a namespace type
-    struct_field_that_is_namespace: zlinter.rules.LintTextStyleWithSeverity = .{
-        .style = .snake_case,
-        .severity = .@"error",
-    },
+    struct_field_that_is_namespace: zlinter.rules.LintTextStyleWithSeverity = .{ .@"error" = .snake_case },
 
     /// Like `struct_field` but for fields with a callable/function type
-    struct_field_that_is_fn: zlinter.rules.LintTextStyleWithSeverity = .{
-        .style = .camel_case,
-        .severity = .@"error",
-    },
+    struct_field_that_is_fn: zlinter.rules.LintTextStyleWithSeverity = .{ .@"error" = .camel_case },
 
     /// Like `struct_field_that_is_fn` but the callable/function returns a `type`
-    struct_field_that_is_type_fn: zlinter.rules.LintTextStyleWithSeverity = .{
-        .style = .title_case,
-        .severity = .@"error",
-    },
+    struct_field_that_is_type_fn: zlinter.rules.LintTextStyleWithSeverity = .{ .@"error" = .title_case },
 
     /// Style and severity for union fields defined within a `union { ... }` block
-    union_field: zlinter.rules.LintTextStyleWithSeverity = .{
-        .style = .snake_case,
-        .severity = .@"error",
-    },
+    union_field: zlinter.rules.LintTextStyleWithSeverity = .{ .@"error" = .snake_case },
 
     /// Minimum length of a `union` field name. To exclude names from this check
     /// see `union_field_exclude_len` option. Set to `.off` to disable this
     /// check.
-    union_field_min_len: zlinter.rules.LenAndSeverity = .{
-        .len = 3,
-        .severity = .warning,
-    },
+    union_field_min_len: zlinter.rules.LenAndSeverity = .{ .warning = .{ .len = 3 } },
 
     /// Maximum length of a `union` field name. To exclude names from this check
     /// see `union_field_exclude_len` option. Set to `.off` to disable this
     /// check.
-    union_field_max_len: zlinter.rules.LenAndSeverity = .{
-        .len = 30,
-        .severity = .warning,
-    },
+    union_field_max_len: zlinter.rules.LenAndSeverity = .{ .warning = .{ .len = 30 } },
 
     /// Exclude these `union` field names from min and max `union` field name checks.
     union_field_exclude_len: []const []const u8 = zlinter.strings.default_excluded_short_names,
@@ -182,33 +134,43 @@ fn run(
                             }
                         }
 
-                        if (!is_len_excluded and min_len.severity != .off and name_len < min_len.len) {
-                            try lint_problems.append(session_arena, .{
-                                .rule_id = rule.rule_id,
-                                .severity = min_len.severity,
-                                .start = .startOfToken(tree, token),
-                                .end = .endOfToken(tree, token),
-                                .message = try std.fmt.allocPrint(session_arena, "Error field names should have a length greater or equal to {d}", .{min_len.len}),
-                            });
-                        } else if (!is_len_excluded and
-                            max_len.severity != .off and
-                            name_len > max_len.len)
-                            try lint_problems.append(session_arena, .{
-                                .rule_id = rule.rule_id,
-                                .severity = max_len.severity,
-                                .start = .startOfToken(tree, token),
-                                .end = .endOfToken(tree, token),
-                                .message = try std.fmt.allocPrint(session_arena, "Error field names should have a length less or equal to {d}", .{max_len.len}),
-                            });
+                        if (!is_len_excluded) {
+                            var emitted_len_diagnostic = false;
+                            if (min_len.len()) |len| {
+                                if (name_len < len) {
+                                    try lint_problems.append(session_arena, .{
+                                        .rule_id = rule.rule_id,
+                                        .severity = min_len.severity(),
+                                        .start = .startOfToken(tree, token),
+                                        .end = .endOfToken(tree, token),
+                                        .message = try std.fmt.allocPrint(session_arena, "Error field names should have a length greater or equal to {d}", .{len}),
+                                    });
+                                    emitted_len_diagnostic = true;
+                                }
+                            }
+                            if (!emitted_len_diagnostic) if (max_len.len()) |len| {
+                                if (name_len > len) {
+                                    try lint_problems.append(session_arena, .{
+                                        .rule_id = rule.rule_id,
+                                        .severity = max_len.severity(),
+                                        .start = .startOfToken(tree, token),
+                                        .end = .endOfToken(tree, token),
+                                        .message = try std.fmt.allocPrint(session_arena, "Error field names should have a length less or equal to {d}", .{len}),
+                                    });
+                                }
+                            };
+                        }
 
-                        if (config.error_field.severity != .off and !config.error_field.style.check(name)) {
-                            try lint_problems.append(session_arena, .{
-                                .rule_id = rule.rule_id,
-                                .severity = config.error_field.severity,
-                                .start = .startOfToken(tree, token),
-                                .end = .endOfToken(tree, token),
-                                .message = try std.fmt.allocPrint(session_arena, "Error fields should be {s}", .{config.error_field.style.name()}),
-                            });
+                        if (config.error_field.style()) |style| {
+                            if (!style.check(name)) {
+                                try lint_problems.append(session_arena, .{
+                                    .rule_id = rule.rule_id,
+                                    .severity = config.error_field.severity(),
+                                    .start = .startOfToken(tree, token),
+                                    .end = .endOfToken(tree, token),
+                                    .message = try std.fmt.allocPrint(session_arena, "Error fields should be {s}", .{style.name()}),
+                                });
+                            }
                         }
                     },
                     else => {},
@@ -276,33 +238,43 @@ fn run(
                         else => unreachable,
                     };
 
-                    if (!is_len_excluded and min_len.severity != .off and name_len < min_len.len) {
-                        try lint_problems.append(session_arena, .{
-                            .rule_id = rule.rule_id,
-                            .severity = min_len.severity,
-                            .start = .startOfToken(tree, name_token),
-                            .end = .endOfToken(tree, name_token),
-                            .message = try std.fmt.allocPrint(session_arena, "{s} field names should have a length greater or equal to {d}", .{ container_name, min_len.len }),
-                        });
-                    } else if (!is_len_excluded and
-                        max_len.severity != .off and
-                        name_len > max_len.len)
-                        try lint_problems.append(session_arena, .{
-                            .rule_id = rule.rule_id,
-                            .severity = max_len.severity,
-                            .start = .startOfToken(tree, name_token),
-                            .end = .endOfToken(tree, name_token),
-                            .message = try std.fmt.allocPrint(session_arena, "{s} field names should have a length less or equal to {d}", .{ container_name, max_len.len }),
-                        });
+                    if (!is_len_excluded) {
+                        var emitted_len_diagnostic = false;
+                        if (min_len.len()) |len| {
+                            if (name_len < len) {
+                                try lint_problems.append(session_arena, .{
+                                    .rule_id = rule.rule_id,
+                                    .severity = min_len.severity(),
+                                    .start = .startOfToken(tree, name_token),
+                                    .end = .endOfToken(tree, name_token),
+                                    .message = try std.fmt.allocPrint(session_arena, "{s} field names should have a length greater or equal to {d}", .{ container_name, len }),
+                                });
+                                emitted_len_diagnostic = true;
+                            }
+                        }
+                        if (!emitted_len_diagnostic) if (max_len.len()) |len| {
+                            if (name_len > len) {
+                                try lint_problems.append(session_arena, .{
+                                    .rule_id = rule.rule_id,
+                                    .severity = max_len.severity(),
+                                    .start = .startOfToken(tree, name_token),
+                                    .end = .endOfToken(tree, name_token),
+                                    .message = try std.fmt.allocPrint(session_arena, "{s} field names should have a length less or equal to {d}", .{ container_name, len }),
+                                });
+                            }
+                        };
+                    }
 
-                    if (style_with_severity.severity != .off and !style_with_severity.style.check(name)) {
-                        try lint_problems.append(session_arena, .{
-                            .rule_id = rule.rule_id,
-                            .severity = style_with_severity.severity,
-                            .start = .startOfToken(tree, name_token),
-                            .end = .endOfToken(tree, name_token),
-                            .message = try std.fmt.allocPrint(session_arena, "{s} fields should be {s}", .{ field_desc, style_with_severity.style.name() }),
-                        });
+                    if (style_with_severity.style()) |style| {
+                        if (!style.check(name)) {
+                            try lint_problems.append(session_arena, .{
+                                .rule_id = rule.rule_id,
+                                .severity = style_with_severity.severity(),
+                                .start = .startOfToken(tree, name_token),
+                                .end = .endOfToken(tree, name_token),
+                                .message = try std.fmt.allocPrint(session_arena, "{s} fields should be {s}", .{ field_desc, style.name() }),
+                            });
+                        }
                     }
                 }
             }
@@ -526,22 +498,22 @@ test "run - style checks honor off severity" {
     ,
         .{},
         Config{
-            .error_field = .{ .style = .title_case, .severity = .off },
-            .enum_field = .{ .style = .snake_case, .severity = .off },
-            .struct_field = .{ .style = .snake_case, .severity = .off },
-            .struct_field_that_is_type = .{ .style = .title_case, .severity = .off },
-            .struct_field_that_is_namespace = .{ .style = .snake_case, .severity = .off },
-            .struct_field_that_is_fn = .{ .style = .camel_case, .severity = .off },
-            .struct_field_that_is_type_fn = .{ .style = .title_case, .severity = .off },
-            .union_field = .{ .style = .snake_case, .severity = .off },
-            .error_field_min_len = .{ .len = 0, .severity = .off },
-            .error_field_max_len = .{ .len = 0, .severity = .off },
-            .enum_field_min_len = .{ .len = 0, .severity = .off },
-            .enum_field_max_len = .{ .len = 0, .severity = .off },
-            .struct_field_min_len = .{ .len = 0, .severity = .off },
-            .struct_field_max_len = .{ .len = 0, .severity = .off },
-            .union_field_min_len = .{ .len = 0, .severity = .off },
-            .union_field_max_len = .{ .len = 0, .severity = .off },
+            .error_field = .off,
+            .enum_field = .off,
+            .struct_field = .off,
+            .struct_field_that_is_type = .off,
+            .struct_field_that_is_namespace = .off,
+            .struct_field_that_is_fn = .off,
+            .struct_field_that_is_type_fn = .off,
+            .union_field = .off,
+            .error_field_min_len = .off,
+            .error_field_max_len = .off,
+            .enum_field_min_len = .off,
+            .enum_field_max_len = .off,
+            .struct_field_min_len = .off,
+            .struct_field_max_len = .off,
+            .union_field_min_len = .off,
+            .union_field_max_len = .off,
         },
         &.{},
     );
@@ -562,14 +534,8 @@ test "name lengths" {
     ,
         .{},
         Config{
-            .struct_field_max_len = .{
-                .severity = .warning,
-                .len = 3,
-            },
-            .struct_field_min_len = .{
-                .severity = .@"error",
-                .len = 2,
-            },
+            .struct_field_max_len = .{ .warning = .{ .len = 3 } },
+            .struct_field_min_len = .{ .@"error" = .{ .len = 2 } },
             .struct_field_exclude_len = &.{ "s", "ssss" },
         },
         &.{
@@ -600,14 +566,8 @@ test "name lengths" {
     ,
         .{},
         Config{
-            .struct_field_max_len = .{
-                .severity = .warning,
-                .len = 3,
-            },
-            .struct_field_min_len = .{
-                .severity = .@"error",
-                .len = 2,
-            },
+            .struct_field_max_len = .{ .warning = .{ .len = 3 } },
+            .struct_field_min_len = .{ .@"error" = .{ .len = 2 } },
         },
         &.{},
     );
@@ -627,14 +587,8 @@ test "name lengths" {
     ,
         .{},
         Config{
-            .union_field_max_len = .{
-                .severity = .warning,
-                .len = 3,
-            },
-            .union_field_min_len = .{
-                .severity = .@"error",
-                .len = 2,
-            },
+            .union_field_max_len = .{ .warning = .{ .len = 3 } },
+            .union_field_min_len = .{ .@"error" = .{ .len = 2 } },
             .union_field_exclude_len = &.{ "s", "ssss" },
         },
         &.{
@@ -672,14 +626,8 @@ test "name lengths" {
     ,
         .{},
         Config{
-            .enum_field_max_len = .{
-                .severity = .warning,
-                .len = 3,
-            },
-            .enum_field_min_len = .{
-                .severity = .@"error",
-                .len = 2,
-            },
+            .enum_field_max_len = .{ .warning = .{ .len = 3 } },
+            .enum_field_min_len = .{ .@"error" = .{ .len = 2 } },
             .enum_field_exclude_len = &.{ "s", "ssss" },
         },
         &.{
@@ -715,13 +663,7 @@ test "name lengths" {
         \\};
     ,
         .{},
-        Config{ .error_field_max_len = .{
-            .severity = .warning,
-            .len = 3,
-        }, .error_field_min_len = .{
-            .severity = .@"error",
-            .len = 2,
-        }, .error_field_exclude_len = &.{ "Z", "ZZZZ" } },
+        Config{ .error_field_max_len = .{ .warning = .{ .len = 3 } }, .error_field_min_len = .{ .@"error" = .{ .len = 2 } }, .error_field_exclude_len = &.{ "Z", "ZZZZ" } },
         &.{
             .{
                 .rule_id = "field_naming",
@@ -752,14 +694,8 @@ test "length exclusions do not skip struct style checks" {
     ,
         .{},
         Config{
-            .struct_field_min_len = .{
-                .severity = .warning,
-                .len = 20,
-            },
-            .struct_field_max_len = .{
-                .severity = .warning,
-                .len = 3,
-            },
+            .struct_field_min_len = .{ .warning = .{ .len = 20 } },
+            .struct_field_max_len = .{ .warning = .{ .len = 3 } },
             .struct_field_exclude_len = &.{"BadName"},
         },
         &.{
@@ -782,18 +718,9 @@ test "length exclusions do not skip error style checks" {
     ,
         .{},
         Config{
-            .error_field = .{
-                .style = .snake_case,
-                .severity = .@"error",
-            },
-            .error_field_min_len = .{
-                .severity = .warning,
-                .len = 20,
-            },
-            .error_field_max_len = .{
-                .severity = .warning,
-                .len = 3,
-            },
+            .error_field = .{ .@"error" = .snake_case },
+            .error_field_min_len = .{ .warning = .{ .len = 20 } },
+            .error_field_max_len = .{ .warning = .{ .len = 3 } },
             .error_field_exclude_len = &.{"BadName"},
         },
         &.{

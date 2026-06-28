@@ -9,10 +9,7 @@ pub const Config = struct {
     /// Order and severity for union fields. If you're setting this and use
     /// tagged unions (e.g., `union(MyEnum)`) then you will also need to set
     /// the same order for enums.
-    union_field_order: zlinter.rules.LintTextOrderWithSeverity = .{
-        .order = .alphabetical_ascending,
-        .severity = .warning,
-    },
+    union_field_order: zlinter.rules.LintTextOrderWithSeverity = .{ .warning = .alphabetical_ascending },
 
     /// Order and severity for struct fields
     struct_field_order: zlinter.rules.LintTextOrderWithSeverity = .off,
@@ -30,10 +27,7 @@ pub const Config = struct {
     /// Order and severity for enum fields. If you're setting this and use
     /// tagged unions (e.g., `union(MyEnum)`) then you will also need to set
     /// the same order for unions.
-    enum_field_order: zlinter.rules.LintTextOrderWithSeverity = .{
-        .order = .alphabetical_ascending,
-        .severity = .warning,
-    },
+    enum_field_order: zlinter.rules.LintTextOrderWithSeverity = .{ .warning = .alphabetical_ascending },
 };
 
 /// Builds and returns the field_ordering rule.
@@ -92,9 +86,7 @@ fn run(
             break :kind null;
         } orelse continue :nodes;
 
-        if (order_with_severity.order == .off or order_with_severity.severity == .off) {
-            continue :nodes;
-        }
+        const order = order_with_severity.order() orelse continue :nodes;
 
         var actual_order = std.ArrayList(Ast.Node.Index).empty;
         var expected_order = std.ArrayList(Ast.Node.Index).empty;
@@ -103,7 +95,7 @@ fn run(
             Field,
             struct { zlinter.rules.LintTextOrder },
             Field.cmp,
-        ) = .initContext(.{order_with_severity.order});
+        ) = .initContext(.{order});
 
         var seen_field: bool = false;
         var original_index: usize = 0;
@@ -193,12 +185,12 @@ fn run(
 
             try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
-                .severity = order_with_severity.severity,
+                .severity = order_with_severity.severity(),
                 .start = actual_start,
                 .end = actual_end,
                 .message = try std.fmt.allocPrint(session_arena, "{s} fields should be in {s} order", .{
                     container_kind_name,
-                    order_with_severity.order.name(),
+                    order.name(),
                 }),
                 .fix = .{
                     .start = first_fix_segment.start,

@@ -1,8 +1,8 @@
 .{
     .rules = .{
         .no_todo = .{
-    .exclude_if_contains_issue_number = false,
-    .exclude_if_contains_url = true,
-},
+            .exclude_if_contains_issue_number = false,
+            .exclude_if_contains_url = true,
+        },
     },
 }

@@ -91,24 +91,40 @@ pub const LintTextOrder = enum {
     }
 };
 
-pub const LintTextOrderWithSeverity = struct {
-    order: LintTextOrder,
-    severity: LintProblemSeverity,
+pub const LintTextOrderWithSeverity = union(LintProblemSeverity) {
+    off,
+    warning: LintTextOrder,
+    @"error": LintTextOrder,
 
-    pub const off = LintTextOrderWithSeverity{
-        .order = .off,
-        .severity = .off,
-    };
+    pub fn severity(self: LintTextOrderWithSeverity) LintProblemSeverity {
+        return std.meta.activeTag(self);
+    }
+
+    pub fn order(self: LintTextOrderWithSeverity) ?LintTextOrder {
+        return switch (self) {
+            .off => null,
+            .warning => |order_value| order_value,
+            .@"error" => |order_value| order_value,
+        };
+    }
 };
 
-pub const LintTextStyleWithSeverity = struct {
-    style: LintTextStyle,
-    severity: LintProblemSeverity,
+pub const LintTextStyleWithSeverity = union(LintProblemSeverity) {
+    off,
+    warning: LintTextStyle,
+    @"error": LintTextStyle,
 
-    pub const off = LintTextStyleWithSeverity{
-        .style = .off,
-        .severity = .off,
-    };
+    pub fn severity(self: LintTextStyleWithSeverity) LintProblemSeverity {
+        return std.meta.activeTag(self);
+    }
+
+    pub fn style(self: LintTextStyleWithSeverity) ?LintTextStyle {
+        return switch (self) {
+            .off => null,
+            .warning => |style_value| style_value,
+            .@"error" => |style_value| style_value,
+        };
+    }
 };
 
 pub const LintTextStyle = enum {
@@ -179,15 +195,27 @@ pub const LintTextStyle = enum {
 
 /// Represents a min or max length configuration, usually for fields and variable
 /// declaration checks.
-pub const LenAndSeverity = struct {
+pub const LenAndSeverity = union(LintProblemSeverity) {
+    off,
     /// Should always be inclusive.
-    len: u16,
-    severity: LintProblemSeverity,
+    warning: Config,
+    @"error": Config,
 
-    pub const off = LenAndSeverity{
-        .len = 0,
-        .severity = .off,
+    pub const Config = struct {
+        len: u16,
     };
+
+    pub fn severity(self: LenAndSeverity) LintProblemSeverity {
+        return std.meta.activeTag(self);
+    }
+
+    pub fn len(self: LenAndSeverity) ?u16 {
+        return switch (self) {
+            .off => null,
+            .warning => |config| config.len,
+            .@"error" => |config| config.len,
+        };
+    }
 };
 
 pub const LintProblemSeverity = enum(u8) {

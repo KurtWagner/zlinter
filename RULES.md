@@ -29,49 +29,49 @@ Enforces that variable declaration names use consistent naming. For example,
 
   * Style and severity for declarations with `var` mutability.
 
-  * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
+  * **Default:** `.{ .@"error" = .snake_case }`
 
 * `const_decl`
 
   * Style and severity for declarations with `const` mutability.
 
-  * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
+  * **Default:** `.{ .@"error" = .snake_case }`
 
 * `decl_that_is_type`
 
   * Style and severity for type declarations.
 
-  * **Default:** `.{ .style = .title_case, .severity = .@"error", }`
+  * **Default:** `.{ .@"error" = .title_case }`
 
 * `decl_that_is_namespace`
 
   * Style and severity for namespace declarations.
 
-  * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
+  * **Default:** `.{ .@"error" = .snake_case }`
 
 * `decl_that_is_fn`
 
   * Style and severity for non-type function declarations.
 
-  * **Default:** `.{ .style = .camel_case, .severity = .@"error", }`
+  * **Default:** `.{ .@"error" = .camel_case }`
 
 * `decl_that_is_type_fn`
 
   * Style and severity type function declarations.
 
-  * **Default:** `.{ .style = .title_case, .severity = .@"error", }`
+  * **Default:** `.{ .@"error" = .title_case }`
 
 * `decl_name_min_len`
 
   * Minimum length of a declarations name. To exclude names from this check see `decl_name_exclude_len` option. Set to `.off` to disable this check.
 
-  * **Default:** `.{ .len = 3, .severity = .warning, }`
+  * **Default:** `.{ .warning = .{ .len = 3 } }`
 
 * `decl_name_max_len`
 
   * Maximum length of an `error` field name. To exclude names from this check see `decl_name_exclude_len` option. Set to `.off` to disable this check.
 
-  * **Default:** `.{ .len = 30, .severity = .warning, }`
+  * **Default:** `.{ .warning = .{ .len = 30 } }`
 
 * `decl_name_exclude_len`
 
@@ -90,19 +90,19 @@ example, `struct`, `enum`, `union`, `opaque` and `error`.
 
   * Style and severity for errors defined within an `error { ... }` container
 
-  * **Default:** `.{ .style = .title_case, .severity = .@"error", }`
+  * **Default:** `.{ .@"error" = .title_case }`
 
 * `error_field_min_len`
 
   * Minimum length of an `error` field name. To exclude names from this check see `error_field_exclude_len` option. Set to `.off` to disable this check.
 
-  * **Default:** `.{ .len = 3, .severity = .warning, }`
+  * **Default:** `.{ .warning = .{ .len = 3 } }`
 
 * `error_field_max_len`
 
   * Maximum length of an `error` field name. To exclude names from this check see `error_field_exclude_len` option. Set to `.off` to disable this check.
 
-  * **Default:** `.{ .len = 30, .severity = .warning, }`
+  * **Default:** `.{ .warning = .{ .len = 30 } }`
 
 * `error_field_exclude_len`
 
@@ -114,19 +114,19 @@ example, `struct`, `enum`, `union`, `opaque` and `error`.
 
   * Style and severity for enum values defined within an `enum { ... }` container
 
-  * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
+  * **Default:** `.{ .@"error" = .snake_case }`
 
 * `enum_field_min_len`
 
   * Minimum length of an `enum` field name. To exclude names from this check see `enum_field_exclude_len` option. Set to `.off` to disable this check.
 
-  * **Default:** `.{ .len = 3, .severity = .warning, }`
+  * **Default:** `.{ .warning = .{ .len = 3 } }`
 
 * `enum_field_max_len`
 
   * Maximum length of an `enum` field name. To exclude names from this check see `enum_field_exclude_len` option. Set to `.off` to disable this check.
 
-  * **Default:** `.{ .len = 30, .severity = .warning, }`
+  * **Default:** `.{ .warning = .{ .len = 30 } }`
 
 * `enum_field_exclude_len`
 
@@ -138,19 +138,19 @@ example, `struct`, `enum`, `union`, `opaque` and `error`.
 
   * Style and severity for struct fields defined within a `struct { ... }` container
 
-  * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
+  * **Default:** `.{ .@"error" = .snake_case }`
 
 * `struct_field_min_len`
 
   * Minimum length of a `struct` field name. To exclude names from this check see `struct_field_exclude_len` option. Set to `.off` to disable this check.
 
-  * **Default:** `.{ .len = 3, .severity = .warning, }`
+  * **Default:** `.{ .warning = .{ .len = 3 } }`
 
 * `struct_field_max_len`
 
   * Maximum length of a `struct` field name. To exclude names from this check see `struct_field_exclude_len` option. Set to `.off` to disable this check.
 
-  * **Default:** `.{ .len = 30, .severity = .warning, }`
+  * **Default:** `.{ .warning = .{ .len = 30 } }`
 
 * `struct_field_exclude_len`
 
@@ -162,43 +162,43 @@ example, `struct`, `enum`, `union`, `opaque` and `error`.
 
   * Like `struct_field` but for fields with type `type`
 
-  * **Default:** `.{ .style = .title_case, .severity = .@"error", }`
+  * **Default:** `.{ .@"error" = .title_case }`
 
 * `struct_field_that_is_namespace`
 
   * Like `struct_field` but for fields with a namespace type
 
-  * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
+  * **Default:** `.{ .@"error" = .snake_case }`
 
 * `struct_field_that_is_fn`
 
   * Like `struct_field` but for fields with a callable/function type
 
-  * **Default:** `.{ .style = .camel_case, .severity = .@"error", }`
+  * **Default:** `.{ .@"error" = .camel_case }`
 
 * `struct_field_that_is_type_fn`
 
   * Like `struct_field_that_is_fn` but the callable/function returns a `type`
 
-  * **Default:** `.{ .style = .title_case, .severity = .@"error", }`
+  * **Default:** `.{ .@"error" = .title_case }`
 
 * `union_field`
 
   * Style and severity for union fields defined within a `union { ... }` block
 
-  * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
+  * **Default:** `.{ .@"error" = .snake_case }`
 
 * `union_field_min_len`
 
   * Minimum length of a `union` field name. To exclude names from this check see `union_field_exclude_len` option. Set to `.off` to disable this check.
 
-  * **Default:** `.{ .len = 3, .severity = .warning, }`
+  * **Default:** `.{ .warning = .{ .len = 3 } }`
 
 * `union_field_max_len`
 
   * Maximum length of a `union` field name. To exclude names from this check see `union_field_exclude_len` option. Set to `.off` to disable this check.
 
-  * **Default:** `.{ .len = 30, .severity = .warning, }`
+  * **Default:** `.{ .warning = .{ .len = 30 } }`
 
 * `union_field_exclude_len`
 
@@ -220,7 +220,7 @@ Enforce a consistent, predictable order for fields in structs, enums, and unions
 
   * Order and severity for union fields. If you're setting this and use tagged unions (e.g., `union(MyEnum)`) then you will also need to set the same order for enums.
 
-  * **Default:** `.{ .order = .alphabetical_ascending, .severity = .warning, }`
+  * **Default:** `.{ .warning = .alphabetical_ascending }`
 
 * `struct_field_order`
 
@@ -244,7 +244,7 @@ Enforce a consistent, predictable order for fields in structs, enums, and unions
 
   * Order and severity for enum fields. If you're setting this and use tagged unions (e.g., `union(MyEnum)`) then you will also need to set the same order for unions.
 
-  * **Default:** `.{ .order = .alphabetical_ascending, .severity = .warning, }`
+  * **Default:** `.{ .warning = .alphabetical_ascending }`
 
 ## `file_naming`
 
@@ -257,13 +257,13 @@ for implicit structs and `snake_case` for namespaces.
 
   * Style and severity for a file that is a namespace (i.e., does not have root container fields)
 
-  * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
+  * **Default:** `.{ .@"error" = .snake_case }`
 
 * `file_struct`
 
   * Style and severity for a file that is a struct (i.e., has root container fields)
 
-  * **Default:** `.{ .style = .title_case, .severity = .@"error", }`
+  * **Default:** `.{ .@"error" = .title_case }`
 
 ## `function_naming`
 
@@ -288,37 +288,37 @@ that return types and `camelCase` for others.
 
   * Style and severity for non-type functions
 
-  * **Default:** `.{ .style = .camel_case, .severity = .@"error", }`
+  * **Default:** `.{ .@"error" = .camel_case }`
 
 * `function_that_returns_type`
 
   * Style and severity for type functions
 
-  * **Default:** `.{ .style = .title_case, .severity = .@"error", }`
+  * **Default:** `.{ .@"error" = .title_case }`
 
 * `function_arg`
 
   * Style and severity for standard function arg
 
-  * **Default:** `.{ .style = .snake_case, .severity = .@"error", }`
+  * **Default:** `.{ .@"error" = .snake_case }`
 
 * `function_arg_that_is_type`
 
   * Style and severity for type function arg
 
-  * **Default:** `.{ .style = .title_case, .severity = .@"error", }`
+  * **Default:** `.{ .@"error" = .title_case }`
 
 * `function_arg_that_is_fn`
 
   * Style and severity for non-type function function arg
 
-  * **Default:** `.{ .style = .camel_case, .severity = .@"error", }`
+  * **Default:** `.{ .@"error" = .camel_case }`
 
 * `function_arg_that_is_type_fn`
 
   * Style and severity for type function function arg
 
-  * **Default:** `.{ .style = .title_case, .severity = .@"error", }`
+  * **Default:** `.{ .@"error" = .title_case }`
 
 ## `import_ordering`
 
@@ -1017,43 +1017,43 @@ else
 
   * Requirement for `if` statements
 
-  * **Default:** `.{ .severity = .warning, .requirement = .multi_line_only, }`
+  * **Default:** `.{ .warning = .multi_line_only }`
 
 * `while_statement`
 
   * Requirement for `while` statements
 
-  * **Default:** `.{ .severity = .off, .requirement = .multi_line_only, }`
+  * **Default:** `.off`
 
 * `for_statement`
 
   * Requirement for for statements
 
-  * **Default:** `.{ .severity = .warning, .requirement = .multi_line_only, }`
+  * **Default:** `.{ .warning = .multi_line_only }`
 
 * `catch_statement`
 
   * Requirement for `catch` statements
 
-  * **Default:** `.{ .severity = .warning, .requirement = .multi_line_only, }`
+  * **Default:** `.{ .warning = .multi_line_only }`
 
 * `switch_case_statement`
 
   * Requirement for `switch` statements
 
-  * **Default:** `.{ .severity = .off, .requirement = .multi_line_only, }`
+  * **Default:** `.off`
 
 * `defer_statement`
 
   * Requirement for `defer` statements
 
-  * **Default:** `.{ .severity = .off, .requirement = .multi_line_only, }`
+  * **Default:** `.off`
 
 * `errdefer_statement`
 
   * Requirement for `errdefer` statements
 
-  * **Default:** `.{ .severity = .off, .requirement = .multi_line_only, }`
+  * **Default:** `.off`
 
 ## `require_doc_comment`
 

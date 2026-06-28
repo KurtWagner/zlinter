@@ -1,7 +1,7 @@
 .{
     .rules = .{
         .declaration_naming = .{
-    .exclude_aliases = false,
-},
+            .exclude_aliases = false,
+        },
     },
 }

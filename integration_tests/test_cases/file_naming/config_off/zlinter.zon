@@ -1,10 +1,7 @@
 .{
     .rules = .{
         .file_naming = .{
-            .file_struct = .{
-                .style = .title_case,
-                .severity = .off,
-            },
+            .file_struct = .off,
         },
     },
 }
