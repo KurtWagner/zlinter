@@ -22,56 +22,32 @@ pub const Config = struct {
     exclude_aliases: bool = true,
 
     /// Style and severity for declarations with `var` mutability.
-    var_decl: zlinter.rules.LintTextStyleWithSeverity = .{
-        .style = .snake_case,
-        .severity = .@"error",
-    },
+    var_decl: zlinter.rules.LintTextStyleWithSeverity = .{ .@"error" = .snake_case },
 
     /// Style and severity for declarations with `const` mutability.
-    const_decl: zlinter.rules.LintTextStyleWithSeverity = .{
-        .style = .snake_case,
-        .severity = .@"error",
-    },
+    const_decl: zlinter.rules.LintTextStyleWithSeverity = .{ .@"error" = .snake_case },
 
     /// Style and severity for type declarations.
-    decl_that_is_type: zlinter.rules.LintTextStyleWithSeverity = .{
-        .style = .title_case,
-        .severity = .@"error",
-    },
+    decl_that_is_type: zlinter.rules.LintTextStyleWithSeverity = .{ .@"error" = .title_case },
 
     /// Style and severity for namespace declarations.
-    decl_that_is_namespace: zlinter.rules.LintTextStyleWithSeverity = .{
-        .style = .snake_case,
-        .severity = .@"error",
-    },
+    decl_that_is_namespace: zlinter.rules.LintTextStyleWithSeverity = .{ .@"error" = .snake_case },
 
     /// Style and severity for non-type function declarations.
-    decl_that_is_fn: zlinter.rules.LintTextStyleWithSeverity = .{
-        .style = .camel_case,
-        .severity = .@"error",
-    },
+    decl_that_is_fn: zlinter.rules.LintTextStyleWithSeverity = .{ .@"error" = .camel_case },
 
     /// Style and severity type function declarations.
-    decl_that_is_type_fn: zlinter.rules.LintTextStyleWithSeverity = .{
-        .style = .title_case,
-        .severity = .@"error",
-    },
+    decl_that_is_type_fn: zlinter.rules.LintTextStyleWithSeverity = .{ .@"error" = .title_case },
 
     /// Minimum length of a declarations name. To exclude names from this check
     /// see `decl_name_exclude_len` option. Set to `.off` to disable this
     /// check.
-    decl_name_min_len: zlinter.rules.LenAndSeverity = .{
-        .len = 3,
-        .severity = .warning,
-    },
+    decl_name_min_len: zlinter.rules.LenAndSeverity = .{ .warning = .{ .len = 3 } },
 
     /// Maximum length of an `error` field name. To exclude names from this check
     /// see `decl_name_exclude_len` option. Set to `.off` to disable this
     /// check.
-    decl_name_max_len: zlinter.rules.LenAndSeverity = .{
-        .len = 30,
-        .severity = .warning,
-    },
+    decl_name_max_len: zlinter.rules.LenAndSeverity = .{ .warning = .{ .len = 30 } },
 
     /// Exclude these declaration names from min and max declaration name checks.
     decl_name_exclude_len: []const []const u8 = zlinter.strings.default_excluded_short_names,
@@ -166,31 +142,38 @@ fn run(
         }
 
         // Check name length:
-        if (config.decl_name_min_len.severity != .off and name.len < config.decl_name_min_len.len) {
-            for (config.decl_name_exclude_len) |exclude_name| {
-                if (std.mem.eql(u8, name, exclude_name)) continue :nodes;
-            }
+        var emitted_len_diagnostic = false;
+        if (config.decl_name_min_len.len()) |min_len| {
+            if (name.len < min_len) {
+                for (config.decl_name_exclude_len) |exclude_name| {
+                    if (std.mem.eql(u8, name, exclude_name)) continue :nodes;
+                }
 
-            try lint_problems.append(session_arena, .{
-                .rule_id = rule.rule_id,
-                .severity = config.decl_name_min_len.severity,
-                .start = .startOfToken(tree, name_token),
-                .end = .endOfToken(tree, name_token),
-                .message = try std.fmt.allocPrint(session_arena, "Declaration names should have a length greater or equal to {d}", .{config.decl_name_min_len.len}),
-            });
-        } else if (config.decl_name_max_len.severity != .off and name.len > config.decl_name_max_len.len) {
-            for (config.decl_name_exclude_len) |exclude_name| {
-                if (std.mem.eql(u8, name, exclude_name)) continue :nodes;
+                try lint_problems.append(session_arena, .{
+                    .rule_id = rule.rule_id,
+                    .severity = config.decl_name_min_len.severity(),
+                    .start = .startOfToken(tree, name_token),
+                    .end = .endOfToken(tree, name_token),
+                    .message = try std.fmt.allocPrint(session_arena, "Declaration names should have a length greater or equal to {d}", .{min_len}),
+                });
+                emitted_len_diagnostic = true;
             }
-
-            try lint_problems.append(session_arena, .{
-                .rule_id = rule.rule_id,
-                .severity = config.decl_name_max_len.severity,
-                .start = .startOfToken(tree, name_token),
-                .end = .endOfToken(tree, name_token),
-                .message = try std.fmt.allocPrint(session_arena, "Declaration names should have a length less or equal to {d}", .{config.decl_name_max_len.len}),
-            });
         }
+        if (!emitted_len_diagnostic) if (config.decl_name_max_len.len()) |max_len| {
+            if (name.len > max_len) {
+                for (config.decl_name_exclude_len) |exclude_name| {
+                    if (std.mem.eql(u8, name, exclude_name)) continue :nodes;
+                }
+
+                try lint_problems.append(session_arena, .{
+                    .rule_id = rule.rule_id,
+                    .severity = config.decl_name_max_len.severity(),
+                    .start = .startOfToken(tree, name_token),
+                    .end = .endOfToken(tree, name_token),
+                    .message = try std.fmt.allocPrint(session_arena, "Declaration names should have a length less or equal to {d}", .{max_len}),
+                });
+            }
+        };
 
         // Check name style:
         for (resolved_summaries.items) |resolved_summary| {
@@ -199,17 +182,17 @@ fn run(
                 tree.tokens.items(.tag)[var_decl.ast.mut_token],
                 config,
             );
-            if (style_diagnostic.style_with_severity.severity == .off) continue;
-            if (style_diagnostic.style_with_severity.style.check(name)) continue;
+            const style = style_diagnostic.style_with_severity.style() orelse continue;
+            if (style.check(name)) continue;
 
             try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
-                .severity = style_diagnostic.style_with_severity.severity,
+                .severity = style_diagnostic.style_with_severity.severity(),
                 .start = .startOfToken(tree, name_token),
                 .end = .endOfToken(tree, name_token),
                 .message = try std.fmt.allocPrint(session_arena, "{s} declaration should be {s}", .{
                     style_diagnostic.var_desc,
-                    style_diagnostic.style_with_severity.style.name(),
+                    style.name(),
                 }),
                 .notes = try allocResolvedDeclNotes(session_arena, session, style_diagnostic.source_decl_id),
             });
@@ -722,14 +705,8 @@ test "name lengths" {
     ,
         .{},
         Config{
-            .decl_name_max_len = .{
-                .severity = .warning,
-                .len = 3,
-            },
-            .decl_name_min_len = .{
-                .severity = .@"error",
-                .len = 2,
-            },
+            .decl_name_max_len = .{ .warning = .{ .len = 3 } },
+            .decl_name_min_len = .{ .@"error" = .{ .len = 2 } },
             .decl_name_exclude_len = &.{ "s", "ssss" },
         },
         &.{
@@ -756,14 +733,8 @@ test "name lengths" {
     ,
         .{},
         Config{
-            .decl_name_max_len = .{
-                .severity = .off,
-                .len = 3,
-            },
-            .decl_name_min_len = .{
-                .severity = .off,
-                .len = 2,
-            },
+            .decl_name_max_len = .off,
+            .decl_name_min_len = .off,
         },
         &.{},
     );
@@ -775,14 +746,8 @@ test "declaration_naming style off still checks const declaration length" {
         "const BadName = 1;",
         .{},
         Config{
-            .const_decl = .{
-                .style = .snake_case,
-                .severity = .off,
-            },
-            .decl_name_max_len = .{
-                .severity = .warning,
-                .len = 3,
-            },
+            .const_decl = .off,
+            .decl_name_max_len = .{ .warning = .{ .len = 3 } },
         },
         &.{
             .{
@@ -801,14 +766,8 @@ test "declaration_naming style off still checks type declaration length" {
         "const bad_type = u32;",
         .{},
         Config{
-            .decl_that_is_type = .{
-                .style = .title_case,
-                .severity = .off,
-            },
-            .decl_name_max_len = .{
-                .severity = .warning,
-                .len = 3,
-            },
+            .decl_that_is_type = .off,
+            .decl_name_max_len = .{ .warning = .{ .len = 3 } },
         },
         &.{
             .{
@@ -827,14 +786,8 @@ test "declaration_naming style off still checks function declaration length" {
         "const BadFn = fn () void {};",
         .{},
         Config{
-            .decl_that_is_fn = .{
-                .style = .camel_case,
-                .severity = .off,
-            },
-            .decl_name_max_len = .{
-                .severity = .warning,
-                .len = 3,
-            },
+            .decl_that_is_fn = .off,
+            .decl_name_max_len = .{ .warning = .{ .len = 3 } },
         },
         &.{
             .{

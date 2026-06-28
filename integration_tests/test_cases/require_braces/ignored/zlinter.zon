@@ -1,10 +1,7 @@
 .{
     .rules = .{
         .require_braces = .{
-    .if_statement = .{
-        .severity = .@"error",
-        .requirement = .all,
-    },
-},
+            .if_statement = .{ .@"error" = .all },
+        },
     },
 }

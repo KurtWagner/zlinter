@@ -223,10 +223,10 @@ being added. These are the base configurations applied. For example,
 
 ```zig
 builder.addRule(.{ .builtin = .field_naming }, .{
-  .enum_field = .{ .style = .snake_case, .severity = .warning },
+  .enum_field = .{ .warning = .snake_case },
   .union_field = .off,
-  .struct_field_that_is_type = .{ .style = .title_case, .severity = .@"error" },
-  .struct_field_that_is_fn = .{ .style = .camel_case, .severity = .@"error" },
+  .struct_field_that_is_type = .{ .@"error" = .title_case },
+  .struct_field_that_is_fn = .{ .@"error" = .camel_case },
 });
 builder.addRule(.{ .builtin = .no_deprecated }, .{
   .severity = .warning,
@@ -246,7 +246,7 @@ example,
 .{
     .rules = .{
         .field_naming = .{
-            .enum_field = .{ .severity = .off },
+            .enum_field = .off,
         },
     },
 }

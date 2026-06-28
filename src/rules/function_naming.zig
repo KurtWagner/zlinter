@@ -16,40 +16,22 @@ pub const Config = struct {
     exclude_export: bool = false,
 
     /// Style and severity for non-type functions
-    function: zlinter.rules.LintTextStyleWithSeverity = .{
-        .style = .camel_case,
-        .severity = .@"error",
-    },
+    function: zlinter.rules.LintTextStyleWithSeverity = .{ .@"error" = .camel_case },
 
     /// Style and severity for type functions
-    function_that_returns_type: zlinter.rules.LintTextStyleWithSeverity = .{
-        .style = .title_case,
-        .severity = .@"error",
-    },
+    function_that_returns_type: zlinter.rules.LintTextStyleWithSeverity = .{ .@"error" = .title_case },
 
     /// Style and severity for standard function arg
-    function_arg: zlinter.rules.LintTextStyleWithSeverity = .{
-        .style = .snake_case,
-        .severity = .@"error",
-    },
+    function_arg: zlinter.rules.LintTextStyleWithSeverity = .{ .@"error" = .snake_case },
 
     /// Style and severity for type function arg
-    function_arg_that_is_type: zlinter.rules.LintTextStyleWithSeverity = .{
-        .style = .title_case,
-        .severity = .@"error",
-    },
+    function_arg_that_is_type: zlinter.rules.LintTextStyleWithSeverity = .{ .@"error" = .title_case },
 
     /// Style and severity for non-type function function arg
-    function_arg_that_is_fn: zlinter.rules.LintTextStyleWithSeverity = .{
-        .style = .camel_case,
-        .severity = .@"error",
-    },
+    function_arg_that_is_fn: zlinter.rules.LintTextStyleWithSeverity = .{ .@"error" = .camel_case },
 
     /// Style and severity for type function function arg
-    function_arg_that_is_type_fn: zlinter.rules.LintTextStyleWithSeverity = .{
-        .style = .title_case,
-        .severity = .@"error",
-    },
+    function_arg_that_is_type_fn: zlinter.rules.LintTextStyleWithSeverity = .{ .@"error" = .title_case },
 };
 
 const ParamKind = struct {
@@ -106,17 +88,19 @@ fn run(
 
             const error_message: ?[]const u8, const severity: ?zlinter.rules.LintProblemSeverity = msg: {
                 if (functionReturnsType(return_type)) {
-                    if (!config.function_that_returns_type.style.check(fn_name)) {
+                    const style = config.function_that_returns_type.style() orelse break :msg .{ null, null };
+                    if (!style.check(fn_name)) {
                         break :msg .{
-                            try std.fmt.allocPrint(session_arena, "Callable returning `type` should be {s}", .{config.function_that_returns_type.style.name()}),
-                            config.function_that_returns_type.severity,
+                            try std.fmt.allocPrint(session_arena, "Callable returning `type` should be {s}", .{style.name()}),
+                            config.function_that_returns_type.severity(),
                         };
                     }
                 } else {
-                    if (!config.function.style.check(fn_name)) {
+                    const style = config.function.style() orelse break :msg .{ null, null };
+                    if (!style.check(fn_name)) {
                         break :msg .{
-                            try std.fmt.allocPrint(session_arena, "Callable should be {s}", .{config.function.style.name()}),
-                            config.function.severity,
+                            try std.fmt.allocPrint(session_arena, "Callable should be {s}", .{style.name()}),
+                            config.function.severity(),
                         };
                     }
                 }
@@ -200,13 +184,14 @@ fn run(
                     };
                 };
 
-                if (!style_with_severity.style.check(identifier)) {
+                const style = style_with_severity.style() orelse continue;
+                if (!style.check(identifier)) {
                     try lint_problems.append(session_arena, .{
                         .rule_id = rule.rule_id,
-                        .severity = style_with_severity.severity,
+                        .severity = style_with_severity.severity(),
                         .start = .startOfToken(tree, identifer_token),
                         .end = .endOfToken(tree, identifer_token),
-                        .message = try std.fmt.allocPrint(session_arena, "{s} should be {s}", .{ desc, style_with_severity.style.name() }),
+                        .message = try std.fmt.allocPrint(session_arena, "{s} should be {s}", .{ desc, style.name() }),
                     });
                 }
             }

@@ -1,7 +1,7 @@
 .{
     .rules = .{
         .import_ordering = .{
-    .allow_line_separated_chunks = false,
-},
+            .allow_line_separated_chunks = false,
+        },
     },
 }

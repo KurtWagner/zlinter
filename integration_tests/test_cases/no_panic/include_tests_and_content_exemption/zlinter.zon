@@ -1,8 +1,8 @@
 .{
     .rules = .{
         .no_panic = .{
-    .exclude_tests = false,
-    .exclude_panic_with_content = .{"OOM", "", "a\"b"},
-},
+            .exclude_tests = false,
+            .exclude_panic_with_content = .{ "OOM", "", "a\"b" },
+        },
     },
 }

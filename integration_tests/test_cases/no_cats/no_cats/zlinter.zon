@@ -1,7 +1,7 @@
 .{
     .rules = .{
         .no_cats = .{
-    .message = "I'm allergic to cats",
-},
+            .message = "I'm allergic to cats",
+        },
     },
 }

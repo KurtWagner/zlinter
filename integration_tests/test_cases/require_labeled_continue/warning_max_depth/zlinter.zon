@@ -1,8 +1,8 @@
 .{
     .rules = .{
         .require_labeled_continue = .{
-    .severity = .warning,
-    .max_unlabeled_depth = 2,
-},
+            .severity = .warning,
+            .max_unlabeled_depth = 2,
+        },
     },
 }

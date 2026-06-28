@@ -1,7 +1,7 @@
 .{
     .rules = .{
         .function_naming = .{
-    .exclude_extern = false,
-},
+            .exclude_extern = false,
+        },
     },
 }

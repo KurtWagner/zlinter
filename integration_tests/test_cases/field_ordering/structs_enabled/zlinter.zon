@@ -1,10 +1,7 @@
 .{
     .rules = .{
         .field_ordering = .{
-    .struct_field_order = .{
-        .order = .alphabetical_descending,
-        .severity = .@"error",
-    },
-},
+            .struct_field_order = .{ .@"error" = .alphabetical_descending },
+        },
     },
 }
