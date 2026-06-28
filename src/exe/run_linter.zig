@@ -940,52 +940,67 @@ const LintConfigStore = struct {
         dir_abs_path: []const u8,
         cwd: std.Io.Dir,
     ) void {
-        if (dir_abs_path.len == 0) return;
-
         std.debug.assert(std.fs.path.isAbsolute(dir_abs_path));
 
-        const trimmed = std.mem.trimEnd(
+        const normalized_slice = std.mem.trimEnd(
             u8,
             dir_abs_path,
             std.fs.path.sep_str,
         );
-        if (trimmed.len == 0) return;
+        if (normalized_slice.len == 0) return;
 
-        const normalized = oom(arena.dupe(u8, trimmed));
-        for (normalized, 0..) |c, i| {
+        // We only make a copy for key indexing if we need to index part of the
+        // path, in which case we make a copy of it and base all slices keys
+        // off it in memory stored in the arena.
+        var maybe_normalized_copy: ?[]const u8 = null;
+
+        for (normalized_slice, 0..) |c, i| {
             if (!std.fs.path.isSep(c)) continue;
 
-            const dir_abs_sub_path = normalized[0..i];
-            self.ensureIndex(
+            if (self.needsIndexing(normalized_slice[0..i])) {
+                if (maybe_normalized_copy == null)
+                    maybe_normalized_copy = oom(arena.dupe(u8, normalized_slice));
+                self.insertIntoIndex(
+                    io,
+                    arena,
+                    maybe_normalized_copy.?[0..i],
+                    cwd,
+                );
+            }
+        }
+        if (self.needsIndexing(normalized_slice[0..])) {
+            if (maybe_normalized_copy == null)
+                maybe_normalized_copy = oom(arena.dupe(u8, normalized_slice));
+            self.insertIntoIndex(
                 io,
                 arena,
-                dir_abs_sub_path,
+                maybe_normalized_copy.?[0..],
                 cwd,
             );
         }
-        self.ensureIndex(
-            io,
-            arena,
-            normalized[0..],
-            cwd,
-        );
     }
 
-    fn ensureIndex(
+    /// Returns true if `insertIntoIndex` needs to be called for a path.
+    fn needsIndexing(
+        self: *const LintConfigStore,
+        dir_abs_sub_path: []const u8,
+    ) bool {
+        return dir_abs_sub_path.len > 0 and
+            !self.config_by_dir_abs_path.contains(dir_abs_sub_path);
+    }
+
+    /// Inserts a path into the index, should check `needsIndexing` before
+    /// calling this.
+    fn insertIntoIndex(
         self: *LintConfigStore,
         io: std.Io,
         arena: std.mem.Allocator,
         dir_abs_sub_path: []const u8,
         cwd: std.Io.Dir,
     ) void {
-        if (dir_abs_sub_path.len == 0)
-            return;
-
-        if (self.config_by_dir_abs_path.contains(dir_abs_sub_path))
-            return;
+        std.debug.assert(self.needsIndexing(dir_abs_sub_path));
 
         std.log.info("Index zlinter config: '{s}'", .{dir_abs_sub_path});
-
         if (LintConfig.tryLoad(
             io,
             arena,
