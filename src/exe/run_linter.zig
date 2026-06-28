@@ -287,7 +287,7 @@ fn runLinterRules(
         };
         const file_abs_path = session.file_store.fileAbsPath(file_id);
 
-        lint_config_store.index(
+        try lint_config_store.index(
             runtime.io,
             runtime.sessionArena(),
             std.fs.path.dirname(file_abs_path).?,
@@ -939,7 +939,7 @@ const LintConfigStore = struct {
         arena: std.mem.Allocator,
         dir_abs_path: []const u8,
         cwd: std.Io.Dir,
-    ) void {
+    ) error{InvalidLintConfig}!void {
         std.debug.assert(std.fs.path.isAbsolute(dir_abs_path));
 
         const normalized_slice = std.mem.trimEnd(
@@ -960,7 +960,7 @@ const LintConfigStore = struct {
             if (self.needsIndexing(normalized_slice[0..i])) {
                 if (maybe_normalized_copy == null)
                     maybe_normalized_copy = oom(arena.dupe(u8, normalized_slice));
-                self.insertIntoIndex(
+                try self.insertIntoIndex(
                     io,
                     arena,
                     maybe_normalized_copy.?[0..i],
@@ -971,7 +971,7 @@ const LintConfigStore = struct {
         if (self.needsIndexing(normalized_slice[0..])) {
             if (maybe_normalized_copy == null)
                 maybe_normalized_copy = oom(arena.dupe(u8, normalized_slice));
-            self.insertIntoIndex(
+            try self.insertIntoIndex(
                 io,
                 arena,
                 maybe_normalized_copy.?[0..],
@@ -997,11 +997,11 @@ const LintConfigStore = struct {
         arena: std.mem.Allocator,
         dir_abs_sub_path: []const u8,
         cwd: std.Io.Dir,
-    ) void {
+    ) error{InvalidLintConfig}!void {
         std.debug.assert(self.needsIndexing(dir_abs_sub_path));
 
         std.log.info("Index zlinter config: '{s}'", .{dir_abs_sub_path});
-        if (LintConfig.tryLoad(
+        if (try LintConfig.tryLoad(
             io,
             arena,
             cwd,
@@ -1088,7 +1088,7 @@ const LintConfigStore = struct {
             arena: std.mem.Allocator,
             cwd: std.Io.Dir,
             dir_abs_path: []const u8,
-        ) ?LintConfig {
+        ) error{InvalidLintConfig}!?LintConfig {
             var fba_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
             var fba_path: std.heap.FixedBufferAllocator = .init(&fba_path_buffer);
 
@@ -1118,7 +1118,7 @@ const LintConfigStore = struct {
                         "Could not read lint config '{s}' due to: {t}",
                         .{ lint_config_abs_path, e },
                     );
-                    return null;
+                    return error.InvalidLintConfig;
                 },
             };
 
@@ -1137,7 +1137,7 @@ const LintConfigStore = struct {
                     "Failed to parse lint config: '{s}' due to {t} - {f}",
                     .{ lint_config_abs_path, e, diagnostics },
                 );
-                return null;
+                return error.InvalidLintConfig;
             };
 
             var self: LintConfig = .empty;
@@ -1152,6 +1152,76 @@ const LintConfigStore = struct {
         }
     };
 };
+
+test "LintConfigStore.index errors on malformed zlinter.zon" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    try tmp_dir.dir.createDirPath(std.testing.io, "nested");
+    try zlinter.testing.writeFile(
+        tmp_dir.dir,
+        "nested/zlinter.zon",
+        ".{ .rules = .{ .no_unused = ",
+    );
+
+    var dir_abs_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    const dir_abs_path = dir_abs_path_buffer[0..try tmp_dir.dir.realPath(
+        std.testing.io,
+        "nested",
+        &dir_abs_path_buffer,
+    )];
+
+    var store = LintConfigStore.init(
+        arena.allocator(),
+        rule_configs,
+    );
+    try std.testing.expectError(
+        error.InvalidLintConfig,
+        store.index(
+            std.testing.io,
+            arena.allocator(),
+            dir_abs_path,
+            std.Io.Dir.cwd(),
+        ),
+    );
+}
+
+test "LintConfigStore.index errors when zlinter.zon is not readable as a file" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    try tmp_dir.dir.createDirPath(
+        std.testing.io,
+        "nested/zlinter.zon",
+    );
+
+    var dir_abs_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    const dir_abs_path = dir_abs_path_buffer[0..try tmp_dir.dir.realPath(
+        std.testing.io,
+        "nested",
+        &dir_abs_path_buffer,
+    )];
+
+    var store = LintConfigStore.init(
+        arena.allocator(),
+        rule_configs,
+    );
+    try std.testing.expectError(
+        error.InvalidLintConfig,
+        store.index(
+            std.testing.io,
+            arena.allocator(),
+            dir_abs_path,
+            std.Io.Dir.cwd(),
+        ),
+    );
+}
 
 test {
     std.testing.refAllDecls(@This());
