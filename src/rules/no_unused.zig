@@ -428,7 +428,7 @@ fn referencedDeclReference(
         if (referencedDeclNameFromCandidates(
             session,
             doc,
-            decl_candidates.items,
+            decl_candidates,
         )) |name|
             return .{
                 .name = name,
@@ -450,7 +450,7 @@ fn referencedDeclReference(
         if (referencedDeclNameFromCandidates(
             session,
             doc,
-            member_candidates.items,
+            member_candidates,
         )) |name|
             return .{
                 .name = name,
@@ -462,7 +462,7 @@ fn referencedDeclReference(
     {
         const type_candidates = session.resolveTypeCandidatesOfNode(rule_arena, doc, lhs) catch return null;
         if (session.decl_store.rootDecl(doc.file_id)) |root_decl_id| {
-            for (type_candidates.items) |candidate| {
+            for (type_candidates) |candidate| {
                 if (candidate.type.decl_id == root_decl_id)
                     return .{
                         .name = member_name,

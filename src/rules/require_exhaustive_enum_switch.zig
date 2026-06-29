@@ -90,7 +90,7 @@ fn run(
         const enum_tag_sets = try enumTagSets(
             session,
             rule_arena,
-            enum_candidates.items,
+            enum_candidates,
         );
         if (enum_tag_sets.items.len == 0)
             continue :nodes;
@@ -114,7 +114,7 @@ fn run(
                             value_node,
                         );
 
-                        for (tag_candidates.items) |tag_name| {
+                        for (tag_candidates) |tag_name| {
                             if (containsString(complete_tags, tag_name)) {
                                 try used_tag_set.put(tag_name, {});
                                 continue :case_values;

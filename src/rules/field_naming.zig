@@ -183,7 +183,7 @@ fn run(
                 if (tree.fullContainerField(member)) |container_field| {
                     const type_summary = if (session.decl_store.declIdByNode(doc.file_id, member)) |decl_id| summary: {
                         const summary_candidates = try session.resolveDeclValueSummaryCandidates(rule_arena, decl_id);
-                        for (summary_candidates.items) |candidate| {
+                        for (summary_candidates) |candidate| {
                             break :summary candidate.summary;
                         }
                         break :summary null;

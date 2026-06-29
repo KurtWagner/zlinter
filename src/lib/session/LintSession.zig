@@ -777,21 +777,21 @@ fn resolveDeclOfNodeForModule(
 /// from the file. This is the new semantic entrypoint for ambiguous lookup.
 pub fn resolveDeclCandidatesOfNode(
     self: *LintContext,
-    allocator: std.mem.Allocator,
+    arena: std.mem.Allocator,
     doc: *const LintDocument,
     node: Ast.Node.Index,
-) !std.ArrayList(DeclCandidate) {
+) ![]const DeclCandidate {
     var candidates = std.ArrayList(DeclCandidate).empty;
     const module_ids = self.moduleIdsForFile(doc.file_id);
     for (module_ids) |module_id| {
         if (self.resolveDeclOfNodeForModule(module_id, doc, node)) |decl_id| {
-            try candidates.append(allocator, .{
+            try candidates.append(arena, .{
                 .module_id = module_id,
                 .decl_id = decl_id,
             });
         }
     }
-    return candidates;
+    return candidates.items;
 }
 
 /// Resolves a member declaration from a container/type declaration.
@@ -811,10 +811,10 @@ fn resolveDeclMemberForModule(
 /// modules that can reach the declaration's file.
 pub fn resolveDeclMemberCandidates(
     self: *LintContext,
-    allocator: std.mem.Allocator,
+    arena: std.mem.Allocator,
     parent_decl_id: DeclStore.DeclId,
     member_name: []const u8,
-) !std.ArrayList(DeclCandidate) {
+) ![]const DeclCandidate {
     var candidates = std.ArrayList(DeclCandidate).empty;
     const module_ids = self.moduleIdsForDecl(parent_decl_id);
     for (module_ids) |module_id| {
@@ -823,22 +823,22 @@ pub fn resolveDeclMemberCandidates(
             parent_decl_id,
             member_name,
         ) orelse continue;
-        try candidates.append(allocator, .{
+        try candidates.append(arena, .{
             .module_id = module_id,
             .decl_id = decl_id,
         });
     }
-    return candidates;
+    return candidates.items;
 }
 
 /// Resolves a member declaration from each declaration candidate, preserving
 /// the candidate module used for lookup.
 pub fn resolveDeclMemberCandidatesFromCandidates(
     self: *LintContext,
-    allocator: std.mem.Allocator,
+    arena: std.mem.Allocator,
     parent_candidates: []const DeclCandidate,
     member_name: []const u8,
-) !std.ArrayList(DeclCandidate) {
+) ![]const DeclCandidate {
     var candidates = std.ArrayList(DeclCandidate).empty;
     for (parent_candidates) |parent| {
         const decl_id = self.resolveDeclMemberForModule(
@@ -846,12 +846,12 @@ pub fn resolveDeclMemberCandidatesFromCandidates(
             parent.decl_id,
             member_name,
         ) orelse continue;
-        try candidates.append(allocator, .{
+        try candidates.append(arena, .{
             .module_id = parent.module_id,
             .decl_id = decl_id,
         });
     }
-    return candidates;
+    return candidates.items;
 }
 
 /// Follows simple value aliases from a declaration candidate while preserving
@@ -888,51 +888,51 @@ pub fn resolveDeclAliasCandidate(
 /// Resolves the type of `node` for every module reachable from the file.
 pub fn resolveTypeCandidatesOfNode(
     self: *LintContext,
-    allocator: std.mem.Allocator,
+    arena: std.mem.Allocator,
     doc: *const LintDocument,
     node: Ast.Node.Index,
-) !std.ArrayList(TypeCandidate) {
+) ![]const TypeCandidate {
     var candidates = std.ArrayList(TypeCandidate).empty;
     const module_ids = self.moduleIdsForFile(doc.file_id);
     for (module_ids) |module_id| {
         if (self.resolveTypeOfNodeForModule(module_id, doc, node)) |resolved| {
-            try candidates.append(allocator, .{
+            try candidates.append(arena, .{
                 .module_id = module_id,
                 .type = resolved,
             });
         }
     }
-    return candidates;
+    return candidates.items;
 }
 
 /// Resolves `node` to all enum declarations it can name across reachable modules.
 pub fn resolveEnumCandidatesOfNode(
     self: *LintContext,
-    allocator: std.mem.Allocator,
+    arena: std.mem.Allocator,
     doc: *const LintDocument,
     node: Ast.Node.Index,
-) !std.ArrayList(EnumCandidate) {
+) ![]const EnumCandidate {
     var candidates = std.ArrayList(EnumCandidate).empty;
     const module_ids = self.moduleIdsForFile(doc.file_id);
     for (module_ids) |module_id| {
         if (self.resolveEnumDeclOfNodeForModule(module_id, doc, node)) |decl_id| {
-            try candidates.append(allocator, .{
+            try candidates.append(arena, .{
                 .module_id = module_id,
                 .decl_id = decl_id,
             });
         }
     }
-    return candidates;
+    return candidates.items;
 }
 
 /// Resolves an expression to all enum tag names it can name across reachable
 /// modules.
 pub fn resolveEnumTagNameCandidatesOfNode(
     self: *LintContext,
-    allocator: std.mem.Allocator,
+    arena: std.mem.Allocator,
     doc: *const LintDocument,
     node: Ast.Node.Index,
-) !std.ArrayList([]const u8) {
+) ![]const []const u8 {
     var candidates = std.ArrayList([]const u8).empty;
     const module_ids = self.moduleIdsForFile(doc.file_id);
     for (module_ids) |module_id| {
@@ -941,10 +941,10 @@ pub fn resolveEnumTagNameCandidatesOfNode(
             doc,
             node,
         )) |tag_name| {
-            try candidates.append(allocator, tag_name);
+            try candidates.append(arena, tag_name);
         }
     }
-    return candidates;
+    return candidates.items;
 }
 
 /// Resolves a member from the type represented by a declaration.
@@ -964,10 +964,10 @@ fn resolveDeclTypeMemberForModule(
 /// modules that can reach the declaration's file.
 pub fn resolveDeclTypeMemberCandidates(
     self: *LintContext,
-    allocator: std.mem.Allocator,
+    arena: std.mem.Allocator,
     parent_decl_id: DeclStore.DeclId,
     member_name: []const u8,
-) !std.ArrayList(DeclCandidate) {
+) ![]const DeclCandidate {
     var candidates = std.ArrayList(DeclCandidate).empty;
     const module_ids = self.moduleIdsForDecl(parent_decl_id);
     for (module_ids) |module_id| {
@@ -977,12 +977,12 @@ pub fn resolveDeclTypeMemberCandidates(
             member_name,
         ) orelse continue;
 
-        try candidates.append(allocator, .{
+        try candidates.append(arena, .{
             .module_id = module_id,
             .decl_id = decl_id,
         });
     }
-    return candidates;
+    return candidates.items;
 }
 
 /// Resolves the declaration named by a declaration's type expression.
@@ -1001,9 +1001,9 @@ fn resolveDeclTypeDeclForModule(
 /// all modules that can reach the declaration's file.
 pub fn resolveDeclTypeDeclCandidates(
     self: *LintContext,
-    allocator: std.mem.Allocator,
+    arena: std.mem.Allocator,
     decl_id: DeclStore.DeclId,
-) !std.ArrayList(DeclCandidate) {
+) ![]const DeclCandidate {
     var candidates = std.ArrayList(DeclCandidate).empty;
     const module_ids = self.moduleIdsForDecl(decl_id);
     for (module_ids) |module_id| {
@@ -1012,33 +1012,33 @@ pub fn resolveDeclTypeDeclCandidates(
             decl_id,
         ) orelse continue;
 
-        try candidates.append(allocator, .{
+        try candidates.append(arena, .{
             .module_id = module_id,
             .decl_id = type_decl_id,
         });
     }
-    return candidates;
+    return candidates.items;
 }
 
 /// Resolves the declaration named by each candidate's type expression,
 /// preserving the candidate module used for lookup.
 pub fn resolveDeclTypeDeclCandidatesFromCandidates(
     self: *LintContext,
-    allocator: std.mem.Allocator,
+    arena: std.mem.Allocator,
     decl_candidates: []const DeclCandidate,
-) !std.ArrayList(DeclCandidate) {
+) ![]const DeclCandidate {
     var candidates = std.ArrayList(DeclCandidate).empty;
     for (decl_candidates) |candidate| {
         const type_decl_id = self.resolveDeclTypeDeclForModule(
             candidate.module_id,
             candidate.decl_id,
         ) orelse continue;
-        try candidates.append(allocator, .{
+        try candidates.append(arena, .{
             .module_id = candidate.module_id,
             .decl_id = type_decl_id,
         });
     }
-    return candidates;
+    return candidates.items;
 }
 
 /// Returns the cached concrete type target for a declaration, when one was
@@ -1350,7 +1350,7 @@ fn tagNameFromValueExpr(
 /// Allocates the leading doc comments for a declaration without comment tokens.
 pub fn allocDeclDocComments(
     self: *const LintContext,
-    allocator: std.mem.Allocator,
+    arena: std.mem.Allocator,
     decl_id: DeclStore.DeclId,
 ) !?[]const u8 {
     const node = self.decl_store.declAstNode(decl_id) orelse return null;
@@ -1371,7 +1371,7 @@ pub fn allocDeclDocComments(
 
     var token = first_doc_token;
     while (token < first_token) : (token += 1) {
-        if (token != first_doc_token) oom(comments_text.append(allocator, '\n'));
+        if (token != first_doc_token) oom(comments_text.append(arena, '\n'));
 
         const raw = tree.tokenSlice(token);
         const without_marker = if (std.mem.startsWith(u8, raw, "///") or
@@ -1379,10 +1379,10 @@ pub fn allocDeclDocComments(
             raw[3..]
         else
             raw;
-        oom(comments_text.appendSlice(allocator, without_marker));
+        oom(comments_text.appendSlice(arena, without_marker));
     }
 
-    return oom(comments_text.toOwnedSlice(allocator));
+    return oom(comments_text.toOwnedSlice(arena));
 }
 
 /// Returns the source span to show when explaining where a declaration lives.
@@ -1512,9 +1512,9 @@ fn resolveDeclValueSummaryForModule(
 /// reach its file.
 pub fn resolveDeclValueSummaryCandidates(
     self: *LintContext,
-    allocator: std.mem.Allocator,
+    arena: std.mem.Allocator,
     decl_id: DeclStore.DeclId,
-) !std.ArrayList(DeclValueSummaryCandidate) {
+) ![]const DeclValueSummaryCandidate {
     var candidates = std.ArrayList(DeclValueSummaryCandidate).empty;
     const module_ids = self.moduleIdsForDecl(decl_id);
     for (module_ids) |module_id| {
@@ -1522,33 +1522,33 @@ pub fn resolveDeclValueSummaryCandidates(
             module_id,
             decl_id,
         ) orelse continue;
-        try candidates.append(allocator, .{
+        try candidates.append(arena, .{
             .module_id = module_id,
             .summary = summary,
         });
     }
-    return candidates;
+    return candidates.items;
 }
 
 /// Resolves value summaries for existing declaration candidates while keeping
 /// each candidate's module context.
 pub fn resolveDeclValueSummaryCandidatesFromCandidates(
     self: *LintContext,
-    allocator: std.mem.Allocator,
+    arena: std.mem.Allocator,
     decl_candidates: []const DeclCandidate,
-) !std.ArrayList(DeclValueSummaryCandidate) {
+) ![]const DeclValueSummaryCandidate {
     var candidates = std.ArrayList(DeclValueSummaryCandidate).empty;
     for (decl_candidates) |candidate| {
         const summary = self.resolveDeclValueSummaryForModule(
             candidate.module_id,
             candidate.decl_id,
         ) orelse continue;
-        try candidates.append(allocator, .{
+        try candidates.append(arena, .{
             .module_id = candidate.module_id,
             .summary = summary,
         });
     }
-    return candidates;
+    return candidates.items;
 }
 
 /// Classifies a type annotation by the kinds of values it admits. This keeps
@@ -1559,7 +1559,7 @@ pub fn resolveValueTypeAnnotationCandidates(
     arena: std.mem.Allocator,
     doc: *const LintDocument,
     type_node: Ast.Node.Index,
-) !std.ArrayList(ValueTypeAnnotationCandidate) {
+) ![]const ValueTypeAnnotationCandidate {
     var candidates = std.ArrayList(ValueTypeAnnotationCandidate).empty;
 
     const tree = doc.tree(self);
@@ -1571,7 +1571,7 @@ pub fn resolveValueTypeAnnotationCandidates(
             arena,
             .{ .summary = summary },
         );
-        return candidates;
+        return candidates.items;
     }
 
     const decl_candidates = try self.resolveDeclCandidatesOfNode(
@@ -1580,14 +1580,14 @@ pub fn resolveValueTypeAnnotationCandidates(
         typeReferenceNode(tree, type_node),
     );
 
-    if (decl_candidates.items.len == 0) {
+    if (decl_candidates.len == 0) {
         try candidates.append(arena, .{
             .summary = .other,
         });
-        return candidates;
+        return candidates.items;
     }
 
-    for (decl_candidates.items) |decl_candidate| {
+    for (decl_candidates) |decl_candidate| {
         const source_decl_id = self.resolveDeclAliasCandidate(
             decl_candidate,
         ).decl_id;
@@ -1613,7 +1613,7 @@ pub fn resolveValueTypeAnnotationCandidates(
             .{ .summary = .other },
         );
 
-    return candidates;
+    return candidates.items;
 }
 
 /// Recursively summarizes a declaration's value in one module context.

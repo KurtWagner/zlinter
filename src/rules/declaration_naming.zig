@@ -108,7 +108,7 @@ fn run(
 
         var resolved_summaries: std.ArrayList(ResolvedSummary) = .empty;
         const summary_candidates = try session.resolveDeclValueSummaryCandidates(rule_arena, decl_id);
-        for (summary_candidates.items) |candidate| {
+        for (summary_candidates) |candidate| {
             const resolved_summary: ResolvedSummary = .{
                 .summary = candidate.summary,
                 .source_decl_id = try resolvedSummarySourceDeclId(
@@ -305,7 +305,7 @@ fn resolvedSummarySourceDeclId(
             doc,
             source_node,
         );
-        for (candidates.items) |candidate| {
+        for (candidates) |candidate| {
             if (candidate.module_id != module_id) continue;
             const resolved_alias = session.resolveDeclAliasCandidate(candidate);
             break :source resolved_alias.decl_id;

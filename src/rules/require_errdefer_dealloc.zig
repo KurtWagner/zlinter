@@ -239,7 +239,7 @@ fn declRequiringCleanup(
         var_decl_id,
         "deinit",
     );
-    for (deinit_candidates.items) |candidate| {
+    for (deinit_candidates) |candidate| {
         if (declIsPublicDeinit(session, candidate.decl_id)) {
             return .{ .decl_name_token = var_decl.ast.mut_token + 1 };
         }

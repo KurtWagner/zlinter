@@ -168,7 +168,7 @@ fn resolveAllocatorDecl(
     const rule_arena = session.runtime.ruleArena();
     const decl_candidates = session.resolveDeclCandidatesOfNode(rule_arena, doc, lhs) catch return null;
 
-    for (decl_candidates.items) |candidate| {
+    for (decl_candidates) |candidate| {
         return session.resolveDeclAliasCandidate(candidate).decl_id;
     }
     return null;

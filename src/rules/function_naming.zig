@@ -142,7 +142,7 @@ fn run(
                     param_kinds.items,
                 );
 
-                for (type_classifications.items) |classification| {
+                for (type_classifications) |classification| {
                     switch (classification.summary) {
                         .@"fn", .fn_returns_type => {
                             try param_kinds.append(rule_arena, .{
@@ -161,7 +161,7 @@ fn run(
                     }
                 }
 
-                for (type_classifications.items) |classification| {
+                for (type_classifications) |classification| {
                     const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const desc: []const u8 = style: {
                         break :style switch (classification.summary) {
                             .@"fn" => .{ config.function_arg_that_is_fn, "Function argument of function" },
@@ -228,10 +228,10 @@ fn classifyReturnType(
         doc,
         payload_node,
     ) catch return null;
-    for (type_candidates.items) |candidate| {
+    for (type_candidates) |candidate| {
         if (functionReturnsType(candidate.summary)) return candidate.summary;
     }
-    return type_candidates.items[0].summary;
+    return type_candidates[0].summary;
 }
 
 fn unwrapErrorUnionPayloadTypeNode(tree: Ast, node: Ast.Node.Index) Ast.Node.Index {
@@ -253,7 +253,7 @@ fn classifyParamTypeCandidates(
     tree: Ast,
     param: Ast.Node.Index,
     seen_param_kinds: []const ParamKind,
-) !std.ArrayList(zlinter.session.LintSession.ValueTypeAnnotationCandidate) {
+) ![]const zlinter.session.LintSession.ValueTypeAnnotationCandidate {
     const param_type_node = zlinter.ast.unwrapNode(
         tree,
         param,
@@ -281,7 +281,7 @@ fn classifyParamTypeCandidates(
                         else => param_kind.kind,
                     },
                 });
-                return candidates;
+                return candidates.items;
             }
         }
     }

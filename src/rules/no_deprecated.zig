@@ -137,11 +137,11 @@ fn handleStructInit(
 
         const field_candidates = try session.resolveDeclMemberCandidatesFromCandidates(
             rule_arena,
-            struct_candidates.items,
+            struct_candidates,
             tree.tokenSlice(field_name_token),
         );
 
-        for (field_candidates.items) |candidate| {
+        for (field_candidates) |candidate| {
             const doc_comment = try session.allocDeclDocComments(
                 rule_arena,
                 candidate.decl_id,
@@ -184,7 +184,7 @@ fn handleIdentifierAccess(
     const tree = doc.tree(session);
 
     const decl_candidates = try session.resolveDeclCandidatesOfNode(rule_arena, doc, node_index);
-    for (decl_candidates.items) |candidate| {
+    for (decl_candidates) |candidate| {
         // Check whether the identifier is itself the declaration, in which case
         // we should skip as its not the usage but the declaration of it and we
         // dont want to list the declaration as deprecated only its usages
@@ -228,7 +228,7 @@ fn handleEnumLiteral(
         node_index,
         tree.tokenSlice(identifier_token),
     );
-    for (decl_candidates.items) |candidate| {
+    for (decl_candidates) |candidate| {
         try appendDeprecatedProblem(
             rule,
             session_arena,
@@ -259,7 +259,7 @@ fn handleFieldAccess(
     _ = identifier_token;
 
     const decl_candidates = try session.resolveDeclCandidatesOfNode(rule_arena, doc, node_index);
-    for (decl_candidates.items) |candidate| {
+    for (decl_candidates) |candidate| {
         try appendDeprecatedProblem(
             rule,
             session_arena,
@@ -326,7 +326,7 @@ fn resolveEnumLiteralDeclCandidates(
     doc: *const zlinter.session.LintDocument,
     node: Ast.Node.Index,
     name: []const u8,
-) !std.ArrayList(zlinter.session.LintSession.DeclCandidate) {
+) ![]const zlinter.session.LintSession.DeclCandidate {
     const enum_candidates = try resolveEnumLiteralContextTypeDeclCandidates(
         session,
         rule_arena,
@@ -336,7 +336,7 @@ fn resolveEnumLiteralDeclCandidates(
 
     return session.resolveDeclMemberCandidatesFromCandidates(
         rule_arena,
-        enum_candidates.items,
+        enum_candidates,
         name,
     );
 }
@@ -347,7 +347,7 @@ fn resolveStructInitTypeDeclCandidates(
     doc: *const zlinter.session.LintDocument,
     node: Ast.Node.Index,
     struct_init: Ast.full.StructInit,
-) !std.ArrayList(zlinter.session.LintSession.DeclCandidate) {
+) ![]const zlinter.session.LintSession.DeclCandidate {
     if (struct_init.ast.type_expr.unwrap()) |type_expr|
         return session.resolveDeclCandidatesOfNode(rule_arena, doc, type_expr);
 
@@ -364,7 +364,7 @@ fn resolveEnumLiteralContextTypeDeclCandidates(
     rule_arena: std.mem.Allocator,
     doc: *const zlinter.session.LintDocument,
     node: Ast.Node.Index,
-) !std.ArrayList(zlinter.session.LintSession.DeclCandidate) {
+) ![]const zlinter.session.LintSession.DeclCandidate {
     const tree = doc.tree(session);
 
     var struct_init_buffer: [2]Ast.Node.Index = undefined;
@@ -387,13 +387,13 @@ fn resolveEnumLiteralContextTypeDeclCandidates(
 
                 const field_candidates = try session.resolveDeclMemberCandidatesFromCandidates(
                     rule_arena,
-                    struct_candidates.items,
+                    struct_candidates,
                     tree.tokenSlice(field_name_token),
                 );
 
                 return session.resolveDeclTypeDeclCandidatesFromCandidates(
                     rule_arena,
-                    field_candidates.items,
+                    field_candidates,
                 );
             }
         }
@@ -404,7 +404,7 @@ fn resolveEnumLiteralContextTypeDeclCandidates(
                 continue;
             };
             if (nodeWithin(tree, init_node, current)) {
-                const decl_id = session.decl_store.declIdByNode(doc.file_id, ancestor) orelse return .empty;
+                const decl_id = session.decl_store.declIdByNode(doc.file_id, ancestor) orelse return &.{};
                 return session.resolveDeclTypeDeclCandidates(rule_arena, decl_id);
             }
         }
@@ -415,7 +415,7 @@ fn resolveEnumLiteralContextTypeDeclCandidates(
                 continue;
             };
             if (nodeWithin(tree, value_node, current)) {
-                const decl_id = session.decl_store.declIdByNode(doc.file_id, ancestor) orelse return .empty;
+                const decl_id = session.decl_store.declIdByNode(doc.file_id, ancestor) orelse return &.{};
                 return session.resolveDeclTypeDeclCandidates(rule_arena, decl_id);
             }
         }
@@ -423,7 +423,7 @@ fn resolveEnumLiteralContextTypeDeclCandidates(
         current = ancestor;
     }
 
-    return .empty;
+    return &.{};
 }
 
 fn structInitFieldNameToken(
