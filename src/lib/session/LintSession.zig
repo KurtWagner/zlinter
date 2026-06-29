@@ -386,12 +386,7 @@ pub fn resolveFileTypes(
         &self.type_store,
     );
 
-    const module_ids = oom(self.moduleIdsForFile(
-        file_id,
-        self.runtime.sessionArena(),
-    ));
-    defer self.runtime.sessionArena().free(module_ids);
-
+    const module_ids = self.moduleIdsForFile(file_id);
     for (module_ids) |module_id| {
         self.resolveFileTypesForModule(file_id, module_id);
     }
@@ -463,9 +458,8 @@ fn resolutionForModule(
 pub fn moduleIdsForFile(
     self: *LintContext,
     file_id: FileStore.FileId,
-    gpa: std.mem.Allocator,
-) ![]ModuleStore.ModuleId {
-    self.ensureModuleIdsByFile(gpa);
+) []const ModuleStore.ModuleId {
+    self.ensureModuleIdsByFile(self.runtime.sessionArena());
 
     const cached = self.module_ids_by_file.get(file_id) orelse fallback: {
         const module_id = self.module_store.resolve(.{
@@ -474,20 +468,16 @@ pub fn moduleIdsForFile(
             .build_config_module = @enumFromInt(file_id.toIndex()),
             .module_id_by_import_name = .empty,
         });
-        self.indexModuleFiles(module_id, gpa);
+        self.indexModuleFiles(module_id, self.runtime.sessionArena());
         break :fallback self.module_ids_by_file.get(file_id) orelse
-            return gpa.dupe(ModuleStore.ModuleId, &.{module_id});
+            unreachable;
     };
 
-    return gpa.dupe(ModuleStore.ModuleId, cached.items);
+    return cached.items;
 }
 
-fn moduleIdsForDecl(
-    self: *LintContext,
-    decl_id: DeclStore.DeclId,
-    allocator: std.mem.Allocator,
-) ![]ModuleStore.ModuleId {
-    return self.moduleIdsForFile(self.decl_store.declFileId(decl_id), allocator);
+fn moduleIdsForDecl(self: *LintContext, decl_id: DeclStore.DeclId) []const ModuleStore.ModuleId {
+    return self.moduleIdsForFile(self.decl_store.declFileId(decl_id));
 }
 
 fn ensureModuleIdsByFile(
@@ -790,8 +780,7 @@ pub fn resolveDeclCandidatesOfNode(
     node: Ast.Node.Index,
 ) !std.ArrayList(DeclCandidate) {
     var candidates = std.ArrayList(DeclCandidate).empty;
-    const module_ids = try self.moduleIdsForFile(doc.file_id, allocator);
-    defer allocator.free(module_ids);
+    const module_ids = self.moduleIdsForFile(doc.file_id);
     for (module_ids) |module_id| {
         if (self.resolveDeclOfNodeForModule(module_id, doc, node)) |decl_id| {
             try candidates.append(allocator, .{
@@ -825,8 +814,7 @@ pub fn resolveDeclMemberCandidates(
     member_name: []const u8,
 ) !std.ArrayList(DeclCandidate) {
     var candidates = std.ArrayList(DeclCandidate).empty;
-    const module_ids = try self.moduleIdsForDecl(parent_decl_id, allocator);
-    defer allocator.free(module_ids);
+    const module_ids = self.moduleIdsForDecl(parent_decl_id);
     for (module_ids) |module_id| {
         const decl_id = self.resolveDeclMemberForModule(
             module_id,
@@ -903,8 +891,7 @@ pub fn resolveTypeCandidatesOfNode(
     node: Ast.Node.Index,
 ) !std.ArrayList(TypeCandidate) {
     var candidates = std.ArrayList(TypeCandidate).empty;
-    const module_ids = try self.moduleIdsForFile(doc.file_id, allocator);
-    defer allocator.free(module_ids);
+    const module_ids = self.moduleIdsForFile(doc.file_id);
     for (module_ids) |module_id| {
         if (self.resolveTypeOfNodeForModule(module_id, doc, node)) |resolved| {
             try candidates.append(allocator, .{
@@ -924,8 +911,7 @@ pub fn resolveEnumCandidatesOfNode(
     node: Ast.Node.Index,
 ) !std.ArrayList(EnumCandidate) {
     var candidates = std.ArrayList(EnumCandidate).empty;
-    const module_ids = try self.moduleIdsForFile(doc.file_id, allocator);
-    defer allocator.free(module_ids);
+    const module_ids = self.moduleIdsForFile(doc.file_id);
     for (module_ids) |module_id| {
         if (self.resolveEnumDeclOfNodeForModule(module_id, doc, node)) |decl_id| {
             try candidates.append(allocator, .{
@@ -946,8 +932,7 @@ pub fn resolveEnumTagNameCandidatesOfNode(
     node: Ast.Node.Index,
 ) !std.ArrayList([]const u8) {
     var candidates = std.ArrayList([]const u8).empty;
-    const module_ids = try self.moduleIdsForFile(doc.file_id, allocator);
-    defer allocator.free(module_ids);
+    const module_ids = self.moduleIdsForFile(doc.file_id);
     for (module_ids) |module_id| {
         if (self.resolveEnumTagNameOfNodeForModule(module_id, doc, node)) |tag_name| {
             try candidates.append(allocator, tag_name);
@@ -978,8 +963,7 @@ pub fn resolveDeclTypeMemberCandidates(
     member_name: []const u8,
 ) !std.ArrayList(DeclCandidate) {
     var candidates = std.ArrayList(DeclCandidate).empty;
-    const module_ids = try self.moduleIdsForDecl(parent_decl_id, allocator);
-    defer allocator.free(module_ids);
+    const module_ids = self.moduleIdsForDecl(parent_decl_id);
     for (module_ids) |module_id| {
         const decl_id = self.resolveDeclTypeMemberForModule(
             module_id,
@@ -1014,8 +998,7 @@ pub fn resolveDeclTypeDeclCandidates(
     decl_id: DeclStore.DeclId,
 ) !std.ArrayList(DeclCandidate) {
     var candidates = std.ArrayList(DeclCandidate).empty;
-    const module_ids = try self.moduleIdsForDecl(decl_id, allocator);
-    defer allocator.free(module_ids);
+    const module_ids = self.moduleIdsForDecl(decl_id);
     for (module_ids) |module_id| {
         const type_decl_id = self.resolveDeclTypeDeclForModule(
             module_id,
@@ -1509,8 +1492,7 @@ pub fn resolveDeclValueSummaryCandidates(
     decl_id: DeclStore.DeclId,
 ) !std.ArrayList(DeclValueSummaryCandidate) {
     var candidates = std.ArrayList(DeclValueSummaryCandidate).empty;
-    const module_ids = try self.moduleIdsForDecl(decl_id, allocator);
-    defer allocator.free(module_ids);
+    const module_ids = self.moduleIdsForDecl(decl_id);
     for (module_ids) |module_id| {
         const summary = self.resolveDeclValueSummaryForModule(
             module_id,
@@ -2711,11 +2693,10 @@ test "moduleIdsForFile includes shared dependency children" {
         .root_module = root2_module_id,
     });
 
-    const module_ids = try session.moduleIdsForFile(
-        dep_child_file_id,
-        arena.allocator(),
-    );
+    const module_ids = session.moduleIdsForFile(dep_child_file_id);
+    const cached_module_ids = session.module_ids_by_file.get(dep_child_file_id).?.items;
     try std.testing.expectEqual(@as(usize, 2), module_ids.len);
+    try std.testing.expectEqual(cached_module_ids.ptr, module_ids.ptr);
 
     var found_root1 = false;
     var found_root2 = false;
