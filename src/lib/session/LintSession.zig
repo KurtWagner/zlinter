@@ -17,10 +17,27 @@ compile_contexts: std.MultiArrayList(CompileContext) = .empty,
 module_ids_by_file: std.AutoHashMapUnmanaged(FileStore.FileId, std.ArrayList(ModuleStore.ModuleId)) = .empty,
 module_file_index_built: bool = false,
 resolved_decl_types_by_module: std.AutoHashMapUnmanaged(ResolvedDeclTypeKey, ResolvedDeclType) = .empty,
+resolved_decl_by_module_file_node: std.AutoHashMapUnmanaged(ResolvedNodeDeclKey, ?DeclStore.DeclId) = .empty,
 
 const ResolvedDeclTypeKey = struct {
     module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
+};
+
+const ResolvedNodeDeclKey = enum(u128) {
+    _,
+
+    fn init(
+        module_id: ModuleStore.ModuleId,
+        file_id: FileStore.FileId,
+        node: std.zig.Ast.Node.Index,
+    ) ResolvedNodeDeclKey {
+        return @enumFromInt(
+            (@as(u128, @intFromEnum(module_id)) << 64) |
+                (@as(u128, @intFromEnum(file_id)) << 32) |
+                @as(u128, @intFromEnum(node)),
+        );
+    }
 };
 
 const ResolvedDeclType = struct {
@@ -770,7 +787,17 @@ fn resolveDeclOfNodeForModule(
     const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclOfNode");
     defer zone.end();
 
-    return self.immediateDeclForNode(module_id, doc, node);
+    const key = ResolvedNodeDeclKey.init(module_id, doc.file_id, node);
+    if (self.resolved_decl_by_module_file_node.get(key)) |cached|
+        return cached;
+
+    const decl_id = self.immediateDeclForNode(module_id, doc, node);
+    oom(self.resolved_decl_by_module_file_node.put(
+        self.runtime.sessionArena(),
+        key,
+        decl_id,
+    ));
+    return decl_id;
 }
 
 /// Resolves `node` to all declarations it names across the modules reachable
