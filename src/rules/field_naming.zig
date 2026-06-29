@@ -196,7 +196,8 @@ fn run(
                                     .@"fn" => .{ config.struct_field_that_is_fn, "Function" },
                                     .type => |type_value| switch (type_value.kind) {
                                         .namespace => .{ config.struct_field_that_is_namespace, "Namespace" },
-                                        .@"fn", .fn_returns_type => .{ config.struct_field_that_is_type, "Type" },
+                                        .@"fn" => .{ config.struct_field_that_is_fn, "Function" },
+                                        .fn_returns_type => .{ config.struct_field_that_is_type_fn, "Type function" },
                                         else => .{ config.struct_field_that_is_type, "Type" },
                                     },
                                     else => .{ config.struct_field, "Struct" },

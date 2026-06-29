@@ -1,0 +1,16 @@
+error Function fields should be camelCase [test_cases/field_naming/sub_module_resolution/sub_module_resolution.input.zig:4:5] field_naming
+
+ 4 |     bad_callback: sub_module.CallbackFn,
+   |     ^^^^^^^^^^^^
+
+error Type function fields should be TitleCase [test_cases/field_naming/sub_module_resolution/sub_module_resolution.input.zig:6:5] field_naming
+
+ 6 |     bad_factory: sub_module.TypeFactoryFn,
+   |     ^^^^^^^^^^^
+
+error Type fields should be TitleCase [test_cases/field_naming/sub_module_resolution/sub_module_resolution.input.zig:8:5] field_naming
+
+ 8 |     bad_type: sub_module.SomeTypeAlias,
+   |     ^^^^^^^^
+
+x 3 errors

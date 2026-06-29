@@ -1,0 +1,14 @@
+.{
+    .rules = .{
+        .field_naming = .{
+            .struct_field_min_len = .off,
+            .struct_field_max_len = .off,
+            .union_field_min_len = .off,
+            .union_field_max_len = .off,
+            .enum_field_min_len = .off,
+            .enum_field_max_len = .off,
+            .error_field_min_len = .off,
+            .error_field_max_len = .off,
+        },
+    },
+}

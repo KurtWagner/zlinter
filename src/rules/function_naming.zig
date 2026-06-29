@@ -39,11 +39,6 @@ const ParamKind = struct {
     kind: zlinter.session.TypeStore.TypeSummary,
 };
 
-const ParamTypeClassification = struct {
-    kind: zlinter.session.TypeStore.TypeSummary,
-    source_decl_id: ?zlinter.session.DeclStore.DeclId = null,
-};
-
 /// Builds and returns the function_naming rule.
 pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
     _ = options;
@@ -139,7 +134,7 @@ fn run(
 
                 if (identifier.len == 1 and identifier[0] == '_') continue;
 
-                const type_classification = classifyParamType(
+                const type_classifications = try classifyParamTypeCandidates(
                     session,
                     doc,
                     tree,
@@ -147,18 +142,18 @@ fn run(
                     param_kinds.items,
                 );
 
-                if (type_classification) |classification| {
-                    switch (classification.kind) {
+                for (type_classifications.items) |classification| {
+                    switch (classification.summary) {
                         .@"fn", .fn_returns_type => {
                             try param_kinds.append(rule_arena, .{
                                 .name = identifier,
-                                .kind = classification.kind,
+                                .kind = classification.summary,
                             });
                         },
                         .type => |type_value| switch (type_value.kind) {
                             .@"fn", .fn_returns_type => try param_kinds.append(rule_arena, .{
                                 .name = identifier,
-                                .kind = classification.kind,
+                                .kind = classification.summary,
                             }),
                             else => {},
                         },
@@ -166,21 +161,23 @@ fn run(
                     }
                 }
 
-                const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const desc: []const u8 = style: {
-                    break :style switch (if (type_classification) |classification| classification.kind else .other) {
-                        .@"fn" => .{ config.function_arg_that_is_fn, "Function argument of function" },
-                        .fn_returns_type => .{ config.function_arg_that_is_type_fn, "Function argument of type function" },
-                        .type => |type_value| switch (type_value.kind) {
+                for (type_classifications.items) |classification| {
+                    const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const desc: []const u8 = style: {
+                        break :style switch (classification.summary) {
                             .@"fn" => .{ config.function_arg_that_is_fn, "Function argument of function" },
                             .fn_returns_type => .{ config.function_arg_that_is_type_fn, "Function argument of type function" },
-                            else => .{ config.function_arg_that_is_type, "Function argument of type" },
-                        },
-                        else => .{ config.function_arg, "Function argument" },
+                            .type => |type_value| switch (type_value.kind) {
+                                .@"fn" => .{ config.function_arg_that_is_fn, "Function argument of function" },
+                                .fn_returns_type => .{ config.function_arg_that_is_type_fn, "Function argument of type function" },
+                                else => .{ config.function_arg_that_is_type, "Function argument of type" },
+                            },
+                            else => .{ config.function_arg, "Function argument" },
+                        };
                     };
-                };
 
-                const style = style_with_severity.style() orelse continue;
-                if (!style.check(identifier)) {
+                    const style = style_with_severity.style() orelse continue;
+                    if (style.check(identifier)) continue;
+
                     try lint_problems.append(session_arena, .{
                         .rule_id = rule.rule_id,
                         .severity = style_with_severity.severity(),
@@ -190,7 +187,7 @@ fn run(
                         .notes = try allocResolvedDeclNotes(
                             session_arena,
                             session,
-                            if (type_classification) |classification| classification.source_decl_id else null,
+                            classification.source_decl_id,
                         ),
                     });
                 }
@@ -225,42 +222,16 @@ fn classifyReturnType(
 ) ?zlinter.session.TypeStore.TypeSummary {
     const return_type_node = fn_proto.ast.return_type.unwrap() orelse return null;
     const payload_node = unwrapErrorUnionPayloadTypeNode(tree, return_type_node);
-    var type_summary: ?zlinter.session.TypeStore.TypeSummary =
-        zlinter.session.TypeStore.summarizeTypeNode(tree, payload_node);
-    if (type_summary) |summary|
-        if (functionReturnsType(summary)) return summary;
 
-    const rule_arena = session.runtime.ruleArena();
-    const decl_candidates = resolveTypeDeclCandidates(
-        session,
-        rule_arena,
+    const type_candidates = session.resolveValueTypeAnnotationCandidates(
+        session.runtime.ruleArena(),
         doc,
-        tree,
         payload_node,
-    ) catch return type_summary;
-    const summary_candidates = session.resolveDeclValueSummaryCandidatesFromCandidates(
-        rule_arena,
-        decl_candidates.items,
-    ) catch return type_summary;
-
-    for (summary_candidates.items) |candidate| {
-        type_summary = candidate.summary;
-        const source_decl_id = resolvedTypeSourceDeclId(
-            session,
-            decl_candidates.items,
-            candidate.module_id,
-        );
-        if (paramValueKindFromResolvedTypeAnnotation(
-            session,
-            source_decl_id,
-            type_summary,
-        )) |resolved_summary| {
-            if (functionReturnsType(resolved_summary)) return resolved_summary;
-        }
-        break;
+    ) catch return null;
+    for (type_candidates.items) |candidate| {
+        if (functionReturnsType(candidate.summary)) return candidate.summary;
     }
-
-    return type_summary;
+    return type_candidates.items[0].summary;
 }
 
 fn unwrapErrorUnionPayloadTypeNode(tree: Ast, node: Ast.Node.Index) Ast.Node.Index {
@@ -276,28 +247,18 @@ fn functionReturnsType(return_type: zlinter.session.TypeStore.TypeSummary) bool 
     };
 }
 
-// TODO: Move this classification into a shared helper (e.g., in session/session)
-// so declaration_naming and field_naming can reuse the same logic.
-fn classifyParamType(
+fn classifyParamTypeCandidates(
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     tree: Ast,
     param: Ast.Node.Index,
     seen_param_kinds: []const ParamKind,
-) ?ParamTypeClassification {
+) !std.ArrayList(zlinter.session.LintSession.ValueTypeAnnotationCandidate) {
     const param_type_node = zlinter.ast.unwrapNode(
         tree,
         param,
         .{},
     );
-
-    var type_summary: ?zlinter.session.TypeStore.TypeSummary =
-        zlinter.session.TypeStore.summarizeTypeNode(tree, param);
-    if (paramValueKindFromTypeAnnotation(
-        tree,
-        param_type_node,
-        type_summary,
-    )) |param_value_kind| return .{ .kind = param_value_kind };
 
     const maybe_type_name = if (tree.nodeTag(param_type_node) == .identifier)
         tree.getNodeSource(param_type_node)
@@ -307,156 +268,29 @@ fn classifyParamType(
     if (maybe_type_name) |type_name| {
         for (seen_param_kinds) |param_kind| {
             if (std.mem.eql(u8, param_kind.name, type_name)) {
-                return .{ .kind = switch (param_kind.kind) {
-                    .type => |type_value| switch (type_value.kind) {
-                        .@"fn" => .@"fn",
-                        .fn_returns_type => .fn_returns_type,
+                var candidates = std.ArrayList(
+                    zlinter.session.LintSession.ValueTypeAnnotationCandidate,
+                ).empty;
+                try candidates.append(session.runtime.ruleArena(), .{
+                    .summary = switch (param_kind.kind) {
+                        .type => |type_value| switch (type_value.kind) {
+                            .@"fn" => .@"fn",
+                            .fn_returns_type => .fn_returns_type,
+                            else => param_kind.kind,
+                        },
                         else => param_kind.kind,
                     },
-                    else => param_kind.kind,
-                } };
+                });
+                return candidates;
             }
         }
     }
 
-    const rule_arena = session.runtime.ruleArena();
-    const decl_candidates = resolveTypeDeclCandidates(
-        session,
-        rule_arena,
+    return session.resolveValueTypeAnnotationCandidates(
+        session.runtime.ruleArena(),
         doc,
-        tree,
         param_type_node,
-    ) catch return if (type_summary) |summary| .{ .kind = summary } else null;
-    const summary_candidates = session.resolveDeclValueSummaryCandidatesFromCandidates(
-        rule_arena,
-        decl_candidates.items,
-    ) catch return if (type_summary) |summary| .{ .kind = summary } else null;
-
-    var selected_summary_candidate: ?zlinter.session.LintSession.DeclValueSummaryCandidate = null;
-    for (summary_candidates.items) |candidate| {
-        selected_summary_candidate = candidate;
-        type_summary = candidate.summary;
-        break;
-    }
-    const source_decl_id = if (selected_summary_candidate) |candidate|
-        resolvedTypeSourceDeclId(
-            session,
-            decl_candidates.items,
-            candidate.module_id,
-        )
-    else
-        null;
-    if (paramValueKindFromResolvedTypeAnnotation(
-        session,
-        source_decl_id,
-        type_summary,
-    )) |param_value_kind| {
-        return .{
-            .kind = param_value_kind,
-            .source_decl_id = source_decl_id,
-        };
-    }
-
-    return if (type_summary) |summary| .{ .kind = summary } else null;
-}
-
-fn resolveTypeDeclCandidates(
-    session: *zlinter.session.LintSession,
-    allocator: std.mem.Allocator,
-    doc: *const zlinter.session.LintDocument,
-    tree: Ast,
-    node: Ast.Node.Index,
-) !std.ArrayList(zlinter.session.LintSession.DeclCandidate) {
-    if (tree.nodeTag(node) == .field_access) {
-        const lhs, const member_token = tree.nodeData(node).node_and_token;
-        const lhs_candidates = try resolveTypeDeclCandidates(
-            session,
-            allocator,
-            doc,
-            tree,
-            lhs,
-        );
-
-        for (lhs_candidates.items) |*candidate|
-            candidate.* = session.resolveDeclAliasCandidate(candidate.*);
-
-        return session.resolveDeclMemberCandidatesFromCandidates(
-            allocator,
-            lhs_candidates.items,
-            tree.tokenSlice(member_token),
-        );
-    }
-
-    return session.resolveDeclCandidatesOfNode(allocator, doc, node);
-}
-
-fn paramValueKindFromTypeAnnotation(
-    tree: Ast,
-    param_type_node: Ast.Node.Index,
-    maybe_type_summary: ?zlinter.session.TypeStore.TypeSummary,
-) ?zlinter.session.TypeStore.TypeSummary {
-    const type_summary = maybe_type_summary orelse return null;
-    return switch (type_summary) {
-        .unknown, .other, .primitive => null,
-        .@"fn", .fn_returns_type => type_summary,
-        .type => {
-            const is_type_literal = tree.nodeTag(param_type_node) == .identifier and
-                std.mem.eql(u8, tree.getNodeSource(param_type_node), "type");
-            return if (is_type_literal) type_summary else .other;
-        },
-        .instance, .slice, .array => .other,
-    };
-}
-
-fn paramValueKindFromResolvedTypeAnnotation(
-    session: *zlinter.session.LintSession,
-    source_decl_id: ?zlinter.session.DeclStore.DeclId,
-    maybe_type_summary: ?zlinter.session.TypeStore.TypeSummary,
-) ?zlinter.session.TypeStore.TypeSummary {
-    const type_summary = maybe_type_summary orelse return null;
-    return switch (type_summary) {
-        .unknown, .other, .primitive => null,
-        .@"fn", .fn_returns_type => type_summary,
-        .type => |type_value| switch (type_value.kind) {
-            .unknown => if (resolvedDeclIsExplicitTypeLiteral(session, source_decl_id)) type_summary else .other,
-            .@"fn", .fn_returns_type => type_summary,
-            else => .other,
-        },
-        .instance, .slice, .array => .other,
-    };
-}
-
-fn resolvedDeclIsExplicitTypeLiteral(
-    session: *zlinter.session.LintSession,
-    maybe_decl_id: ?zlinter.session.DeclStore.DeclId,
-) bool {
-    const decl_id = maybe_decl_id orelse return false;
-
-    const file_id = session.decl_store.declFileId(decl_id);
-    const tree = session.file_store.fileTree(file_id);
-
-    const decl_node = session.decl_store.declAstNode(decl_id) orelse
-        return false;
-    const var_decl = tree.fullVarDecl(decl_node) orelse
-        return false;
-    const init_node = var_decl.ast.init_node.unwrap() orelse
-        return false;
-
-    const init_expr = zlinter.ast.unwrapNode(tree, init_node, .{});
-    return tree.nodeTag(init_expr) == .identifier and
-        std.mem.eql(u8, tree.getNodeSource(init_expr), "type");
-}
-
-fn resolvedTypeSourceDeclId(
-    session: *zlinter.session.LintSession,
-    decl_candidates: []const zlinter.session.LintSession.DeclCandidate,
-    module_id: zlinter.session.ModuleStore.ModuleId,
-) ?zlinter.session.DeclStore.DeclId {
-    for (decl_candidates) |candidate| {
-        if (candidate.module_id != module_id) continue;
-        return session.resolveDeclAliasCandidate(candidate).decl_id;
-    }
-    return null;
+    );
 }
 
 fn allocResolvedDeclNotes(

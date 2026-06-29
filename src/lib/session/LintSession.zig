@@ -718,6 +718,11 @@ pub const DeclValueSummaryCandidate = struct {
     summary: TypeStore.TypeSummary,
 };
 
+pub const ValueTypeAnnotationCandidate = struct {
+    summary: TypeStore.TypeSummary,
+    source_decl_id: ?DeclStore.DeclId = null,
+};
+
 pub const DeclLocation = struct {
     abs_path: []const u8,
     start: results.LintProblemLocation,
@@ -1534,6 +1539,71 @@ pub fn resolveDeclValueSummaryCandidatesFromCandidates(
     return candidates;
 }
 
+/// Classifies a type annotation by the kinds of values it admits. This keeps
+/// module-specific declaration resolution and source locations so callers can
+/// explain cross-module ambiguity consistently.
+pub fn resolveValueTypeAnnotationCandidates(
+    self: *LintContext,
+    arena: std.mem.Allocator,
+    doc: *const LintDocument,
+    type_node: Ast.Node.Index,
+) !std.ArrayList(ValueTypeAnnotationCandidate) {
+    var candidates = std.ArrayList(ValueTypeAnnotationCandidate).empty;
+
+    const tree = doc.tree(self);
+    if (directValueTypeAnnotationSummary(
+        tree,
+        type_node,
+    )) |summary| {
+        try candidates.append(
+            arena,
+            .{ .summary = summary },
+        );
+        return candidates;
+    }
+
+    const decl_candidates = try self.resolveDeclCandidatesOfNode(
+        arena,
+        doc,
+        typeReferenceNode(tree, type_node),
+    );
+
+    if (decl_candidates.items.len == 0) {
+        try candidates.append(arena, .{
+            .summary = .other,
+        });
+        return candidates;
+    }
+
+    for (decl_candidates.items) |decl_candidate| {
+        const source_decl_id = self.resolveDeclAliasCandidate(
+            decl_candidate,
+        ).decl_id;
+
+        const resolved_summary = self.resolveDeclValueSummaryForModule(
+            decl_candidate.module_id,
+            source_decl_id,
+        ) orelse continue;
+
+        try candidates.append(arena, .{
+            .summary = resolvedValueTypeAnnotationSummary(
+                self,
+                source_decl_id,
+                resolved_summary,
+            ),
+            .source_decl_id = source_decl_id,
+        });
+    }
+
+    if (candidates.items.len == 0)
+        try candidates.append(
+            arena,
+            .{ .summary = .other },
+        );
+
+    return candidates;
+}
+
 /// Recursively summarizes a declaration's value in one module context.
 fn resolveDeclValueSummaryDepth(
     self: *LintContext,
@@ -1563,11 +1633,12 @@ fn resolveDeclValueSummaryDepth(
     if (tree.fullVarDecl(node)) |var_decl| {
         const init_node = var_decl.ast.init_node.unwrap();
         if (var_decl.ast.type_node.unwrap()) |type_node| {
-            if (typeSummaryFromValueTypeNode(tree, type_node)) |summary| {
-                return summary;
-            }
-
-            return .other;
+            return self.resolveValueTypeAnnotationSummaryForModule(
+                module_id,
+                decl_id,
+                type_node,
+                remaining_depth - 1,
+            );
         }
 
         if (init_node) |value_node| {
@@ -1583,11 +1654,12 @@ fn resolveDeclValueSummaryDepth(
     if (tree.fullContainerField(node)) |container_field| {
         const value_node = container_field.ast.value_expr.unwrap();
         if (container_field.ast.type_expr.unwrap()) |type_node| {
-            if (typeSummaryFromValueTypeNode(tree, type_node)) |summary| {
-                return summary;
-            }
-
-            return .other;
+            return self.resolveValueTypeAnnotationSummaryForModule(
+                module_id,
+                decl_id,
+                type_node,
+                remaining_depth - 1,
+            );
         }
 
         if (value_node) |expr| {
@@ -1718,6 +1790,57 @@ fn typeSummaryFromTypeNode(
     };
 }
 
+fn resolveValueTypeAnnotationSummaryForModule(
+    self: *LintContext,
+    module_id: ModuleStore.ModuleId,
+    context_decl_id: DeclStore.DeclId,
+    type_node: Ast.Node.Index,
+    remaining_depth: u8,
+) TypeStore.TypeSummary {
+    const tree = self.file_store.fileTree(
+        self.decl_store.declFileId(context_decl_id),
+    );
+
+    if (directValueTypeAnnotationSummary(
+        tree,
+        type_node,
+    )) |summary|
+        return summary;
+
+    if (remaining_depth == 0) return .other;
+
+    const target_decl_id = self
+        .resolutionForModule(module_id)
+        .nodeDeclWithRoot(
+        context_decl_id,
+        typeReferenceNode(tree, type_node),
+    ) orelse return .other;
+
+    const source_decl_id = self.resolveDeclAliasCandidate(.{
+        .module_id = module_id,
+        .decl_id = target_decl_id,
+    }).decl_id;
+
+    const resolved_summary = self.resolveDeclValueSummaryDepth(
+        module_id,
+        source_decl_id,
+        remaining_depth - 1,
+    ) orelse return .other;
+
+    return resolvedValueTypeAnnotationSummary(
+        self,
+        source_decl_id,
+        resolved_summary,
+    );
+}
+
+fn typeReferenceNode(
+    tree: Ast,
+    type_node: Ast.Node.Index,
+) Ast.Node.Index {
+    return ast.unwrapNode(tree, type_node, .{});
+}
+
 fn typeSummaryFromValueTypeNode(
     tree: Ast,
     type_node: Ast.Node.Index,
@@ -1733,6 +1856,68 @@ fn typeSummaryFromValueTypeNode(
         },
         else => null,
     };
+}
+
+fn directValueTypeAnnotationSummary(
+    tree: Ast,
+    type_node: Ast.Node.Index,
+) ?TypeStore.TypeSummary {
+    const node = typeReferenceNode(tree, type_node);
+    const summary = TypeStore.summarizeTypeNode(
+        tree,
+        node,
+    );
+
+    return switch (summary) {
+        .@"fn", .fn_returns_type => summary,
+        .type => |type_value| if (type_value.kind == .unknown and
+            tree.nodeTag(node) == .identifier and
+            std.mem.eql(u8, tree.getNodeSource(node), "type"))
+            summary
+        else
+            .other,
+        .unknown => switch (tree.nodeTag(node)) {
+            .identifier, .field_access => null,
+            else => .other,
+        },
+        .other, .primitive, .instance, .slice, .array => .other,
+    };
+}
+
+fn resolvedValueTypeAnnotationSummary(
+    self: *LintContext,
+    source_decl_id: DeclStore.DeclId,
+    summary: TypeStore.TypeSummary,
+) TypeStore.TypeSummary {
+    return switch (summary) {
+        .unknown, .other, .primitive => .other,
+        .@"fn", .fn_returns_type => summary,
+        .type => |type_value| switch (type_value.kind) {
+            .unknown => if (declIsExplicitTypeLiteral(self, source_decl_id)) summary else .other,
+            .@"fn", .fn_returns_type => summary,
+            else => .other,
+        },
+        .instance, .slice, .array => .other,
+    };
+}
+
+fn declIsExplicitTypeLiteral(
+    self: *LintContext,
+    decl_id: DeclStore.DeclId,
+) bool {
+    const file_id = self.decl_store.declFileId(decl_id);
+    const tree = self.file_store.fileTree(file_id);
+
+    const decl_node = self.decl_store.declAstNode(decl_id) orelse
+        return false;
+    const var_decl = tree.fullVarDecl(decl_node) orelse
+        return false;
+    const init_node = var_decl.ast.init_node.unwrap() orelse
+        return false;
+
+    const init_expr = ast.unwrapNode(tree, init_node, .{});
+    return tree.nodeTag(init_expr) == .identifier and
+        std.mem.eql(u8, tree.getNodeSource(init_expr), "type");
 }
 
 fn typeSummaryFromValueNode(

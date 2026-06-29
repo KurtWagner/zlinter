@@ -22,8 +22,20 @@ error Function argument of function should be camelCase [test_cases/function_nam
  29 | fn takesImportedCallback(bad_imported_fn: sub_module.CallbackFn, importedCallback: sub_module.CallbackFn) void {
     |                          ^^^^^^^^^^^^^^^
 
+error Function argument of function should be camelCase [test_cases/function_naming/sub_module_resolution/sub_module_resolution.input.zig:29:26] function_naming
+  ↳ note resolved declaration is here [sub_module_a_src/root.zig:16:11]
+
+ 29 | fn takesImportedCallback(bad_imported_fn: sub_module.CallbackFn, importedCallback: sub_module.CallbackFn) void {
+    |                          ^^^^^^^^^^^^^^^
+
 error Function argument of type function should be TitleCase [test_cases/function_naming/sub_module_resolution/sub_module_resolution.input.zig:34:29] function_naming
   ↳ note resolved declaration is here [sub_module_b_src/root.zig:22:11]
+
+ 34 | fn takesImportedTypeFactory(bad_imported_factory: sub_module.TypeFactoryFn, ImportedFactory: sub_module.TypeFactoryFn) void {
+    |                             ^^^^^^^^^^^^^^^^^^^^
+
+error Function argument of type function should be TitleCase [test_cases/function_naming/sub_module_resolution/sub_module_resolution.input.zig:34:29] function_naming
+  ↳ note resolved declaration is here [sub_module_a_src/root.zig:17:11]
 
  34 | fn takesImportedTypeFactory(bad_imported_factory: sub_module.TypeFactoryFn, ImportedFactory: sub_module.TypeFactoryFn) void {
     |                             ^^^^^^^^^^^^^^^^^^^^
@@ -34,9 +46,15 @@ error Function argument of type should be TitleCase [test_cases/function_naming/
  39 | fn takesImportedType(bad_imported_type: sub_module.SomeTypeAlias, ImportedType: sub_module.SomeTypeAlias) void {
     |                      ^^^^^^^^^^^^^^^^^
 
+error Function argument of type should be TitleCase [test_cases/function_naming/sub_module_resolution/sub_module_resolution.input.zig:39:22] function_naming
+  ↳ note resolved declaration is here [sub_module_a_src/root.zig:18:11]
+
+ 39 | fn takesImportedType(bad_imported_type: sub_module.SomeTypeAlias, ImportedType: sub_module.SomeTypeAlias) void {
+    |                      ^^^^^^^^^^^^^^^^^
+
 error Function argument should be snake_case [test_cases/function_naming/sub_module_resolution/sub_module_resolution.input.zig:44:36] function_naming
 
  44 | fn takesGeneric(T: type, value: T, BadValue: T) void {
     |                                    ^^^^^^^^
 
-x 7 errors
+x 10 errors
