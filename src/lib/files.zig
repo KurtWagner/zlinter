@@ -397,9 +397,10 @@ fn resolveConfigurationPath(
 pub fn resolveLazyPath(
     path: std.Build.Configuration.LazyPath,
     config: *const std.Build.Configuration,
-    gpa: std.mem.Allocator,
     build_root_path: []const u8,
+    buffer: []u8,
 ) !?[]const u8 {
+    var fba: std.heap.FixedBufferAllocator = .init(buffer);
     switch (path) {
         .source_path => |source_path| {
             const root = if (source_path.owner.get(config)) |pkg|
@@ -407,10 +408,10 @@ pub fn resolveLazyPath(
             else
                 build_root_path;
 
-            return try std.fs.path.resolve(gpa, &.{
-                root,
-                source_path.sub_path.slice(config),
-            });
+            return try std.fs.path.resolve(
+                fba.allocator(),
+                &.{ root, source_path.sub_path.slice(config) },
+            );
         },
         .relative => |rel| {
             const sub_path = rel.sub_path.slice(config);
@@ -427,7 +428,10 @@ pub fn resolveLazyPath(
                 .install_include,
                 => return null,
             };
-            return try std.fs.path.resolve(gpa, &.{ root, sub_path });
+            return try std.fs.path.resolve(
+                fba.allocator(),
+                &.{ root, sub_path },
+            );
         },
         .generated => return null,
     }

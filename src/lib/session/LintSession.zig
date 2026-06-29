@@ -347,13 +347,14 @@ fn resolveBuildModuleShallow(
     const build_module = build_module_index.get(build_config);
     const root_source_file_id = build_module.root_source_file.unwrap() orelse return null;
     const root_source_file = root_source_file_id.get(build_config);
+
+    var root_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
     const root_path = try files.resolveLazyPath(
         root_source_file,
         build_config,
-        self.runtime.sessionArena(),
         build_root_path,
+        &root_path_buffer,
     ) orelse return null;
-    defer self.runtime.sessionArena().free(root_path);
 
     return self.module_store.resolve(.{
         .root_file = try self.file_store.resolve(root_path),
