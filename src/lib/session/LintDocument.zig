@@ -7,6 +7,7 @@ file_id: FileStore.FileId,
 lineage: ast.NodeLineage,
 comments: comments_module.CommentsDocument,
 skipper: comments_module.LazyRuleSkipper,
+context_scope_by_node: []?DeclStore.ScopeId,
 
 pub fn deinit(self: *LintDocument, gpa: std.mem.Allocator) void {
     while (self.lineage.pop()) |connections| {
@@ -14,6 +15,7 @@ pub fn deinit(self: *LintDocument, gpa: std.mem.Allocator) void {
     }
 
     self.lineage.deinit(gpa);
+    gpa.free(self.context_scope_by_node);
     self.comments.deinit(gpa);
     self.skipper.deinit();
 }
@@ -247,6 +249,7 @@ const comments_module = @import("../comments.zig");
 const common = @import("common.zig");
 const std = @import("std");
 const testing = @import("../testing.zig");
+const DeclStore = @import("DeclStore.zig");
 const FileStore = @import("FileStore.zig");
 const LintSession = @import("LintSession.zig");
 const LintProblem = @import("../results.zig").LintProblem;

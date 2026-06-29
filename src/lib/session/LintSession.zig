@@ -641,7 +641,9 @@ pub fn initDocument(
         .lineage = .empty,
         .comments = oom(comments.allocParse(source, gpa)),
         .skipper = .init(doc.comments, source, gpa),
+        .context_scope_by_node = oom(gpa.alloc(?DeclStore.ScopeId, tree.nodes.len)),
     };
+    @memset(doc.context_scope_by_node, null);
 
     {
         oom(doc.lineage.resize(gpa, tree.nodes.len));
@@ -934,7 +936,11 @@ pub fn resolveEnumTagNameCandidatesOfNode(
     var candidates = std.ArrayList([]const u8).empty;
     const module_ids = self.moduleIdsForFile(doc.file_id);
     for (module_ids) |module_id| {
-        if (self.resolveEnumTagNameOfNodeForModule(module_id, doc, node)) |tag_name| {
+        if (self.resolveEnumTagNameOfNodeForModule(
+            module_id,
+            doc,
+            node,
+        )) |tag_name| {
             try candidates.append(allocator, tag_name);
         }
     }
@@ -970,6 +976,7 @@ pub fn resolveDeclTypeMemberCandidates(
             parent_decl_id,
             member_name,
         ) orelse continue;
+
         try candidates.append(allocator, .{
             .module_id = module_id,
             .decl_id = decl_id,
@@ -1004,6 +1011,7 @@ pub fn resolveDeclTypeDeclCandidates(
             module_id,
             decl_id,
         ) orelse continue;
+
         try candidates.append(allocator, .{
             .module_id = module_id,
             .decl_id = type_decl_id,
@@ -1452,15 +1460,31 @@ fn contextScopeForNode(
     const zone = tracy.traceNamed(@src(), "LintContext.contextScopeForNode");
     defer zone.end();
 
+    const node_index = @intFromEnum(node);
+    if (node_index < doc.context_scope_by_node.len) {
+        if (doc.context_scope_by_node[node_index]) |scope_id| {
+            return scope_id;
+        }
+    }
+
     var current: ?Ast.Node.Index = node;
     while (current) |current_node| {
         if (self.decl_store.scopeIdByNode(doc.file_id, current_node)) |scope_id| {
+            if (node_index < doc.context_scope_by_node.len) {
+                @constCast(doc).context_scope_by_node[node_index] = scope_id;
+            }
             return scope_id;
         }
 
         current = doc.lineage.items(.parent)[@intFromEnum(current_node)];
     }
-    return self.decl_store.scopeIdByNode(doc.file_id, .root);
+    const root_scope_id = self.decl_store.scopeIdByNode(doc.file_id, .root);
+    if (root_scope_id) |scope_id| {
+        if (node_index < doc.context_scope_by_node.len) {
+            @constCast(doc).context_scope_by_node[node_index] = scope_id;
+        }
+    }
+    return root_scope_id;
 }
 
 /// Resolves the coarse value kind for a declaration in one module context.
