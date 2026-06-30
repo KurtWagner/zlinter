@@ -224,7 +224,6 @@ fn classifyReturnType(
     const payload_node = unwrapErrorUnionPayloadTypeNode(tree, return_type_node);
 
     const type_candidates = session.resolveValueTypeAnnotationCandidates(
-        session.runtime.ruleArena(),
         doc,
         payload_node,
     ) catch return null;
@@ -286,11 +285,11 @@ fn classifyParamTypeCandidates(
         }
     }
 
-    return session.resolveValueTypeAnnotationCandidates(
-        session.runtime.ruleArena(),
+    const candidates = try session.resolveValueTypeAnnotationCandidates(
         doc,
         param_type_node,
     );
+    return candidates;
 }
 
 fn allocResolvedDeclNotes(

@@ -107,12 +107,11 @@ fn run(
             false;
 
         var resolved_summaries: std.ArrayList(ResolvedSummary) = .empty;
-        const summary_candidates = try session.resolveDeclValueSummaryCandidates(rule_arena, decl_id);
+        const summary_candidates = try session.resolveDeclValueSummaryCandidates(decl_id);
         for (summary_candidates) |candidate| {
             const resolved_summary: ResolvedSummary = .{
                 .summary = candidate.summary,
                 .source_decl_id = try resolvedSummarySourceDeclId(
-                    rule_arena,
                     session,
                     doc,
                     var_decl,
@@ -280,7 +279,6 @@ fn allocResolvedDeclNotes(
 }
 
 fn resolvedSummarySourceDeclId(
-    rule_arena: std.mem.Allocator,
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     var_decl: Ast.full.VarDecl,
@@ -299,21 +297,17 @@ fn resolvedSummarySourceDeclId(
     else
         init_expr;
 
-    const source_decl_id = source: {
-        const candidates = try session.resolveDeclCandidatesOfNode(
-            rule_arena,
-            doc,
-            source_node,
-        );
-        for (candidates) |candidate| {
-            if (candidate.module_id != module_id) continue;
-            const resolved_alias = session.resolveDeclAliasCandidate(candidate);
-            break :source resolved_alias.decl_id;
-        }
-        break :source null;
-    } orelse return null;
+    const source_decl_id = session.resolveDeclOfNodeForModule(
+        module_id,
+        doc,
+        source_node,
+    ) orelse return null;
+    const resolved_source_decl_id = session.resolveDeclAliasForModule(
+        module_id,
+        source_decl_id,
+    );
 
-    if (source_decl_id == decl_id) return null;
+    if (resolved_source_decl_id == decl_id) return null;
 
     // Very basic heuristic that if on same line and file than not the
     // same declaration and should be noted in the problems notes. e.g.,
@@ -321,9 +315,9 @@ fn resolvedSummarySourceDeclId(
     if (!declLocationsDifferLineOrFile(
         session,
         decl_id,
-        source_decl_id,
+        resolved_source_decl_id,
     )) return null;
-    return source_decl_id;
+    return resolved_source_decl_id;
 }
 
 fn declLocationsDifferLineOrFile(

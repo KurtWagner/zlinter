@@ -38,47 +38,53 @@ fn run(
     const tree = doc.tree(session);
     const token_tags = tree.tokens.items(.tag);
 
-    // Store referenced identifiers and field accesses on the container with
-    // their source locations. This lets a declaration ignore references from
-    // inside its own body (i.e., recursive calls).
-    const container_references = map: {
-        var references = std.ArrayList(DeclReference).empty;
+    var container_references = ReferenceIndex{};
+    var unused_problem_by_decl: std.AutoHashMapUnmanaged(
+        Ast.Node.Index,
+        ?DeclarationProblem,
+    ) = .empty;
 
-        var index: u32 = @intFromEnum(Ast.Node.Index.root);
-        while (index < tree.nodes.len) : (index += 1) {
-            const node: Ast.Node.Index = @enumFromInt(index);
-            switch (tree.nodeTag(node)) {
-                .identifier => try references.append(rule_arena, .{
+    // Store referenced identifiers and field accesses by name. This lets
+    // declaration checks ignore self-references without rescanning every
+    // reference in the file for each declaration.
+    var index: u32 = @intFromEnum(Ast.Node.Index.root);
+    while (index < tree.nodes.len) : (index += 1) {
+        const node: Ast.Node.Index = @enumFromInt(index);
+        switch (tree.nodeTag(node)) {
+            .identifier => try container_references.append(
+                rule_arena,
+                .{
                     .name = tree.tokenSlice(tree.nodeMainToken(node)),
-                    .node = node,
                     .token = tree.nodeMainToken(node),
-                }),
-                .field_access => if (referencedDeclReference(
-                    session,
-                    doc,
-                    rule_arena,
-                    node,
-                )) |reference|
-                    try references.append(rule_arena, reference),
-                else => {},
-            }
+                },
+            ),
+            .field_access => if (referencedDeclReference(
+                session,
+                doc,
+                rule_arena,
+                node,
+            )) |reference|
+                try container_references.append(rule_arena, reference),
+            else => {},
         }
-        break :map references;
-    };
+    }
 
     const candidate_decls = try containerDeclarationCandidates(
         rule_arena,
         tree,
         token_tags,
-        container_references.items,
+        &container_references,
+        &unused_problem_by_decl,
     );
 
     for (candidate_decls.items) |decl| {
-        const problem = unusedDeclarationProblem(
+        const problem = try cachedUnusedDeclarationProblem(
+            rule_arena,
             tree,
             token_tags,
-            container_references.items,
+            &container_references,
             decl,
+            &unused_problem_by_decl,
         );
 
         if (problem) |p| {
@@ -117,8 +123,29 @@ fn run(
 
 const DeclReference = struct {
     name: []const u8,
-    node: Ast.Node.Index,
     token: Ast.TokenIndex,
+};
+
+const ReferenceIndex = struct {
+    by_name: std.StringHashMapUnmanaged(std.ArrayList(DeclReference)) = .empty,
+
+    fn append(
+        self: *ReferenceIndex,
+        allocator: std.mem.Allocator,
+        reference: DeclReference,
+    ) !void {
+        const entry = try self.by_name.getOrPut(allocator, reference.name);
+        if (!entry.found_existing) entry.value_ptr.* = .empty;
+        try entry.value_ptr.append(allocator, reference);
+    }
+
+    fn referencesForName(
+        self: *const ReferenceIndex,
+        name: []const u8,
+    ) []const DeclReference {
+        const refs = self.by_name.get(name) orelse return &.{};
+        return refs.items;
+    }
 };
 
 const DeclarationProblem = struct {
@@ -218,7 +245,11 @@ fn containerDeclarationCandidates(
     allocator: std.mem.Allocator,
     tree: Ast,
     token_tags: []const std.zig.Token.Tag,
-    references: []const DeclReference,
+    references: *const ReferenceIndex,
+    unused_problem_by_decl: *std.AutoHashMapUnmanaged(
+        Ast.Node.Index,
+        ?DeclarationProblem,
+    ),
 ) !std.ArrayList(Ast.Node.Index) {
     var candidates = std.ArrayList(Ast.Node.Index).empty;
     try appendContainerDeclarationCandidates(
@@ -226,6 +257,7 @@ fn containerDeclarationCandidates(
         tree,
         token_tags,
         references,
+        unused_problem_by_decl,
         tree.rootDecls(),
         &candidates,
     );
@@ -236,19 +268,25 @@ fn appendContainerDeclarationCandidates(
     allocator: std.mem.Allocator,
     tree: Ast,
     token_tags: []const std.zig.Token.Tag,
-    references: []const DeclReference,
+    references: *const ReferenceIndex,
+    unused_problem_by_decl: *std.AutoHashMapUnmanaged(
+        Ast.Node.Index,
+        ?DeclarationProblem,
+    ),
     members: []const Ast.Node.Index,
     candidates: *std.ArrayList(Ast.Node.Index),
 ) !void {
     for (members) |member| {
         try candidates.append(allocator, member);
 
-        if (!shouldDescendIntoDeclaration(
+        if ((try cachedUnusedDeclarationProblem(
+            allocator,
             tree,
             token_tags,
             references,
             member,
-        ))
+            unused_problem_by_decl,
+        )) != null)
             continue;
 
         const container_node = declarationContainerNode(
@@ -269,24 +307,37 @@ fn appendContainerDeclarationCandidates(
             tree,
             token_tags,
             references,
+            unused_problem_by_decl,
             container_decl.ast.members,
             candidates,
         );
     }
 }
 
-fn shouldDescendIntoDeclaration(
+fn cachedUnusedDeclarationProblem(
+    allocator: std.mem.Allocator,
     tree: Ast,
     token_tags: []const std.zig.Token.Tag,
-    references: []const DeclReference,
+    references: *const ReferenceIndex,
     decl: Ast.Node.Index,
-) bool {
-    return unusedDeclarationProblem(
-        tree,
-        token_tags,
-        references,
+    unused_problem_by_decl: *std.AutoHashMapUnmanaged(
+        Ast.Node.Index,
+        ?DeclarationProblem,
+    ),
+) !?DeclarationProblem {
+    const entry = try unused_problem_by_decl.getOrPut(
+        allocator,
         decl,
-    ) == null;
+    );
+    if (!entry.found_existing) {
+        entry.value_ptr.* = unusedDeclarationProblem(
+            tree,
+            token_tags,
+            references,
+            decl,
+        );
+    }
+    return entry.value_ptr.*;
 }
 
 fn declarationContainerNode(tree: Ast, decl: Ast.Node.Index) ?Ast.Node.Index {
@@ -305,7 +356,7 @@ fn declarationContainerNode(tree: Ast, decl: Ast.Node.Index) ?Ast.Node.Index {
 fn unusedDeclarationProblem(
     tree: Ast,
     token_tags: []const std.zig.Token.Tag,
-    references: []const DeclReference,
+    references: *const ReferenceIndex,
     decl: Ast.Node.Index,
 ) ?DeclarationProblem {
     const first_token = tree.firstToken(decl);
@@ -355,15 +406,12 @@ fn unusedDeclarationProblem(
 }
 
 fn hasExternalReference(
-    references: []const DeclReference,
+    references: *const ReferenceIndex,
     name: []const u8,
     first_token: Ast.TokenIndex,
     last_token: Ast.TokenIndex,
 ) bool {
-    for (references) |reference| {
-        if (!std.mem.eql(u8, reference.name, name))
-            continue;
-
+    for (references.referencesForName(name)) |reference| {
         if (reference.token >= first_token and reference.token <= last_token)
             continue;
 
@@ -432,7 +480,6 @@ fn referencedDeclReference(
         )) |name|
             return .{
                 .name = name,
-                .node = node,
                 .token = tree.nodeMainToken(node),
             };
     }
@@ -454,7 +501,6 @@ fn referencedDeclReference(
         )) |name|
             return .{
                 .name = name,
-                .node = node,
                 .token = member_token,
             };
     }
@@ -466,7 +512,6 @@ fn referencedDeclReference(
                 if (candidate.type.decl_id == root_decl_id)
                     return .{
                         .name = member_name,
-                        .node = node,
                         .token = member_token,
                     };
             }
