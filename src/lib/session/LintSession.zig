@@ -18,8 +18,16 @@ module_ids_by_file: std.AutoHashMapUnmanaged(FileStore.FileId, std.ArrayList(Mod
 module_file_index_built: bool = false,
 resolved_decl_types_by_module: std.AutoHashMapUnmanaged(ResolvedDeclTypeKey, ResolvedDeclType) = .empty,
 resolved_decl_by_module_file_node: std.AutoHashMapUnmanaged(ResolvedNodeDeclKey, ?DeclStore.DeclId) = .empty,
+decl_value_summary_by_module: std.AutoHashMapUnmanaged(ResolvedDeclSummaryKey, ?TypeStore.TypeSummary) = .empty,
+decl_summary_cands_by_decl: std.AutoHashMapUnmanaged(DeclStore.DeclId, []const DeclValueSummaryCandidate) = .empty,
+type_annotation_cands_by_node: std.AutoHashMapUnmanaged(FileNodeKey, []const ValueTypeAnnotationCandidate) = .empty,
 
 const ResolvedDeclTypeKey = struct {
+    module_id: ModuleStore.ModuleId,
+    decl_id: DeclStore.DeclId,
+};
+
+const ResolvedDeclSummaryKey = struct {
     module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
 };
@@ -43,6 +51,11 @@ const ResolvedNodeDeclKey = enum(u128) {
 const ResolvedDeclType = struct {
     type_id: ?TypeStore.TypeId,
     type_target: ?DeclStore.TypeTarget,
+};
+
+const FileNodeKey = struct {
+    file_id: FileStore.FileId,
+    node: Ast.Node.Index,
 };
 
 const ModuleResolution = struct {
@@ -747,6 +760,18 @@ pub const DeclLocation = struct {
     column: usize,
 };
 
+/// Follows simple value aliases from a declaration in one module context.
+pub fn resolveDeclAliasForModule(
+    self: *LintContext,
+    module_id: ModuleStore.ModuleId,
+    decl_id: DeclStore.DeclId,
+) DeclStore.DeclId {
+    return self.resolveDeclAliasCandidate(.{
+        .module_id = module_id,
+        .decl_id = decl_id,
+    }).decl_id;
+}
+
 /// Resolves the type summary for an expression node in a single module.
 fn resolveTypeOfNodeForModule(
     self: *LintContext,
@@ -779,7 +804,7 @@ fn resolveTypeOfNodeForModule(
 }
 
 /// Resolves `node` to the declaration it directly names in a single module.
-fn resolveDeclOfNodeForModule(
+pub fn resolveDeclOfNodeForModule(
     self: *LintContext,
     module_id: ModuleStore.ModuleId,
     doc: *const LintDocument,
@@ -1533,16 +1558,31 @@ fn resolveDeclValueSummaryForModule(
     module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
 ) ?TypeStore.TypeSummary {
-    return self.resolveDeclValueSummaryDepth(module_id, decl_id, 16);
+    const key: ResolvedDeclSummaryKey = .{
+        .module_id = module_id,
+        .decl_id = decl_id,
+    };
+    if (self.decl_value_summary_by_module.get(key)) |summary|
+        return summary;
+
+    const summary = self.resolveDeclValueSummaryDepth(module_id, decl_id, 16);
+    oom(self.decl_value_summary_by_module.put(
+        self.runtime.sessionArena(),
+        key,
+        summary,
+    ));
+    return summary;
 }
 
 /// Resolves value summaries for a declaration across every module that can
 /// reach its file.
 pub fn resolveDeclValueSummaryCandidates(
     self: *LintContext,
-    arena: std.mem.Allocator,
     decl_id: DeclStore.DeclId,
 ) ![]const DeclValueSummaryCandidate {
+    if (self.decl_summary_cands_by_decl.get(decl_id)) |cached|
+        return cached;
+
     var candidates = std.ArrayList(DeclValueSummaryCandidate).empty;
     const module_ids = self.moduleIdsForDecl(decl_id);
     for (module_ids) |module_id| {
@@ -1550,12 +1590,21 @@ pub fn resolveDeclValueSummaryCandidates(
             module_id,
             decl_id,
         ) orelse continue;
-        try candidates.append(arena, .{
+        try candidates.append(self.runtime.sessionArena(), .{
             .module_id = module_id,
             .summary = summary,
         });
     }
-    return candidates.items;
+    const owned = try self.runtime.sessionArena().dupe(
+        DeclValueSummaryCandidate,
+        candidates.items,
+    );
+    oom(self.decl_summary_cands_by_decl.put(
+        self.runtime.sessionArena(),
+        decl_id,
+        owned,
+    ));
+    return owned;
 }
 
 /// Resolves value summaries for existing declaration candidates while keeping
@@ -1584,11 +1633,19 @@ pub fn resolveDeclValueSummaryCandidatesFromCandidates(
 /// explain cross-module ambiguity consistently.
 pub fn resolveValueTypeAnnotationCandidates(
     self: *LintContext,
-    arena: std.mem.Allocator,
     doc: *const LintDocument,
     type_node: Ast.Node.Index,
 ) ![]const ValueTypeAnnotationCandidate {
+    const key: FileNodeKey = .{
+        .file_id = doc.file_id,
+        .node = type_node,
+    };
+    if (self.type_annotation_cands_by_node.get(key)) |cached| {
+        return cached;
+    }
+
     var candidates = std.ArrayList(ValueTypeAnnotationCandidate).empty;
+    errdefer candidates.deinit(self.runtime.sessionArena());
 
     const tree = doc.tree(self);
     if (directValueTypeAnnotationSummary(
@@ -1596,23 +1653,41 @@ pub fn resolveValueTypeAnnotationCandidates(
         type_node,
     )) |summary| {
         try candidates.append(
-            arena,
+            self.runtime.sessionArena(),
             .{ .summary = summary },
         );
-        return candidates.items;
+        const owned = try self.runtime.sessionArena().dupe(
+            ValueTypeAnnotationCandidate,
+            candidates.items,
+        );
+        oom(self.type_annotation_cands_by_node.put(
+            self.runtime.sessionArena(),
+            key,
+            owned,
+        ));
+        return owned;
     }
 
     const decl_candidates = try self.resolveDeclCandidatesOfNode(
-        arena,
+        self.runtime.sessionArena(),
         doc,
         typeReferenceNode(tree, type_node),
     );
 
     if (decl_candidates.len == 0) {
-        try candidates.append(arena, .{
+        try candidates.append(self.runtime.sessionArena(), .{
             .summary = .other,
         });
-        return candidates.items;
+        const owned = try self.runtime.sessionArena().dupe(
+            ValueTypeAnnotationCandidate,
+            candidates.items,
+        );
+        oom(self.type_annotation_cands_by_node.put(
+            self.runtime.sessionArena(),
+            key,
+            owned,
+        ));
+        return owned;
     }
 
     for (decl_candidates) |decl_candidate| {
@@ -1625,7 +1700,7 @@ pub fn resolveValueTypeAnnotationCandidates(
             source_decl_id,
         ) orelse continue;
 
-        try candidates.append(arena, .{
+        try candidates.append(self.runtime.sessionArena(), .{
             .summary = resolvedValueTypeAnnotationSummary(
                 self,
                 source_decl_id,
@@ -1637,11 +1712,20 @@ pub fn resolveValueTypeAnnotationCandidates(
 
     if (candidates.items.len == 0)
         try candidates.append(
-            arena,
+            self.runtime.sessionArena(),
             .{ .summary = .other },
         );
 
-    return candidates.items;
+    const owned = try self.runtime.sessionArena().dupe(
+        ValueTypeAnnotationCandidate,
+        candidates.items,
+    );
+    oom(self.type_annotation_cands_by_node.put(
+        self.runtime.sessionArena(),
+        key,
+        owned,
+    ));
+    return owned;
 }
 
 /// Recursively summarizes a declaration's value in one module context.
