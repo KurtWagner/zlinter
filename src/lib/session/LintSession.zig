@@ -188,19 +188,19 @@ pub fn init(self: *LintContext, build_info: BuildInfo) !void {
 
 fn initBuildConfig(
     self: *LintContext,
-    build_info: BuildInfo,
+    lint_build_info: BuildInfo,
 ) !BuildConfigStore.ConfigId {
     const zone = tracy.traceNamed(@src(), "LintContext.initBuildConfig");
     defer zone.end();
 
     const config_id = try self.build_config_store.resolve(".");
 
-    const compile_unit_names = build_info.compile_unit_names;
-    const matched_compile_units: ?[]bool = if (compile_unit_names) |names| matched: {
-        const matched = oom(self.runtime.sessionArena().alloc(bool, names.len));
-        @memset(matched, false);
-        break :matched matched;
-    } else null;
+    const compile_unit_names = lint_build_info.compile_unit_names;
+    var matched_compile_units: ?std.bit_set.Dynamic =
+        if (compile_unit_names) |names|
+            try .initEmpty(self.runtime.sessionArena(), names.len)
+        else
+            null;
 
     const build_config = self.build_config_store.buildConfig(config_id);
     for (0..build_config.steps.len) |step_index| {
@@ -211,9 +211,11 @@ fn initBuildConfig(
         ) == null) continue;
 
         if (compile_unit_names) |names| {
-            const step_name = step.name.slice(build_config);
-            const name_index = indexOfName(names, step_name) orelse continue;
-            matched_compile_units.?[name_index] = true;
+            const name_index = indexOfName(
+                names,
+                step.name.slice(build_config),
+            ) orelse continue;
+            matched_compile_units.?.set(name_index);
         }
 
         try self.consumeBuildConfigStep(
@@ -223,14 +225,13 @@ fn initBuildConfig(
     }
 
     if (compile_unit_names) |names| {
-        for (matched_compile_units.?, 0..) |matched, index| {
-            if (!matched) {
-                std.log.err("Selected compile unit \"{s}\" was not found in the evaluated build configuration. Available compile units: {s}", .{
-                    names[index],
-                    self.allocCompileUnitNamesForDebugging(build_config) catch "<ERROR>",
-                });
-                return error.InvalidBuildConfig;
-            }
+        var it = matched_compile_units.?.iterator(.{ .kind = .unset });
+        while (it.next()) |index| {
+            std.log.err("Selected compile unit \"{s}\" was not found in the evaluated build configuration. Available compile units: {s}", .{
+                names[index],
+                self.allocCompileUnitNamesForDebugging(build_config) catch "<ERROR>",
+            });
+            return error.InvalidBuildConfig;
         }
     }
 
@@ -263,6 +264,7 @@ fn allocCompileUnitNamesForDebugging(
     }
 
     if (!written_any) try writer.writer.writeAll("(none)");
+    try writer.writer.flush();
 
     return writer.toOwnedSlice();
 }
