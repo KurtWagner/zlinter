@@ -174,31 +174,73 @@ const ModuleResolution = struct {
     }
 };
 
-pub fn init(self: *LintContext) !void {
+pub fn init(self: *LintContext, build_info: BuildInfo) !void {
     const zone = tracy.traceNamed(@src(), "LintContext.init");
     defer zone.end();
 
     // Maybe one day we will care enough to use a fake for tests but for now
     // it's fine to ignore...
     self.root_build_config_id = if (!builtin.is_test)
-        try self.initBuildConfig()
+        try self.initBuildConfig(build_info)
     else
         null;
 }
 
-fn initBuildConfig(self: *LintContext) !BuildConfigStore.ConfigId {
+fn initBuildConfig(
+    self: *LintContext,
+    build_info: BuildInfo,
+) !BuildConfigStore.ConfigId {
     const zone = tracy.traceNamed(@src(), "LintContext.initBuildConfig");
     defer zone.end();
 
     const config_id = try self.build_config_store.resolve(".");
 
+    const compile_unit_names = build_info.compile_unit_names;
+    const matched_compile_units: ?[]bool = if (compile_unit_names) |names| matched: {
+        const matched = oom(self.runtime.sessionArena().alloc(bool, names.len));
+        @memset(matched, false);
+        break :matched matched;
+    } else null;
+
     const build_config = self.build_config_store.buildConfig(config_id);
-    for (0..build_config.steps.len) |step_index|
+    for (0..build_config.steps.len) |step_index| {
+        const step = build_config.steps[step_index];
+        if (step.extended.cast(
+            build_config,
+            std.Build.Configuration.Step.Compile,
+        ) == null) continue;
+
+        if (compile_unit_names) |names| {
+            const step_name = step.name.slice(build_config);
+            const name_index = indexOfName(names, step_name) orelse continue;
+            matched_compile_units.?[name_index] = true;
+        }
+
         try self.consumeBuildConfigStep(
             config_id,
             @enumFromInt(step_index),
         );
+    }
+
+    if (compile_unit_names) |names| {
+        for (matched_compile_units.?, 0..) |matched, index| {
+            if (!matched) {
+                std.log.err("Selected compile unit '{s}' was not found in the evaluated build configuration", .{
+                    names[index],
+                });
+                return error.InvalidBuildConfig;
+            }
+        }
+    }
+
     return config_id;
+}
+
+fn indexOfName(names: []const []const u8, needle: []const u8) ?usize {
+    for (names, 0..) |name, index| {
+        if (std.mem.eql(u8, name, needle)) return index;
+    }
+    return null;
 }
 
 fn consumeBuildConfigStep(
@@ -2919,6 +2961,7 @@ const results = @import("../results.zig");
 const std = @import("std");
 const testing = @import("../testing.zig");
 const tracy = @import("tracy");
+const BuildInfo = @import("../BuildInfo.zig");
 const BuildConfigStore = @import("BuildConfigStore.zig");
 const CompileContext = @import("CompileContext.zig");
 const DeclStore = @import("DeclStore.zig");

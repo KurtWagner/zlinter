@@ -83,6 +83,7 @@ pub fn builder(b: *std.Build, options: BuilderOptions) StepBuilder {
         .rules = .empty,
         .exclude = .empty,
         .include = .empty,
+        .compile_unit_names = .empty,
         .options = .{
             .optimize = options.optimize,
             .target = options.target orelse b.graph.host,
@@ -111,6 +112,7 @@ const StepBuilder = struct {
     rules: std.ArrayList(BuiltRule),
     include: std.ArrayList(LintIncludeSource),
     exclude: std.ArrayList(LintExcludeSource),
+    compile_unit_names: std.ArrayList([]const u8),
     options: BuildOptions,
     b: *std.Build,
 
@@ -146,6 +148,16 @@ const StepBuilder = struct {
     pub fn addSource(self: *StepBuilder, source: LintIncludeSource) void {
         const arena = self.b.allocator;
         self.include.append(arena, source) catch @panic("OOM");
+    }
+
+    /// Adds a compile unit whose module/import context should be used while
+    /// linting.
+    ///
+    /// If no compile units are configured then zlinter uses all compile units
+    /// discovered in the evaluated build configuration.
+    pub fn addCompileUnit(self: *StepBuilder, compile: *std.Build.Step.Compile) void {
+        const arena = self.b.allocator;
+        self.compile_unit_names.append(arena, compile.step.name) catch @panic("OOM");
     }
 
     /// Set the paths to include or exclude when running the linter.
@@ -213,6 +225,7 @@ const StepBuilder = struct {
             },
             self.include.items,
             self.exclude.items,
+            self.compile_unit_names.items,
             self.options,
         );
     }
@@ -477,6 +490,7 @@ pub fn build(b: *std.Build) void {
             .{ .module = zlinter_lib_module },
             include.items,
             exclude.items,
+            &.{},
             .{
                 .target = target,
                 .optimize = if (tracy) .ReleaseSafe else .Debug,
@@ -533,6 +547,7 @@ fn buildStep(
     },
     include: []const LintIncludeSource,
     exclude: []const LintExcludeSource,
+    compile_unit_names: []const []const u8,
     options: BuildOptions,
 ) *std.Build.Step {
     const zlinter_lib_module: *std.Build.Module, const exe_file: std.Build.LazyPath, const build_rules_exe_file: std.Build.LazyPath = switch (zlinter) {
@@ -628,6 +643,7 @@ fn buildStep(
         // dependency graph is correct.
         .include_paths = null,
         .exclude_paths = null,
+        .compile_unit_names = if (compile_unit_names.len > 0) compile_unit_names else null,
     }, .{}, &buff.writer) catch @panic("Invalid build info");
 
     const stdin_bytes = buff.written();

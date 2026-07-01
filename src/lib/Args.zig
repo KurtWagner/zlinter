@@ -694,6 +694,35 @@ test "allocParse with include_paths and exclude_paths" {
     }), args);
 }
 
+test "allocParse with compile_unit_names" {
+    const bytes =
+        \\.{
+        \\  .compile_unit_names = .{"my_app", "my_lib_tests"},
+        \\}
+    ;
+
+    var backing: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer backing.deinit();
+
+    try backing.writer.writeInt(u32, @intCast(bytes.len), .little);
+    try backing.writer.writeAll(bytes);
+
+    var stdin_fbs = std.Io.Reader.fixed(backing.written());
+    const args = try allocParse(
+        testing.cliArgs(&.{"--stdin"}),
+        &.{},
+        std.testing.allocator,
+        &stdin_fbs,
+    );
+    defer args.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualDeep(testing.expected(.{
+        .build_info = BuildInfo{
+            .compile_unit_names = @constCast(&[_][]const u8{ "my_app", "my_lib_tests" }),
+        },
+    }), args);
+}
+
 test "allocParse with exclude and include files" {
     var stdin_fbs = std.Io.Reader.fixed("");
 

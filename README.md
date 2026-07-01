@@ -358,6 +358,20 @@ If your project is large it may be worth setting optimize to `.ReleaseFast`. Jus
 
 Since 0.16.x, `.Debug` is significantly slower to run as it uses the debug allocator. Unless you're working on zlinter or a custom rule, it should be avoided.
 
+### Limit Compile Units
+
+Large projects often have many compile units with overlapping module graphs. By default, `zlinter` uses all compile units discovered in the evaluated `build.zig` configuration. To significantly improve performance for large projects, you can limit that context to specific compile steps:
+
+```zig
+const exe = b.addExecutable(.{
+    .name = "my_app",
+    .root_module = app_module,
+});
+
+var builder = zlinter.builder(b, .{});
+builder.addCompileUnit(exe);
+```
+
 ## Supported zig versions
 
 The plan is to support `master` (mostly because its an important exercise in keeping up to date with whats changing in zig) and the latest previous version.

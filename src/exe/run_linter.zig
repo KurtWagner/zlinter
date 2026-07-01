@@ -257,7 +257,7 @@ fn runLinterRules(
         .type_store = .init(runtime),
         .decl_store = .init(runtime),
     };
-    try session.init();
+    try session.init(args.build_info);
 
     var enabled_rules = enabledRules(args.rules);
 
