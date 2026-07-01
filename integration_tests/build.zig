@@ -100,6 +100,7 @@ pub fn build(b: *std.Build) !void {
         inline for (@typeInfo(zlinter.BuiltinLintRule).@"enum".field_values) |field_value| {
             builder.addRule(.{ .builtin = @enumFromInt(field_value) }, .{});
         }
+        builder.setCompileUnits(&.{.all});
         builder.addRule(.{ .custom = .{ .name = "no_cats", .path = "src/no_cats.zig" } }, .{});
         break :step builder.build();
     });
