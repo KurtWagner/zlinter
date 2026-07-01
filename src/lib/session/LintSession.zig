@@ -397,8 +397,8 @@ pub fn resolveFile(self: *LintContext, input_path: []const u8) !FileStore.FileId
     return id;
 }
 
-/// Resolves cached type information for a file in every module context that can
-/// reach it.
+/// Resolves file-level type information and records declarations for module
+/// contexts that can reach it.
 ///
 /// This avoids choosing one active module when imports can resolve to
 /// different declarations across compile units.
@@ -424,7 +424,7 @@ pub fn resolveFileTypes(
     }
 }
 
-/// Resolves type caches for a file under one module root.
+/// Ensures declarations are available for module-specific lazy resolution.
 fn resolveFileTypesForModule(
     self: *LintContext,
     file_id: FileStore.FileId,
@@ -433,12 +433,8 @@ fn resolveFileTypesForModule(
     const zone = tracy.traceNamed(@src(), "LintContext.resolveFileTypesForModule");
     defer zone.end();
 
+    _ = module_id;
     _ = self.decl_store.store(file_id, &self.file_store);
-
-    var it = self.decl_store.fileDeclIterator(file_id);
-    while (it.next()) |decl_id| {
-        _ = self.cacheResolvedDeclTypeForModule(module_id, decl_id);
-    }
 }
 
 /// Returns cached type information for a declaration in one module context,
@@ -2206,8 +2202,7 @@ fn typeSummaryFromValueNode(
     );
 }
 
-/// Resolves an `@import` root declaration in the active module context and
-/// seeds that imported file's module-specific type cache.
+/// Resolves an `@import` root declaration in the active module context.
 fn resolveImportRootDecl(
     self: *LintContext,
     module_id: ModuleStore.ModuleId,
