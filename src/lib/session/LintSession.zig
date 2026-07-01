@@ -174,14 +174,14 @@ const ModuleResolution = struct {
     }
 };
 
-pub fn init(self: *LintContext, build_info: BuildInfo) !void {
+pub fn init(self: *LintContext, lint_build_info: BuildInfo) !void {
     const zone = tracy.traceNamed(@src(), "LintContext.init");
     defer zone.end();
 
     // Maybe one day we will care enough to use a fake for tests but for now
     // it's fine to ignore...
     self.root_build_config_id = if (!builtin.is_test)
-        try self.initBuildConfig(build_info)
+        try self.initBuildConfig(lint_build_info)
     else
         null;
 }
