@@ -71,6 +71,7 @@ A **linter** is a tool that automatically checks source code for style issues, b
   - [How to Contribute](#contributions)
   - [Run tests](#run-tests)
   - [Run on self](#run-lint-on-self)
+- [Release Notes](RELEASES.md)
 
 ## Getting started
 
