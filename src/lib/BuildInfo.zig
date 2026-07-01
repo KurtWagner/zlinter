@@ -4,6 +4,15 @@
 
 const BuildInfo = @This();
 
+pub const CompileUnitSelector = union(enum) {
+    exe,
+    lib,
+    obj,
+    @"test",
+    all,
+    name: []const u8,
+};
+
 /// Similar to `Args.include_paths` but is populated by the build runner and
 /// piped into the zlinter execution.
 include_paths: ?[]const []const u8 = null,
@@ -12,9 +21,10 @@ include_paths: ?[]const []const u8 = null,
 /// piped into the zlinter execution.
 exclude_paths: ?[]const []const u8 = null,
 
-/// Compile unit step names whose module/import contexts should be used while
-/// linting. If null, all discovered compile units are used.
-compile_unit_names: ?[]const []const u8 = null,
+/// Compile unit selectors whose module/import contexts should be used while
+/// linting. If null, zlinter defaults to executables if present, otherwise
+/// libraries, otherwise objects, otherwise tests.
+compile_units: ?[]const CompileUnitSelector = null,
 
 pub const default: BuildInfo = .{};
 
@@ -29,9 +39,14 @@ pub fn deinit(self: BuildInfo, gpa: std.mem.Allocator) void {
         gpa.free(paths);
     }
 
-    if (self.compile_unit_names) |names| {
-        for (names) |name| gpa.free(name);
-        gpa.free(names);
+    if (self.compile_units) |selectors| {
+        for (selectors) |selector| {
+            switch (selector) {
+                .name => |name| gpa.free(name),
+                .exe, .lib, .obj, .@"test", .all => {},
+            }
+        }
+        gpa.free(selectors);
     }
 }
 

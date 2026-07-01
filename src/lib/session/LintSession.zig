@@ -195,54 +195,202 @@ fn initBuildConfig(
 
     const config_id = try self.build_config_store.resolve(".");
 
-    const compile_unit_names = lint_build_info.compile_unit_names;
+    const build_config = self.build_config_store.buildConfig(config_id);
+    const compile_units = lint_build_info.compile_units;
+    const auto_kind = if (compile_units == null)
+        resolveDefaultCompileUnitKind(build_config)
+    else
+        null;
+
     var matched_compile_units: ?std.bit_set.Dynamic =
-        if (compile_unit_names) |names|
-            try .initEmpty(self.runtime.sessionArena(), names.len)
+        if (compile_units) |selectors|
+            try .initEmpty(self.runtime.sessionArena(), selectors.len)
         else
             null;
 
-    const build_config = self.build_config_store.buildConfig(config_id);
     for (0..build_config.steps.len) |step_index| {
         const step = build_config.steps[step_index];
-        if (step.extended.cast(
+        const compile = step.extended.cast(
             build_config,
             std.Build.Configuration.Step.Compile,
-        ) == null) continue;
+        ) orelse continue;
 
-        if (compile_unit_names) |names| {
-            const name_index = indexOfName(
-                names,
-                step.name.slice(build_config),
-            ) orelse continue;
-            matched_compile_units.?.set(name_index);
+        const step_name = step.name.slice(build_config);
+        const kind = compileUnitKind(compile);
+
+        const should_consume = if (compile_units) |selectors| should_consume: {
+            const matched = &(matched_compile_units.?);
+            break :should_consume compileUnitSelectorsMatch(selectors, step_name, kind, matched);
+        } else auto_kind != null and auto_kind.? == kind;
+
+        if (!should_consume) {
+            std.log.info("Skipping compile unit \"{s}\" ({s})", .{ step_name, @tagName(kind) });
+            continue;
         }
 
+        std.log.info("Using compile unit \"{s}\" ({s})", .{ step_name, @tagName(kind) });
         try self.consumeBuildConfigStep(
             config_id,
             @enumFromInt(step_index),
         );
     }
 
-    if (compile_unit_names) |names| {
+    if (compile_units) |selectors| {
         var it = matched_compile_units.?.iterator(.{ .kind = .unset });
         while (it.next()) |index| {
-            std.log.err("Selected compile unit \"{s}\" was not found in the evaluated build configuration. Available compile units: {s}", .{
-                names[index],
-                self.allocCompileUnitNamesForDebugging(build_config) catch "<ERROR>",
-            });
-            return error.InvalidBuildConfig;
+            switch (selectors[index]) {
+                .name => |name| {
+                    std.log.err("Selected compile unit \"{s}\" was not found in the evaluated build configuration. Available compile units: {s}", .{
+                        name,
+                        self.allocCompileUnitNamesForDebugging(build_config) catch "<ERROR>",
+                    });
+                    return error.InvalidBuildConfig;
+                },
+                .exe, .lib, .obj, .@"test", .all => {},
+            }
         }
     }
 
     return config_id;
 }
 
-fn indexOfName(names: []const []const u8, needle: []const u8) ?usize {
-    for (names, 0..) |name, index| {
-        if (std.mem.eql(u8, name, needle)) return index;
+const CompileUnitKind = enum {
+    exe,
+    lib,
+    @"test",
+    obj,
+    test_obj,
+};
+
+fn compileUnitKind(compile: std.Build.Configuration.Step.Compile) CompileUnitKind {
+    return switch (compile.flags3.kind) {
+        .exe => .exe,
+        .lib => .lib,
+        .obj => .obj,
+        .@"test" => .@"test",
+        .test_obj => .test_obj,
+    };
+}
+
+fn resolveDefaultCompileUnitKind(build_config: *const std.Build.Configuration) ?CompileUnitKind {
+    var has_lib = false;
+    var has_test = false;
+    var has_obj = false;
+    var has_test_obj = false;
+
+    for (build_config.steps) |step| {
+        const compile = step.extended.cast(
+            build_config,
+            std.Build.Configuration.Step.Compile,
+        ) orelse continue;
+
+        switch (compileUnitKind(compile)) {
+            .exe => return .exe,
+            .lib => has_lib = true,
+            .@"test" => has_test = true,
+            .obj => has_obj = true,
+            .test_obj => has_test_obj = true,
+        }
     }
+
+    if (has_lib) return .lib;
+    if (has_test) return .@"test";
+    if (has_obj) return .obj;
+    if (has_test_obj) return .test_obj;
     return null;
+}
+
+fn compileUnitSelectorsMatch(
+    selectors: []const BuildInfo.CompileUnitSelector,
+    step_name: []const u8,
+    kind: CompileUnitKind,
+    matched_selectors: *std.bit_set.Dynamic,
+) bool {
+    var matched = false;
+    for (selectors, 0..) |selector, index| {
+        if (compileUnitSelectorMatches(selector, step_name, kind)) {
+            matched_selectors.set(index);
+            matched = true;
+        }
+    }
+    return matched;
+}
+
+fn compileUnitSelectorMatches(
+    selector: BuildInfo.CompileUnitSelector,
+    step_name: []const u8,
+    kind: CompileUnitKind,
+) bool {
+    return switch (selector) {
+        .exe => kind == .exe,
+        .lib => kind == .lib,
+        .obj => kind == .obj,
+        .@"test" => kind == .@"test" or kind == .test_obj,
+        .all => true,
+        .name => |name| std.mem.eql(u8, name, step_name),
+    };
+}
+
+fn resolveDefaultCompileUnitKindFromKinds(kinds: []const CompileUnitKind) ?CompileUnitKind {
+    var has_lib = false;
+    var has_test = false;
+    var has_obj = false;
+    var has_test_obj = false;
+
+    for (kinds) |kind| switch (kind) {
+        .exe => return .exe,
+        .lib => has_lib = true,
+        .@"test" => has_test = true,
+        .obj => has_obj = true,
+        .test_obj => has_test_obj = true,
+    };
+
+    if (has_lib) return .lib;
+    if (has_test) return .@"test";
+    if (has_obj) return .obj;
+    if (has_test_obj) return .test_obj;
+    return null;
+}
+
+test "resolveDefaultCompileUnitKindFromKinds prefers exe then lib then test then obj then test_obj" {
+    try std.testing.expectEqual(CompileUnitKind.exe, resolveDefaultCompileUnitKindFromKinds(&.{ .@"test", .lib, .exe }));
+    try std.testing.expectEqual(CompileUnitKind.lib, resolveDefaultCompileUnitKindFromKinds(&.{ .@"test", .obj, .lib }));
+    try std.testing.expectEqual(CompileUnitKind.@"test", resolveDefaultCompileUnitKindFromKinds(&.{.@"test"}));
+    try std.testing.expectEqual(CompileUnitKind.@"test", resolveDefaultCompileUnitKindFromKinds(&.{ .test_obj, .obj, .@"test" }));
+    try std.testing.expectEqual(CompileUnitKind.obj, resolveDefaultCompileUnitKindFromKinds(&.{ .test_obj, .obj }));
+    try std.testing.expectEqual(CompileUnitKind.test_obj, resolveDefaultCompileUnitKindFromKinds(&.{.test_obj}));
+    try std.testing.expectEqual(null, resolveDefaultCompileUnitKindFromKinds(&.{}));
+}
+
+test "compileUnitSelectorMatches applies mode name and all selectors" {
+    try std.testing.expect(compileUnitSelectorMatches(.exe, "app", .exe));
+    try std.testing.expect(!compileUnitSelectorMatches(.exe, "lib", .lib));
+    try std.testing.expect(compileUnitSelectorMatches(.lib, "lib", .lib));
+    try std.testing.expect(compileUnitSelectorMatches(.obj, "obj", .obj));
+    try std.testing.expect(compileUnitSelectorMatches(.@"test", "unit", .@"test"));
+    try std.testing.expect(compileUnitSelectorMatches(.@"test", "unit", .test_obj));
+    try std.testing.expect(compileUnitSelectorMatches(.all, "unit", .@"test"));
+    try std.testing.expect(compileUnitSelectorMatches(.{ .name = "special" }, "special", .@"test"));
+    try std.testing.expect(!compileUnitSelectorMatches(.{ .name = "special" }, "other", .@"test"));
+}
+
+test "compileUnitSelectorsMatch combines selectors with or semantics" {
+    var matched = try std.bit_set.Dynamic.initEmpty(std.testing.allocator, 2);
+    defer matched.deinit(std.testing.allocator);
+
+    const selectors = [_]BuildInfo.CompileUnitSelector{
+        .exe,
+        .{ .name = "special_test" },
+    };
+
+    try std.testing.expect(compileUnitSelectorsMatch(&selectors, "app", .exe, &matched));
+    try std.testing.expect(matched.isSet(0));
+    try std.testing.expect(!matched.isSet(1));
+
+    try std.testing.expect(compileUnitSelectorsMatch(&selectors, "special_test", .@"test", &matched));
+    try std.testing.expect(matched.isSet(1));
+
+    try std.testing.expect(!compileUnitSelectorsMatch(&selectors, "other_test", .@"test", &matched));
 }
 
 fn allocCompileUnitNamesForDebugging(

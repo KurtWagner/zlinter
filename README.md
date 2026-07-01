@@ -358,19 +358,40 @@ If your project is large it may be worth setting optimize to `.ReleaseFast`. Jus
 
 Since 0.16.x, `.Debug` is significantly slower to run as it uses the debug allocator. Unless you're working on zlinter or a custom rule, it should be avoided.
 
-### Limit Compile Units
+### Compile Units
 
-Large projects often have many compile units with overlapping module graphs. By default, `zlinter` uses all compile units discovered in the evaluated `build.zig` configuration. To significantly improve performance for large projects, you can limit that context to specific compile steps:
+Large projects often have many compile units with overlapping module graphs. By default, `zlinter` uses executables first, then libraries, then tests, then object units, then test objects. This usually gives the linter the module/import context you expect without resolving every compile unit in the build, which is slower.
+
+Compiled units are used to resolve declarations from dependencies in your import graph.
+
+You can override that selection with explicit selectors. For example, to do all executables and a specific test:
 
 ```zig
 const exe = b.addExecutable(.{
     .name = "my_app",
     .root_module = app_module,
 });
+const unit_tests = b.addTest(.{
+    .name = "unit_tests",
+    .root_module = test_module,
+});
 
 var builder = zlinter.builder(b, .{});
-builder.addCompileUnit(exe);
+builder.setCompileUnits(&.{
+    .exe,
+    .{ .explicit = unit_tests },
+});
 ```
+
+If you only want to context resolve a single executable and your project registers multiple, then you should:
+
+```zig
+builder.setCompileUnits(&.{
+    .{ .explicit = your_exe },
+});
+```
+
+Use `.all` only when you intentionally want every discovered compile unit to supply context. It can be much slower for large projects, and may not provide much additional context resolution.
 
 ## Supported zig versions
 

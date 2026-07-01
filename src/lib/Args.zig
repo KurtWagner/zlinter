@@ -694,10 +694,10 @@ test "allocParse with include_paths and exclude_paths" {
     }), args);
 }
 
-test "allocParse with compile_unit_names" {
+test "allocParse with compile_units" {
     const bytes =
         \\.{
-        \\  .compile_unit_names = .{"my_app", "my_lib_tests"},
+        \\  .compile_units = .{ .exe, .@"test", .{ .name = "my_app" }, .{ .name = "my_lib_tests" } },
         \\}
     ;
 
@@ -718,7 +718,12 @@ test "allocParse with compile_unit_names" {
 
     try std.testing.expectEqualDeep(testing.expected(.{
         .build_info = BuildInfo{
-            .compile_unit_names = @constCast(&[_][]const u8{ "my_app", "my_lib_tests" }),
+            .compile_units = @constCast(&[_]BuildInfo.CompileUnitSelector{
+                .exe,
+                .@"test",
+                .{ .name = "my_app" },
+                .{ .name = "my_lib_tests" },
+            }),
         },
     }), args);
 }
