@@ -225,8 +225,9 @@ fn initBuildConfig(
     if (compile_unit_names) |names| {
         for (matched_compile_units.?, 0..) |matched, index| {
             if (!matched) {
-                std.log.err("Selected compile unit '{s}' was not found in the evaluated build configuration", .{
+                std.log.err("Selected compile unit \"{s}\" was not found in the evaluated build configuration. Available compile units: {s}", .{
                     names[index],
+                    self.allocCompileUnitNamesForDebugging(build_config) catch "<ERROR>",
                 });
                 return error.InvalidBuildConfig;
             }
@@ -241,6 +242,29 @@ fn indexOfName(names: []const []const u8, needle: []const u8) ?usize {
         if (std.mem.eql(u8, name, needle)) return index;
     }
     return null;
+}
+
+fn allocCompileUnitNamesForDebugging(
+    self: *LintContext,
+    build_config: *const std.Build.Configuration,
+) ![]const u8 {
+    var writer: std.Io.Writer.Allocating = .init(self.runtime.sessionArena());
+
+    var written_any = false;
+    for (build_config.steps) |step| {
+        if (step.extended.cast(
+            build_config,
+            std.Build.Configuration.Step.Compile,
+        ) == null) continue;
+
+        if (written_any) try writer.writer.writeAll(", ");
+        try writer.writer.print("\"{s}\"", .{step.name.slice(build_config)});
+        written_any = true;
+    }
+
+    if (!written_any) try writer.writer.writeAll("(none)");
+
+    return writer.toOwnedSlice();
 }
 
 fn consumeBuildConfigStep(

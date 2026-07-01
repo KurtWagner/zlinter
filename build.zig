@@ -490,7 +490,12 @@ pub fn build(b: *std.Build) void {
             .{ .module = zlinter_lib_module },
             include.items,
             exclude.items,
-            &.{},
+            &.{
+                // Probably unstable but good enough for our internal use
+                // and easy to fix if it breaks. Users should never do this
+                // though.....
+                "compile exe zlinter Debug native",
+            },
             .{
                 .target = target,
                 .optimize = if (tracy) .ReleaseSafe else .Debug,
