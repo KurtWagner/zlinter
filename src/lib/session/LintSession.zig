@@ -18,6 +18,7 @@ module_ids_by_file: std.AutoHashMapUnmanaged(FileStore.FileId, std.ArrayList(Mod
 module_file_index_built: bool = false,
 resolved_decl_types_by_module: std.AutoHashMapUnmanaged(ResolvedDeclTypeKey, ResolvedDeclType) = .empty,
 resolved_decl_by_module_file_node: std.AutoHashMapUnmanaged(ResolvedNodeDeclKey, ?DeclStore.DeclId) = .empty,
+decl_cands_by_node: std.AutoHashMapUnmanaged(FileNodeKey, []const DeclCandidate) = .empty,
 decl_value_summary_by_module: std.AutoHashMapUnmanaged(ResolvedDeclSummaryKey, ?TypeStore.TypeSummary) = .empty,
 decl_summary_cands_by_decl: std.AutoHashMapUnmanaged(DeclStore.DeclId, []const DeclValueSummaryCandidate) = .empty,
 type_annotation_cands_by_node: std.AutoHashMapUnmanaged(FileNodeKey, []const ValueTypeAnnotationCandidate) = .empty,
@@ -490,6 +491,10 @@ pub fn moduleIdsForFile(
     self: *LintContext,
     file_id: FileStore.FileId,
 ) []const ModuleStore.ModuleId {
+    const zone = tracy.traceNamed(@src(), "LintContext.moduleIdsForFile");
+    defer zone.end();
+    zone.setValue(file_id.toIndex());
+
     self.ensureModuleIdsByFile(self.runtime.sessionArena());
 
     const cached = self.module_ids_by_file.get(file_id) orelse fallback: {
@@ -515,6 +520,10 @@ fn ensureModuleIdsByFile(
     self: *LintContext,
     gpa: std.mem.Allocator,
 ) void {
+    const zone = tracy.traceNamed(@src(), "LintContext.ensureModuleIdsByFile");
+    defer zone.end();
+    zone.setValue(@intFromBool(self.module_file_index_built));
+
     if (self.module_file_index_built) return;
 
     for (self.compile_contexts.items(.root_module)) |root_module_id| {
@@ -562,6 +571,10 @@ fn indexModuleFiles(
     root_module_id: ModuleStore.ModuleId,
     gpa: std.mem.Allocator,
 ) void {
+    const zone = tracy.traceNamed(@src(), "LintContext.indexModuleFiles");
+    defer zone.end();
+    zone.setValue(root_module_id.toIndex());
+
     const compile_root_file_id = self.module_store.rootFileId(root_module_id);
 
     var visited = std.AutoHashMapUnmanaged(ReachKey, void).empty;
@@ -782,7 +795,7 @@ fn resolveTypeOfNodeForModule(
     const zone = tracy.traceNamed(@src(), "LintContext.resolveTypeOfNode");
     defer zone.end();
 
-    const immediate_decl_id = self.immediateDeclForNode(module_id, doc, node);
+    const immediate_decl_id = self.resolveDeclOfNodeForModule(module_id, doc, node);
     const resolved_decl_id = if (immediate_decl_id) |decl_id|
         self.decl_store.resolvedContainerDecl(
             &self.file_store,
@@ -834,6 +847,14 @@ pub fn resolveDeclCandidatesOfNode(
     doc: *const LintDocument,
     node: Ast.Node.Index,
 ) ![]const DeclCandidate {
+    const key: FileNodeKey = .{
+        .file_id = doc.file_id,
+        .node = node,
+    };
+    if (self.decl_cands_by_node.get(key)) |cached| {
+        return cached;
+    }
+
     var candidates = std.ArrayList(DeclCandidate).empty;
     const module_ids = self.moduleIdsForFile(doc.file_id);
     for (module_ids) |module_id| {
@@ -844,7 +865,17 @@ pub fn resolveDeclCandidatesOfNode(
             });
         }
     }
-    return candidates.items;
+
+    const owned = try self.runtime.sessionArena().dupe(
+        DeclCandidate,
+        candidates.items,
+    );
+    oom(self.decl_cands_by_node.put(
+        self.runtime.sessionArena(),
+        key,
+        owned,
+    ));
+    return owned;
 }
 
 /// Resolves a member declaration from a container/type declaration.
@@ -1558,13 +1589,19 @@ fn resolveDeclValueSummaryForModule(
     module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
 ) ?TypeStore.TypeSummary {
+    const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclValueSummaryForModule");
+    defer zone.end();
+
     const key: ResolvedDeclSummaryKey = .{
         .module_id = module_id,
         .decl_id = decl_id,
     };
-    if (self.decl_value_summary_by_module.get(key)) |summary|
+    if (self.decl_value_summary_by_module.get(key)) |summary| {
+        zone.setValue(1);
         return summary;
+    }
 
+    zone.setValue(0);
     const summary = self.resolveDeclValueSummaryDepth(module_id, decl_id, 16);
     oom(self.decl_value_summary_by_module.put(
         self.runtime.sessionArena(),
@@ -1580,8 +1617,13 @@ pub fn resolveDeclValueSummaryCandidates(
     self: *LintContext,
     decl_id: DeclStore.DeclId,
 ) ![]const DeclValueSummaryCandidate {
-    if (self.decl_summary_cands_by_decl.get(decl_id)) |cached|
+    const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclValueSummaryCandidates");
+    defer zone.end();
+
+    if (self.decl_summary_cands_by_decl.get(decl_id)) |cached| {
+        zone.setValue(cached.len);
         return cached;
+    }
 
     var candidates = std.ArrayList(DeclValueSummaryCandidate).empty;
     const module_ids = self.moduleIdsForDecl(decl_id);
@@ -1604,6 +1646,7 @@ pub fn resolveDeclValueSummaryCandidates(
         decl_id,
         owned,
     ));
+    zone.setValue(owned.len);
     return owned;
 }
 
@@ -1614,6 +1657,10 @@ pub fn resolveDeclValueSummaryCandidatesFromCandidates(
     arena: std.mem.Allocator,
     decl_candidates: []const DeclCandidate,
 ) ![]const DeclValueSummaryCandidate {
+    const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclValueSummaryCandidatesFromCandidates");
+    defer zone.end();
+    zone.setValue(decl_candidates.len);
+
     var candidates = std.ArrayList(DeclValueSummaryCandidate).empty;
     for (decl_candidates) |candidate| {
         const summary = self.resolveDeclValueSummaryForModule(
@@ -1636,11 +1683,15 @@ pub fn resolveValueTypeAnnotationCandidates(
     doc: *const LintDocument,
     type_node: Ast.Node.Index,
 ) ![]const ValueTypeAnnotationCandidate {
+    const zone = tracy.traceNamed(@src(), "LintContext.resolveValueTypeAnnotationCandidates");
+    defer zone.end();
+
     const key: FileNodeKey = .{
         .file_id = doc.file_id,
         .node = type_node,
     };
     if (self.type_annotation_cands_by_node.get(key)) |cached| {
+        zone.setValue(cached.len);
         return cached;
     }
 
@@ -1665,6 +1716,7 @@ pub fn resolveValueTypeAnnotationCandidates(
             key,
             owned,
         ));
+        zone.setValue(owned.len);
         return owned;
     }
 
@@ -1687,6 +1739,7 @@ pub fn resolveValueTypeAnnotationCandidates(
             key,
             owned,
         ));
+        zone.setValue(owned.len);
         return owned;
     }
 
@@ -1725,6 +1778,7 @@ pub fn resolveValueTypeAnnotationCandidates(
         key,
         owned,
     ));
+    zone.setValue(owned.len);
     return owned;
 }
 
@@ -1735,6 +1789,10 @@ fn resolveDeclValueSummaryDepth(
     decl_id: DeclStore.DeclId,
     remaining_depth: u8,
 ) ?TypeStore.TypeSummary {
+    const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclValueSummaryDepth");
+    defer zone.end();
+    zone.setValue(remaining_depth);
+
     if (remaining_depth == 0) return null;
 
     const file_id = self.decl_store.declFileId(decl_id);

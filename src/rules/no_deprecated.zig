@@ -28,6 +28,10 @@ fn run(
     doc: *const zlinter.session.LintDocument,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
+    const zone = zlinter.tracy.traceNamed(@src(), "rule.no_deprecated");
+    defer zone.end();
+    zone.addText(doc.absPath(session));
+
     const config = options.getConfig(Config);
     const session_arena = session.runtime.sessionArena();
     const rule_arena = session.runtime.ruleArena();
