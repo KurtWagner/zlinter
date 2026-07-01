@@ -108,7 +108,7 @@ pub fn initFakeContext(
         .type_store = .init(runtime),
         .decl_store = .init(runtime),
     };
-    session.init() catch @panic("failed to initialize fake lint session");
+    session.init(.default) catch @panic("failed to initialize fake lint session");
     return session;
 }
 

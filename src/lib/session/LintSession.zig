@@ -18,6 +18,7 @@ module_ids_by_file: std.AutoHashMapUnmanaged(FileStore.FileId, std.ArrayList(Mod
 module_file_index_built: bool = false,
 resolved_decl_types_by_module: std.AutoHashMapUnmanaged(ResolvedDeclTypeKey, ResolvedDeclType) = .empty,
 resolved_decl_by_module_file_node: std.AutoHashMapUnmanaged(ResolvedNodeDeclKey, ?DeclStore.DeclId) = .empty,
+decl_cands_by_node: std.AutoHashMapUnmanaged(FileNodeKey, []const DeclCandidate) = .empty,
 decl_value_summary_by_module: std.AutoHashMapUnmanaged(ResolvedDeclSummaryKey, ?TypeStore.TypeSummary) = .empty,
 decl_summary_cands_by_decl: std.AutoHashMapUnmanaged(DeclStore.DeclId, []const DeclValueSummaryCandidate) = .empty,
 type_annotation_cands_by_node: std.AutoHashMapUnmanaged(FileNodeKey, []const ValueTypeAnnotationCandidate) = .empty,
@@ -173,31 +174,99 @@ const ModuleResolution = struct {
     }
 };
 
-pub fn init(self: *LintContext) !void {
+pub fn init(self: *LintContext, lint_build_info: BuildInfo) !void {
     const zone = tracy.traceNamed(@src(), "LintContext.init");
     defer zone.end();
 
     // Maybe one day we will care enough to use a fake for tests but for now
     // it's fine to ignore...
     self.root_build_config_id = if (!builtin.is_test)
-        try self.initBuildConfig()
+        try self.initBuildConfig(lint_build_info)
     else
         null;
 }
 
-fn initBuildConfig(self: *LintContext) !BuildConfigStore.ConfigId {
+fn initBuildConfig(
+    self: *LintContext,
+    lint_build_info: BuildInfo,
+) !BuildConfigStore.ConfigId {
     const zone = tracy.traceNamed(@src(), "LintContext.initBuildConfig");
     defer zone.end();
 
     const config_id = try self.build_config_store.resolve(".");
 
+    const compile_unit_names = lint_build_info.compile_unit_names;
+    var matched_compile_units: ?std.bit_set.Dynamic =
+        if (compile_unit_names) |names|
+            try .initEmpty(self.runtime.sessionArena(), names.len)
+        else
+            null;
+
     const build_config = self.build_config_store.buildConfig(config_id);
-    for (0..build_config.steps.len) |step_index|
+    for (0..build_config.steps.len) |step_index| {
+        const step = build_config.steps[step_index];
+        if (step.extended.cast(
+            build_config,
+            std.Build.Configuration.Step.Compile,
+        ) == null) continue;
+
+        if (compile_unit_names) |names| {
+            const name_index = indexOfName(
+                names,
+                step.name.slice(build_config),
+            ) orelse continue;
+            matched_compile_units.?.set(name_index);
+        }
+
         try self.consumeBuildConfigStep(
             config_id,
             @enumFromInt(step_index),
         );
+    }
+
+    if (compile_unit_names) |names| {
+        var it = matched_compile_units.?.iterator(.{ .kind = .unset });
+        while (it.next()) |index| {
+            std.log.err("Selected compile unit \"{s}\" was not found in the evaluated build configuration. Available compile units: {s}", .{
+                names[index],
+                self.allocCompileUnitNamesForDebugging(build_config) catch "<ERROR>",
+            });
+            return error.InvalidBuildConfig;
+        }
+    }
+
     return config_id;
+}
+
+fn indexOfName(names: []const []const u8, needle: []const u8) ?usize {
+    for (names, 0..) |name, index| {
+        if (std.mem.eql(u8, name, needle)) return index;
+    }
+    return null;
+}
+
+fn allocCompileUnitNamesForDebugging(
+    self: *LintContext,
+    build_config: *const std.Build.Configuration,
+) ![]const u8 {
+    var writer: std.Io.Writer.Allocating = .init(self.runtime.sessionArena());
+
+    var written_any = false;
+    for (build_config.steps) |step| {
+        if (step.extended.cast(
+            build_config,
+            std.Build.Configuration.Step.Compile,
+        ) == null) continue;
+
+        if (written_any) try writer.writer.writeAll(", ");
+        try writer.writer.print("\"{s}\"", .{step.name.slice(build_config)});
+        written_any = true;
+    }
+
+    if (!written_any) try writer.writer.writeAll("(none)");
+    try writer.writer.flush();
+
+    return writer.toOwnedSlice();
 }
 
 fn consumeBuildConfigStep(
@@ -396,8 +465,8 @@ pub fn resolveFile(self: *LintContext, input_path: []const u8) !FileStore.FileId
     return id;
 }
 
-/// Resolves cached type information for a file in every module context that can
-/// reach it.
+/// Resolves file-level type information and records declarations for module
+/// contexts that can reach it.
 ///
 /// This avoids choosing one active module when imports can resolve to
 /// different declarations across compile units.
@@ -423,7 +492,7 @@ pub fn resolveFileTypes(
     }
 }
 
-/// Resolves type caches for a file under one module root.
+/// Ensures declarations are available for module-specific lazy resolution.
 fn resolveFileTypesForModule(
     self: *LintContext,
     file_id: FileStore.FileId,
@@ -432,12 +501,8 @@ fn resolveFileTypesForModule(
     const zone = tracy.traceNamed(@src(), "LintContext.resolveFileTypesForModule");
     defer zone.end();
 
+    _ = module_id;
     _ = self.decl_store.store(file_id, &self.file_store);
-
-    var it = self.decl_store.fileDeclIterator(file_id);
-    while (it.next()) |decl_id| {
-        _ = self.cacheResolvedDeclTypeForModule(module_id, decl_id);
-    }
 }
 
 /// Returns cached type information for a declaration in one module context,
@@ -490,6 +555,10 @@ pub fn moduleIdsForFile(
     self: *LintContext,
     file_id: FileStore.FileId,
 ) []const ModuleStore.ModuleId {
+    const zone = tracy.traceNamed(@src(), "LintContext.moduleIdsForFile");
+    defer zone.end();
+    zone.setValue(file_id.toIndex());
+
     self.ensureModuleIdsByFile(self.runtime.sessionArena());
 
     const cached = self.module_ids_by_file.get(file_id) orelse fallback: {
@@ -515,6 +584,10 @@ fn ensureModuleIdsByFile(
     self: *LintContext,
     gpa: std.mem.Allocator,
 ) void {
+    const zone = tracy.traceNamed(@src(), "LintContext.ensureModuleIdsByFile");
+    defer zone.end();
+    zone.setValue(@intFromBool(self.module_file_index_built));
+
     if (self.module_file_index_built) return;
 
     for (self.compile_contexts.items(.root_module)) |root_module_id| {
@@ -562,6 +635,10 @@ fn indexModuleFiles(
     root_module_id: ModuleStore.ModuleId,
     gpa: std.mem.Allocator,
 ) void {
+    const zone = tracy.traceNamed(@src(), "LintContext.indexModuleFiles");
+    defer zone.end();
+    zone.setValue(root_module_id.toIndex());
+
     const compile_root_file_id = self.module_store.rootFileId(root_module_id);
 
     var visited = std.AutoHashMapUnmanaged(ReachKey, void).empty;
@@ -782,7 +859,7 @@ fn resolveTypeOfNodeForModule(
     const zone = tracy.traceNamed(@src(), "LintContext.resolveTypeOfNode");
     defer zone.end();
 
-    const immediate_decl_id = self.immediateDeclForNode(module_id, doc, node);
+    const immediate_decl_id = self.resolveDeclOfNodeForModule(module_id, doc, node);
     const resolved_decl_id = if (immediate_decl_id) |decl_id|
         self.decl_store.resolvedContainerDecl(
             &self.file_store,
@@ -834,6 +911,14 @@ pub fn resolveDeclCandidatesOfNode(
     doc: *const LintDocument,
     node: Ast.Node.Index,
 ) ![]const DeclCandidate {
+    const key: FileNodeKey = .{
+        .file_id = doc.file_id,
+        .node = node,
+    };
+    if (self.decl_cands_by_node.get(key)) |cached| {
+        return cached;
+    }
+
     var candidates = std.ArrayList(DeclCandidate).empty;
     const module_ids = self.moduleIdsForFile(doc.file_id);
     for (module_ids) |module_id| {
@@ -844,7 +929,17 @@ pub fn resolveDeclCandidatesOfNode(
             });
         }
     }
-    return candidates.items;
+
+    const owned = try self.runtime.sessionArena().dupe(
+        DeclCandidate,
+        candidates.items,
+    );
+    oom(self.decl_cands_by_node.put(
+        self.runtime.sessionArena(),
+        key,
+        owned,
+    ));
+    return owned;
 }
 
 /// Resolves a member declaration from a container/type declaration.
@@ -1558,13 +1653,19 @@ fn resolveDeclValueSummaryForModule(
     module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
 ) ?TypeStore.TypeSummary {
+    const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclValueSummaryForModule");
+    defer zone.end();
+
     const key: ResolvedDeclSummaryKey = .{
         .module_id = module_id,
         .decl_id = decl_id,
     };
-    if (self.decl_value_summary_by_module.get(key)) |summary|
+    if (self.decl_value_summary_by_module.get(key)) |summary| {
+        zone.setValue(1);
         return summary;
+    }
 
+    zone.setValue(0);
     const summary = self.resolveDeclValueSummaryDepth(module_id, decl_id, 16);
     oom(self.decl_value_summary_by_module.put(
         self.runtime.sessionArena(),
@@ -1580,8 +1681,13 @@ pub fn resolveDeclValueSummaryCandidates(
     self: *LintContext,
     decl_id: DeclStore.DeclId,
 ) ![]const DeclValueSummaryCandidate {
-    if (self.decl_summary_cands_by_decl.get(decl_id)) |cached|
+    const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclValueSummaryCandidates");
+    defer zone.end();
+
+    if (self.decl_summary_cands_by_decl.get(decl_id)) |cached| {
+        zone.setValue(cached.len);
         return cached;
+    }
 
     var candidates = std.ArrayList(DeclValueSummaryCandidate).empty;
     const module_ids = self.moduleIdsForDecl(decl_id);
@@ -1604,6 +1710,7 @@ pub fn resolveDeclValueSummaryCandidates(
         decl_id,
         owned,
     ));
+    zone.setValue(owned.len);
     return owned;
 }
 
@@ -1614,6 +1721,10 @@ pub fn resolveDeclValueSummaryCandidatesFromCandidates(
     arena: std.mem.Allocator,
     decl_candidates: []const DeclCandidate,
 ) ![]const DeclValueSummaryCandidate {
+    const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclValueSummaryCandidatesFromCandidates");
+    defer zone.end();
+    zone.setValue(decl_candidates.len);
+
     var candidates = std.ArrayList(DeclValueSummaryCandidate).empty;
     for (decl_candidates) |candidate| {
         const summary = self.resolveDeclValueSummaryForModule(
@@ -1636,11 +1747,15 @@ pub fn resolveValueTypeAnnotationCandidates(
     doc: *const LintDocument,
     type_node: Ast.Node.Index,
 ) ![]const ValueTypeAnnotationCandidate {
+    const zone = tracy.traceNamed(@src(), "LintContext.resolveValueTypeAnnotationCandidates");
+    defer zone.end();
+
     const key: FileNodeKey = .{
         .file_id = doc.file_id,
         .node = type_node,
     };
     if (self.type_annotation_cands_by_node.get(key)) |cached| {
+        zone.setValue(cached.len);
         return cached;
     }
 
@@ -1665,6 +1780,7 @@ pub fn resolveValueTypeAnnotationCandidates(
             key,
             owned,
         ));
+        zone.setValue(owned.len);
         return owned;
     }
 
@@ -1687,6 +1803,7 @@ pub fn resolveValueTypeAnnotationCandidates(
             key,
             owned,
         ));
+        zone.setValue(owned.len);
         return owned;
     }
 
@@ -1725,6 +1842,7 @@ pub fn resolveValueTypeAnnotationCandidates(
         key,
         owned,
     ));
+    zone.setValue(owned.len);
     return owned;
 }
 
@@ -1735,6 +1853,10 @@ fn resolveDeclValueSummaryDepth(
     decl_id: DeclStore.DeclId,
     remaining_depth: u8,
 ) ?TypeStore.TypeSummary {
+    const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclValueSummaryDepth");
+    defer zone.end();
+    zone.setValue(remaining_depth);
+
     if (remaining_depth == 0) return null;
 
     const file_id = self.decl_store.declFileId(decl_id);
@@ -2148,8 +2270,7 @@ fn typeSummaryFromValueNode(
     );
 }
 
-/// Resolves an `@import` root declaration in the active module context and
-/// seeds that imported file's module-specific type cache.
+/// Resolves an `@import` root declaration in the active module context.
 fn resolveImportRootDecl(
     self: *LintContext,
     module_id: ModuleStore.ModuleId,
@@ -2866,6 +2987,7 @@ const results = @import("../results.zig");
 const std = @import("std");
 const testing = @import("../testing.zig");
 const tracy = @import("tracy");
+const BuildInfo = @import("../BuildInfo.zig");
 const BuildConfigStore = @import("BuildConfigStore.zig");
 const CompileContext = @import("CompileContext.zig");
 const DeclStore = @import("DeclStore.zig");

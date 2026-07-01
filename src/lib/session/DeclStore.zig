@@ -6,6 +6,12 @@ decl_id_by_ast_node: std.AutoHashMapUnmanaged(DeclAstNodeKey, DeclId) = .empty,
 decl_ids_by_file: std.AutoHashMapUnmanaged(FileStore.FileId, std.ArrayList(DeclId)) = .empty,
 scope_id_by_owner_node: std.AutoHashMapUnmanaged(ScopeOwnerKey, ScopeId) = .empty,
 scope_id_by_owner_decl: std.AutoHashMapUnmanaged(DeclId, ScopeId) = .empty,
+import_member_by_context: std.HashMapUnmanaged(
+    ImportMemberKey,
+    ?DeclId,
+    ImportMemberKey.context,
+    std.hash_map.default_max_load_percentage,
+) = .empty,
 
 /// Lives for the full linter invocation.
 runtime: *const LintRuntime,
@@ -92,6 +98,73 @@ const ScopeOwnerKey = enum(u64) {
     fn init(file_id: FileStore.FileId, owner_node: std.zig.Ast.Node.Index) ScopeOwnerKey {
         return @enumFromInt(packFileNodeKey(file_id, owner_node));
     }
+};
+
+const ImportMemberKey = struct {
+    parent_file_id: FileStore.FileId,
+    init_node: std.zig.Ast.Node.Index,
+    module_id: ?ModuleStore.ModuleId,
+    root_file_id: ?FileStore.FileId,
+    member_name: []const u8,
+
+    fn init(
+        ctx: ResolveContext,
+        parent_file_id: FileStore.FileId,
+        init_node: std.zig.Ast.Node.Index,
+        member_name: []const u8,
+    ) ImportMemberKey {
+        return .{
+            .parent_file_id = parent_file_id,
+            .init_node = init_node,
+            .module_id = ctx.module_id,
+            .root_file_id = ctx.root_file_id,
+            .member_name = member_name,
+        };
+    }
+
+    const context = struct {
+        pub fn hash(_: context, key: ImportMemberKey) u64 {
+            var hasher = std.hash.Wyhash.init(0);
+            std.hash.autoHash(&hasher, key.parent_file_id);
+            std.hash.autoHash(&hasher, key.init_node);
+            hashOptionalModuleId(&hasher, key.module_id);
+            hashOptionalFileId(&hasher, key.root_file_id);
+            hasher.update(key.member_name);
+            return hasher.final();
+        }
+
+        pub fn eql(_: context, a: ImportMemberKey, b: ImportMemberKey) bool {
+            return a.parent_file_id == b.parent_file_id and
+                a.init_node == b.init_node and
+                a.module_id == b.module_id and
+                a.root_file_id == b.root_file_id and
+                std.mem.eql(u8, a.member_name, b.member_name);
+        }
+
+        fn hashOptionalModuleId(
+            hasher: *std.hash.Wyhash,
+            maybe_module_id: ?ModuleStore.ModuleId,
+        ) void {
+            if (maybe_module_id) |module_id| {
+                std.hash.autoHash(hasher, true);
+                std.hash.autoHash(hasher, module_id);
+            } else {
+                std.hash.autoHash(hasher, false);
+            }
+        }
+
+        fn hashOptionalFileId(
+            hasher: *std.hash.Wyhash,
+            maybe_file_id: ?FileStore.FileId,
+        ) void {
+            if (maybe_file_id) |file_id| {
+                std.hash.autoHash(hasher, true);
+                std.hash.autoHash(hasher, file_id);
+            } else {
+                std.hash.autoHash(hasher, false);
+            }
+        }
+    };
 };
 
 fn packFileNodeKey(
@@ -1282,6 +1355,18 @@ fn resolveImportMember(
     const zone = tracy.traceNamed(@src(), "DeclStore.resolveImportMember");
     defer zone.end();
 
+    const key = ImportMemberKey.init(
+        ctx,
+        parent_file_id,
+        init_node,
+        member_name,
+    );
+    if (self.import_member_by_context.get(key)) |decl_id| {
+        zone.setValue(1);
+        return decl_id;
+    }
+    zone.setValue(0);
+
     const tree = ctx.file_store.fileTree(parent_file_id);
 
     var import_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
@@ -1289,8 +1374,14 @@ fn resolveImportMember(
         tree,
         init_node,
         &import_path_buffer,
-    ) orelse
+    ) orelse {
+        oom(self.import_member_by_context.put(
+            self.runtime.sessionArena(),
+            self.ownedImportMemberKey(key),
+            null,
+        ));
         return null;
+    };
 
     const maybe_file_id = import_utils.resolveFile(
         ctx.withParent(parent_file_id),
@@ -1300,10 +1391,29 @@ fn resolveImportMember(
         return null;
     };
 
-    return if (maybe_file_id) |file_id|
+    const decl_id = if (maybe_file_id) |file_id|
         self.resolveFileRootMember(ctx.file_store, file_id, member_name)
     else
         null;
+
+    oom(self.import_member_by_context.put(
+        self.runtime.sessionArena(),
+        self.ownedImportMemberKey(key),
+        decl_id,
+    ));
+    return decl_id;
+}
+
+fn ownedImportMemberKey(
+    self: *DeclStore,
+    key: ImportMemberKey,
+) ImportMemberKey {
+    var owned_key = key;
+    owned_key.member_name = oom(self.runtime.sessionArena().dupe(
+        u8,
+        key.member_name,
+    ));
+    return owned_key;
 }
 
 fn isThisBuiltinCall(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) bool {

@@ -12,6 +12,10 @@ include_paths: ?[]const []const u8 = null,
 /// piped into the zlinter execution.
 exclude_paths: ?[]const []const u8 = null,
 
+/// Compile unit step names whose module/import contexts should be used while
+/// linting. If null, all discovered compile units are used.
+compile_unit_names: ?[]const []const u8 = null,
+
 pub const default: BuildInfo = .{};
 
 pub fn deinit(self: BuildInfo, gpa: std.mem.Allocator) void {
@@ -23,6 +27,11 @@ pub fn deinit(self: BuildInfo, gpa: std.mem.Allocator) void {
     if (self.include_paths) |paths| {
         for (paths) |p| gpa.free(p);
         gpa.free(paths);
+    }
+
+    if (self.compile_unit_names) |names| {
+        for (names) |name| gpa.free(name);
+        gpa.free(names);
     }
 }
 

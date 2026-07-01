@@ -257,7 +257,7 @@ fn runLinterRules(
         .type_store = .init(runtime),
         .decl_store = .init(runtime),
     };
-    try session.init();
+    try session.init(args.build_info);
 
     var enabled_rules = enabledRules(args.rules);
 
@@ -363,6 +363,10 @@ fn runLinterRules(
             const rule_id: RuleId = @intCast(rule_index);
 
             const rule = rules[rule_id];
+            const rule_zone = tracy.traceNamed(@src(), "run_linter.rule");
+            defer rule_zone.end();
+            rule_zone.addText(rule.rule_id);
+            rule_zone.addText(cwd_rel_path);
             if (try rule.run(
                 rule,
                 &session,
