@@ -4,13 +4,13 @@ const MyStruct = struct {
 
     field_d: u32 = 0,
 
+    /// field_c - field with single line comment
+    field_c: u32,
+
     /// field_a - Field with comment
     /// across multiple
     /// lines
     field_a: u32,
-
-    /// field_c - field with single line comment
-    field_c: u32,
 
     fn ok() void {}
 };
@@ -26,9 +26,9 @@ const MyEnum = enum {
 
 const MyUnion = union {
     my_union_a: struct {
+        d: u32,
         /// c - Nested fields
         c: f32,
-        d: u32,
         a: u32,
     },
 
@@ -42,20 +42,20 @@ const MyUnion = union {
 // Example with no trailing comma for an item that is moved to start
 const EnumOfOneLine = enum { A, C, D };
 const UnionOfOneLine = union { A: i32, C: u32, D: f32 };
-const StructOfOnLine = struct { a: u32, b: u32 };
+const StructOfOnLine = struct { b: u32, a: u32 };
 
 // Example where fixes overlap so aren't included - needs multiple fix calls
 const MixedStruct = struct {
-    a: []const u8,
-    c: struct { x: u32, y: u32, w: u32, h: u32 },
-    b: struct { w: u32, h: u32 },
     d: u32,
+    c: struct { y: u32, x: u32, w: u32, h: u32 },
+    b: struct { w: u32, h: u32 },
+    a: []const u8,
 };
 
 // Example where only nested has ordering problem
 const NestedStruct = struct {
     d: u32,
-    c: struct { x: u32, y: u32, w: u32, h: u32 },
+    c: struct { y: u32, x: u32, w: u32, h: u32 },
     b: struct { w: u32, h: u32 },
     a: []const u8,
 };
@@ -94,4 +94,4 @@ const EnumWithInlineComments = enum {
     c, // comment after c comma
 };
 
-const DuplicateFields = struct { a: u32 = 1, a: u32 = 2, b: u32, z: u32 };
+const DuplicateFields = struct { z: u32, b: u32, a: u32 = 1, a: u32 = 2 };
