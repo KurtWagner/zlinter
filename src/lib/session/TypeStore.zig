@@ -677,7 +677,7 @@ fn summarizeContainerDecl(
     };
 }
 
-fn primitiveFromName(name: []const u8) ?Primitive {
+pub fn primitiveFromName(name: []const u8) ?Primitive {
     if (std.mem.eql(u8, name, "bool")) return .bool;
 
     if (std.mem.eql(u8, name, "comptime_int")) {

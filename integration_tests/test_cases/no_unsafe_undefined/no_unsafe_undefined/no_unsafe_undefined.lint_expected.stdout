@@ -1,0 +1,41 @@
+warning Do not initialize primitive scalar values to undefined [test_cases/no_unsafe_undefined/no_unsafe_undefined/no_unsafe_undefined.input.zig:21:19] no_unsafe_undefined
+
+ 21 | var number: u32 = undefined;
+    |                   ^^^^^^^^^
+
+warning Do not initialize const values to undefined [test_cases/no_unsafe_undefined/no_unsafe_undefined/no_unsafe_undefined.input.zig:18:18] no_unsafe_undefined
+
+ 18 | const inferred = undefined;
+    |                  ^^^^^^^^^
+
+warning Do not initialize pointers to undefined [test_cases/no_unsafe_undefined/no_unsafe_undefined/no_unsafe_undefined.input.zig:17:19] no_unsafe_undefined
+
+ 17 | const ptr: *u32 = undefined;
+    |                   ^^^^^^^^^
+
+warning Use a meaningful enum or union tag such as .none or .unspecified instead of undefined [test_cases/no_unsafe_undefined/no_unsafe_undefined/no_unsafe_undefined.input.zig:16:26] no_unsafe_undefined
+
+ 16 | const payload: Payload = undefined;
+    |                          ^^^^^^^^^
+
+warning Use a meaningful enum or union tag such as .none or .unspecified instead of undefined [test_cases/no_unsafe_undefined/no_unsafe_undefined/no_unsafe_undefined.input.zig:15:22] no_unsafe_undefined
+
+ 15 | const state: State = undefined;
+    |                      ^^^^^^^^^
+
+warning Use null instead of undefined for optional values [test_cases/no_unsafe_undefined/no_unsafe_undefined/no_unsafe_undefined.input.zig:14:27] no_unsafe_undefined
+
+ 14 | const maybe_value: ?u32 = undefined;
+    |                           ^^^^^^^^^
+
+warning Do not break undefined from a block [test_cases/no_unsafe_undefined/no_unsafe_undefined/no_unsafe_undefined.input.zig:10:20] no_unsafe_undefined
+
+ 10 |         break :blk undefined;
+    |                    ^^^^^^^^^
+
+warning Do not return undefined [test_cases/no_unsafe_undefined/no_unsafe_undefined/no_unsafe_undefined.input.zig:5:12] no_unsafe_undefined
+
+ 5 |     return undefined;
+   |            ^^^^^^^^^
+
+x 8 warnings
