@@ -1017,9 +1017,45 @@ Some ok uses of `undefined` are:
 
 **Config options:**
 
-* `severity`
+* `return_value`
 
-  * The severity (off, warning, error).
+  * Severity for returning `undefined` from a function.
+
+  * **Default:** `.warning`
+
+* `break_value`
+
+  * Severity for breaking `undefined` from a block.
+
+  * **Default:** `.warning`
+
+* `const_value`
+
+  * Severity for initializing a `const` to `undefined`.
+
+  * **Default:** `.warning`
+
+* `optional_value`
+
+  * Severity for initializing an optional to `undefined`.
+
+  * **Default:** `.warning`
+
+* `pointer_value`
+
+  * Severity for initializing a pointer to `undefined`.
+
+  * **Default:** `.warning`
+
+* `enum_or_union_value`
+
+  * Severity for initializing an enum or tagged union to `undefined`.
+
+  * **Default:** `.warning`
+
+* `primitive_scalar_value`
+
+  * Severity for initializing a primitive scalar to `undefined`.
 
   * **Default:** `.warning`
 

@@ -37,8 +37,26 @@
 
 /// Config for no_unsafe_undefined rule.
 pub const Config = struct {
-    /// The severity (off, warning, error).
-    severity: zlinter.rules.LintProblemSeverity = .warning,
+    /// Severity for returning `undefined` from a function.
+    return_value: zlinter.rules.LintProblemSeverity = .warning,
+
+    /// Severity for breaking `undefined` from a block.
+    break_value: zlinter.rules.LintProblemSeverity = .warning,
+
+    /// Severity for initializing a `const` to `undefined`.
+    const_value: zlinter.rules.LintProblemSeverity = .warning,
+
+    /// Severity for initializing an optional to `undefined`.
+    optional_value: zlinter.rules.LintProblemSeverity = .warning,
+
+    /// Severity for initializing a pointer to `undefined`.
+    pointer_value: zlinter.rules.LintProblemSeverity = .warning,
+
+    /// Severity for initializing an enum or tagged union to `undefined`.
+    enum_or_union_value: zlinter.rules.LintProblemSeverity = .warning,
+
+    /// Severity for initializing a primitive scalar to `undefined`.
+    primitive_scalar_value: zlinter.rules.LintProblemSeverity = .warning,
 };
 
 const Problem = enum {
@@ -61,6 +79,18 @@ const Problem = enum {
             .primitive_scalar_value => "Do not initialize primitive scalar values to undefined",
         };
     }
+
+    fn severity(self: Problem, config: Config) zlinter.rules.LintProblemSeverity {
+        return switch (self) {
+            .return_value => config.return_value,
+            .break_value => config.break_value,
+            .const_value => config.const_value,
+            .optional_value => config.optional_value,
+            .pointer_value => config.pointer_value,
+            .enum_or_union_value => config.enum_or_union_value,
+            .primitive_scalar_value => config.primitive_scalar_value,
+        };
+    }
 };
 
 /// Builds and returns the no_unsafe_undefined rule.
@@ -81,7 +111,6 @@ fn run(
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
-    if (config.severity == .off) return null;
 
     const session_arena = session.runtime.sessionArena();
     const rule_arena = session.runtime.ruleArena();
@@ -100,10 +129,12 @@ fn run(
         if (!std.mem.eql(u8, tree.getNodeSource(node), "undefined")) continue :nodes;
 
         const problem = try classifyUndefined(session, doc, tree, node, connections.parent) orelse continue :nodes;
+        const severity = problem.severity(config);
+        if (severity == .off) continue :nodes;
 
         try lint_problems.append(session_arena, .{
             .rule_id = rule.rule_id,
-            .severity = config.severity,
+            .severity = severity,
             .start = .startOfNode(tree, node),
             .end = .endOfNode(tree, node),
             .message = try session_arena.dupe(u8, problem.message()),
@@ -318,6 +349,180 @@ fn directEnumOrUnionType(tree: Ast, type_node: Ast.Node.Index) bool {
 
 test {
     std.testing.refAllDecls(@This());
+}
+
+const isolation_test_source =
+    \\const State = enum { none, ready };
+    \\fn returnsUndefined() ?u32 {
+    \\  return undefined;
+    \\}
+    \\fn breaksUndefined() State {
+    \\  return blk: {
+    \\    break :blk undefined;
+    \\  };
+    \\}
+    \\const maybe: ?u32 = undefined;
+    \\const state: State = undefined;
+    \\const ptr: *u32 = undefined;
+    \\const inferred = undefined;
+    \\var scalar: u32 = undefined;
+    \\fn assignsLater(flag: *bool) void {
+    \\  flag.* = undefined;
+    \\}
+;
+
+test "no_unsafe_undefined can enable only return_value" {
+    const config: Config = .{
+        .return_value = .@"error",
+        .break_value = .off,
+        .const_value = .off,
+        .optional_value = .off,
+        .pointer_value = .off,
+        .enum_or_union_value = .off,
+        .primitive_scalar_value = .off,
+    };
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        isolation_test_source,
+        .{},
+        config,
+        &.{
+            .{ .rule_id = "no_unsafe_undefined", .severity = .@"error", .slice = "undefined", .message = "Do not return undefined" },
+        },
+    );
+}
+
+test "no_unsafe_undefined can enable only break_value" {
+    const config: Config = .{
+        .return_value = .off,
+        .break_value = .@"error",
+        .const_value = .off,
+        .optional_value = .off,
+        .pointer_value = .off,
+        .enum_or_union_value = .off,
+        .primitive_scalar_value = .off,
+    };
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        isolation_test_source,
+        .{},
+        config,
+        &.{
+            .{ .rule_id = "no_unsafe_undefined", .severity = .@"error", .slice = "undefined", .message = "Do not break undefined from a block" },
+        },
+    );
+}
+
+test "no_unsafe_undefined can enable only optional_value" {
+    const config: Config = .{
+        .return_value = .off,
+        .break_value = .off,
+        .const_value = .off,
+        .optional_value = .@"error",
+        .pointer_value = .off,
+        .enum_or_union_value = .off,
+        .primitive_scalar_value = .off,
+    };
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        isolation_test_source,
+        .{},
+        config,
+        &.{
+            .{ .rule_id = "no_unsafe_undefined", .severity = .@"error", .slice = "undefined", .message = "Use null instead of undefined for optional values" },
+        },
+    );
+}
+
+test "no_unsafe_undefined can enable only enum_or_union_value" {
+    const config: Config = .{
+        .return_value = .off,
+        .break_value = .off,
+        .const_value = .off,
+        .optional_value = .off,
+        .pointer_value = .off,
+        .enum_or_union_value = .@"error",
+        .primitive_scalar_value = .off,
+    };
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        isolation_test_source,
+        .{},
+        config,
+        &.{
+            .{ .rule_id = "no_unsafe_undefined", .severity = .@"error", .slice = "undefined", .message = "Use a meaningful enum or union tag such as .none or .unspecified instead of undefined" },
+        },
+    );
+}
+
+test "no_unsafe_undefined can enable only pointer_value" {
+    const config: Config = .{
+        .return_value = .off,
+        .break_value = .off,
+        .const_value = .off,
+        .optional_value = .off,
+        .pointer_value = .@"error",
+        .enum_or_union_value = .off,
+        .primitive_scalar_value = .off,
+    };
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        isolation_test_source,
+        .{},
+        config,
+        &.{
+            .{ .rule_id = "no_unsafe_undefined", .severity = .@"error", .slice = "undefined", .message = "Do not initialize pointers to undefined" },
+        },
+    );
+}
+
+test "no_unsafe_undefined can enable only const_value" {
+    const config: Config = .{
+        .return_value = .off,
+        .break_value = .off,
+        .const_value = .@"error",
+        .optional_value = .off,
+        .pointer_value = .off,
+        .enum_or_union_value = .off,
+        .primitive_scalar_value = .off,
+    };
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        isolation_test_source,
+        .{},
+        config,
+        &.{
+            .{ .rule_id = "no_unsafe_undefined", .severity = .@"error", .slice = "undefined", .message = "Do not initialize const values to undefined" },
+        },
+    );
+}
+
+test "no_unsafe_undefined can enable only primitive_scalar_value" {
+    const config: Config = .{
+        .return_value = .off,
+        .break_value = .off,
+        .const_value = .off,
+        .optional_value = .off,
+        .pointer_value = .off,
+        .enum_or_union_value = .off,
+        .primitive_scalar_value = .@"error",
+    };
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        isolation_test_source,
+        .{},
+        config,
+        &.{
+            .{ .rule_id = "no_unsafe_undefined", .severity = .@"error", .slice = "undefined", .message = "Do not initialize primitive scalar values to undefined" },
+        },
+    );
 }
 
 test "no_unsafe_undefined reports returning undefined from a function" {
