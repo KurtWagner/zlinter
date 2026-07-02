@@ -1,6 +1,3 @@
-> [!WARNING]
-> Latest on master / 0.17.x has had significant changes and may not work as intended while bugs are worked through.
-
 <div align=center>
 
 <img width="128" height="128" src="icon_512.png" alt="Zlinter icon">
