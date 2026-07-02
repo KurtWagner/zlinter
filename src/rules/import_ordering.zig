@@ -26,6 +26,9 @@
 //! is treated as part of that import's chunk. A `//!` doc comment is not treated
 //! as an attachable import comment.
 //!
+//! When `group_by_visibility` is `true`, public imports are grouped before
+//! private imports within each import chunk.
+//!
 //! **Auto fixing is an experimental feature so only use it if you use source control - always back up your code first!**
 
 /// Config for import_ordering rule.
@@ -42,6 +45,9 @@ pub const Config = struct {
     /// When false, all imports in the same scope must form one contiguous
     /// chunk.
     allow_line_separated_chunks: bool = true,
+
+    /// Whether public imports should be grouped before private imports.
+    group_by_visibility: bool = false,
 };
 
 /// Builds and returns the import_ordering rule.
@@ -120,9 +126,35 @@ fn run(
                 }
 
                 if (is_same_chunk) {
+                    if (config.group_by_visibility and
+                        p.visibility == .private and import.visibility == .public)
+                    {
+                        try lint_problems.append(session_arena, .{
+                            .rule_id = rule.rule_id,
+                            .severity = config.severity,
+                            .start = .startOfNode(tree, import.decl_node),
+                            .end = .endOfNode(tree, import.decl_node),
+                            .message = try std.fmt.allocPrint(
+                                session_arena,
+                                "Public import '{s}' should be grouped before private imports",
+                                .{import.decl_name},
+                            ),
+                            .fix = if (same_line) null else try swapVisibilityGroupsFix(
+                                doc,
+                                session,
+                                p,
+                                import,
+                                session_arena,
+                            ),
+                        });
+                        continue :scopes;
+                    }
+
                     // Import ordering is intentionally based on the local declaration
                     // name, not the import path.
-                    if (order == .lt) {
+                    if ((!config.group_by_visibility or p.visibility == import.visibility) and
+                        order == .lt)
+                    {
                         try lint_problems.append(session_arena, .{
                             .rule_id = rule.rule_id,
                             .severity = config.severity,
@@ -169,6 +201,7 @@ const ImportDecl = struct {
     decl_node: Ast.Node.Index,
     /// Local declaration name used to order imports.
     decl_name: []const u8,
+    visibility: zlinter.ast.Visibility,
     first_line: usize,
     last_line: usize,
     start_offset: usize,
@@ -218,6 +251,51 @@ fn swapImportBlocksFix(
         session_arena,
         source[first.block_end_offset..second.block_start_offset],
     );
+    try text.appendSlice(
+        session_arena,
+        source[first.block_start_offset..first.block_end_offset],
+    );
+
+    return .{
+        .text = try text.toOwnedSlice(session_arena),
+        .start = first.block_start_offset,
+        .end = second.block_end_offset,
+    };
+}
+
+fn swapVisibilityGroupsFix(
+    doc: *const zlinter.session.LintDocument,
+    session: *const zlinter.session.LintSession,
+    first: ImportDecl,
+    second: ImportDecl,
+    session_arena: std.mem.Allocator,
+) error{OutOfMemory}!?zlinter.results.LintProblemFix {
+    const source = doc.source(session);
+
+    if (first.block_start_offset >= second.block_start_offset) return null;
+    if (!sourceRangeIsBlankOnly(
+        doc.comments.line_starts,
+        source,
+        first.block_end_line + 1,
+        second.block_start_line,
+    ))
+        return null;
+
+    var text = try std.ArrayList(u8).initCapacity(
+        session_arena,
+        second.block_end_offset +
+            first.block_end_offset -
+            first.block_start_offset -
+            second.block_start_offset +
+            2,
+    );
+    errdefer text.deinit(session_arena);
+
+    try text.appendSlice(
+        session_arena,
+        source[second.block_start_offset..second.block_end_offset],
+    );
+    try text.appendSlice(session_arena, "\n");
     try text.appendSlice(
         session_arena,
         source[first.block_start_offset..first.block_end_offset],
@@ -383,6 +461,7 @@ fn resolveScopedImports(
         const import = ImportDecl{
             .decl_node = node,
             .decl_name = decl_name,
+            .visibility = zlinter.ast.varDeclVisibility(tree, var_decl),
             .first_line = first_loc.line,
             .last_line = last_loc.line,
             .start_offset = tree.tokenStart(tree.firstToken(node)),
@@ -828,6 +907,99 @@ test "allow_line_separated_chunks" {
                     .start = 25,
                     .end = 26,
                     .text = "",
+                },
+            },
+        },
+    );
+}
+
+test "group_by_visibility" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const b = @import("a");
+        \\ pub const a = @import("b");
+        \\ const c = @import("c");
+    ,
+        .{},
+        Config{ .group_by_visibility = false },
+        &.{
+            .{
+                .rule_id = "import_ordering",
+                .severity = .warning,
+                .slice =
+                \\pub const a = @import("b")
+                ,
+                .message = "Import 'a' is not in alphabetical order",
+                .disabled_by_comment = false,
+                .fix = .{
+                    .start = 0,
+                    .end = 54,
+                    .text =
+                    \\ pub const a = @import("b");
+                    \\ const b = @import("a");
+                    \\
+                    ,
+                },
+            },
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const b = @import("a");
+        \\ pub const a = @import("b");
+        \\ const c = @import("c");
+    ,
+        .{},
+        Config{ .group_by_visibility = true },
+        &.{
+            .{
+                .rule_id = "import_ordering",
+                .severity = .warning,
+                .slice =
+                \\pub const a = @import("b")
+                ,
+                .message = "Public import 'a' should be grouped before private imports",
+                .disabled_by_comment = false,
+                .fix = .{
+                    .start = 0,
+                    .end = 54,
+                    .text =
+                    \\ pub const a = @import("b");
+                    \\
+                    \\ const b = @import("a");
+                    \\
+                    ,
+                },
+            },
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ pub const a = @import("b");
+        \\
+        \\ const c = @import("c");
+        \\ const b = @import("a");
+    ,
+        .{},
+        Config{ .group_by_visibility = true },
+        &.{
+            .{
+                .rule_id = "import_ordering",
+                .severity = .warning,
+                .slice =
+                \\const b = @import("a")
+                ,
+                .message = "Import 'b' is not in alphabetical order",
+                .disabled_by_comment = false,
+                .fix = .{
+                    .start = 30,
+                    .end = 79,
+                    .text =
+                    \\ const b = @import("a"); const c = @import("c");
+                    \\
+                    ,
                 },
             },
         },

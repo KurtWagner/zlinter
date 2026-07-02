@@ -1,0 +1,6 @@
+warning Public import 'a' should be grouped before private imports [test_cases/import_ordering/visibility_groups/visibility_groups.input.zig:2:1] import_ordering
+
+ 2 | pub const a = @import("b");
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+x 1 warnings

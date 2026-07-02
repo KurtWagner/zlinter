@@ -350,6 +350,9 @@ Comments do not split chunks. A `//` comment directly attached to an import
 is treated as part of that import's chunk. A `//!` doc comment is not treated
 as an attachable import comment.
 
+When `group_by_visibility` is `true`, public imports are grouped before
+private imports within each import chunk.
+
 **Auto fixing is an experimental feature so only use it if you use source control - always back up your code first!**
 
 **Config options:**
@@ -371,6 +374,12 @@ as an attachable import comment.
   * Whether imports separated by blank lines are treated as independent chunks. When false, all imports in the same scope must form one contiguous chunk.
 
   * **Default:** `true`
+
+* `group_by_visibility`
+
+  * Whether public imports should be grouped before private imports.
+
+  * **Default:** `false`
 
 ## `max_positional_args`
 

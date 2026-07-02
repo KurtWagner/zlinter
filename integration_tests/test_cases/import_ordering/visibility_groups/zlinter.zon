@@ -1,0 +1,7 @@
+.{
+    .rules = .{
+        .import_ordering = .{
+            .group_by_visibility = true,
+        },
+    },
+}
