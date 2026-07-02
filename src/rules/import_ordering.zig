@@ -42,19 +42,6 @@ pub const Config = struct {
     /// When false, all imports in the same scope must form one contiguous
     /// chunk.
     allow_line_separated_chunks: bool = true,
-
-    // TODO(#52): Decide whether or not to implement this:
-    // /// Whether imports should be at the bottom or top of their parent scope.
-    // location: enum { top, bottom, off } = .off,
-
-    // TODO(#52): Decide whether of not to implement this
-    // /// Whether or not to group the imports by their visibility or source.
-    // group: struct {
-    //     /// public and private separately.
-    //     visibilty: bool = false,
-    //     /// enternal and local separately.
-    //     source: bool = false,
-    // } = .{},
 };
 
 /// Builds and returns the import_ordering rule.
@@ -422,29 +409,6 @@ fn resolveScopedImports(
     }
     return scoped_imports;
 }
-
-// TODO(#52): Move to ast module
-// zlinter-disable-next-line
-// fn getScopedNode(doc: *const zlinter.session.LintDocument, node: Ast.Node.Index) Ast.Node.Index {
-//     var parent = doc.lineage.items(.parent)[node];
-//     while (parent) |parent_node| {
-//         switch (doc.handle.tree.nodeTag(parent_node)) {
-//             .block_two,
-//             .block_two_semicolon,
-//             .block,
-//             .block_semicolon,
-//             .container_decl,
-//             .container_decl_trailing,
-//             .container_decl_two,
-//             .container_decl_two_trailing,
-//             .container_decl_arg,
-//             .container_decl_arg_trailing,
-//             => return parent_node,
-//             else => parent = doc.lineage.items(.parent)[parent_node],
-//         }
-//     }
-//     return .root;
-// }
 
 test {
     std.testing.refAllDecls(@This());
