@@ -113,8 +113,8 @@ fn run(
                         .fix = if (same_line) null else try swapImportBlocksFix(
                             doc,
                             session,
-                            p.decl_node,
-                            import.decl_node,
+                            p,
+                            import,
                             session_arena,
                         ),
                     });
@@ -139,8 +139,8 @@ fn run(
                             .fix = if (same_line) null else try swapImportBlocksFix(
                                 doc,
                                 session,
-                                p.decl_node,
-                                import.decl_node,
+                                p,
+                                import,
                                 session_arena,
                             ),
                         });
@@ -177,6 +177,10 @@ const ImportDecl = struct {
     last_line: usize,
     start_offset: usize,
     end_offset: usize,
+    block_start_line: usize,
+    block_end_line: usize,
+    block_start_offset: usize,
+    block_end_offset: usize,
 
     const Classification = enum { local, external };
 
@@ -188,83 +192,55 @@ const ImportDecl = struct {
     }
 };
 
-const ImportSwapRange = struct {
-    start_line: usize,
-    end_line: usize,
-    start_offset: usize,
-    end_offset: usize,
-};
-
 fn swapImportBlocksFix(
     doc: *const zlinter.session.LintDocument,
     session: *const zlinter.session.LintSession,
-    first: Ast.Node.Index,
-    second: Ast.Node.Index,
+    first: ImportDecl,
+    second: ImportDecl,
     session_arena: std.mem.Allocator,
 ) error{OutOfMemory}!?zlinter.results.LintProblemFix {
-    const tree = doc.tree(session);
-    const source = tree.source;
+    const source = doc.source(session);
 
-    const first_range = importSwapRange(
-        doc,
-        session,
-        first,
-    ) orelse return null;
-    const second_range = importSwapRange(
-        doc,
-        session,
-        second,
-    ) orelse return null;
-
-    if (first_range.start_offset >= second_range.start_offset) return null;
+    if (first.block_start_offset >= second.block_start_offset) return null;
     if (!sourceRangeIsBlankOnly(
         doc.comments.line_starts,
         source,
-        first_range.end_line + 1,
-        second_range.start_line,
+        first.block_end_line + 1,
+        second.block_start_line,
     ))
         return null;
 
     var text = try std.ArrayList(u8).initCapacity(
         session_arena,
-        second_range.end_offset + 1 - first_range.start_offset,
+        second.block_end_offset + 1 - first.block_start_offset,
     );
     errdefer text.deinit(session_arena);
 
     try text.appendSlice(
         session_arena,
-        source[second_range.start_offset..second_range.end_offset],
+        source[second.block_start_offset..second.block_end_offset],
     );
     try text.appendSlice(
         session_arena,
-        source[first_range.end_offset..second_range.start_offset],
+        source[first.block_end_offset..second.block_start_offset],
     );
     try text.appendSlice(
         session_arena,
-        source[first_range.start_offset..first_range.end_offset],
+        source[first.block_start_offset..first.block_end_offset],
     );
 
     return .{
         .text = try text.toOwnedSlice(session_arena),
-        .start = first_range.start_offset,
-        .end = second_range.end_offset,
+        .start = first.block_start_offset,
+        .end = second.block_end_offset,
     };
 }
 
-fn importSwapRange(
-    doc: *const zlinter.session.LintDocument,
-    session: *const zlinter.session.LintSession,
-    node: Ast.Node.Index,
-) ?ImportSwapRange {
-    const tree = doc.tree(session);
-    const source = tree.source;
-    const line_starts = doc.comments.line_starts;
-
-    const first_token = tree.firstToken(node);
-    const last_token = tree.lastToken(node);
-    const start_line = tree.tokenLocation(0, first_token).line;
-    const end_line = tree.tokenLocation(0, last_token).line;
-
+fn importBlockStartLine(
+    source: [:0]const u8,
+    line_starts: []const usize,
+    start_line: usize,
+) usize {
     var block_start_line = start_line;
     while (block_start_line > 0) {
         const prev_line = block_start_line - 1;
@@ -280,16 +256,7 @@ fn importSwapRange(
         block_start_line = prev_line;
     }
 
-    return .{
-        .start_line = block_start_line,
-        .end_line = end_line,
-        .start_offset = line_starts[block_start_line],
-        .end_offset = lineEndExclusive(
-            source,
-            line_starts,
-            end_line,
-        ),
-    };
+    return block_start_line;
 }
 
 fn sourceRangeIsBlankOnly(
@@ -362,6 +329,8 @@ fn resolveScopedImports(
     rule_arena: std.mem.Allocator,
 ) !std.array_hash_map.Auto(Ast.Node.Index, ImportsQueueLinesAscending) {
     const tree = doc.tree(session);
+    const source = tree.source;
+    const line_starts = doc.comments.line_starts;
     var import_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
 
     const root: Ast.Node.Index = .root;
@@ -387,6 +356,12 @@ fn resolveScopedImports(
 
         const first_loc = tree.tokenLocation(0, tree.firstToken(node));
         const last_loc = tree.tokenLocation(0, tree.lastToken(node));
+        const block_start_line = importBlockStartLine(
+            source,
+            line_starts,
+            first_loc.line,
+        );
+        const block_end_line = last_loc.line;
 
         const import = ImportDecl{
             .decl_node = node,
@@ -396,6 +371,14 @@ fn resolveScopedImports(
             .last_line = last_loc.line,
             .start_offset = tree.tokenStart(tree.firstToken(node)),
             .end_offset = tree.tokenStart(tree.lastToken(node)) + tree.tokenSlice(tree.lastToken(node)).len,
+            .block_start_line = block_start_line,
+            .block_end_line = block_end_line,
+            .block_start_offset = line_starts[block_start_line],
+            .block_end_offset = lineEndExclusive(
+                source,
+                line_starts,
+                block_end_line,
+            ),
         };
 
         var gop = try scoped_imports.getOrPut(rule_arena, parent);
