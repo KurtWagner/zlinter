@@ -98,6 +98,7 @@ fn run(
             if (previous) |p| {
                 const is_same_chunk = (p.last_line + 1) >= import.first_line;
                 const same_line = p.first_line == import.first_line;
+                const order = config.order.cmp(import.decl_name, p.decl_name);
 
                 if (!config.allow_line_separated_chunks and !is_same_chunk) {
                     try lint_problems.append(session_arena, .{
@@ -110,13 +111,23 @@ fn run(
                             "Import '{s}' should be grouped with other imports",
                             .{import.decl_name},
                         ),
-                        .fix = if (same_line) null else try swapImportBlocksFix(
-                            doc,
-                            session,
-                            p,
-                            import,
-                            session_arena,
-                        ),
+                        .fix = if (same_line)
+                            null
+                        else if (order == .lt)
+                            try swapImportBlocksFix(
+                                doc,
+                                session,
+                                p,
+                                import,
+                                session_arena,
+                            )
+                        else
+                            removeImportSeparationFix(
+                                doc,
+                                session,
+                                p,
+                                import,
+                            ),
                     });
                     continue :scopes;
                 }
@@ -124,7 +135,6 @@ fn run(
                 if (is_same_chunk) {
                     // Import ordering is intentionally based on the local declaration
                     // name, not the import path.
-                    const order = config.order.cmp(import.decl_name, p.decl_name);
                     if (order == .lt) {
                         try lint_problems.append(session_arena, .{
                             .rule_id = rule.rule_id,
@@ -172,7 +182,6 @@ const ImportDecl = struct {
     decl_node: Ast.Node.Index,
     /// Local declaration name used to order imports.
     decl_name: []const u8,
-    classification: Classification,
     first_line: usize,
     last_line: usize,
     start_offset: usize,
@@ -181,8 +190,6 @@ const ImportDecl = struct {
     block_end_line: usize,
     block_start_offset: usize,
     block_end_offset: usize,
-
-    const Classification = enum { local, external };
 
     pub fn compareSourceAscending(_: void, a: ImportDecl, b: ImportDecl) std.math.Order {
         const line_order = std.math.order(a.first_line, b.first_line);
@@ -233,6 +240,30 @@ fn swapImportBlocksFix(
         .text = try text.toOwnedSlice(session_arena),
         .start = first.block_start_offset,
         .end = second.block_end_offset,
+    };
+}
+
+fn removeImportSeparationFix(
+    doc: *const zlinter.session.LintDocument,
+    session: *const zlinter.session.LintSession,
+    first: ImportDecl,
+    second: ImportDecl,
+) ?zlinter.results.LintProblemFix {
+    const source = doc.source(session);
+
+    if (first.block_end_offset >= second.block_start_offset) return null;
+    if (!sourceRangeIsBlankOnly(
+        doc.comments.line_starts,
+        source,
+        first.block_end_line + 1,
+        second.block_start_line,
+    ))
+        return null;
+
+    return .{
+        .text = "",
+        .start = first.block_end_offset,
+        .end = second.block_start_offset,
     };
 }
 
@@ -344,7 +375,7 @@ fn resolveScopedImports(
         const var_decl = tree.fullVarDecl(node) orelse continue;
 
         const init_node = var_decl.ast.init_node.unwrap() orelse continue;
-        const import_path = import_utils.writeImportPath(
+        _ = import_utils.writeImportPath(
             tree,
             init_node,
             &import_path_buffer,
@@ -352,7 +383,6 @@ fn resolveScopedImports(
         const parent = connections.parent orelse continue;
 
         const decl_name = tree.tokenSlice(var_decl.ast.mut_token + 1);
-        const classification = classifyImportKind(.init(import_path));
 
         const first_loc = tree.tokenLocation(0, tree.firstToken(node));
         const last_loc = tree.tokenLocation(0, tree.lastToken(node));
@@ -366,7 +396,6 @@ fn resolveScopedImports(
         const import = ImportDecl{
             .decl_node = node,
             .decl_name = decl_name,
-            .classification = classification,
             .first_line = first_loc.line,
             .last_line = last_loc.line,
             .start_offset = tree.tokenStart(tree.firstToken(node)),
@@ -392,17 +421,6 @@ fn resolveScopedImports(
         }
     }
     return scoped_imports;
-}
-
-fn classifyImportKind(kind: import_utils.Kind) ImportDecl.Classification {
-    return switch (kind) {
-        .relative => .local,
-        .stdlib,
-        .root,
-        .builtin,
-        .module,
-        => .external,
-    };
 }
 
 // TODO(#52): Move to ast module
@@ -802,13 +820,9 @@ test "allow_line_separated_chunks" {
                 ,
                 .message = "Import 'b' should be grouped with other imports",
                 .fix = .{
-                    .start = 0,
-                    .end = 50,
-                    .text =
-                    \\ const b = @import("b");
-                    \\ const a = @import("a");
-                    \\
-                    ,
+                    .start = 25,
+                    .end = 26,
+                    .text = "",
                 },
             },
         },

@@ -177,6 +177,12 @@ fn runTest(
             io,
             .{},
         );
+        try copyFixtureZlinterZonForFix(
+            io,
+            arena,
+            input_zig_file.?,
+            ".zig-cache" ++ std.fs.path.sep_str ++ "tmp" ++ std.fs.path.sep_str ++ "zlinter.zon",
+        );
 
         var lint_args: std.ArrayList([]const u8) = try .initCapacity(arena, 32);
         lint_args.appendSliceAssumeCapacity(&.{
@@ -237,6 +243,36 @@ fn runTest(
             return e;
         };
     }
+}
+
+fn copyFixtureZlinterZonForFix(
+    io: std.Io,
+    arena: std.mem.Allocator,
+    input_zig_file: []const u8,
+    temp_config_path: []const u8,
+) !void {
+    std.Io.Dir.cwd().deleteFile(io, temp_config_path) catch |err|
+        switch (err) {
+            error.FileNotFound => {},
+            else => return err,
+        };
+
+    const input_dir = std.fs.path.dirname(input_zig_file) orelse ".";
+    const fixture_config_path = try std.fs.path.join(
+        arena,
+        &.{ input_dir, "zlinter.zon" },
+    );
+
+    std.Io.Dir.cwd().copyFile(
+        fixture_config_path,
+        std.Io.Dir.cwd(),
+        temp_config_path,
+        io,
+        .{},
+    ) catch |err| switch (err) {
+        error.FileNotFound => {},
+        else => return err,
+    };
 }
 
 fn expectFileContentsEquals(

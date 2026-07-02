@@ -1,0 +1,6 @@
+warning Import 'b' should be grouped with other imports [test_cases/import_ordering/ordered_no_chunks/ordered_no_chunks.input.zig:3:1] import_ordering
+
+ 3 | const b = @import("b");
+   | ^^^^^^^^^^^^^^^^^^^^^^
+
+x 1 warnings
