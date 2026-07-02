@@ -1,4 +1,4 @@
-warning Import 'a' should be grouped with other imports [test_cases/import_ordering/leading_comments/leading_comments.input.zig:3:1] import_ordering
+warning Import 'a' is not in alphabetical order [test_cases/import_ordering/leading_comments/leading_comments.input.zig:3:1] import_ordering
 
  3 | const a = @import("a");
    | ^^^^^^^^^^^^^^^^^^^^^^

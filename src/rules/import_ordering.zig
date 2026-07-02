@@ -96,7 +96,7 @@ fn run(
 
         while (imports.popMin()) |import| {
             if (previous) |p| {
-                const is_same_chunk = (p.last_line + 1) >= import.first_line;
+                const is_same_chunk = (p.block_end_line + 1) >= import.block_start_line;
                 const same_line = p.first_line == import.first_line;
                 const order = config.order.cmp(import.decl_name, p.decl_name);
 
@@ -749,6 +749,47 @@ test "allow_line_separated_chunks" {
     try zlinter.testing.testRunRule(
         buildRule(.{}),
         \\ const b = @import("b");
+        \\
+        \\ const a = @import("a");
+    ,
+        .{},
+        Config{ .allow_line_separated_chunks = true },
+        &.{},
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const b = @import("b");
+        \\ // comment for a
+        \\ const a = @import("a");
+    ,
+        .{},
+        Config{ .allow_line_separated_chunks = true },
+        &.{
+            .{
+                .rule_id = "import_ordering",
+                .severity = .warning,
+                .slice =
+                \\const a = @import("a")
+                ,
+                .message = "Import 'a' is not in alphabetical order",
+                .fix = .{
+                    .start = 0,
+                    .end = 67,
+                    .text =
+                    \\ // comment for a
+                    \\ const a = @import("a"); const b = @import("b");
+                    \\
+                    ,
+                },
+            },
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const b = @import("b");
+        \\ // detached comment
         \\
         \\ const a = @import("a");
     ,
