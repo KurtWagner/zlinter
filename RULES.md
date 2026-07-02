@@ -976,6 +976,53 @@ case uses should disable the line with an explanation.
 
   * **Default:** `&.{ "init", "initialize", "initialise" }`
 
+## `no_unsafe_undefined`
+
+Disallow `undefined` in questionable situations.
+
+`undefined` is unsafe to overuse because it creates storage without a valid
+value. If that value is read before every relevant byte/field has been
+written, the program may observe garbage data and have unpredictive behaviour
+
+Disallowed situations:
+
+* Returning `undefined` from a function - Return a real value, optional `null`, or an
+  explicit error instead.
+* Breaking `undefined` from a block - Break a real value or optional instead.
+* Initializing an optional to `undefined` -  Use `null` instead.
+* Initializing an enum or tagged union to `undefined` - Use a meaningful tag
+  such as `.none` or `.unspecified` instead.
+* Initializing a primitive scalar to `undefined` - Use a meaningful zero/false
+  value or make it optional and use `null` instead.
+* Initializing a `const` to `undefined` - Use a real value, optional or make the
+  declaration mutable if delayed initialization is intentional.
+* Initializing a pointer to `undefined` - Restructure the initialization and use a valid pointer, or make it
+  optional and use `null`.
+
+Some ok uses of `undefined` are:
+
+* Scratch buffers that are filled before reading:
+
+  ```zig
+  var buffer: [1024]u8 = undefined;
+  const message = try bufPrint(&buffer, "Hello {s}", .{name});
+  ```
+
+* Out-parameters that are populated by another method:
+
+  ```zig
+  var result: Stat = undefined;
+  try Stat.init(&result);
+  ```
+
+**Config options:**
+
+* `severity`
+
+  * The severity (off, warning, error).
+
+  * **Default:** `.warning`
+
 ## `no_unused`
 
 Enforces that container declarations are referenced.
