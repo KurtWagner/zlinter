@@ -13,7 +13,6 @@ pub const BuiltinLintRule = enum {
     no_inferred_error_unions,
     no_orelse_unreachable,
     require_labeled_continue,
-    no_undefined,
     no_unsafe_undefined,
     no_literal_only_bool_expression,
     no_hidden_allocations,
@@ -315,9 +314,7 @@ pub fn build(b: *std.Build) void {
     // Generate dynamic rules list and configs
     // --------------------------------------------------------------------
     const builtin_rule_names = comptime std.meta.fieldNames(BuiltinLintRule);
-    // zlinter-disable-next-line no_undefined - immediately set in inline loop
     var rules: [builtin_rule_names.len]BuiltRule = undefined;
-    // zlinter-disable-next-line no_undefined - immediately set in inline loop
     var rule_imports: [builtin_rule_names.len]std.Build.Module.Import = undefined;
 
     inline for (builtin_rule_names, 0..) |enum_type_name, i| {
@@ -485,7 +482,6 @@ pub fn build(b: *std.Build) void {
                 buildBuiltinRule(b, .no_empty_block, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .no_inferred_error_unions, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .no_orelse_unreachable, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_undefined, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .no_unsafe_undefined, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .no_literal_only_bool_expression, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
                 buildBuiltinRule(b, .require_labeled_continue, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{ .severity = .warning }),

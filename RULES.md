@@ -933,49 +933,6 @@ configurable.
 
   * **Default:** `true`
 
-## `no_undefined`
-
-Enforces no uses of `undefined`. There are some valid use case, in which
-case uses should disable the line with an explanation.
-
-**Config options:**
-
-* `severity`
-
-  * The severity (off, warning, error).
-
-  * **Default:** `.warning`
-
-* `exclude_in_fn`
-
-  * Skip if found inside an enclosing function whose name exactly matches one of these names, case-insensitively.
-
-  * **Default:** `&.{"deinit"}`
-
-* `exclude_tests`
-
-  * Skip if found within `test { ... }` block.
-
-  * **Default:** `true`
-
-* `exclude_var_decl_name_equals`
-
-  * Skips var declarations that name equals (case-insensitive, for `var`, not `const`).
-
-  * **Default:** `&.{}`
-
-* `exclude_var_decl_name_ends_with`
-
-  * Skips var declarations that name ends in (case-insensitive, for `var`, not `const`).
-
-  * **Default:** `&.{ "memory", "mem", "buffer", "buf", "buff", }`
-
-* `init_method_names`
-
-  * Skips when the undefined variable has this method called on it.
-
-  * **Default:** `&.{ "init", "initialize", "initialise" }`
-
 ## `no_unsafe_undefined`
 
 Disallow `undefined` in questionable situations.

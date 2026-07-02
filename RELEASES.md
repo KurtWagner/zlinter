@@ -111,6 +111,13 @@ These notes compare `master` against the `0.16.x` branch.
 
 * `.off` remains the disabled value for these tagged-union config fields.
 
+### Rule changes
+
+* `no_undefined` was removed and replaced with `no_unsafe_undefined`.
+  The replacement focuses on unsafe `undefined` situations such as returns,
+  block breaks, optionals, pointers, enums/tagged unions, const declarations,
+  and primitive scalars, while allowing common scratch-buffer and out-parameter patterns.
+
 ### Directory-level configuration
 
 * `zlinter.zon` files are now supported for per-directory rule overrides.

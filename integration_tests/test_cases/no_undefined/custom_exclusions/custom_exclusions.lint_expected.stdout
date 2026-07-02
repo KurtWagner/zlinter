@@ -1,6 +1,0 @@
-warning Take care when using `undefined` [test_cases/no_undefined/custom_exclusions/custom_exclusions.input.zig:22:26] no_undefined
-
- 22 |     var still_bad: u32 = undefined;
-    |                          ^^^^^^^^^
-
-x 1 warnings
