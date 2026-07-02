@@ -154,7 +154,7 @@ fn classifyUndefined(
             if (isOptionalType(tree, type_node)) return .optional_value;
             if (isPointerType(tree, type_node)) return .pointer_value;
             if (try isEnumOrUnionType(session, doc, tree, type_node)) return .enum_or_union_value;
-            if (isPrimitiveScalarType(tree, type_node)) return .primitive_scalar_value;
+            if (try isPrimitiveScalarType(session, doc, tree, type_node)) return .primitive_scalar_value;
 
             if (tree.tokens.items(.tag)[var_decl.ast.mut_token] == .keyword_const) return .const_value;
             return null;
@@ -193,7 +193,17 @@ fn isPointerType(tree: Ast, type_node: Ast.Node.Index) bool {
     }
 }
 
-fn isPrimitiveScalarType(tree: Ast, type_node: Ast.Node.Index) bool {
+fn isPrimitiveScalarType(
+    session: *zlinter.session.LintSession,
+    doc: *const zlinter.session.LintDocument,
+    tree: Ast,
+    type_node: Ast.Node.Index,
+) zlinter.rules.RunError!bool {
+    if (directPrimitiveScalarType(tree, type_node)) return true;
+    return resolvedDeclIsPrimitiveScalar(session, doc, type_node);
+}
+
+fn directPrimitiveScalarType(tree: Ast, type_node: Ast.Node.Index) bool {
     var current = type_node;
     while (true) {
         switch (tree.nodeTag(current)) {
@@ -210,6 +220,33 @@ fn isPrimitiveScalarType(tree: Ast, type_node: Ast.Node.Index) bool {
             },
         }
     }
+}
+
+fn resolvedDeclIsPrimitiveScalar(
+    session: *zlinter.session.LintSession,
+    doc: *const zlinter.session.LintDocument,
+    type_node: Ast.Node.Index,
+) zlinter.rules.RunError!bool {
+    const candidates = try session.resolveDeclCandidatesOfNode(
+        session.runtime.ruleArena(),
+        doc,
+        type_node,
+    );
+    for (candidates) |candidate| {
+        const resolved = session.resolveDeclAliasCandidate(candidate);
+        const decl_node = session.decl_store.declAstNode(resolved.decl_id) orelse
+            continue;
+
+        const file_id = session.decl_store.declFileId(resolved.decl_id);
+        const decl_tree = session.file_store.fileTree(file_id);
+
+        const var_decl = decl_tree.fullVarDecl(decl_node) orelse continue;
+        const init_node = var_decl.ast.init_node.unwrap() orelse continue;
+
+        if (directPrimitiveScalarType(decl_tree, init_node))
+            return true;
+    }
+    return false;
 }
 
 fn isEnumOrUnionType(
@@ -293,7 +330,7 @@ test "no_unsafe_undefined reports returning undefined from a function" {
         .{},
         Config{},
         &.{
-            .{ .rule_id = "no_unsafe_undefined", .severity = .@"error", .slice = "undefined", .message = "Do not return undefined" },
+            .{ .rule_id = "no_unsafe_undefined", .severity = .warning, .slice = "undefined", .message = "Do not return undefined" },
         },
     );
 }
@@ -310,7 +347,7 @@ test "no_unsafe_undefined reports breaking undefined from a block" {
         .{},
         Config{},
         &.{
-            .{ .rule_id = "no_unsafe_undefined", .severity = .@"error", .slice = "undefined", .message = "Do not break undefined from a block" },
+            .{ .rule_id = "no_unsafe_undefined", .severity = .warning, .slice = "undefined", .message = "Do not break undefined from a block" },
         },
     );
 }
@@ -323,7 +360,7 @@ test "no_unsafe_undefined reports optional initialized to undefined" {
         .{},
         Config{},
         &.{
-            .{ .rule_id = "no_unsafe_undefined", .severity = .@"error", .slice = "undefined", .message = "Use null instead of undefined for optional values" },
+            .{ .rule_id = "no_unsafe_undefined", .severity = .warning, .slice = "undefined", .message = "Use null instead of undefined for optional values" },
         },
     );
 }
@@ -337,7 +374,7 @@ test "no_unsafe_undefined reports enum initialized to undefined" {
         .{},
         Config{},
         &.{
-            .{ .rule_id = "no_unsafe_undefined", .severity = .@"error", .slice = "undefined", .message = "Use a meaningful enum or union tag such as .none or .unspecified instead of undefined" },
+            .{ .rule_id = "no_unsafe_undefined", .severity = .warning, .slice = "undefined", .message = "Use a meaningful enum or union tag such as .none or .unspecified instead of undefined" },
         },
     );
 }
@@ -351,7 +388,7 @@ test "no_unsafe_undefined reports tagged union initialized to undefined" {
         .{},
         Config{},
         &.{
-            .{ .rule_id = "no_unsafe_undefined", .severity = .@"error", .slice = "undefined", .message = "Use a meaningful enum or union tag such as .none or .unspecified instead of undefined" },
+            .{ .rule_id = "no_unsafe_undefined", .severity = .warning, .slice = "undefined", .message = "Use a meaningful enum or union tag such as .none or .unspecified instead of undefined" },
         },
     );
 }
@@ -364,7 +401,7 @@ test "no_unsafe_undefined reports const initialized to undefined" {
         .{},
         Config{},
         &.{
-            .{ .rule_id = "no_unsafe_undefined", .severity = .@"error", .slice = "undefined", .message = "Do not initialize const values to undefined" },
+            .{ .rule_id = "no_unsafe_undefined", .severity = .warning, .slice = "undefined", .message = "Do not initialize const values to undefined" },
         },
     );
 }
@@ -377,7 +414,7 @@ test "no_unsafe_undefined reports pointer initialized to undefined" {
         .{},
         Config{},
         &.{
-            .{ .rule_id = "no_unsafe_undefined", .severity = .@"error", .slice = "undefined", .message = "Do not initialize pointers to undefined" },
+            .{ .rule_id = "no_unsafe_undefined", .severity = .warning, .slice = "undefined", .message = "Do not initialize pointers to undefined" },
         },
     );
 }
@@ -392,9 +429,26 @@ test "no_unsafe_undefined reports primitive scalar initialized to undefined" {
         .{},
         Config{},
         &.{
-            .{ .rule_id = "no_unsafe_undefined", .severity = .@"error", .slice = "undefined", .message = "Do not initialize primitive scalar values to undefined" },
-            .{ .rule_id = "no_unsafe_undefined", .severity = .@"error", .slice = "undefined", .message = "Do not initialize primitive scalar values to undefined" },
-            .{ .rule_id = "no_unsafe_undefined", .severity = .@"error", .slice = "undefined", .message = "Do not initialize primitive scalar values to undefined" },
+            .{ .rule_id = "no_unsafe_undefined", .severity = .warning, .slice = "undefined", .message = "Do not initialize primitive scalar values to undefined" },
+            .{ .rule_id = "no_unsafe_undefined", .severity = .warning, .slice = "undefined", .message = "Do not initialize primitive scalar values to undefined" },
+            .{ .rule_id = "no_unsafe_undefined", .severity = .warning, .slice = "undefined", .message = "Do not initialize primitive scalar values to undefined" },
+        },
+    );
+}
+
+test "no_unsafe_undefined reports primitive scalar aliases initialized to undefined" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const Flag = bool;
+        \\const Count = u32;
+        \\var flag: Flag = undefined;
+        \\var count: Count = undefined;
+    ,
+        .{},
+        Config{},
+        &.{
+            .{ .rule_id = "no_unsafe_undefined", .severity = .warning, .slice = "undefined", .message = "Do not initialize primitive scalar values to undefined" },
+            .{ .rule_id = "no_unsafe_undefined", .severity = .warning, .slice = "undefined", .message = "Do not initialize primitive scalar values to undefined" },
         },
     );
 }
