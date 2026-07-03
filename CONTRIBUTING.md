@@ -94,3 +94,14 @@ zig build lint
 ```shell
 zig build docs
 ```
+
+There's a caching issue I havent resolved yet so you may need to clear cache
+before building docs if its not updating as you expect.
+
+## Build and serve website (with AST explorer)
+
+```shell
+zig build website && npx http-server -c-1 zig-out/website
+```
+
+You don't need to use `npx`, its just static content in `zig-out/website`. You may decide to use `python -m http.server` instead.

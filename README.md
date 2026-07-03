@@ -62,12 +62,9 @@ A **linter** is a tool that automatically checks source code for style issues, b
   - [Command-Line Arguments](#command-line-arguments)
   - [Optimization](#configure-optimization)
 - [Supported zig versions](#supported-zig-versions)
-- [Milestones](#milestones)
+- [Background](#background)
 - [Versioning](#versioning)
-- [Contributing](#contributing)
-  - [How to Contribute](#contributions)
-  - [Run tests](#run-tests)
-  - [Run on self](#run-lint-on-self)
+- [Contributing](CONTRIBUTING.md)
 - [Release Notes](RELEASES.md)
 
 ## Getting started
@@ -401,9 +398,7 @@ Fixes and improvements to rules may be cherry-picked to older versions if there'
 
 This may change once zig hits `1.x`.
 
-## Milestones
-
-### Background
+## Background
 
 `zlinter` was written to be used across my personal projects. The main motivation was to have it integrated from source through a build step so that it can be
 
@@ -415,20 +410,6 @@ organically evolve around needs, if there's value in doing so.
 
 It uses `std.zig` and `std.Build.Configuration` to build and analyze zig source files.
 
-### Current limitations
-
-`zlinter` currently analyzes the Zig AST, which has limited context without trying to re-implement the Zig compiler (not doing).
-
-See [limitations](./LIMITATIONS.md) for more information.
-
----
-
-1. [done] **Rough implementaton of 20 diverse linter rules** - this is important to understanding limitations (e.g., the AST and design patterns to a stable API.)
-  
-1. [in-progress] **Run and review the results on at least 5 large open source Zig projects** - this is to discover unknown unknowns to populate caveats and limitations of current approach.
-
-1. [pending] **To be informed by (1) and (2)** - could be that AST is good enough for enough cases to provide value providing adequate documentation, AND/OR, could be that it's worth contributing time into Zigs efforts around "multibuild" and zig compiler server.
-
 ## Versioning
 
 `zlinter` will:
@@ -438,15 +419,3 @@ See [limitations](./LIMITATIONS.md) for more information.
 - use branch `0.14.x` for `zig` `0.14.x` releases.
 
 This may change, especially when `zig` is "stable" at `1.x`. If you have opinions on this, feel free to comment on [#20](https://github.com/KurtWagner/zlinter/issues/20).
-
-## Contributing
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for contribution guidance, commit message format, test commands, and repository maintenance notes.
-
-### Build and serve website (with AST explorer)
-
-```shell
-zig build website && npx http-server -c-1 zig-out/website
-```
-
-You don't need to use `npx`, its just static content in `zig-out/website`. You may decide to use `python -m http.server` instead.
