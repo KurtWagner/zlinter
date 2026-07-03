@@ -526,6 +526,60 @@ test "declaration_naming classifies @This aliases as types" {
     );
 }
 
+test "declaration_naming classifies result expressions returning types as types" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\
+        \\const Size = enum { small, large };
+        \\const size = Size.small;
+        \\const use_small = true;
+        \\const MyInt = switch (size) {
+        \\    .small => u32,
+        \\    .large => u64,
+        \\};
+        \\const myInt = switch (size) {
+        \\    .small => u32,
+        \\    .large => u64,
+        \\};
+        \\const my_int = switch (size) {
+        \\    .small => u32,
+        \\    .large => u64,
+        \\};
+        \\const MyFloat = if (use_small) f32 else f64;
+        \\const myFloat = if (use_small) f32 else f64;
+        \\const my_float = if (use_small) f32 else f64;
+    ,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "myInt",
+                .message = "Type declaration should be TitleCase",
+            },
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "my_int",
+                .message = "Type declaration should be TitleCase",
+            },
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "myFloat",
+                .message = "Type declaration should be TitleCase",
+            },
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "my_float",
+                .message = "Type declaration should be TitleCase",
+            },
+        },
+    );
+}
+
 test "declaration_naming notes resolved declaration used for alias classification" {
     try zlinter.testing.testRunRule(
         buildRule(.{}),

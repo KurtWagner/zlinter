@@ -2364,6 +2364,13 @@ fn typeSummaryFromValueNode(
 
     if (typeSummaryFromTypeValueExpr(tree, node)) |type_summary| return type_summary;
 
+    if (self.typeSummaryFromResultValueNode(
+        module_id,
+        context_decl_id,
+        node,
+        remaining_depth - 1,
+    )) |result_summary| return result_summary;
+
     var struct_init_buffer: [2]Ast.Node.Index = undefined;
     if (tree.fullStructInit(&struct_init_buffer, node)) |struct_init| {
         if (struct_init.ast.type_expr.unwrap()) |type_expr| {
@@ -2448,6 +2455,119 @@ fn resolveImportRootDecl(
     const file_id = maybe_file_id orelse return null;
     self.resolveFileTypesForModule(file_id, module_id);
     return self.decl_store.rootDecl(file_id);
+}
+
+fn typeSummaryFromResultValueNode(
+    self: *LintContext,
+    module_id: ModuleStore.ModuleId,
+    context_decl_id: DeclStore.DeclId,
+    node: Ast.Node.Index,
+    remaining_depth: u8,
+) ?TypeStore.TypeSummary {
+    if (remaining_depth == 0) return null;
+
+    const tree = self.file_store.fileTree(
+        self.decl_store.declFileId(context_decl_id),
+    );
+
+    if (self.typeSummaryFromSwitchResultValueNode(
+        module_id,
+        context_decl_id,
+        tree,
+        node,
+        remaining_depth - 1,
+    )) |summary| return summary;
+
+    if (self.typeSummaryFromIfResultValueNode(
+        module_id,
+        context_decl_id,
+        tree,
+        node,
+        remaining_depth - 1,
+    )) |summary| return summary;
+
+    return null;
+}
+
+fn typeSummaryFromSwitchResultValueNode(
+    self: *LintContext,
+    module_id: ModuleStore.ModuleId,
+    context_decl_id: DeclStore.DeclId,
+    tree: Ast,
+    node: Ast.Node.Index,
+    remaining_depth: u8,
+) ?TypeStore.TypeSummary {
+    if (remaining_depth == 0) return null;
+
+    const switch_info = tree.fullSwitch(node) orelse return null;
+    if (switch_info.ast.cases.len == 0) return null;
+
+    var summary: ?TypeStore.TypeSummary = null;
+
+    for (switch_info.ast.cases) |case_node| {
+        const switch_case = tree.fullSwitchCase(case_node) orelse
+            return null;
+        const case_summary = self.typeSummaryFromValueNode(
+            module_id,
+            context_decl_id,
+            switch_case.ast.target_expr,
+            remaining_depth - 1,
+        ) orelse return null;
+
+        summary = joinResultTypeSummaries(
+            summary,
+            case_summary,
+        ) orelse return null;
+    }
+
+    return summary;
+}
+
+fn typeSummaryFromIfResultValueNode(
+    self: *LintContext,
+    module_id: ModuleStore.ModuleId,
+    context_decl_id: DeclStore.DeclId,
+    tree: Ast,
+    node: Ast.Node.Index,
+    remaining_depth: u8,
+) ?TypeStore.TypeSummary {
+    if (remaining_depth == 0) return null;
+
+    const if_info = tree.fullIf(node) orelse
+        return null;
+    const else_expr = if_info.ast.else_expr.unwrap() orelse
+        return null;
+
+    const then_summary = self.typeSummaryFromValueNode(
+        module_id,
+        context_decl_id,
+        if_info.ast.then_expr,
+        remaining_depth - 1,
+    ) orelse return null;
+
+    const else_summary = self.typeSummaryFromValueNode(
+        module_id,
+        context_decl_id,
+        else_expr,
+        remaining_depth - 1,
+    ) orelse return null;
+
+    return joinResultTypeSummaries(then_summary, else_summary);
+}
+
+fn joinResultTypeSummaries(
+    maybe_lhs: ?TypeStore.TypeSummary,
+    rhs: TypeStore.TypeSummary,
+) ?TypeStore.TypeSummary {
+    const lhs = maybe_lhs orelse return rhs;
+
+    if (TypeStore.TypeSummary.eql(lhs, rhs))
+        return lhs;
+
+    if (lhs.isTypeValue() and rhs.isTypeValue())
+        return .{ .type = .unknown };
+
+    return null;
 }
 
 fn typeSummaryFromTypeValueExpr(
