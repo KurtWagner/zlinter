@@ -59,12 +59,6 @@ pub fn resolveStdlib(
     return self.resolveFrom("std/std.zig", self.runtime.zig_lib_directory);
 }
 
-pub fn resolveStdLib(
-    self: *FileStore,
-) error{ResolutionError}!FileId {
-    return self.resolveStdlib();
-}
-
 pub fn resolveFrom(
     self: *FileStore,
     input_path: []const u8,
