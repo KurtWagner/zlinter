@@ -346,8 +346,7 @@ fn runLinterRules(
             problems[0] = problem;
 
             const result = oom(zlinter.results.LintResult.init(
-                runtime.sessionArena(),
-                file_abs_path,
+                file_id,
                 problems,
             ));
 
@@ -428,7 +427,7 @@ fn sameProblemNotes(
     if (lhs_notes.len != rhs_notes.len) return false;
 
     for (lhs_notes, rhs_notes) |lhs_note, rhs_note| {
-        if (!std.mem.eql(u8, lhs_note.abs_path, rhs_note.abs_path)) return false;
+        if (lhs_note.file_id != rhs_note.file_id) return false;
         if (lhs_note.start.byte_offset != rhs_note.start.byte_offset) return false;
         if (lhs_note.end.byte_offset != rhs_note.end.byte_offset) return false;
         if (lhs_note.line != rhs_note.line) return false;
@@ -483,7 +482,7 @@ fn appendDedupedResult(
     if (deduped_problems.items.len == 0) return;
 
     try results.append(session_arena, .{
-        .abs_path = result.abs_path,
+        .file_id = result.file_id,
         .problems = try deduped_problems.toOwnedSlice(session_arena),
     });
 }
@@ -532,6 +531,7 @@ fn runFormatter(
 
     try formatter.format(.{
         .results = try flattened.toOwnedSlice(session_arena),
+        .file_store = &session.file_store,
         .cwd = runtime.cwd,
         .zig_lib_directory = runtime.zig_lib_directory,
         .arena = session_arena,

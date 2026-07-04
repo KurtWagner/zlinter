@@ -83,8 +83,7 @@ fn run(
         .message = message,
     };
     return try zlinter.results.LintResult.init(
-        session_arena,
-        abs_path,
+        doc.file_id,
         lint_problems,
     );
 }

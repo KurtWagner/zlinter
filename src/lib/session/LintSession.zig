@@ -978,7 +978,7 @@ pub const ValueTypeAnnotationCandidate = struct {
 };
 
 pub const DeclLocation = struct {
-    abs_path: []const u8,
+    file_id: FileStore.FileId,
     start: results.LintProblemLocation,
     end: results.LintProblemLocation,
     line: usize,
@@ -1709,7 +1709,7 @@ pub fn declLocation(
     const token_location = tree.tokenLocation(0, first_token);
 
     return .{
-        .abs_path = self.file_store.fileAbsPath(file_id),
+        .file_id = file_id,
         .start = start,
         .end = end,
         .line = token_location.line,

@@ -4,32 +4,24 @@
 pub const LintResult = struct {
     const Self = @This();
 
-    // TODO: Use FileStore.FileId here instead of absolute path
-    abs_path: []const u8,
+    file_id: FileId,
     problems: []LintProblem,
 
     /// Initializes a result. Caller must call deinit once done to free memory.
     pub fn init(
-        allocator: std.mem.Allocator,
-        abs_path: []const u8,
+        file_id: FileId,
         problems: []LintProblem,
     ) error{OutOfMemory}!Self {
-        std.debug.assert(std.fs.path.isAbsolute(abs_path));
-
-        const owned_abs_path = try allocator.dupe(u8, abs_path);
-
         return .{
-            .abs_path = owned_abs_path,
+            .file_id = file_id,
             .problems = problems,
         };
     }
 
     pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
-        for (self.problems) |*err| {
+        for (self.problems) |*err|
             err.deinit(allocator);
-        }
         allocator.free(self.problems);
-        allocator.free(self.abs_path);
     }
 };
 
@@ -313,7 +305,7 @@ pub const LintProblem = struct {
 };
 
 pub const LintProblemNote = struct {
-    abs_path: []const u8,
+    file_id: FileId,
     start: LintProblemLocation,
     end: LintProblemLocation,
     /// Zero-indexed display line for `start`.
@@ -323,7 +315,6 @@ pub const LintProblemNote = struct {
     message: []const u8,
 
     pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
-        allocator.free(self.abs_path);
         allocator.free(self.message);
         self.* = undefined;
     }
@@ -333,7 +324,7 @@ pub const LintProblemNote = struct {
         const indent_str = spaces[0..indent];
 
         writer.print("{s}.{{\n", .{indent_str});
-        writer.print("{s}  .abs_path = \"{s}\",\n", .{ indent_str, self.abs_path });
+        writer.print("{s}  .file_id = \"{s}\",\n", .{ indent_str, self.file_id });
         writer.print("{s}  .start =\n", .{indent_str});
         self.start.debugPrintWithIndent(writer, indent + 4);
         writer.print("{s}  .end =\n", .{indent_str});
@@ -391,6 +382,7 @@ const rules = @import("rules.zig");
 const std = @import("std");
 const strings = @import("strings.zig");
 const Ast = std.zig.Ast;
+const FileId = @import("session/FileStore.zig").FileId;
 
 test {
     std.testing.refAllDecls(@This());

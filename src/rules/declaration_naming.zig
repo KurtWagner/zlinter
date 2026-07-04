@@ -204,8 +204,7 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            session_arena,
-            doc.absPath(session),
+            doc.file_id,
             lint_problems.items,
         )
     else
@@ -272,7 +271,7 @@ fn allocResolvedDeclNotes(
 
     const notes = try session_arena.alloc(zlinter.results.LintProblemNote, 1);
     notes[0] = .{
-        .abs_path = try session_arena.dupe(u8, decl_location.abs_path),
+        .file_id = decl_location.file_id,
         .start = decl_location.start,
         .end = decl_location.end,
         .line = decl_location.line,
@@ -332,7 +331,7 @@ fn declLocationsDifferLineOrFile(
     const lhs = session.declLocation(lhs_decl_id) orelse return true;
     const rhs = session.declLocation(rhs_decl_id) orelse return true;
 
-    return lhs.line != rhs.line or !std.mem.eql(u8, lhs.abs_path, rhs.abs_path);
+    return lhs.line != rhs.line or lhs.file_id != rhs.file_id;
 }
 
 fn isThisBuiltinCall(tree: Ast, node: Ast.Node.Index) bool {

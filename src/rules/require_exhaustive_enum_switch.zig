@@ -152,8 +152,7 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            session_arena,
-            doc.absPath(session),
+            doc.file_id,
             lint_problems.items,
         )
     else
@@ -260,7 +259,7 @@ fn allocEnumDeclNotes(
 
     const notes = try session_arena.alloc(zlinter.results.LintProblemNote, 1);
     notes[0] = .{
-        .abs_path = try session_arena.dupe(u8, decl_location.abs_path),
+        .file_id = decl_location.file_id,
         .start = decl_location.start,
         .end = decl_location.end,
         .line = decl_location.line,

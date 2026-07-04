@@ -117,8 +117,7 @@ fn run(
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
-            session_arena,
-            doc.absPath(session),
+            doc.file_id,
             lint_problems.items,
         )
     else

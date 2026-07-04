@@ -165,6 +165,8 @@ These notes compare `master` against the `0.16.x` branch.
 
 * `LintResult.init` results should be allocated from the session arena and use
   `doc.absPath(session)`.
+* `LintResult` and `LintProblemNote` now take a `file_id` instead of an absolute
+  path. This is a breaking change for custom rule authors.
 * The bundled `zlinter.testing` helpers changed to construct a `LintSession`
   rather than a `LintContext`. `testRunRule` now accepts `TestRunOptions`,
   including `.allow_parse_errors`.

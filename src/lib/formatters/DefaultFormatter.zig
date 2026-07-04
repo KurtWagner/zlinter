@@ -17,16 +17,18 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: *st
 
     for (input.results) |file_result| {
         defer _ = file_arena.reset(.retain_capacity);
+        const file_abs_path = input.file_store.fileAbsPath(file_result.file_id);
 
         var file = std.Io.Dir.openFileAbsolute(
             input.io,
-            file_result.abs_path,
+            file_abs_path,
             .{ .mode = .read_only },
         ) catch |e| return logAndReturnWriteFailure("Open file", e);
         defer file.close(input.io);
 
         var file_reader = file.reader(input.io, &file_buffer);
 
+        // TODO: Use file_id instead of reading file again.
         const file_renderer = zlinter.rendering.LintFileRenderer.init(
             file_arena.allocator(),
             &file_reader.interface,
@@ -37,7 +39,7 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: *st
             input.cwd,
             null,
             input.cwd,
-            file_result.abs_path,
+            file_abs_path,
         ) catch return error.OutOfMemory;
 
         for (file_result.problems) |problem| {
@@ -149,18 +151,19 @@ fn renderNoteTitle(
     note: zlinter.results.LintProblemNote,
     writer: *std.Io.Writer,
 ) Formatter.Error!void {
+    const note_abs_path = input.file_store.fileAbsPath(note.file_id);
     const display_path = if (isStdLibPath(
-        note.abs_path,
+        note_abs_path,
         input.zig_lib_directory,
     ))
-        note.abs_path
+        note_abs_path
     else
         std.fs.path.relative(
             allocator,
             input.cwd,
             null,
             input.cwd,
-            note.abs_path,
+            note_abs_path,
         ) catch return error.OutOfMemory;
 
     writer.print("  {s}↳ note{s} {s} [{s}{s}:{d}:{d}{s}]\n", .{

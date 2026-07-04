@@ -2,6 +2,10 @@ const Formatter = @This();
 
 pub const FormatInput = struct {
     results: []zlinter.results.LintResult,
+    file_store: *const zlinter.session.FileStore,
+
+    // TODO: Pass in runtime instead of cwd and arena.
+
     /// The directory the linter ran relative to.
     cwd: []const u8,
 
