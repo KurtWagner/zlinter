@@ -62,13 +62,23 @@ fn run(
                     .token = tree.nodeMainToken(node),
                 },
             ),
-            .field_access => if (referencedDeclReference(
-                session,
-                doc,
+            .field_access => {
+                const member_token = tree.nodeData(node).node_and_token[1];
+                try container_references.append(
+                    rule_arena,
+                    .{
+                        .name = tree.tokenSlice(member_token),
+                        .token = member_token,
+                    },
+                );
+            },
+            .enum_literal => try container_references.append(
                 rule_arena,
-                node,
-            )) |reference|
-                try container_references.append(rule_arena, reference),
+                .{
+                    .name = tree.tokenSlice(tree.nodeMainToken(node)),
+                    .token = tree.nodeMainToken(node),
+                },
+            ),
             else => {},
         }
     }
@@ -465,95 +475,6 @@ fn isPublicFnProto(tree: Ast, fn_proto: Ast.full.FnProto) bool {
     return zlinter.ast.fnProtoVisibility(tree, fn_proto) == .public;
 }
 
-fn referencedDeclReference(
-    session: *zlinter.session.LintSession,
-    doc: *const zlinter.session.LintDocument,
-    rule_arena: std.mem.Allocator,
-    node: Ast.Node.Index,
-) ?DeclReference {
-    const tree = doc.tree(session);
-    std.debug.assert(tree.nodeTag(node) == .field_access);
-
-    {
-        const decl_candidates = session.resolveDeclCandidatesOfNode(rule_arena, doc, node) catch return null;
-        if (referencedDeclNameFromCandidates(
-            session,
-            doc,
-            decl_candidates,
-        )) |name|
-            return .{
-                .name = name,
-                .token = tree.nodeMainToken(node),
-            };
-    }
-
-    const lhs, const member_token = tree.nodeData(node).node_and_token;
-    const member_name = tree.tokenSlice(member_token);
-
-    if (isCallCallee(tree, doc, node)) {
-        const root_decl_id = session.decl_store.rootDecl(doc.file_id) orelse return null;
-        const member_candidates = session.resolveDeclMemberCandidates(
-            rule_arena,
-            root_decl_id,
-            member_name,
-        ) catch return null;
-        if (referencedDeclNameFromCandidates(
-            session,
-            doc,
-            member_candidates,
-        )) |name|
-            return .{
-                .name = name,
-                .token = member_token,
-            };
-    }
-
-    {
-        const type_candidates = session.resolveTypeCandidatesOfNode(rule_arena, doc, lhs) catch return null;
-        if (session.decl_store.rootDecl(doc.file_id)) |root_decl_id| {
-            for (type_candidates) |candidate| {
-                if (candidate.type.decl_id == root_decl_id)
-                    return .{
-                        .name = member_name,
-                        .token = member_token,
-                    };
-            }
-        }
-    }
-    return null;
-}
-
-fn referencedDeclNameFromCandidates(
-    session: *zlinter.session.LintSession,
-    doc: *const zlinter.session.LintDocument,
-    candidates: []const zlinter.session.LintSession.DeclCandidate,
-) ?[]const u8 {
-    const tree = doc.tree(session);
-    for (candidates) |candidate| {
-        if (session.decl_store.declFileId(candidate.decl_id) != doc.file_id)
-            continue;
-
-        const name_token = session.decl_store.declNameToken(candidate.decl_id) orelse
-            continue;
-        return tree.tokenSlice(name_token);
-    }
-    return null;
-}
-
-fn isCallCallee(
-    tree: Ast,
-    doc: *const zlinter.session.LintDocument,
-    node: Ast.Node.Index,
-) bool {
-    var ancestors = doc.nodeAncestorIterator(node);
-    const parent = ancestors.next() orelse return false;
-
-    var call_buffer: [1]Ast.Node.Index = undefined;
-    const call = tree.fullCall(&call_buffer, parent) orelse
-        return false;
-    return call.ast.fn_expr == node;
-}
-
 test "no_unused" {
     std.testing.refAllDecls(@This());
 
@@ -682,6 +603,46 @@ test "no_unused" {
         &.{},
     );
 
+    // Inferred field syntax should count as used too.
+    try zlinter.testing.testRunRule(
+        rule,
+        \\const Printer = struct {
+        \\    const empty: Printer = .{};
+        \\};
+        \\
+        \\const printer_singleton: Printer = .empty;
+        \\
+        \\pub fn main() void {
+        \\    _ = printer_singleton;
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{},
+    );
+
+    // Inferred method syntax should not be reported as unused.
+    try zlinter.testing.testRunRule(
+        rule,
+        \\const ChildIterator = struct {
+        \\    fn initArray() ChildIterator {
+        \\        return .{};
+        \\    }
+        \\
+        \\    fn used() ChildIterator {
+        \\        return .initArray();
+        \\    }
+        \\};
+        \\
+        \\pub fn main() void {
+        \\    _ = ChildIterator.used();
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{},
+    );
+
     // Rule-level regression: unsupported declarations in the same file should
     // not stop later same-file members from resolving as used.
     try zlinter.testing.testRunRule(
@@ -697,6 +658,105 @@ test "no_unused" {
         \\fn used(self: *Store) void {
         \\    _ = self;
         \\}
+    ,
+        .{},
+        Config{},
+        &.{},
+    );
+
+    // Nested enum methods called through values should count as used.
+    try zlinter.testing.testRunRule(
+        rule,
+        \\pub const Token = struct {
+        \\    tag: Tag,
+        \\
+        \\    const Tag = enum {
+        \\        doc_comment,
+        \\
+        \\        fn isComment(self: Tag) bool {
+        \\            _ = self;
+        \\            return true;
+        \\        }
+        \\    };
+        \\
+        \\    pub fn main(token: Token) void {
+        \\        _ = token.tag.isComment();
+        \\    }
+        \\};
+    ,
+        .{},
+        Config{},
+        &.{},
+    );
+
+    // Nested struct methods called through values should count as used too.
+    try zlinter.testing.testRunRule(
+        rule,
+        \\pub const Comments = struct {
+        \\    const Comment = struct {
+        \\        value: u32,
+        \\
+        \\        fn debugPrint(self: Comment) void {
+        \\            _ = self.value;
+        \\        }
+        \\    };
+        \\
+        \\    pub fn main(comment: Comment) void {
+        \\        comment.debugPrint();
+        \\    }
+        \\};
+    ,
+        .{},
+        Config{},
+        &.{},
+    );
+
+    // Chained access through indexing should still mark nested enum methods as used.
+    try zlinter.testing.testRunRule(
+        rule,
+        \\pub const Parser = struct {
+        \\    tokens: []const Token,
+        \\    i: usize,
+        \\
+        \\    const Token = struct {
+        \\        tag: Tag,
+        \\
+        \\        const Tag = enum {
+        \\            doc_comment,
+        \\
+        \\            fn isComment(self: Tag) bool {
+        \\                _ = self;
+        \\                return true;
+        \\            }
+        \\        };
+        \\    };
+        \\
+        \\    pub fn main(p: Parser) void {
+        \\        if (!p.tokens[p.i].tag.isComment()) return;
+        \\    }
+        \\};
+    ,
+        .{},
+        Config{},
+        &.{},
+    );
+
+    // Methods on loop elements should count as used too.
+    try zlinter.testing.testRunRule(
+        rule,
+        \\pub const Comments = struct {
+        \\    const Comment = struct {
+        \\        value: u32,
+        \\
+        \\        fn debugPrint(self: Comment) void {
+        \\            _ = self.value;
+        \\        }
+        \\    };
+        \\
+        \\    pub fn main(items: []const Comment) void {
+        \\        for (items) |comment| comment.debugPrint();
+        \\    }
+        \\};
     ,
         .{},
         Config{},
