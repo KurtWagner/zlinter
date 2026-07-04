@@ -131,9 +131,8 @@ fn run(
     var timer = Timer.createStarted(io);
     var total_timer = Timer.createStarted(io);
 
-    // Key is index to `lint_files` and value are errors for the file.
     var file_lint_problems = std.array_hash_map.Auto(
-        u32,
+        zlinter.session.FileStore.FileId,
         []zlinter.results.LintResult,
     ).empty;
 
@@ -223,8 +222,6 @@ fn run(
     return if (args.fix)
         try runFixes(
             &session,
-            // TODO: Pass in lint_file_ids.items instead
-            lint_files,
             file_lint_problems,
             printer,
         )
@@ -249,7 +246,10 @@ fn runLinterRules(
     lint_file_ids: []zlinter.session.FileStore.FileId,
     printer: *zlinter.rendering.Printer,
     timer: *Timer,
-    file_lint_problems: *std.array_hash_map.Auto(u32, []zlinter.results.LintResult),
+    file_lint_problems: *std.array_hash_map.Auto(
+        zlinter.session.FileStore.FileId,
+        []zlinter.results.LintResult,
+    ),
     args: zlinter.Args,
 ) !void {
     const runtime = session.runtime;
@@ -398,7 +398,7 @@ fn runLinterRules(
         if (results.items.len > 0) {
             oom(file_lint_problems.putNoClobber(
                 runtime.sessionArena(),
-                std.math.cast(u32, i) orelse @panic("Too many files"),
+                file_id,
                 oom(results.toOwnedSlice(runtime.sessionArena())),
             ));
         }
@@ -489,7 +489,10 @@ fn appendDedupedResult(
 
 fn runFormatter(
     session: *zlinter.session.LintSession,
-    file_lint_problems: std.array_hash_map.Auto(u32, []zlinter.results.LintResult),
+    file_lint_problems: std.array_hash_map.Auto(
+        zlinter.session.FileStore.FileId,
+        []zlinter.results.LintResult,
+    ),
     output_writer: *std.Io.Writer,
     output_tty: zlinter.ansi.Tty,
     formatter: *const zlinter.formatters.Formatter,
@@ -553,8 +556,10 @@ fn cmpFix(context: void, a: zlinter.results.LintProblemFix, b: zlinter.results.L
 
 fn runFixes(
     session: *zlinter.session.LintSession,
-    lint_files: []zlinter.files.LintFile,
-    file_lint_problems: std.array_hash_map.Auto(u32, []zlinter.results.LintResult),
+    file_lint_problems: std.array_hash_map.Auto(
+        zlinter.session.FileStore.FileId,
+        []zlinter.results.LintResult,
+    ),
     printer: *zlinter.rendering.Printer,
 ) !RunResult {
     const runtime = session.runtime;
@@ -591,34 +596,16 @@ fn runFixes(
             cmpFix,
         );
 
-        const abs_path = lint_files[entry.key_ptr.*].abs_path;
+        const file_id = entry.key_ptr.*;
+        const abs_path = session.file_store.fileAbsPath(file_id);
 
-        var file_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
-        var fba: std.heap.FixedBufferAllocator = .init(&file_path_buffer);
-        const cwd_rel_path = try allocCwdRelPath(fba.allocator(), runtime.cwd, abs_path);
+        const cwd_rel_path = oom(allocCwdRelPath(
+            runtime.sessionArena(),
+            runtime.cwd,
+            abs_path,
+        ));
 
-        const file = try std.Io.Dir.openFileAbsolute(runtime.io, abs_path, .{
-            .mode = .read_only,
-        });
-        defer file.close(runtime.io);
-
-        const file_content = file_content: {
-            var file_reader_buffer: [1024]u8 = undefined;
-            var file_reader = file.readerStreaming(runtime.io, &file_reader_buffer);
-
-            var buffer: std.Io.Writer.Allocating = .init(runtime.fileArena());
-            defer buffer.deinit();
-
-            if (file_reader.getSize()) |size| {
-                const casted_size = std.math.cast(u32, size) orelse return error.StreamTooLong;
-                oom(buffer.ensureTotalCapacity(casted_size));
-            } else |_| {
-                // Do nothing.
-            }
-
-            _ = try file_reader.interface.streamRemaining(&buffer.writer);
-            break :file_content oom(buffer.toOwnedSlice());
-        };
+        const file_content = session.file_store.fileSource(file_id);
 
         var output_slices = std.ArrayList([]const u8).empty;
 
