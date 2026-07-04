@@ -16,7 +16,7 @@ fn format(
     var warning_count: u32 = 0;
     var total_disabled_by_comment: usize = 0;
 
-    var file_arena = std.heap.ArenaAllocator.init(input.arena);
+    var file_arena = std.heap.ArenaAllocator.init(input.runtime.sessionArena());
 
     for (input.results) |file_result| {
         defer _ = file_arena.reset(.retain_capacity);
@@ -29,16 +29,15 @@ fn format(
 
         const cwd_rel_path = oom(std.fs.path.relative(
             file_arena.allocator(),
-            input.cwd,
+            input.runtime.cwd,
             null,
-            input.cwd,
+            input.runtime.cwd,
             file_abs_path,
         ));
 
         for (file_result.problems) |problem| {
-            if (@intFromEnum(problem.severity) < @intFromEnum(input.min_severity)) {
+            if (@intFromEnum(problem.severity) < @intFromEnum(input.min_severity))
                 continue;
-            }
 
             if (problem.disabled_by_comment) {
                 total_disabled_by_comment += 1;
@@ -147,15 +146,15 @@ fn renderNoteTitle(
     const note_abs_path = input.file_store.fileAbsPath(note.file_id);
     const display_path = if (isStdLibPath(
         note_abs_path,
-        input.zig_lib_directory,
+        input.runtime.zig_lib_directory,
     ))
         note_abs_path
     else
         oom(std.fs.path.relative(
             allocator,
-            input.cwd,
+            input.runtime.cwd,
             null,
-            input.cwd,
+            input.runtime.cwd,
             note_abs_path,
         ));
 

@@ -3,19 +3,7 @@ const Formatter = @This();
 pub const FormatInput = struct {
     results: []zlinter.results.LintResult,
     file_store: *const zlinter.session.FileStore,
-
-    // TODO: Pass in runtime instead of cwd and arena.
-
-    /// The directory the linter ran relative to.
-    cwd: []const u8,
-
-    /// Zig lib directory used for the lint run.
-    zig_lib_directory: []const u8,
-
-    /// Arena allocator that is cleared after calling format.
-    arena: std.mem.Allocator,
-
-    io: std.Io,
+    runtime: *const zlinter.session.LintRuntime,
     tty: zlinter.ansi.Tty = .no_color,
 
     /// Only print this severity and above. e.g., set to error to only format errors

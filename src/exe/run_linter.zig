@@ -534,12 +534,9 @@ fn runFormatter(
     try formatter.format(.{
         .results = try flattened.toOwnedSlice(session_arena),
         .file_store = &session.file_store,
-        .cwd = runtime.cwd,
-        .zig_lib_directory = runtime.zig_lib_directory,
-        .arena = session_arena,
+        .runtime = runtime,
         .tty = output_tty,
         .min_severity = if (quiet) .@"error" else .warning,
-        .io = runtime.io,
     }, output_writer);
 
     return run_result;
