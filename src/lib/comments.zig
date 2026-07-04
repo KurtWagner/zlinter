@@ -1742,8 +1742,8 @@ pub const LazyRuleSkipper = struct {
         if (self.index) |*index| index.deinit();
     }
 
-    pub fn shouldSkip(self: *LazyRuleSkipper, problem: LintProblem) error{OutOfMemory}!bool {
-        const index = try self.ensureBuilt();
+    pub fn shouldSkip(self: *LazyRuleSkipper, problem: LintProblem) bool {
+        const index = self.ensureBuilt();
 
         const line = self.doc.lineNumber(problem.start.byte_offset);
         if (index.rules.get(problem.rule_id)) |bits| {
@@ -1753,13 +1753,16 @@ pub const LazyRuleSkipper = struct {
         return !index.all.isSet(line);
     }
 
-    fn ensureBuilt(self: *LazyRuleSkipper) error{OutOfMemory}!*Index {
+    fn ensureBuilt(self: *LazyRuleSkipper) *Index {
         if (self.index) |*index| return index;
 
         const line_count = self.doc.line_starts.len;
         var index: Index = .{
             .rules = .init(self.gpa),
-            .all = try .initFull(self.gpa, line_count),
+            .all = oom(std.bit_set.DynamicBitSet.initFull(
+                self.gpa,
+                line_count,
+            )),
         };
         errdefer index.deinit();
 
@@ -1767,10 +1770,10 @@ pub const LazyRuleSkipper = struct {
             range: std.bit_set.Range,
             value: bool,
         };
-        var global_ops: std.ArrayList(GlobalOp) = try .initCapacity(
+        var global_ops: std.ArrayList(GlobalOp) = oom(std.ArrayList(GlobalOp).initCapacity(
             self.gpa,
             self.doc.comments.len,
-        );
+        ));
         defer global_ops.deinit(self.gpa);
 
         for (self.doc.comments) |comment| {
@@ -1804,9 +1807,12 @@ pub const LazyRuleSkipper = struct {
                 for (self.doc.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
                     const rule_id = self.source[token.first_byte .. token.first_byte + token.len];
 
-                    const result = try index.rules.getOrPut(rule_id);
+                    const result = oom(index.rules.getOrPut(rule_id));
                     if (!result.found_existing) {
-                        result.value_ptr.* = try .initFull(self.gpa, line_count);
+                        result.value_ptr.* = oom(std.bit_set.DynamicBitSet.initFull(
+                            self.gpa,
+                            line_count,
+                        ));
                         for (global_ops.items) |op| {
                             result.value_ptr.setRangeValue(op.range, op.value);
                         }
@@ -1864,8 +1870,8 @@ test "LazyRuleSkipper respects rule-specific enable after global disable" {
         .message = "",
     };
 
-    try std.testing.expect(!(try skipper.shouldSkip(problem_a)));
-    try std.testing.expect(try skipper.shouldSkip(problem_b));
+    try std.testing.expect(!skipper.shouldSkip(problem_a));
+    try std.testing.expect(skipper.shouldSkip(problem_b));
 }
 
 test "LazyRuleSkipper global disable affects all rules" {
@@ -1889,7 +1895,7 @@ test "LazyRuleSkipper global disable affects all rules" {
         .message = "",
     };
 
-    try std.testing.expect(try skipper.shouldSkip(problem));
+    try std.testing.expect(skipper.shouldSkip(problem));
 }
 
 test "LazyRuleSkipper disable next line targets only that line" {
@@ -1932,9 +1938,9 @@ test "LazyRuleSkipper disable next line targets only that line" {
         .message = "",
     };
 
-    try std.testing.expect(!(try skipper.shouldSkip(problem_a)));
-    try std.testing.expect(try skipper.shouldSkip(problem_b));
-    try std.testing.expect(!(try skipper.shouldSkip(problem_c)));
+    try std.testing.expect(!skipper.shouldSkip(problem_a));
+    try std.testing.expect(skipper.shouldSkip(problem_b));
+    try std.testing.expect(!skipper.shouldSkip(problem_c));
 }
 
 test "LazyRuleSkipper disable-next-line EOF behavior" {
@@ -1985,8 +1991,8 @@ test "LazyRuleSkipper disable-next-line EOF behavior" {
             .message = "",
         };
 
-        try std.testing.expectEqual(case.expected_skip, try skipper.shouldSkip(problem));
-        try std.testing.expectEqual(case.expected_skip, try skipper.shouldSkip(problem));
+        try std.testing.expectEqual(case.expected_skip, skipper.shouldSkip(problem));
+        try std.testing.expectEqual(case.expected_skip, skipper.shouldSkip(problem));
     }
 }
 
@@ -2019,8 +2025,8 @@ test "LazyRuleSkipper rule-specific disable does not affect other rules" {
         .message = "",
     };
 
-    try std.testing.expect(try skipper.shouldSkip(problem_a));
-    try std.testing.expect(!(try skipper.shouldSkip(problem_b)));
+    try std.testing.expect(skipper.shouldSkip(problem_a));
+    try std.testing.expect(!skipper.shouldSkip(problem_b));
 }
 
 test "LazyRuleSkipper shouldSkip reuses cached index" {
@@ -2044,8 +2050,8 @@ test "LazyRuleSkipper shouldSkip reuses cached index" {
         .message = "",
     };
 
-    try std.testing.expect(try skipper.shouldSkip(problem));
-    try std.testing.expect(try skipper.shouldSkip(problem));
+    try std.testing.expect(skipper.shouldSkip(problem));
+    try std.testing.expect(skipper.shouldSkip(problem));
 }
 
 test "CommentsDocument.debugPrint handles all comment kinds" {
@@ -2065,6 +2071,7 @@ test "CommentsDocument.debugPrint handles all comment kinds" {
 
 const std = @import("std");
 const LintProblem = @import("results.zig").LintProblem;
+const oom = @import("allocations.zig").oom;
 
 test {
     std.testing.refAllDecls(@This());

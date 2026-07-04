@@ -4,7 +4,11 @@ formatter: Formatter = .{
     .formatFn = &format,
 },
 
-fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: *std.Io.Writer) Formatter.Error!void {
+fn format(
+    formatter: *const Formatter,
+    input: Formatter.FormatInput,
+    writer: *std.Io.Writer,
+) Formatter.Error!void {
     const self: *const DefaultFormatter = @alignCast(@fieldParentPtr("formatter", formatter));
     _ = self;
 
@@ -23,13 +27,13 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: *st
             input.file_store.fileSource(file_result.file_id),
         ) catch |e| return logAndReturnWriteFailure("Render", e);
 
-        const cwd_rel_path = std.fs.path.relative(
+        const cwd_rel_path = oom(std.fs.path.relative(
             file_arena.allocator(),
             input.cwd,
             null,
             input.cwd,
             file_abs_path,
-        ) catch return error.OutOfMemory;
+        ));
 
         for (file_result.problems) |problem| {
             if (@intFromEnum(problem.severity) < @intFromEnum(input.min_severity)) {
@@ -147,13 +151,13 @@ fn renderNoteTitle(
     ))
         note_abs_path
     else
-        std.fs.path.relative(
+        oom(std.fs.path.relative(
             allocator,
             input.cwd,
             null,
             input.cwd,
             note_abs_path,
-        ) catch return error.OutOfMemory;
+        ));
 
     writer.print("  {s}↳ note{s} {s} [{s}{s}:{d}:{d}{s}]\n", .{
         input.tty.ansiOrEmpty(&.{.cyan}),
@@ -227,7 +231,7 @@ fn logAndReturnWriteFailure(comptime suffix: []const u8, err: anyerror) error{Wr
 const Formatter = @import("./Formatter.zig");
 const std = @import("std");
 const zlinter = @import("../zlinter.zig");
-
+const oom = @import("../allocations.zig").oom;
 test {
     std.testing.refAllDecls(@This());
 }

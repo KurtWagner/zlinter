@@ -380,7 +380,7 @@ fn runLinterRules(
                     ),
                 },
             )) |result| {
-                try appendDedupedResult(
+                appendDedupedResult(
                     runtime.sessionArena(),
                     &results,
                     &doc,
@@ -465,26 +465,25 @@ fn appendDedupedResult(
     results: *std.ArrayList(zlinter.results.LintResult),
     doc: *zlinter.session.LintDocument,
     result: zlinter.results.LintResult,
-) error{OutOfMemory}!void {
+) void {
     var deduped_problems = std.ArrayList(zlinter.results.LintProblem).empty;
-    errdefer deduped_problems.deinit(session_arena);
 
     for (result.problems) |problem| {
         var deduped_problem = problem;
-        deduped_problem.disabled_by_comment = try doc.shouldSkipProblem(deduped_problem);
+        deduped_problem.disabled_by_comment = doc.shouldSkipProblem(deduped_problem);
 
         if (containsProblem(results.items, deduped_problem)) continue;
         if (containsProblemInSlice(deduped_problems.items, deduped_problem)) continue;
 
-        try deduped_problems.append(session_arena, deduped_problem);
+        oom(deduped_problems.append(session_arena, deduped_problem));
     }
 
     if (deduped_problems.items.len == 0) return;
 
-    try results.append(session_arena, .{
+    oom(results.append(session_arena, .{
         .file_id = result.file_id,
-        .problems = try deduped_problems.toOwnedSlice(session_arena),
-    });
+        .problems = oom(deduped_problems.toOwnedSlice(session_arena)),
+    }));
 }
 
 fn runFormatter(

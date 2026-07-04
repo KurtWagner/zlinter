@@ -46,7 +46,7 @@ pub fn absPath(self: *const LintDocument, session: *const LintSession) []const u
 
 /// Returns true if the problem should be skipped based on line level
 /// disable comments.
-pub fn shouldSkipProblem(self: *LintDocument, problem: LintProblem) error{OutOfMemory}!bool {
+pub fn shouldSkipProblem(self: *LintDocument, problem: LintProblem) bool {
     const zone = tracy.traceNamed(@src(), "LintDocument.shouldSkipProblem");
     defer zone.end();
 

@@ -23,7 +23,6 @@ pub const FormatInput = struct {
 };
 
 pub const Error = error{
-    OutOfMemory,
     WriteFailure,
 };
 
