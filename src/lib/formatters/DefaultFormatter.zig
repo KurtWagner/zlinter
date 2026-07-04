@@ -18,7 +18,6 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: *st
         defer _ = file_arena.reset(.retain_capacity);
         const file_abs_path = input.file_store.fileAbsPath(file_result.file_id);
 
-        // TODO: Use file_id instead of reading file again.
         const file_renderer = zlinter.rendering.LintFileRenderer.init(
             file_arena.allocator(),
             input.file_store.fileSource(file_result.file_id),
