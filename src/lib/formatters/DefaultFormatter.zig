@@ -13,25 +13,15 @@ fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: *st
     var total_disabled_by_comment: usize = 0;
 
     var file_arena = std.heap.ArenaAllocator.init(input.arena);
-    var file_buffer: [2048]u8 = undefined;
 
     for (input.results) |file_result| {
         defer _ = file_arena.reset(.retain_capacity);
         const file_abs_path = input.file_store.fileAbsPath(file_result.file_id);
 
-        var file = std.Io.Dir.openFileAbsolute(
-            input.io,
-            file_abs_path,
-            .{ .mode = .read_only },
-        ) catch |e| return logAndReturnWriteFailure("Open file", e);
-        defer file.close(input.io);
-
-        var file_reader = file.reader(input.io, &file_buffer);
-
         // TODO: Use file_id instead of reading file again.
         const file_renderer = zlinter.rendering.LintFileRenderer.init(
             file_arena.allocator(),
-            &file_reader.interface,
+            input.file_store.fileSource(file_result.file_id),
         ) catch |e| return logAndReturnWriteFailure("Render", e);
 
         const cwd_rel_path = std.fs.path.relative(

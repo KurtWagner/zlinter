@@ -3,29 +3,32 @@
 pub const LintFileRenderer = struct {
     const Self = @This();
 
+    /// Externally owned source
     source: []const u8,
+
+    // Owned newline byte positions per line
     line_ends: []usize,
 
-    pub fn init(allocator: std.mem.Allocator, reader: *std.Io.Reader) !Self {
-        const source = try reader.allocRemaining(allocator, .limited(max_zig_file_size_bytes));
-
-        var line_ends = try std.ArrayList(usize).initCapacity(allocator, source.len / 40);
+    pub fn init(allocator: std.mem.Allocator, source: []const u8) !Self {
+        var line_ends: std.ArrayList(usize) = .empty;
         errdefer line_ends.deinit(allocator);
 
-        if (source.len == 0) {
+        if (source.len == 0)
             return .{
                 .source = source,
                 .line_ends = try line_ends.toOwnedSlice(allocator),
             };
-        }
 
+        try line_ends.ensureTotalCapacity(
+            allocator,
+            source.len / 40,
+        );
         for (0..source.len) |i| {
             if (source[i] == '\n')
                 try line_ends.append(allocator, i);
         }
-        if (source[source.len - 1] != '\n') {
+        if (source[source.len - 1] != '\n')
             try line_ends.append(allocator, source.len - 1);
-        }
 
         return .{
             .source = source,
@@ -166,15 +169,13 @@ pub const LintFileRenderer = struct {
 
     pub fn deinit(self: Self, allocator: std.mem.Allocator) void {
         allocator.free(self.line_ends);
-        allocator.free(self.source);
     }
 };
 
 test "LintFileRenderer - empty file" {
-    var input = std.Io.Reader.fixed("");
     var renderer = try LintFileRenderer.init(
         std.testing.allocator,
-        &input,
+        "",
     );
     defer renderer.deinit(std.testing.allocator);
 
@@ -185,11 +186,10 @@ test "LintFileRenderer - empty file" {
 test "LintFileRenderer" {
     inline for (&.{ "\n", "\r\n" }) |newline| {
         const data = "123456789" ++ newline ++ "abcdefghi" ++ newline;
-        var input = std.Io.Reader.fixed(data);
 
         var renderer = try LintFileRenderer.init(
             std.testing.allocator,
-            &input,
+            data,
         );
         defer renderer.deinit(std.testing.allocator);
 
