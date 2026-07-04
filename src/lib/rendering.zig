@@ -312,7 +312,6 @@ pub const Printer = struct {
 
 const ansi = @import("ansi.zig");
 const std = @import("std");
-const max_zig_file_size_bytes = @import("session.zig").max_zig_file_size_bytes;
 
 test {
     std.testing.refAllDecls(@This());

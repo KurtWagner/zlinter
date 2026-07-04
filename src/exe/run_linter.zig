@@ -1229,7 +1229,6 @@ const rule_names = @import("rules").rule_names; // Generated in build_rules.zig
 const RulesConfig = @import("rules").RulesConfig; // Generated in build_rules.zig
 const rules = @import("rules").rules; // Generated in build_rules.zig
 const rule_configs = @import("rules").rule_configs; // Generated in build_rules.zig
-const rule_configs_types = @import("rules").rule_configs_types; // Generated in build_rules.zig
 const RuleId = @import("rules").RuleId; // Generated in build_rules.zig
 const Ast = std.zig.Ast;
 const oom = zlinter.allocations.oom;

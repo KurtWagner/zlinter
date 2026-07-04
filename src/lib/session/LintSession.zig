@@ -1783,18 +1783,6 @@ fn contextScopeForNode(
     return root_scope_id;
 }
 
-/// Resolves the coarse value kind for a declaration in one module context.
-fn resolveDeclValueKindForModule(
-    self: *LintContext,
-    module_id: ModuleStore.ModuleId,
-    decl_id: DeclStore.DeclId,
-) ?TypeStore.Type {
-    return if (self.resolveDeclValueSummaryForModule(module_id, decl_id)) |summary|
-        summary.coarseType()
-    else
-        null;
-}
-
 /// Resolves the value summary for a declaration in one module context.
 fn resolveDeclValueSummaryForModule(
     self: *LintContext,
@@ -2233,23 +2221,6 @@ fn typeReferenceNode(
     type_node: Ast.Node.Index,
 ) Ast.Node.Index {
     return ast.unwrapNode(tree, type_node, .{});
-}
-
-fn typeSummaryFromValueTypeNode(
-    tree: Ast,
-    type_node: Ast.Node.Index,
-) ?TypeStore.TypeSummary {
-    const summary = typeSummaryFromTypeNode(tree, type_node) orelse return null;
-    return switch (summary.coarseType()) {
-        .@"fn",
-        .fn_returns_type,
-        => summary,
-        .type => switch (summary.typeValueKind().?) {
-            .unknown => summary,
-            else => null,
-        },
-        else => null,
-    };
 }
 
 fn directValueTypeAnnotationSummary(
