@@ -29,8 +29,8 @@
 const std = @import("std");
 const assert = std.debug.assert;
 
-const builtin = @import("builtin");
 const build_options = @import("build_options");
+const builtin = @import("builtin");
 
 pub const enable = if (builtin.is_test) false else build_options.enable_tracy;
 pub const enable_allocation = enable and build_options.enable_tracy_allocation;

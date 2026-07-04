@@ -282,12 +282,12 @@ test "resolveFile - root import uses supplied root file id" {
 }
 
 const Ast = std.zig.Ast;
+const ast = @import("../ast.zig");
 const FileStore = @import("FileStore.zig");
 const LintRuntime = @import("LintRuntime.zig");
 const ModuleStore = @import("ModuleStore.zig");
-const ast = @import("../ast.zig");
-const testing = @import("../testing.zig");
 const std = @import("std");
+const testing = @import("../testing.zig");
 
 test {
     std.testing.refAllDecls(@This());

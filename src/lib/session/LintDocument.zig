@@ -247,11 +247,11 @@ test "LintDocument.isEnclosedInTestBlock" {
 const ast = @import("../ast.zig");
 const comments_module = @import("../comments.zig");
 const common = @import("common.zig");
-const std = @import("std");
-const testing = @import("../testing.zig");
 const DeclStore = @import("DeclStore.zig");
 const FileStore = @import("FileStore.zig");
 const LintSession = @import("LintSession.zig");
+const std = @import("std");
+const testing = @import("../testing.zig");
 const LintProblem = @import("../results.zig").LintProblem;
 const Ast = std.zig.Ast;
 const tracy = @import("tracy");

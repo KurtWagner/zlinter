@@ -79,6 +79,6 @@ pub fn deinit(self: *LintRuntime, gpa: std.mem.Allocator) void {
     gpa.destroy(self.rule_arena);
 }
 
-const std = @import("std");
 const Args = @import("../Args.zig");
+const std = @import("std");
 const oom = @import("../allocations.zig").oom;

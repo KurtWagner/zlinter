@@ -249,9 +249,9 @@ pub const LintProblemSeverity = enum(u8) {
 };
 
 const ansi = @import("ansi.zig");
-const results = @import("results.zig");
 const LintDocument = @import("session/LintDocument.zig");
 const LintSession = @import("session/LintSession.zig");
+const results = @import("results.zig");
 const std = @import("std");
 const strings = @import("strings.zig");
 

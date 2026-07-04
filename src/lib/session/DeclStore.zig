@@ -1966,13 +1966,13 @@ pub const FileDeclIterator = struct {
     }
 };
 
-const std = @import("std");
+const ast = @import("../ast.zig");
 const FileStore = @import("FileStore.zig");
+const import_utils = @import("imports.zig");
 const LintRuntime = @import("LintRuntime.zig");
 const ModuleStore = @import("ModuleStore.zig");
+const std = @import("std");
 const TypeStore = @import("TypeStore.zig");
-const ast = @import("../ast.zig");
-const import_utils = @import("imports.zig");
 const ResolveContext = import_utils.ResolveContext;
 const tracy = @import("tracy");
 const oom = @import("../allocations.zig").oom;

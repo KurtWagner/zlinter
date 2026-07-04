@@ -180,8 +180,8 @@ fn tokensToJson(tree: Ast, arena: std.mem.Allocator) !std.json.Array {
     return json_tokens;
 }
 
-const std = @import("std");
 const ast = @import("ast.zig");
+const std = @import("std");
 const Ast = std.zig.Ast;
 
 test {

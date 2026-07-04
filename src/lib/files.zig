@@ -437,10 +437,10 @@ pub fn resolveLazyPath(
     }
 }
 
+const LintRuntime = @import("session/LintRuntime.zig");
 const std = @import("std");
 const testing = @import("testing.zig");
 const zlinter = @import("./zlinter.zig");
-const LintRuntime = @import("session/LintRuntime.zig");
 
 test {
     std.testing.refAllDecls(@This());

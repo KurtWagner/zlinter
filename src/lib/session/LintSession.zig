@@ -3218,21 +3218,21 @@ test "moduleIdsForFile includes shared dependency children" {
 }
 
 const ast = @import("../ast.zig");
+const BuildConfigStore = @import("BuildConfigStore.zig");
+const BuildInfo = @import("../BuildInfo.zig");
 const builtin = @import("builtin");
 const comments = @import("../comments.zig");
+const CompileContext = @import("CompileContext.zig");
+const DeclStore = @import("DeclStore.zig");
 const files = @import("../files.zig");
+const FileStore = @import("FileStore.zig");
 const import_utils = @import("imports.zig");
+const LintDocument = @import("LintDocument.zig");
+const ModuleStore = @import("ModuleStore.zig");
 const results = @import("../results.zig");
 const std = @import("std");
 const testing = @import("../testing.zig");
 const tracy = @import("tracy");
-const BuildInfo = @import("../BuildInfo.zig");
-const BuildConfigStore = @import("BuildConfigStore.zig");
-const CompileContext = @import("CompileContext.zig");
-const DeclStore = @import("DeclStore.zig");
-const FileStore = @import("FileStore.zig");
-const LintDocument = @import("LintDocument.zig");
-const ModuleStore = @import("ModuleStore.zig");
 const TypeStore = @import("TypeStore.zig");
 const Ast = std.zig.Ast;
 const oom = @import("../allocations.zig").oom;

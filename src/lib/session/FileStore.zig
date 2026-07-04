@@ -124,7 +124,7 @@ pub fn fileAbsPath(self: *const FileStore, id: FileId) []const u8 {
     return self.files.items(.abs_path)[id.toIndex()];
 }
 
-const std = @import("std");
 const LintRuntime = @import("LintRuntime.zig");
+const std = @import("std");
 const tracy = @import("tracy");
 const oom = @import("../allocations.zig").oom;

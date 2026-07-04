@@ -799,7 +799,7 @@ test "TypeStore.store deduplicates equivalent summaries" {
 
 const Ast = std.zig.Ast;
 const ast = @import("../ast.zig");
-const std = @import("std");
 const LintRuntime = @import("LintRuntime.zig");
+const std = @import("std");
 const tracy = @import("tracy");
 const oom = @import("../allocations.zig").oom;
