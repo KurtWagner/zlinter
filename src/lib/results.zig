@@ -4,6 +4,7 @@
 pub const LintResult = struct {
     const Self = @This();
 
+    // TODO: Use FileStore.FileId here instead of absolute path
     abs_path: []const u8,
     problems: []LintProblem,
 

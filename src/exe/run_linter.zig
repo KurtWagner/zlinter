@@ -177,9 +177,34 @@ fn run(
 
     printer.println(.verbose, "Resolving {d} files took: {d}ms", .{ lint_files.len, timer.lapMilliseconds() });
 
+    var session: zlinter.session.LintSession = .{
+        .runtime = runtime,
+        .file_store = .init(runtime),
+        .module_store = .init(runtime),
+        .build_config_store = .init(runtime),
+        .type_store = .init(runtime),
+        .decl_store = .init(runtime),
+    };
+    try session.init(args.build_info);
+
+    // Resolve the files to be linted once at the start and pass around file
+    // ids to linting, fixing and rendering phases instead of absolute path.
+    var lint_file_ids = std.ArrayList(zlinter.session.FileStore.FileId).initCapacity(
+        runtime.sessionArena(),
+        lint_files.len,
+    ) catch @panic("OOM");
+    for (lint_files) |file| {
+        if (file.excluded) continue;
+
+        if (session.file_store.resolve(file.abs_path)) |file_id|
+            lint_file_ids.appendAssumeCapacity(file_id)
+        else |e|
+            printer.println(.err, "Unable to open file: {s} ({s})", .{ runtime.cwd, @errorName(e) });
+    }
+
     try runLinterRules(
-        runtime,
-        lint_files,
+        &session,
+        lint_file_ids.items,
         printer,
         &timer,
         &file_lint_problems,
@@ -197,14 +222,15 @@ fn run(
 
     return if (args.fix)
         try runFixes(
-            runtime,
+            &session,
+            // TODO: Pass in lint_file_ids.items instead
             lint_files,
             file_lint_problems,
             printer,
         )
     else
         try runFormatter(
-            runtime,
+            &session,
             file_lint_problems,
             printer.stdout.?,
             printer.tty,
@@ -219,13 +245,15 @@ fn run(
 /// Resolves lint files, prepares one session, and runs each enabled rule once
 /// per file.
 fn runLinterRules(
-    runtime: *const LintRuntime,
-    lint_files: []zlinter.files.LintFile,
+    session: *zlinter.session.LintSession,
+    lint_file_ids: []zlinter.session.FileStore.FileId,
     printer: *zlinter.rendering.Printer,
     timer: *Timer,
     file_lint_problems: *std.array_hash_map.Auto(u32, []zlinter.results.LintResult),
     args: zlinter.Args,
 ) !void {
+    const runtime = session.runtime;
+
     var maybe_slowest_files = if (runtime.verbose) SlowestItemQueue.init(runtime.sessionArena()) else null;
     defer if (maybe_slowest_files) |*slowest_files| {
         defer slowest_files.deinit();
@@ -249,16 +277,6 @@ fn runLinterRules(
         item_timers.unloadAndPrint("Rules", printer);
     };
 
-    var session: zlinter.session.LintSession = .{
-        .runtime = runtime,
-        .file_store = .init(runtime),
-        .module_store = .init(runtime),
-        .build_config_store = .init(runtime),
-        .type_store = .init(runtime),
-        .decl_store = .init(runtime),
-    };
-    try session.init(args.build_info);
-
     var enabled_rules = enabledRules(args.rules);
 
     var lint_config_store: LintConfigStore = .init(
@@ -266,26 +284,11 @@ fn runLinterRules(
         rule_configs,
     );
 
-    files: for (lint_files, 0..) |lint_file, i| {
+    files: for (lint_file_ids, 0..) |file_id, i| {
         defer runtime.resetFileArena();
 
-        const cwd_rel_path = try allocCwdRelPath(
-            runtime.fileArena(),
-            runtime.cwd,
-            lint_file.abs_path,
-        );
-
-        if (lint_file.excluded) {
-            printer.println(.verbose, "[{d}/{d}] Excluding: {s}", .{ i + 1, lint_files.len, cwd_rel_path });
-            continue :files;
-        }
-        printer.println(.verbose, "[{d}/{d}] Linting: {s}", .{ i + 1, lint_files.len, cwd_rel_path });
-
-        const file_id = session.resolveFile(lint_file.abs_path) catch |e| {
-            printer.println(.err, "Unable to open file: {s} ({s})", .{ cwd_rel_path, @errorName(e) });
-            continue :files;
-        };
         const file_abs_path = session.file_store.fileAbsPath(file_id);
+        printer.println(.verbose, "[{d}/{d}] Linting: {s}", .{ i + 1, lint_file_ids.len, file_abs_path });
 
         try lint_config_store.index(
             runtime.io,
@@ -300,7 +303,7 @@ fn runLinterRules(
             printer.println(.verbose, "  - Total elapsed {d}ms", .{ns / std.time.ns_per_ms});
             if (maybe_slowest_files) |*slowest_files| {
                 slowest_files.add(.{
-                    .name = cwd_rel_path,
+                    .name = file_abs_path,
                     .elapsed_ns = ns,
                 });
             }
@@ -308,12 +311,12 @@ fn runLinterRules(
 
         var doc: zlinter.session.LintDocument = undefined;
         session.initDocument(file_id, runtime.fileArena(), &doc) catch |e| {
-            printer.println(.err, "Unable to open file: {s} ({s})", .{ cwd_rel_path, @errorName(e) });
+            printer.println(.err, "Unable to open file: {s} ({s})", .{ file_abs_path, @errorName(e) });
             continue :files;
         };
 
         printer.println(.verbose, "  - Load document: {d}ms", .{timer.lapMilliseconds()});
-        const tree = doc.tree(&session);
+        const tree = doc.tree(session);
         printer.println(.verbose, "    - {d} bytes", .{tree.source.len});
         printer.println(.verbose, "    - {d} nodes", .{tree.nodes.len});
         printer.println(.verbose, "    - {d} tokens", .{tree.tokens.len});
@@ -366,10 +369,10 @@ fn runLinterRules(
             const rule_zone = tracy.traceNamed(@src(), "run_linter.rule");
             defer rule_zone.end();
             rule_zone.addText(rule.rule_id);
-            rule_zone.addText(cwd_rel_path);
+            rule_zone.addText(file_abs_path);
             if (try rule.run(
                 rule,
-                &session,
+                session,
                 &doc,
                 .{
                     .config = lint_config_store.lookup(
@@ -486,7 +489,7 @@ fn appendDedupedResult(
 }
 
 fn runFormatter(
-    runtime: *const LintRuntime,
+    session: *zlinter.session.LintSession,
     file_lint_problems: std.array_hash_map.Auto(u32, []zlinter.results.LintResult),
     output_writer: *std.Io.Writer,
     output_tty: zlinter.ansi.Tty,
@@ -494,6 +497,7 @@ fn runFormatter(
     quiet: bool,
     max_warnings: ?u32,
 ) !RunResult {
+    const runtime = session.runtime;
     const session_arena = runtime.sessionArena();
 
     var run_result: RunResult = .success;
@@ -548,11 +552,13 @@ fn cmpFix(context: void, a: zlinter.results.LintProblemFix, b: zlinter.results.L
 }
 
 fn runFixes(
-    runtime: *const LintRuntime,
+    session: *zlinter.session.LintSession,
     lint_files: []zlinter.files.LintFile,
     file_lint_problems: std.array_hash_map.Auto(u32, []zlinter.results.LintResult),
     printer: *zlinter.rendering.Printer,
 ) !RunResult {
+    const runtime = session.runtime;
+
     var total_fixes: usize = 0;
     var total_disabled_by_comment: usize = 0;
 
