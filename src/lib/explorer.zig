@@ -121,7 +121,7 @@ fn iterateChildren(
     tree: Ast,
     node: Ast.Node.Index,
     context: anytype,
-    comptime Error: type,
+    Error: type,
     comptime callback: fn (@TypeOf(context), Ast, Ast.Node.Index) Error!void,
 ) Error!void {
     var it = ast.ChildIterator.init(tree, node);
