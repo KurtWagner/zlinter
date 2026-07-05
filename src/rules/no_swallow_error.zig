@@ -1,6 +1,19 @@
 //! Disallow silently swallowing errors without proper handling or logging.
 //!
 //! For example, `catch {}` and `catch unreachable`
+//!
+//! By default the rule will ignore empty blocks that contain a comment. For
+//! example,
+//!
+//! ```zig
+//! doSomething() catch {
+//!    // Ignored
+//! };
+//! ```
+//!
+//! This is because typically in this siutation it's safe to assume the author
+//! has put some thought into it being swallowed. This can be disabled by
+//! setting `.exclude_comments = false`
 
 /// Config for no_swallow_error rule.
 pub const Config = struct {
@@ -18,6 +31,11 @@ pub const Config = struct {
 
     /// Skip if found within `test { ... }` block.
     exclude_tests: bool = true,
+
+    /// Whether or not a comment within a block is counted to whether it is empty
+    /// or not. A comment usually indicates the author has put some thought
+    /// into swallowing an error. e.g., `// Ignored.`.
+    exclude_comments: bool = true,
 };
 
 /// Builds and returns the no_swallow_error rule.
@@ -87,6 +105,11 @@ fn run(
                                     .severity = config.detect_empty_catch,
                                     .message = "Avoid swallowing error with empty catch",
                                 },
+                            .empty_with_comment => if (config.detect_empty_catch != .off and !config.exclude_comments)
+                                break :problem .{
+                                    .severity = config.detect_empty_catch,
+                                    .message = "Avoid swallowing error with empty catch",
+                                },
                             .none => {},
                         },
                         else => {},
@@ -113,6 +136,11 @@ fn run(
                                         .message = "Avoid swallowing error with else unreachable",
                                     },
                                 .empty => if (config.detect_empty_else != .off)
+                                    break :problem .{
+                                        .severity = config.detect_empty_else,
+                                        .message = "Avoid swallowing error with empty else",
+                                    },
+                                .empty_with_comment => if (config.detect_empty_else != .off and !config.exclude_comments)
                                     break :problem .{
                                         .severity = config.detect_empty_else,
                                         .message = "Avoid swallowing error with empty else",
@@ -152,7 +180,12 @@ fn run(
         null;
 }
 
-const BlockClassification = enum { none, empty, @"unreachable" };
+const BlockClassification = enum {
+    none,
+    empty,
+    empty_with_comment,
+    @"unreachable",
+};
 
 fn classifyBlock(tree: Ast, node: Ast.Node.Index) BlockClassification {
     return switch (tree.nodeTag(node)) {
@@ -167,9 +200,15 @@ fn classifyBlockTwo(tree: Ast, node: Ast.Node.Index) BlockClassification {
     const lhs = data.opt_node_and_opt_node.@"0".unwrap();
     const rhs = data.opt_node_and_opt_node.@"1".unwrap();
 
-    if (lhs == null and rhs == null) return .empty;
+    if (lhs == null and rhs == null) {
+        return if (emptyBlockContainsLineComment(tree, node))
+            .empty_with_comment
+        else
+            .empty;
+    }
     if (lhs) |lhs_node| {
-        if (rhs == null and tree.nodeTag(lhs_node) == .unreachable_literal) return .@"unreachable";
+        if (rhs == null and tree.nodeTag(lhs_node) == .unreachable_literal)
+            return .@"unreachable";
     }
     return .none;
 }
@@ -178,8 +217,15 @@ fn classifyBlockSpan(tree: Ast, node: Ast.Node.Index) BlockClassification {
     var buffer: [2]Ast.Node.Index = undefined;
     const statements = tree.blockStatements(&buffer, node) orelse return .none;
 
-    if (statements.len == 0) return .empty;
-    if (statements.len == 1 and tree.nodeTag(statements[0]) == .unreachable_literal) return .@"unreachable";
+    if (statements.len == 0)
+        return if (emptyBlockContainsLineComment(tree, node))
+            .empty_with_comment
+        else
+            .empty;
+
+    if (statements.len == 1 and tree.nodeTag(statements[0]) == .unreachable_literal)
+        return .@"unreachable";
+
     return .none;
 }
 
@@ -189,6 +235,14 @@ fn unwrapGroupedExpr(tree: Ast, node: Ast.Node.Index) Ast.Node.Index {
         current = tree.nodeData(current).node_and_token[0];
     }
     return current;
+}
+
+fn emptyBlockContainsLineComment(tree: Ast, node: Ast.Node.Index) bool {
+    // This targets just empty blocks and cannot be used generally as it
+    // will have false positive. e.g., `const url = "http://ziglang.org"`. As
+    // it's just targetted for our empty rule case it should be fine...
+    const source = tree.getNodeSource(node);
+    return std.mem.indexOf(u8, source, "//") != null;
 }
 
 test {
@@ -456,6 +510,100 @@ test "no_swallow_error reports test blocks when exclude_tests is false" {
                 .severity = .warning,
                 .slice = "method() catch {}",
                 .message = "Avoid swallowing error with empty catch",
+            },
+        },
+    );
+}
+
+test "no_swallow_error exclude comments in catch" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\fn main() void {
+        \\    method() catch {
+        \\    // ignore
+        \\   };
+        \\}
+    ,
+        .{},
+        Config{
+            .detect_empty_catch = .warning,
+            .exclude_comments = true,
+        },
+        &.{},
+    );
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\fn main() void {
+        \\    method() catch {
+        \\    // ignore
+        \\   };
+        \\}
+    ,
+        .{},
+        Config{
+            .detect_empty_catch = .warning,
+            .exclude_comments = false,
+        },
+        &.{
+            .{
+                .rule_id = "no_swallow_error",
+                .severity = .warning,
+                .slice =
+                \\method() catch {
+                \\    // ignore
+                \\   }
+                ,
+                .message = "Avoid swallowing error with empty catch",
+            },
+        },
+    );
+}
+
+test "no_swallow_error exclude comments in else" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\fn main() void {
+        \\    if (method()) {
+        \\      call();
+        \\    } else |_| {
+        \\    // ignore
+        \\   }
+        \\}
+    ,
+        .{},
+        Config{
+            .detect_empty_else = .@"error",
+            .exclude_comments = true,
+        },
+        &.{},
+    );
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\fn main() void {
+        \\    if (method()) {
+        \\      call();
+        \\    } else |_| {
+        \\    // ignore
+        \\   }
+        \\}
+    ,
+        .{},
+        Config{
+            .detect_empty_else = .@"error",
+            .exclude_comments = false,
+        },
+        &.{
+            .{
+                .rule_id = "no_swallow_error",
+                .severity = .@"error",
+                .slice =
+                \\if (method()) {
+                \\      call();
+                \\    } else |_| {
+                \\    // ignore
+                \\   }
+                ,
+                .message = "Avoid swallowing error with empty else",
             },
         },
     );

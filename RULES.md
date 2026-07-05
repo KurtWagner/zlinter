@@ -589,7 +589,6 @@ Disallows the use of global vars
 All use of global vars is required to be explicitly enabled with a comment
 
 It is also recommended to encapsulate global state into a struct and giving it a instance var:
-
 ```
 const SomeState = struct {
    foo: u32,
@@ -817,6 +816,7 @@ pub fn divide(x: i32, y: i32) i32 {
 }
 ```
 
+
 **Config options:**
 
 * `severity`
@@ -861,6 +861,7 @@ fn add(comptime a: comptime_int, comptime b: comptime_int) comptime_int { ... }
 `no_redundant_comptime` supports auto fixes with the `--fix` flag.
 Fixes are not applied when the surrounding layout is comment-adjacent or otherwise ambiguous.
 
+
 **Config options:**
 
 * `severity`
@@ -874,6 +875,19 @@ Fixes are not applied when the surrounding layout is comment-adjacent or otherwi
 Disallow silently swallowing errors without proper handling or logging.
 
 For example, `catch {}` and `catch unreachable`
+
+By default the rule will ignore empty blocks that contain a comment. For
+example,
+
+```zig
+doSomething() catch {
+   // Ignored
+};
+```
+
+This is because typically in this siutation it's safe to assume the author
+ has put some thought into it being swallowed. This can be disabled by
+setting `.exclude_comments = false`
 
 **Config options:**
 
@@ -904,6 +918,12 @@ For example, `catch {}` and `catch unreachable`
 * `exclude_tests`
 
   * Skip if found within `test { ... }` block.
+
+  * **Default:** `true`
+
+* `exclude_comments`
+
+  * Whether or not a comment within a block is counted to whether it is empty or not. A comment usually indicates the author has put some thought into swallowing an error. e.g., `// Ignored.`.
 
   * **Default:** `true`
 
@@ -1050,6 +1070,12 @@ By requiring braces, you're consistent and avoid ambiguity, which can code
 easier to maintain, and prevent unintended logic changes when adding new
 lines.
 
+In Zig, braces are required when a branch body contains more than one
+statement, or when they disambiguate which `else` belongs to which `if`.
+An `else` binds to the nearest preceding `if` that does not already have an
+`else`, unless braces force a different grouping. Otherwise, a single
+expression branch may omit braces.
+
 If an `if` statement is used as part of a return or assignment it is excluded
 from this rule (braces not required).
 
@@ -1184,6 +1210,7 @@ pub fn message(age: u8, allocator: std.mem.Allocator) error{ OutOfMemory, Invali
 }
 ```
 
+
 **Config options:**
 
 * `severity`
@@ -1282,3 +1309,4 @@ Enforces an order of values in `switch` statements.
   * The severity for when `else` is not last in a `switch` (off, warning, error).
 
   * **Default:** `.warning`
+
