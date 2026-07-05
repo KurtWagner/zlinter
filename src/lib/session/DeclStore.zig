@@ -145,24 +145,28 @@ const ImportMemberKey = struct {
             hasher: *std.hash.Wyhash,
             maybe_module_id: ?ModuleStore.ModuleId,
         ) void {
+            // zlinter-disable no_literal_args
             if (maybe_module_id) |module_id| {
                 std.hash.autoHash(hasher, true);
                 std.hash.autoHash(hasher, module_id);
             } else {
                 std.hash.autoHash(hasher, false);
             }
+            // zlinter-enable no_literal_args
         }
 
         fn hashOptionalFileId(
             hasher: *std.hash.Wyhash,
             maybe_file_id: ?FileStore.FileId,
         ) void {
+            // zlinter-disable no_literal_args
             if (maybe_file_id) |file_id| {
                 std.hash.autoHash(hasher, true);
                 std.hash.autoHash(hasher, file_id);
             } else {
                 std.hash.autoHash(hasher, false);
             }
+            // zlinter-enable no_literal_args
         }
     };
 };
