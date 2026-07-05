@@ -593,7 +593,7 @@ fn summarizeValueExpr(
         .number_literal => {
             const value = tree.getNodeSource(node);
             const kind: Primitive.NumberKind =
-                if (std.mem.indexOfAny(u8, value, ".eE") == null)
+                if (std.mem.findAny(u8, value, ".eE") == null)
                     .comptime_int
                 else
                     .comptime_float;
