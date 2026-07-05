@@ -15,5 +15,24 @@
             .private_severity = .off,
             .file_severity = .warning,
         },
+        .field_ordering = .{
+            .union_field_order = .off,
+            .struct_field_order = .off,
+            .enum_field_order = .off,
+        },
+        .max_positional_args = .{
+            .severity = .@"error",
+            .max = 8,
+        },
+        // As a short lived CLI we don't really care too much about cleaning up
+        // on error as error is usually fatal....
+        .require_errdefer_dealloc = .{
+            .severity = .off,
+        },
+        // As much as I prefer exhaustive switches its just way too noisy when
+        // dealing with an AST and a large amount of node tags....
+        .require_exhaustive_enum_switch = .{
+            .severity = .off,
+        },
     },
 }
