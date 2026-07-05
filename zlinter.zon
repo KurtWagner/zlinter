@@ -10,5 +10,10 @@
             .defer_statement = .{ .warning = .multi_statement_only },
             .errdefer_statement = .{ .warning = .multi_statement_only },
         },
+        .require_doc_comment = .{
+            .public_severity = .off,
+            .private_severity = .off,
+            .file_severity = .warning,
+        },
     },
 }
