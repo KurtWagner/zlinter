@@ -60,5 +60,8 @@
                 "init",
             },
         },
+        .no_inferred_error_unions = .{
+            .severity = .off,
+        },
     },
 }
