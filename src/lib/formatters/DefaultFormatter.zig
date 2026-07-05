@@ -35,17 +35,17 @@ fn format(
             file_abs_path,
         ));
 
-        for (file_result.problems) |problem| {
+        problems: for (file_result.problems) |problem| {
             if (@intFromEnum(problem.severity) < @intFromEnum(input.min_severity))
-                continue;
+                continue :problems;
 
             if (problem.disabled_by_comment) {
                 total_disabled_by_comment += 1;
-                continue;
+                continue :problems;
             }
 
             switch (problem.severity) {
-                .off => continue,
+                .off => continue :problems,
                 .@"error" => error_count += 1,
                 .warning => warning_count += 1,
             }

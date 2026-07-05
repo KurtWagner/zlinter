@@ -128,15 +128,16 @@ fn run(
 
             // Anonymous and nested fn prototypes are intentionally checked so
             // callback/function-type parameter names follow the same rules.
-            for (fn_proto.ast.params) |param| {
+            params: for (fn_proto.ast.params) |param| {
                 const colon_token = tree.firstToken(param) - 1;
-                if (tree.tokens.items(.tag)[colon_token] != .colon) continue;
+                if (tree.tokens.items(.tag)[colon_token] != .colon) continue :params;
 
                 const identifer_token = colon_token - 1;
-                if (tree.tokens.items(.tag)[identifer_token] != .identifier) continue;
+                if (tree.tokens.items(.tag)[identifer_token] != .identifier)
+                    continue :params;
                 const identifier = tree.tokenSlice(identifer_token);
 
-                if (identifier.len == 1 and identifier[0] == '_') continue;
+                if (identifier.len == 1 and identifier[0] == '_') continue :params;
 
                 const type_classifications = try classifyParamTypeCandidates(
                     session,
@@ -165,7 +166,7 @@ fn run(
                     }
                 }
 
-                for (type_classifications) |classification| {
+                classifications: for (type_classifications) |classification| {
                     const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const desc: []const u8 = style: {
                         break :style switch (classification.summary) {
                             .@"fn" => .{ config.function_arg_that_is_fn, "Function argument of function" },
@@ -179,8 +180,8 @@ fn run(
                         };
                     };
 
-                    const style = style_with_severity.style() orelse continue;
-                    if (style.check(identifier)) continue;
+                    const style = style_with_severity.style() orelse continue :classifications;
+                    if (style.check(identifier)) continue :classifications;
 
                     try lint_problems.append(session_arena, .{
                         .rule_id = rule.rule_id,

@@ -179,14 +179,15 @@ fn run(
         };
 
         // Check name style:
-        for (resolved_summaries.items) |resolved_summary| {
+        summaries: for (resolved_summaries.items) |resolved_summary| {
             const style_diagnostic = styleDiagnostic(
                 resolved_summary,
                 tree.tokens.items(.tag)[var_decl.ast.mut_token],
                 config,
             );
-            const style = style_diagnostic.style_with_severity.style() orelse continue;
-            if (style.check(name)) continue;
+            const style = style_diagnostic.style_with_severity.style() orelse
+                continue :summaries;
+            if (style.check(name)) continue :summaries;
 
             try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,

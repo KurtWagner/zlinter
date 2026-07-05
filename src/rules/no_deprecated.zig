@@ -135,13 +135,14 @@ fn handleStructInit(
             tree.tokenSlice(field_name_token),
         );
 
-        for (field_candidates) |candidate| {
+        field_candidates: for (field_candidates) |candidate| {
             const doc_comment = try session.allocDeclDocComments(
                 rule_arena,
                 candidate.decl_id,
             ) orelse
-                continue;
-            const deprecated_message = getDeprecationFromDoc(doc_comment) orelse continue;
+                continue :field_candidates;
+            const deprecated_message = getDeprecationFromDoc(doc_comment) orelse
+                continue :field_candidates;
             const notes = try allocDeprecatedDeclNotes(
                 session_arena,
                 session,
@@ -462,7 +463,7 @@ fn getDeprecationFromDoc(doc: []const u8) ?[]const u8 {
             &std.ascii.whitespace,
         );
 
-        for ([_][]const u8{
+        prefixes: for ([_][]const u8{
             "deprecated:",
             "deprecated;",
             "deprecated,",
@@ -470,8 +471,9 @@ fn getDeprecationFromDoc(doc: []const u8) ?[]const u8 {
             "deprecated ",
             "deprecated-",
         }) |line_prefix| {
-            if (doc.len < line_prefix.len) continue;
-            if (!std.ascii.startsWithIgnoreCase(trimmed, line_prefix)) continue;
+            if (doc.len < line_prefix.len) continue :prefixes;
+            if (!std.ascii.startsWithIgnoreCase(trimmed, line_prefix))
+                continue :prefixes;
 
             return std.mem.trim(
                 u8,

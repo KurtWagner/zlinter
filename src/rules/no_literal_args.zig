@@ -177,8 +177,9 @@ fn run(
             }
         }
 
-        for (call.ast.params) |param_node| {
-            const kind = literalKindForArg(tree, param_node) orelse continue;
+        params: for (call.ast.params) |param_node| {
+            const kind = literalKindForArg(tree, param_node) orelse
+                continue :params;
 
             switch (kind) {
                 .bool => if (config.detect_bool_literal != .off)

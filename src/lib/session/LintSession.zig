@@ -522,7 +522,7 @@ fn resolveBuildModule(
             @intCast(imports.len),
         ));
 
-        for (imports.items(.name), imports.items(.module)) |
+        imports: for (imports.items(.name), imports.items(.module)) |
             build_import_name_id,
             build_import_module_index,
         | {
@@ -533,7 +533,7 @@ fn resolveBuildModule(
                 const resolved = (try self.resolveBuildModuleShallow(
                     config_id,
                     build_import_module_index,
-                )) orelse continue;
+                )) orelse continue :imports;
 
                 oom(module_id_by_build_module_index.put(
                     self.runtime.sessionArena(),
@@ -809,7 +809,7 @@ fn indexModuleFiles(
 
         const tree = self.file_store.fileTree(item.file_id);
         var node_index: u32 = @intFromEnum(Ast.Node.Index.root);
-        while (node_index < tree.nodes.len) : (node_index += 1) {
+        nodes: while (node_index < tree.nodes.len) : (node_index += 1) {
             const node: Ast.Node.Index = @enumFromInt(node_index);
 
             var import_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
@@ -817,7 +817,7 @@ fn indexModuleFiles(
                 tree,
                 node,
                 &import_path_buffer,
-            ) orelse continue;
+            ) orelse continue :nodes;
 
             const resolved: ?ReachQueueItem = switch (import_utils.Kind.init(import_path)) {
                 .relative => relative: {
@@ -860,7 +860,7 @@ fn indexModuleFiles(
                 => null,
             };
 
-            const next = resolved orelse continue;
+            const next = resolved orelse continue :nodes;
             oom(queue.append(gpa, next));
         }
     }

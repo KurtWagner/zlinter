@@ -92,12 +92,15 @@ fn run(
         } orelse continue;
 
         var param_it = fn_proto.iterate(&tree);
-        while (param_it.next()) |param| {
-            const comptime_token = param.comptime_noalias orelse continue;
-            if (tree.tokenTag(comptime_token) != .keyword_comptime) continue;
+        params: while (param_it.next()) |param| {
+            const comptime_token = param.comptime_noalias orelse
+                continue :params;
+            if (tree.tokenTag(comptime_token) != .keyword_comptime)
+                continue :params;
 
-            const type_node = param.type_expr orelse continue;
-            if (!isRedundantComptimeType(tree, type_node)) continue;
+            const type_node = param.type_expr orelse continue :params;
+            if (!isRedundantComptimeType(tree, type_node))
+                continue :params;
 
             const unwrapped_type_node = unwrapParens(tree, type_node);
             const type_slice = tree.tokenSlice(tree.firstToken(unwrapped_type_node));

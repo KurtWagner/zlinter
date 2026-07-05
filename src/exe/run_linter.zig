@@ -507,8 +507,8 @@ fn runFormatter(
     for (file_lint_problems.values()) |results| {
         results_count += results.len;
         for (results) |result| {
-            for (result.problems) |problem| {
-                if (problem.disabled_by_comment) continue;
+            problems: for (result.problems) |problem| {
+                if (problem.disabled_by_comment) continue :problems;
                 switch (problem.severity) {
                     .@"error" => run_result = .lint_error,
                     .warning => warning_count += 1,
@@ -571,10 +571,10 @@ fn runFixes(
 
         const results = entry.value_ptr.*;
         for (results) |result| {
-            for (result.problems) |err| {
+            problems: for (result.problems) |err| {
                 if (err.disabled_by_comment) {
                     total_disabled_by_comment += 1;
-                    continue;
+                    continue :problems;
                 }
 
                 if (err.fix) |fix| {
@@ -608,12 +608,12 @@ fn runFixes(
         var file_fixes: usize = 0;
         var content_index: usize = 0;
         var previous_fix: ?zlinter.results.LintProblemFix = null;
-        for (lint_fixes.items) |fix| {
+        fixes: for (lint_fixes.items) |fix| {
             if (previous_fix) |p| {
                 if (fix.start <= p.end) {
                     // Skip this fix as it collides with previous fixes range
                     // and may cause an invalid result.
-                    continue;
+                    continue :fixes;
                 }
             }
             previous_fix = fix;

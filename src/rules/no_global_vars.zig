@@ -50,8 +50,8 @@ fn run(
         var buf: [2]Ast.Node.Index = undefined;
         const parent: Ast.Node.Index = @enumFromInt(index);
         const container = tree.fullContainerDecl(&buf, parent) orelse continue;
-        for (container.ast.members) |node| {
-            if (!isContainerMemberGlobalVar(tree, node)) continue;
+        members: for (container.ast.members) |node| {
+            if (!isContainerMemberGlobalVar(tree, node)) continue :members;
             try lint_problems.append(session_arena, .{
                 .start = .startOfNode(tree, node),
                 .end = .endOfNode(tree, node),

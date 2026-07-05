@@ -114,9 +114,11 @@ fn run(
         const decl_abs_path = session.file_store.fileAbsPath(decl_file_id);
 
         var is_problem: bool = false;
-        for (config.detect_allocators) |allocator_kind| {
-            if (!pathEndsWith(decl_abs_path, allocator_kind.file_ends_with)) continue;
-            if (!std.mem.eql(u8, decl_name, allocator_kind.decl_name)) continue;
+        allocators: for (config.detect_allocators) |allocator_kind| {
+            if (!pathEndsWith(decl_abs_path, allocator_kind.file_ends_with))
+                continue :allocators;
+            if (!std.mem.eql(u8, decl_name, allocator_kind.decl_name))
+                continue :allocators;
 
             is_problem = true;
             break;

@@ -135,8 +135,9 @@ fn writeFileRuleConfig(content: []const u8, gpa: std.mem.Allocator, writer: anyt
                 var_decl.ast.init_node.unwrap().?,
             ).?;
 
-            for (struct_init.ast.members) |field| {
-                const container_field = tree.fullContainerField(field) orelse continue;
+            fields: for (struct_init.ast.members) |field| {
+                const container_field = tree.fullContainerField(field) orelse
+                    continue :fields;
 
                 try writer.writeAll("* `");
                 try writer.writeAll(tree.tokenSlice(container_field.ast.main_token));
