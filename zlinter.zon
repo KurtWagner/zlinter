@@ -63,5 +63,9 @@
         .no_inferred_error_unions = .{
             .severity = .off,
         },
+        .declaration_naming = .{
+            .decl_name_min_len = .off,
+            .decl_name_max_len = .off,
+        },
     },
 }
