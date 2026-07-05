@@ -35,10 +35,10 @@
             .severity = .off,
         },
         .no_global_vars = .{
-            .severity = .warning,
+            .severity = .@"error",
         },
         .require_labeled_continue = .{
-            .severity = .warning,
+            .severity = .@"error",
         },
         .no_literal_args = .{
             .exclude_fn_names = .{
@@ -66,6 +66,20 @@
         .declaration_naming = .{
             .decl_name_min_len = .off,
             .decl_name_max_len = .off,
+        },
+        .field_naming = .{
+            .enum_field_exclude_len = .{
+                "fn",
+                "if",
+            },
+            .union_field_exclude_len = .{
+                "fn",
+                "if",
+            },
+            .struct_field_max_len = .{ .@"error" = .{ .len = 50 } },
+            .enum_field_max_len = .{ .@"error" = .{ .len = 50 } },
+            .union_field_max_len = .{ .@"error" = .{ .len = 50 } },
+            .error_field_max_len = .{ .@"error" = .{ .len = 50 } },
         },
     },
 }
