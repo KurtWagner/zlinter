@@ -419,8 +419,8 @@ pub const LintProblemExpectation = struct {
         writer.print("  .rule_id = \"{s}\",\n", .{self.rule_id});
         writer.print("  .severity = .@\"{s}\",\n", .{@tagName(self.severity)});
 
-        const has_quote = std.mem.indexOfScalar(u8, self.slice, '"') != null;
-        const has_newline = std.mem.indexOfScalar(u8, self.slice, '\n') != null;
+        const has_quote = std.mem.findScalar(u8, self.slice, '"') != null;
+        const has_newline = std.mem.findScalar(u8, self.slice, '\n') != null;
 
         writer.print("  .slice ={s}", .{if (has_newline) "\n" else " "});
         if (has_newline or has_quote) {

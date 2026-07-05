@@ -42,7 +42,7 @@ pub fn build(b: *std.Build) !void {
         const parent_dir = std.Io.Dir.path.dirname(item.path).?;
 
         // Format: <rule_name>/<test_name>/<test_name>.input.zig
-        const rule_name = item.path[0 .. std.mem.indexOfScalar(u8, item.path, std.Io.Dir.path.sep) orelse {
+        const rule_name = item.path[0 .. std.mem.findScalar(u8, item.path, std.Io.Dir.path.sep) orelse {
             std.log.err("Test case file skipped as its invalid: {s}", .{item.path});
             continue;
         }];

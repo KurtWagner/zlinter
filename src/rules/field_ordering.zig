@@ -297,7 +297,7 @@ fn fieldSegmentForFix(
         .end_exclusive = end,
         .had_trailing_comma = had_trailing_comma,
         .trailing_comma_start = trailing_comma_start,
-        .is_multiline = std.mem.indexOfScalar(
+        .is_multiline = std.mem.findScalar(
             u8,
             source[start..end],
             '\n',

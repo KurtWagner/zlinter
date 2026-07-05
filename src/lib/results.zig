@@ -363,8 +363,8 @@ pub const LintProblemFix = struct {
         writer.print("{s}  .start = {d},\n", .{ indent_str, self.start });
         writer.print("{s}  .end = {d},\n", .{ indent_str, self.end });
 
-        const has_quote = std.mem.indexOfScalar(u8, self.text, '"') != null;
-        const has_newline = std.mem.indexOfScalar(u8, self.text, '\n') != null;
+        const has_quote = std.mem.findScalar(u8, self.text, '"') != null;
+        const has_newline = std.mem.findScalar(u8, self.text, '\n') != null;
 
         writer.print("{s}  .text ={s}", .{ indent_str, if (has_newline) "\n" else "" });
         if (has_newline or has_quote) {
