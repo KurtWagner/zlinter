@@ -414,10 +414,17 @@ pub fn summarizeRoot() TypeSummary {
     return .{ .type = .{ .kind = .namespace } };
 }
 
+const FnSummaryMode = enum {
+    /// Return the function as a direct summary, e.g. `.@"fn"` or `.fn_returns_type`.
+    summary,
+    /// Return the function wrapped as a type value, e.g. `.type = .{ .kind = .@"fn" }`.
+    type_value,
+};
+
 pub fn summarizeFnProto(
     tree: Ast,
     fn_proto: Ast.full.FnProto,
-    comptime as_type_value: bool,
+    comptime mode: FnSummaryMode,
 ) TypeSummary {
     const zone = tracy.traceNamed(@src(), "TypeStore.summarizeFnProto");
     defer zone.end();
@@ -427,7 +434,7 @@ pub fn summarizeFnProto(
         break :returns_type ast.isIdentiferKind(tree, unwrapped_return, .type);
     } else false;
 
-    return if (as_type_value)
+    return if (mode == .type_value)
         .{ .type = .{ .kind = if (returns_type) .fn_returns_type else .@"fn" } }
     else if (returns_type) .fn_returns_type else .@"fn";
 }
@@ -517,10 +524,10 @@ fn summarizeTypeExpr(
 
     var fn_proto_buffer: [1]Ast.Node.Index = undefined;
     if (tree.fullFnProto(&fn_proto_buffer, node)) |fn_proto| {
-        return summarizeFnProto(tree, fn_proto, false);
+        return summarizeFnProto(tree, fn_proto, .summary);
     }
 
-    if (summarizePtrFnType(tree, node, false)) |ptr_fn_summary| return ptr_fn_summary;
+    if (summarizePtrFnType(tree, node, .summary)) |ptr_fn_summary| return ptr_fn_summary;
 
     var container_decl_buffer: [2]Ast.Node.Index = undefined;
     if (tree.fullContainerDecl(&container_decl_buffer, node)) |container_decl| {
@@ -622,10 +629,10 @@ fn summarizeValueExpr(
 
     var fn_proto_buffer: [1]Ast.Node.Index = undefined;
     if (tree.fullFnProto(&fn_proto_buffer, node)) |fn_proto| {
-        return summarizeFnProto(tree, fn_proto, true);
+        return summarizeFnProto(tree, fn_proto, .type_value);
     }
 
-    if (summarizePtrFnType(tree, node, true)) |ptr_fn_summary| return ptr_fn_summary;
+    if (summarizePtrFnType(tree, node, .type_value)) |ptr_fn_summary| return ptr_fn_summary;
 
     var container_decl_buffer: [2]Ast.Node.Index = undefined;
     if (tree.fullContainerDecl(&container_decl_buffer, node)) |container_decl| {
@@ -638,7 +645,7 @@ fn summarizeValueExpr(
 fn summarizePtrFnType(
     tree: Ast,
     node: Ast.Node.Index,
-    comptime as_type_value: bool,
+    comptime mode: FnSummaryMode,
 ) ?TypeSummary {
     const ptr_type = tree.fullPtrType(node) orelse return null;
     var fn_proto_buffer: [1]Ast.Node.Index = undefined;
@@ -647,7 +654,7 @@ fn summarizePtrFnType(
         ptr_type.ast.child_type,
     ) orelse return null;
 
-    return summarizeFnProto(tree, fn_proto, as_type_value);
+    return summarizeFnProto(tree, fn_proto, mode);
 }
 
 fn summarizeContainerDecl(

@@ -534,7 +534,7 @@ pub fn resolveDeclType(
 
     var fn_proto_buffer: [1]std.zig.Ast.Node.Index = undefined;
     if (tree.fullFnProto(&fn_proto_buffer, node)) |fn_proto| {
-        return TypeStore.summarizeFnProto(tree, fn_proto, false);
+        return TypeStore.summarizeFnProto(tree, fn_proto, .summary);
     }
 
     return null;
@@ -1263,7 +1263,7 @@ pub fn resolveTypeFactoryResultTarget(
     if (TypeStore.summarizeFnProto(
         tree,
         fn_decl.proto,
-        false,
+        .summary,
     ).coarseType() != .fn_returns_type) return null;
 
     var it = ast.ChildIterator.init(tree, fn_decl.block);

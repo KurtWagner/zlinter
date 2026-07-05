@@ -2008,7 +2008,7 @@ fn resolveDeclValueSummaryDepth(
         return TypeStore.summarizeFnProto(
             tree,
             fn_proto,
-            false,
+            .summary,
         );
     }
 
@@ -2093,7 +2093,7 @@ fn resolveDeclTypeSummaryDepth(
         return TypeStore.summarizeFnProto(
             tree,
             fn_proto,
-            false,
+            .summary,
         );
     }
 
