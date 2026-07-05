@@ -1,0 +1,14 @@
+// Configuration for zlinter linting itself:
+.{
+    .rules = .{
+        .require_braces = .{
+            .if_statement = .{ .warning = .multi_statement_only },
+            .while_statement = .{ .warning = .multi_statement_only },
+            .for_statement = .{ .warning = .multi_statement_only },
+            .catch_statement = .{ .warning = .multi_statement_only },
+            .switch_case_statement = .{ .warning = .multi_statement_only },
+            .defer_statement = .{ .warning = .multi_statement_only },
+            .errdefer_statement = .{ .warning = .multi_statement_only },
+        },
+    },
+}
