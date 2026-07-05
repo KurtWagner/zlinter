@@ -5,6 +5,12 @@
 //! easier to maintain, and prevent unintended logic changes when adding new
 //! lines.
 //!
+//! In Zig, braces are required when a branch body contains more than one
+//! statement, or when they disambiguate which `else` belongs to which `if`.
+//! An `else` binds to the nearest preceding `if` that does not already have an
+//! `else`, unless braces force a different grouping. Otherwise, a single
+//! expression branch may omit braces.
+//!
 //! If an `if` statement is used as part of a return or assignment it is excluded
 //! from this rule (braces not required).
 //!
@@ -170,6 +176,9 @@ fn run(
                 else => false,
             };
 
+            if (has_braces and bracesAreRequiredForSemantics(tree, doc, statement, expr_node))
+                continue :expr_nodes;
+
             const first_token = tree.firstToken(expr_node);
             const last_token = tree.lastToken(expr_node);
 
@@ -232,6 +241,35 @@ fn run(
         )
     else
         null;
+}
+
+fn bracesAreRequiredForSemantics(
+    tree: Ast,
+    doc: *const zlinter.session.LintDocument,
+    statement: zlinter.ast.Statement,
+    expr_node: Ast.Node.Index,
+) bool {
+    const if_info = switch (statement) {
+        .@"if" => |info| info,
+        else => return false,
+    };
+
+    if (expr_node != if_info.ast.then_expr or if_info.ast.else_expr == .none)
+        return false;
+
+    const children = doc.lineage.items(.children)[@intFromEnum(expr_node)] orelse
+        return false;
+    if (children.len != 1) return false;
+
+    const child_statement = zlinter.ast.fullStatement(tree, children[0]) orelse
+        return false;
+
+    const child_if_info = switch (child_statement) {
+        .@"if" => |info| info,
+        else => return false,
+    };
+
+    return child_if_info.ast.else_expr == .none;
 }
 
 /// Returns true when `node` is control flow whose body is acting as a
@@ -578,6 +616,88 @@ test "if_statement multi_statement_only reports single-statement blocks" {
                 \\{
                 \\         a = 2;
                 \\     }
+                ,
+                .message = "Expects no braces when there's only one statement",
+            },
+        },
+    );
+}
+
+test "multi_statement_only ignores braces required for if else binding" {
+    const source =
+        \\fn enabled() bool {
+        \\    return true;
+        \\}
+        \\
+        \\fn ifBody() void {}
+        \\fn elseBody() void {}
+        \\
+        \\pub fn main() void {
+        \\    if (enabled()) {
+        \\        if (enabled()) ifBody();
+        \\    } else elseBody();
+        \\}
+    ;
+
+    const multi_statement_only = RequirementAndSeverity{ .warning = .multi_statement_only };
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{
+            .if_statement = multi_statement_only,
+        },
+        &.{},
+    );
+}
+
+test "multi_statement_only still reports single for and while branches with outer else" {
+    const source =
+        \\fn enabled() bool {
+        \\    return true;
+        \\}
+        \\
+        \\fn elseBody() void {}
+        \\fn forBody(_: u8) void {}
+        \\fn whileBody() void {}
+        \\
+        \\pub fn main() void {
+        \\    if (enabled()) {
+        \\        for ("abc") |item| forBody(item);
+        \\    } else elseBody();
+        \\
+        \\    if (enabled()) {
+        \\        while (enabled()) whileBody();
+        \\    } else elseBody();
+        \\}
+    ;
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        source,
+        .{},
+        Config{
+            .if_statement = .{ .warning = .multi_statement_only },
+        },
+        &.{
+            .{
+                .rule_id = "require_braces",
+                .severity = .warning,
+                .slice =
+                \\{
+                \\        while (enabled()) whileBody();
+                \\    }
+                ,
+                .message = "Expects no braces when there's only one statement",
+            },
+            .{
+                .rule_id = "require_braces",
+                .severity = .warning,
+                .slice =
+                \\{
+                \\        for ("abc") |item| forBody(item);
+                \\    }
                 ,
                 .message = "Expects no braces when there's only one statement",
             },
