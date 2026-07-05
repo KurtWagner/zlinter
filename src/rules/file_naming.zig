@@ -49,8 +49,7 @@ fn run(
             if (config.file_struct.style()) |style| {
                 if (!style.check(check_name)) {
                     break :msg .{
-                        try std.fmt.allocPrint(
-                            session_arena,
+                        try session_arena.print(
                             "File `{s}` is an implicit struct, so its name should be {s}",
                             .{ basename, style.name() },
                         ),
@@ -61,8 +60,7 @@ fn run(
         } else if (config.file_namespace.style()) |style| {
             if (!style.check(check_name)) {
                 break :msg .{
-                    try std.fmt.allocPrint(
-                        session_arena,
+                    try session_arena.print(
                         "File `{s}` is a namespace, so its name should be {s}",
                         .{ basename, style.name() },
                     ),

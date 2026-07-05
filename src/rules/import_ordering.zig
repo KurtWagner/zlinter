@@ -99,8 +99,7 @@ fn run(
                         .severity = config.severity,
                         .start = .startOfNode(tree, import.decl_node),
                         .end = .endOfNode(tree, import.decl_node),
-                        .message = try std.fmt.allocPrint(
-                            session_arena,
+                        .message = try session_arena.print(
                             "Import '{s}' should be grouped with other imports",
                             .{import.decl_name},
                         ),
@@ -134,8 +133,7 @@ fn run(
                             .severity = config.severity,
                             .start = .startOfNode(tree, import.decl_node),
                             .end = .endOfNode(tree, import.decl_node),
-                            .message = try std.fmt.allocPrint(
-                                session_arena,
+                            .message = try session_arena.print(
                                 "Public import '{s}' should be grouped before private imports",
                                 .{import.decl_name},
                             ),
@@ -160,8 +158,7 @@ fn run(
                             .severity = config.severity,
                             .start = .startOfNode(tree, import.decl_node),
                             .end = .endOfNode(tree, import.decl_node),
-                            .message = try std.fmt.allocPrint(
-                                session_arena,
+                            .message = try session_arena.print(
                                 "Import '{s}' is not in {s} order",
                                 .{ import.decl_name, config.order.name() },
                             ),

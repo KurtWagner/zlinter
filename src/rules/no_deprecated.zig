@@ -152,8 +152,7 @@ fn handleStructInit(
             try lint_problems.append(session_arena, .{
                 .start = .startOfToken(tree, field_name_token),
                 .end = .endOfToken(tree, field_name_token),
-                .message = try std.fmt.allocPrint(
-                    session_arena,
+                .message = try session_arena.print(
                     "Deprecated: {s}",
                     .{deprecated_message},
                 ),

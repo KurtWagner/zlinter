@@ -122,8 +122,7 @@ fn run(
                     .severity = severity,
                     .start = .startOfToken(tree, tree.firstToken(decl_block.block)),
                     .end = .endOfToken(tree, tree.lastToken(decl_block.block)),
-                    .message = try std.fmt.allocPrint(
-                        session_arena,
+                    .message = try session_arena.print(
                         problem_msg_template,
                         .{decl_block.kind.name()},
                     ),
@@ -216,8 +215,7 @@ fn run(
                 .severity = candidate.severity,
                 .start = .startOfToken(tree, tree.firstToken(expr_node)),
                 .end = .endOfToken(tree, tree.lastToken(expr_node)),
-                .message = try std.fmt.allocPrint(
-                    session_arena,
+                .message = try session_arena.print(
                     problem_msg_template,
                     .{candidate.label},
                 ),

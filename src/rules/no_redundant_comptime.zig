@@ -111,8 +111,7 @@ fn run(
                 .severity = config.severity,
                 .start = .startOfToken(tree, comptime_token),
                 .end = .endOfToken(tree, comptime_token),
-                .message = try std.fmt.allocPrint(
-                    session_arena,
+                .message = try session_arena.print(
                     "Redundant `comptime` on parameter of type `{s}` - parameters of this type are always comptime",
                     .{type_slice},
                 ),

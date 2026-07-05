@@ -164,8 +164,7 @@ fn runTest(
         var temp_dir = try cache_dir.createDirPathOpen(io, "tmp", .{});
         defer temp_dir.close(io);
 
-        const temp_path = try std.fmt.allocPrint(
-            arena,
+        const temp_path = try arena.print(
             ".zig-cache" ++ std.fs.path.sep_str ++ "tmp" ++ std.fs.path.sep_str ++ "{s}.input.zig",
             .{rule_name},
         );
