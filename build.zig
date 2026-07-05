@@ -51,7 +51,7 @@ const BuiltRule = struct {
 
 const BuildOptions = struct {
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
+    optimize: std.lang.OptimizeMode,
     tracy: bool = false,
     tracy_callstack: bool = false,
     tracy_allocation: bool = false,
@@ -68,7 +68,7 @@ pub const BuilderOptions = struct {
     /// `.Debug` for linter development purposes.
     ///
     /// For enormous projects consider using `.ReleaseFast`.
-    optimize: std.builtin.OptimizeMode = .ReleaseSafe,
+    optimize: std.lang.OptimizeMode = .ReleaseSafe,
 
     /// Enable Tracy integration using the pinned Tracy 0.13.1 dependency.
     tracy: bool = false,
@@ -656,7 +656,7 @@ fn createTracyModule(
     b: *std.Build,
     options: struct {
         target: std.Build.ResolvedTarget,
-        optimize: std.builtin.OptimizeMode,
+        optimize: std.lang.OptimizeMode,
         tracy: bool,
         tracy_callstack: bool,
         tracy_allocation: bool,
@@ -721,7 +721,7 @@ fn buildRule(
     comptime source: BuildRuleSource,
     options: struct {
         target: std.Build.ResolvedTarget,
-        optimize: std.builtin.OptimizeMode,
+        optimize: std.lang.OptimizeMode,
         tracy: bool,
         tracy_callstack: bool,
         tracy_allocation: bool,
@@ -772,7 +772,7 @@ fn buildBuiltinRule(
     rule: BuiltinLintRule,
     options: struct {
         target: std.Build.ResolvedTarget,
-        optimize: std.builtin.OptimizeMode,
+        optimize: std.lang.OptimizeMode,
         zlinter_dependency: ?*std.Build.Dependency = null,
         zlinter_import: std.Build.Module.Import,
     },
