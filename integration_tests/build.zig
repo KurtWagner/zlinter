@@ -69,7 +69,7 @@ pub fn build(b: *std.Build) !void {
             ".fix_expected.stdout",
             ".fix_expected.zig",
         }) |suffix| {
-            const filename = std.fmt.bufPrint(
+            const filename = std.mem.print(
                 &filename_buffer,
                 "{s}{s}",
                 .{ test_name, suffix },

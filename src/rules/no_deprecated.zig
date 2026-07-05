@@ -286,7 +286,7 @@ fn appendDeprecatedProblem(
     try lint_problems.append(session_arena, .{
         .start = .startOfNode(tree, node_index),
         .end = .endOfNode(tree, node_index),
-        .message = try std.fmt.allocPrint(session_arena, message_fmt, .{deprecated_message}),
+        .message = try session_arena.print(message_fmt, .{deprecated_message}),
         .notes = notes,
         .rule_id = rule.rule_id,
         .severity = config.severity,

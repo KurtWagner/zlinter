@@ -244,8 +244,8 @@ pub const LintProblemSeverity = enum(u8) {
 
         return switch (self) {
             .off => unreachable,
-            .warning => std.fmt.bufPrint(buffer, "{s}warning{s}", .{ prefix, suffix }) catch unreachable,
-            .@"error" => std.fmt.bufPrint(buffer, "{s}error{s}", .{ prefix, suffix }) catch unreachable,
+            .warning => std.mem.print(buffer, "{s}warning{s}", .{ prefix, suffix }) catch unreachable,
+            .@"error" => std.mem.print(buffer, "{s}error{s}", .{ prefix, suffix }) catch unreachable,
         };
     }
 };

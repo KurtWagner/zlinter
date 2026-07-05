@@ -141,7 +141,7 @@ pub const LintFileRenderer = struct {
         const lhs_format = " {d} ";
         const line_lhs_max_width = comptime std.fmt.comptimePrint(lhs_format, .{std.math.maxInt(@TypeOf(line))}).len;
         var lhs_buffer: [line_lhs_max_width]u8 = undefined;
-        const lhs = std.fmt.bufPrint(&lhs_buffer, lhs_format, .{line + 1}) catch unreachable;
+        const lhs = std.mem.print(&lhs_buffer, lhs_format, .{line + 1}) catch unreachable;
 
         // LHS of code
         try writer.writeAll(tty.ansiOrEmpty(&.{.cyan}));
