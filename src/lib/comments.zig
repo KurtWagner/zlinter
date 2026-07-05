@@ -1713,9 +1713,9 @@ fn testParse(
 pub const LazyRuleSkipper = struct {
     const Index = struct {
         /// Bits are set for enabled lines
-        all: std.bit_set.DynamicBitSet,
+        all: std.bit_set.Dynamic,
         /// Bits are set for enabled lines per rule
-        rules: std.StringHashMap(std.bit_set.DynamicBitSet),
+        rules: std.StringHashMap(std.bit_set.Dynamic),
 
         fn deinit(self: *@This()) void {
             self.all.deinit();
@@ -1759,7 +1759,7 @@ pub const LazyRuleSkipper = struct {
         const line_count = self.doc.line_starts.len;
         var index: Index = .{
             .rules = .init(self.gpa),
-            .all = oom(std.bit_set.DynamicBitSet.initFull(
+            .all = oom(std.bit_set.Dynamic.initFull(
                 self.gpa,
                 line_count,
             )),
@@ -1809,7 +1809,7 @@ pub const LazyRuleSkipper = struct {
 
                     const result = oom(index.rules.getOrPut(rule_id));
                     if (!result.found_existing) {
-                        result.value_ptr.* = oom(std.bit_set.DynamicBitSet.initFull(
+                        result.value_ptr.* = oom(std.bit_set.Dynamic.initFull(
                             self.gpa,
                             line_count,
                         ));
