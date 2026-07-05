@@ -250,9 +250,11 @@ test "LintFileRenderer" {
     }
 }
 
+// zlinter-disable-next-line no_global_vars - scopes to life of CLI so eh...
 var printer_singleton: Printer = .empty;
+
 /// Singleton printer for use for the lifetime of the process
-pub var process_printer = &printer_singleton;
+pub const process_printer = &printer_singleton;
 
 pub const Printer = struct {
     verbose: bool,

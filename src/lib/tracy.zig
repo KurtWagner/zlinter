@@ -254,7 +254,7 @@ pub inline fn messageColorCopy(msg: []const u8, color: u24) void {
 /// lifetime. All such strings will be leaked.
 ///
 /// The `enable` check ensures that this is not referenced if Tracy is disabled.
-var tracy_arena: std.heap.ArenaAllocator = if (enable) .init(std.heap.page_allocator);
+var tracy_arena: std.heap.ArenaAllocator = if (enable) .init(std.heap.page_allocator); // zlinter-disable-current-line no_global_vars
 
 pub inline fn namedFrame(name: []const u8) Frame {
     if (!enable) return .{ .name = {} };
