@@ -1851,8 +1851,8 @@ test "LazyRuleSkipper respects rule-specific enable after global disable" {
     var skipper = LazyRuleSkipper.init(doc, source, std.testing.allocator);
     defer skipper.deinit();
 
-    const a_offset = std.mem.indexOf(u8, source, "const a").?;
-    const b_offset = std.mem.indexOf(u8, source, "const b").?;
+    const a_offset = std.mem.find(u8, source, "const a").?;
+    const b_offset = std.mem.find(u8, source, "const b").?;
 
     const problem_a = LintProblem{
         .rule_id = "rule_a",
@@ -1886,7 +1886,7 @@ test "LazyRuleSkipper global disable affects all rules" {
     var skipper = LazyRuleSkipper.init(doc, source, std.testing.allocator);
     defer skipper.deinit();
 
-    const a_offset = std.mem.indexOf(u8, source, "const a").?;
+    const a_offset = std.mem.find(u8, source, "const a").?;
     const problem = LintProblem{
         .rule_id = "any_rule",
         .severity = .warning,
@@ -1912,9 +1912,9 @@ test "LazyRuleSkipper disable next line targets only that line" {
     var skipper = LazyRuleSkipper.init(doc, source, std.testing.allocator);
     defer skipper.deinit();
 
-    const a_offset = std.mem.indexOf(u8, source, "const a").?;
-    const b_offset = std.mem.indexOf(u8, source, "const b").?;
-    const c_offset = std.mem.indexOf(u8, source, "const c").?;
+    const a_offset = std.mem.find(u8, source, "const a").?;
+    const b_offset = std.mem.find(u8, source, "const b").?;
+    const c_offset = std.mem.find(u8, source, "const c").?;
 
     const problem_a = LintProblem{
         .rule_id = "rule_a",
@@ -2008,7 +2008,7 @@ test "LazyRuleSkipper rule-specific disable does not affect other rules" {
     var skipper = LazyRuleSkipper.init(doc, source, std.testing.allocator);
     defer skipper.deinit();
 
-    const a_offset = std.mem.indexOf(u8, source, "const a").?;
+    const a_offset = std.mem.find(u8, source, "const a").?;
 
     const problem_a = LintProblem{
         .rule_id = "rule_a",
@@ -2041,7 +2041,7 @@ test "LazyRuleSkipper shouldSkip reuses cached index" {
     var skipper = LazyRuleSkipper.init(doc, source, std.testing.allocator);
     defer skipper.deinit();
 
-    const a_offset = std.mem.indexOf(u8, source, "const a").?;
+    const a_offset = std.mem.find(u8, source, "const a").?;
     const problem = LintProblem{
         .rule_id = "rule_a",
         .severity = .warning,

@@ -242,7 +242,7 @@ fn emptyBlockContainsLineComment(tree: Ast, node: Ast.Node.Index) bool {
     // will have false positive. e.g., `const url = "http://ziglang.org"`. As
     // it's just targetted for our empty rule case it should be fine...
     const source = tree.getNodeSource(node);
-    return std.mem.indexOf(u8, source, "//") != null;
+    return std.mem.find(u8, source, "//") != null;
 }
 
 test {
