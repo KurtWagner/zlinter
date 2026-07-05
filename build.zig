@@ -683,10 +683,10 @@ fn createTracyModule(
 
     if (!options.tracy) return tracy_module;
 
-    const tracy_dependency = b.lazyDependency("tracy", .{
+    const tracy_dependency = b.dependencyLazy("tracy", .{
         .target = options.target,
         .optimize = .ReleaseFast,
-    }) orelse return tracy_module;
+    }) catch return tracy_module;
 
     tracy_module.addCMacro("TRACY_ENABLE", "1");
     if (!options.tracy_callstack) {
