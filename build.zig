@@ -466,39 +466,22 @@ pub fn build(b: *std.Build) void {
         exclude.append(b.allocator, .{ .dir_path = b.path("integration_tests/test_cases") }) catch @panic("OOM");
         exclude.append(b.allocator, .{ .file_path = b.path("integration_tests/src/test_case_references.zig") }) catch @panic("OOM");
 
+        // TODO: Fix this false positive in declaration naming rule.
+        // zlinter-disable-next-line declaration_naming - this looks like a false positive based on use of @typeInfo it things its a type?
+        const builtin_rule_values = @typeInfo(BuiltinLintRule).@"enum".field_values;
+        var build_rules = b.allocator.alloc(BuiltRule, builtin_rule_values.len) catch @panic("OOM");
+        inline for (builtin_rule_values, 0..) |field_value, i| {
+            build_rules[i] = buildBuiltinRule(
+                b,
+                @enumFromInt(field_value),
+                .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import },
+                .{},
+            );
+        }
+
         break :step buildStep(
             b,
-            &.{
-                buildBuiltinRule(b, .field_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .field_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .declaration_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .function_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .import_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .file_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_unused, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .switch_case_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_deprecated, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_global_vars, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_empty_block, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_inferred_error_unions, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_orelse_unreachable, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_unsafe_undefined, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_literal_only_bool_expression, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .require_labeled_continue, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .require_errdefer_dealloc, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .require_fmt, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .require_braces, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .require_doc_comment, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .require_exhaustive_enum_switch, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_hidden_allocations, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_swallow_error, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_comment_out_code, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_todo, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_panic, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_redundant_comptime, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .max_positional_args, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_literal_args, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-            },
+            build_rules,
             .{ .module = zlinter_lib_module },
             include.items,
             exclude.items,
