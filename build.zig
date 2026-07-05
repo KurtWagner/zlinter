@@ -465,6 +465,8 @@ pub fn build(b: *std.Build) void {
         include.append(b.allocator, .{ .dir_path = b.path("./") }) catch @panic("OOM");
         exclude.append(b.allocator, .{ .dir_path = b.path("integration_tests/test_cases") }) catch @panic("OOM");
         exclude.append(b.allocator, .{ .file_path = b.path("integration_tests/src/test_case_references.zig") }) catch @panic("OOM");
+        exclude.append(b.allocator, .{ .dir_path = b.path("integration_tests/sub_module_a_src") }) catch @panic("OOM");
+        exclude.append(b.allocator, .{ .dir_path = b.path("integration_tests/sub_module_b_src") }) catch @panic("OOM");
 
         // TODO: Fix this false positive in declaration naming rule.
         // zlinter-disable-next-line declaration_naming - this looks like a false positive based on use of @typeInfo it things its a type?
