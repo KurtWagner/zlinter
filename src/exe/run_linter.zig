@@ -195,10 +195,10 @@ fn run(
     for (lint_files) |file| {
         if (file.excluded) continue;
 
-        if (session.file_store.resolve(file.abs_path)) |file_id|
-            lint_file_ids.appendAssumeCapacity(file_id)
-        else |e|
-            printer.println(.err, "Unable to open file: {s} ({s})", .{ runtime.cwd, @errorName(e) });
+        if (session.file_store.resolve(file.abs_path)) |file_id| {
+            if (session.file_store.fileSource(file_id).len > 0)
+                lint_file_ids.appendAssumeCapacity(file_id);
+        } else |e| printer.println(.err, "Unable to open file: {s} ({s})", .{ runtime.cwd, @errorName(e) });
     }
 
     try runLinterRules(
