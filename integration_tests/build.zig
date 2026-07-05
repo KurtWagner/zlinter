@@ -61,7 +61,7 @@ pub fn build(b: *std.Build) !void {
         run_integration_test.addArg(test_name);
 
         var filename_buffer: [std.fs.max_name_bytes]u8 = undefined;
-        var path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+        var path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
         var path_fba: std.heap.FixedBufferAllocator = .init(&path_buffer);
         inline for (&.{
             ".input.zig",

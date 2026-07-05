@@ -54,7 +54,7 @@ pub fn resolve(
     const session_arena = self.runtime.sessionArena();
 
     // 2x as we use it for generating two paths.
-    var fba_buffer: [std.fs.max_path_bytes * 2]u8 = undefined;
+    var fba_buffer: [std.Io.Dir.max_path_bytes * 2]u8 = undefined;
     var fba: std.heap.FixedBufferAllocator = .init(&fba_buffer);
 
     const normal_path = std.Io.Dir.path.resolve(

@@ -578,7 +578,7 @@ fn resolveBuildModuleShallow(
     const root_source_file_id = build_module.root_source_file.unwrap() orelse return null;
     const root_source_file = root_source_file_id.get(build_config);
 
-    var root_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    var root_path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const root_path = try files.resolveLazyPath(
         root_source_file,
         build_config,
@@ -812,7 +812,7 @@ fn indexModuleFiles(
         nodes: while (node_index < tree.nodes.len) : (node_index += 1) {
             const node: Ast.Node.Index = @enumFromInt(node_index);
 
-            var import_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+            var import_path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
             const import_path = import_utils.writeImportPath(
                 tree,
                 node,
@@ -2405,7 +2405,7 @@ fn resolveImportRootDecl(
 ) ?DeclStore.DeclId {
     const tree = self.file_store.fileTree(parent_file_id);
 
-    var import_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    var import_path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const import_path = import_utils.writeImportPath(
         tree,
         node,
@@ -3112,25 +3112,25 @@ test "moduleIdsForFile includes shared dependency children" {
         std.testing.io,
     );
 
-    var root1_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    var root1_path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const root1_path = root1_path_buffer[0..try tmp.dir.realPathFile(
         std.testing.io,
         "root1.zig",
         &root1_path_buffer,
     )];
-    var root2_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    var root2_path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const root2_path = root2_path_buffer[0..try tmp.dir.realPathFile(
         std.testing.io,
         "root2.zig",
         &root2_path_buffer,
     )];
-    var dep_root_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    var dep_root_path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const dep_root_path = dep_root_path_buffer[0..try tmp.dir.realPathFile(
         std.testing.io,
         "dep/root.zig",
         &dep_root_path_buffer,
     )];
-    var dep_child_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    var dep_child_path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const dep_child_path = dep_child_path_buffer[0..try tmp.dir.realPathFile(
         std.testing.io,
         "dep/child.zig",

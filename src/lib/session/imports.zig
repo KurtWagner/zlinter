@@ -73,7 +73,7 @@ test "Kind.init - absolute or other is module" {
 pub fn writeImportPath(
     tree: Ast,
     node: Ast.Node.Index,
-    buffer: *[std.fs.max_path_bytes]u8,
+    buffer: *[std.Io.Dir.max_path_bytes]u8,
 ) ?[]const u8 {
     if (!ast.isBuiltinCallNamed(tree, node, "@import")) return null;
 
@@ -104,7 +104,7 @@ test "writeImportPath - parses string literal import path" {
     var tree = try Ast.parse(std.testing.allocator, source, .zig);
     defer tree.deinit(std.testing.allocator);
 
-    var buffer: [std.fs.max_path_bytes]u8 = undefined;
+    var buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const node = try testing.expectSingleNodeOfTag(
         tree,
         &.{.builtin_call_two},
@@ -122,7 +122,7 @@ test "writeImportPath - parses trailing comma builtin call" {
     var tree = try Ast.parse(std.testing.allocator, source, .zig);
     defer tree.deinit(std.testing.allocator);
 
-    var buffer: [std.fs.max_path_bytes]u8 = undefined;
+    var buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const node = try testing.expectSingleNodeOfTag(
         tree,
         &.{.builtin_call_two_comma},
@@ -140,7 +140,7 @@ test "writeImportPath - rejects non-string import arguments" {
     var tree = try Ast.parse(std.testing.allocator, source, .zig);
     defer tree.deinit(std.testing.allocator);
 
-    var buffer: [std.fs.max_path_bytes]u8 = undefined;
+    var buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const node = try testing.expectSingleNodeOfTag(
         tree,
         &.{.builtin_call_two},
@@ -222,14 +222,14 @@ test "resolveFile - root import uses supplied root file id" {
     try testing.writeFile(tmp.dir, "root.zig", "");
     try testing.writeFile(tmp.dir, "child.zig", "");
 
-    var root_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    var root_path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const root_path = root_path_buffer[0..try tmp.dir.realPathFile(
         std.testing.io,
         "root.zig",
         &root_path_buffer,
     )];
 
-    var child_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    var child_path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const child_path = child_path_buffer[0..try tmp.dir.realPathFile(
         std.testing.io,
         "child.zig",

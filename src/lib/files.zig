@@ -30,7 +30,7 @@ pub fn allocLintFiles(runtime: *const LintRuntime, dir: std.Io.Dir, maybe_files:
         while (cleanup_it.next()) |abs_path| gpa.free(abs_path.*);
     }
 
-    var root_abs_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    var root_abs_path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const root_abs_path = root_abs_path_buffer[0..try dir.realPath(io, &root_abs_path_buffer)];
 
     if (maybe_files) |files| {
@@ -212,7 +212,7 @@ test "allocLintFiles - with default args" {
         testing.paths.posix("zig-out/a.zig"),
     }));
 
-    var cwd_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    var cwd_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const cwd = cwd_buffer[0..try tmp_dir.dir.realPath(std.testing.io, &cwd_buffer)];
 
     const runtime: LintRuntime = .{
@@ -272,7 +272,7 @@ test "allocLintFiles - with arg files" {
         testing.paths.posix("zig-out/a.zig"),
     }));
 
-    var cwd_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    var cwd_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const cwd = cwd_buffer[0..try tmp_dir.dir.realPath(std.testing.io, &cwd_buffer)];
 
     const runtime: LintRuntime = .{
@@ -359,7 +359,7 @@ pub fn resolveBuildConfigurationPath(
             "--print-configuration-path",
         },
         .cwd = .{ .path = build_root_path },
-        .stdout_limit = .limited(std.fs.max_path_bytes + 1),
+        .stdout_limit = .limited(std.Io.Dir.max_path_bytes + 1),
         .stderr_limit = .limited(1024 * 1024),
     });
 

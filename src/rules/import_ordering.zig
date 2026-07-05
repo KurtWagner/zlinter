@@ -423,7 +423,7 @@ fn resolveScopedImports(
     const tree = doc.tree(session);
     const source = tree.source;
     const line_starts = doc.comments.line_starts;
-    var import_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    var import_path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
 
     const root: Ast.Node.Index = .root;
     var node_it = try doc.nodeLineageIterator(root, rule_arena);

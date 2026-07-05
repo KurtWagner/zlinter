@@ -1369,7 +1369,7 @@ fn resolveImportMember(
 
     const tree = ctx.file_store.fileTree(parent_file_id);
 
-    var import_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    var import_path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const import_path = import_utils.writeImportPath(
         tree,
         init_node,

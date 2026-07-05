@@ -1085,7 +1085,7 @@ const LintConfigStore = struct {
             cwd: std.Io.Dir,
             dir_abs_path: []const u8,
         ) error{InvalidLintConfig}!?LintConfig {
-            var fba_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+            var fba_path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
             var fba_path: std.heap.FixedBufferAllocator = .init(&fba_path_buffer);
 
             const lint_config_abs_path = std.Io.Dir.path.resolve(
@@ -1163,7 +1163,7 @@ test "LintConfigStore.index errors on malformed zlinter.zon" {
         ".{ .rules = .{ .no_unused = ",
     );
 
-    var dir_abs_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    var dir_abs_path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const dir_abs_path = dir_abs_path_buffer[0..try tmp_dir.dir.realPath(
         std.testing.io,
         "nested",
@@ -1197,7 +1197,7 @@ test "LintConfigStore.index errors when zlinter.zon is not readable as a file" {
         "nested/zlinter.zon",
     );
 
-    var dir_abs_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    var dir_abs_path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const dir_abs_path = dir_abs_path_buffer[0..try tmp_dir.dir.realPath(
         std.testing.io,
         "nested",
