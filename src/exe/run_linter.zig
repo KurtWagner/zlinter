@@ -761,8 +761,8 @@ fn buildFilterIndex(runtime: *const LintRuntime, dir: std.Io.Dir, args: zlinter.
 /// Creates and returns a bitset representing enabled rules using the fixed
 /// indices in the rules array. This is what allows people to filter runs with
 /// the `--rule` CLI argument.
-fn enabledRules(filter_rule_ids: ?[]const []const u8) std.StaticBitSet(rules.len) {
-    var bitset: std.StaticBitSet(rules.len) = .full;
+fn enabledRules(filter_rule_ids: ?[]const []const u8) std.bit_set.Static(rules.len) {
+    var bitset: std.bit_set.Static(rules.len) = .full;
     if (filter_rule_ids == null) return bitset;
 
     bitset.toggleAll();

@@ -1,37 +1,37 @@
-error Type declaration should be TitleCase [test_cases/declaration_naming/regression_132/regression_132.input.zig:11:7] declaration_naming
+error Type declaration should be TitleCase [test_cases/declaration_naming/regression_132/regression_132.input.zig:9:7] declaration_naming
   ↳ note resolved declaration is here [test_cases/declaration_naming/regression_132/regression_132.input.zig:1:4]
 
- 11 | const badFloatType = IntToFloatType(u32);
-    |       ^^^^^^^^^^^^
+ 9 | const badFloatType = IntToFloatType(u32);
+   |       ^^^^^^^^^^^^
 
-error Type declaration should be TitleCase [test_cases/declaration_naming/regression_132/regression_132.input.zig:12:7] declaration_naming
+error Type declaration should be TitleCase [test_cases/declaration_naming/regression_132/regression_132.input.zig:10:7] declaration_naming
   ↳ note resolved declaration is here [test_cases/declaration_naming/regression_132/regression_132.input.zig:1:4]
 
- 12 | const bad_float_type = IntToFloatType(u32);
+ 10 | const bad_float_type = IntToFloatType(u32);
     |       ^^^^^^^^^^^^^^
 
-error Type declaration should be TitleCase [test_cases/declaration_naming/regression_132/regression_132.input.zig:15:7] declaration_naming
+error Type declaration should be TitleCase [test_cases/declaration_naming/regression_132/regression_132.input.zig:13:7] declaration_naming
   ↳ note resolved declaration is here [<stdlib>/math.zig:800:8]
 
- 15 | const badInt = std.math.IntFittingRange(0, 10);
+ 13 | const badInt = std.math.IntFittingRange(0, 10);
     |       ^^^^^^
 
-error Type declaration should be TitleCase [test_cases/declaration_naming/regression_132/regression_132.input.zig:16:7] declaration_naming
+error Type declaration should be TitleCase [test_cases/declaration_naming/regression_132/regression_132.input.zig:14:7] declaration_naming
   ↳ note resolved declaration is here [<stdlib>/math.zig:800:8]
 
- 16 | const bad_int = std.math.IntFittingRange(0, 10);
+ 14 | const bad_int = std.math.IntFittingRange(0, 10);
     |       ^^^^^^^
 
-error Type declaration should be TitleCase [test_cases/declaration_naming/regression_132/regression_132.input.zig:19:7] declaration_naming
+error Type declaration should be TitleCase [test_cases/declaration_naming/regression_132/regression_132.input.zig:17:7] declaration_naming
   ↳ note resolved declaration is here [<stdlib>/bit_set.zig:45:8]
 
- 19 | const badBitSet = std.StaticBitSet(10);
+ 17 | const badBitSet = std.bit_set.Static(10);
     |       ^^^^^^^^^
 
-error Type declaration should be TitleCase [test_cases/declaration_naming/regression_132/regression_132.input.zig:20:7] declaration_naming
+error Type declaration should be TitleCase [test_cases/declaration_naming/regression_132/regression_132.input.zig:18:7] declaration_naming
   ↳ note resolved declaration is here [<stdlib>/bit_set.zig:45:8]
 
- 20 | const bad_bit_set = std.StaticBitSet(10);
+ 18 | const bad_bit_set = std.bit_set.Static(10);
     |       ^^^^^^^^^^^
 
 x 6 errors
