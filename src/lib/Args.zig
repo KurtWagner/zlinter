@@ -1113,26 +1113,32 @@ const testing = struct {
     const zig_exe = "/test/zig";
     const zig_lib_directory = "/test/zig/lib";
 
-    var buffer: [64][:0]u8 = undefined;
-
-    inline fn cliArgs(comptime args: []const [:0]const u8) [][:0]u8 {
+    inline fn cliArgs(comptime args: []const [:0]const u8) []const [:0]const u8 {
         assertTestOnly();
 
-        buffer[0] = @constCast("lint-exe");
-        buffer[1] = @constCast("--zig_exe");
-        buffer[2] = @constCast(zig_exe);
-        buffer[3] = @constCast("--zig_lib_directory");
-        buffer[4] = @constCast(zig_lib_directory);
-        inline for (0..args.len) |i| buffer[i + 5] = @constCast(args[i]);
-        return buffer[0 .. args.len + 5];
+        return (&comptime blk: {
+            var buffer: [args.len + 5][:0]const u8 = undefined;
+            buffer[0] = "lint-exe";
+            buffer[1] = "--zig_exe";
+            buffer[2] = zig_exe;
+            buffer[3] = "--zig_lib_directory";
+            buffer[4] = zig_lib_directory;
+            for (0..args.len) |i| buffer[i + 5] = args[i];
+            break :blk buffer;
+        })[0..];
     }
 
-    inline fn cliArgsWithoutBuildConfig(comptime args: []const [:0]const u8) [][:0]u8 {
+    inline fn cliArgsWithoutBuildConfig(
+        comptime args: []const [:0]const u8,
+    ) []const [:0]const u8 {
         assertTestOnly();
 
-        buffer[0] = @constCast("lint-exe");
-        inline for (0..args.len) |i| buffer[i + 1] = @constCast(args[i]);
-        return buffer[0 .. args.len + 1];
+        return (&comptime blk: {
+            var buffer: [args.len + 1][:0]const u8 = undefined;
+            buffer[0] = "lint-exe";
+            for (0..args.len) |i| buffer[i + 1] = args[i];
+            break :blk buffer;
+        })[0..];
     }
 
     inline fn expected(comptime overrides: anytype) Args {
