@@ -1713,14 +1713,14 @@ fn testParse(
 pub const LazyRuleSkipper = struct {
     const Index = struct {
         /// Bits are set for enabled lines
-        all: std.bit_set.DynamicManaged,
+        all: std.bit_set.Dynamic,
         /// Bits are set for enabled lines per rule
-        rules: std.StringHashMap(std.bit_set.DynamicManaged),
+        rules: std.StringHashMap(std.bit_set.Dynamic),
 
-        fn deinit(self: *@This()) void {
-            self.all.deinit();
+        fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
+            self.all.deinit(gpa);
             var it = self.rules.iterator();
-            while (it.next()) |e| e.value_ptr.deinit();
+            while (it.next()) |e| e.value_ptr.deinit(gpa);
             self.rules.deinit();
         }
     };
@@ -1739,7 +1739,7 @@ pub const LazyRuleSkipper = struct {
     }
 
     pub fn deinit(self: *LazyRuleSkipper) void {
-        if (self.index) |*index| index.deinit();
+        if (self.index) |*index| index.deinit(self.gpa);
     }
 
     pub fn shouldSkip(self: *LazyRuleSkipper, problem: LintProblem) bool {
@@ -1759,12 +1759,12 @@ pub const LazyRuleSkipper = struct {
         const line_count = self.doc.line_starts.len;
         var index: Index = .{
             .rules = .init(self.gpa),
-            .all = oom(std.bit_set.DynamicManaged.initFull(
+            .all = oom(std.bit_set.Dynamic.initFull(
                 self.gpa,
                 line_count,
             )),
         };
-        errdefer index.deinit();
+        errdefer index.deinit(self.gpa);
 
         const GlobalOp = struct {
             range: std.bit_set.Range,
@@ -1809,7 +1809,7 @@ pub const LazyRuleSkipper = struct {
 
                     const result = oom(index.rules.getOrPut(rule_id));
                     if (!result.found_existing) {
-                        result.value_ptr.* = oom(std.bit_set.DynamicManaged.initFull(
+                        result.value_ptr.* = oom(std.bit_set.Dynamic.initFull(
                             self.gpa,
                             line_count,
                         ));

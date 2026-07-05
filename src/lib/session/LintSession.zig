@@ -202,11 +202,12 @@ fn initBuildConfig(
     else
         null;
 
-    var matched_compile_units: ?std.bit_set.DynamicManaged =
+    var matched_compile_units: ?std.bit_set.Dynamic =
         if (compile_units) |selectors|
             try .initEmpty(self.runtime.sessionArena(), selectors.len)
         else
             null;
+    defer if (matched_compile_units) |*matched| matched.deinit(self.runtime.sessionArena());
 
     for (0..build_config.steps.len) |step_index| {
         const step = build_config.steps[step_index];
@@ -304,7 +305,7 @@ fn compileUnitSelectorsMatch(
     selectors: []const BuildInfo.CompileUnitSelector,
     step_name: []const u8,
     kind: CompileUnitKind,
-    matched_selectors: *std.bit_set.DynamicManaged,
+    matched_selectors: *std.bit_set.Dynamic,
 ) bool {
     var matched = false;
     for (selectors, 0..) |selector, index| {
@@ -375,8 +376,8 @@ test "compileUnitSelectorMatches applies mode name and all selectors" {
 }
 
 test "compileUnitSelectorsMatch combines selectors with or semantics" {
-    var matched = try std.bit_set.DynamicManaged.initEmpty(std.testing.allocator, 2);
-    defer matched.deinit();
+    var matched = try std.bit_set.Dynamic.initEmpty(std.testing.allocator, 2);
+    defer matched.deinit(std.testing.allocator);
 
     const selectors = [_]BuildInfo.CompileUnitSelector{
         .exe,
