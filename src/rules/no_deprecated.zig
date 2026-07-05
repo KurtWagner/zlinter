@@ -33,8 +33,6 @@ fn run(
     zone.addText(doc.absPath(session));
 
     const config = options.getConfig(Config);
-    const session_arena = session.runtime.sessionArena();
-    const rule_arena = session.runtime.ruleArena();
     if (config.severity == .off) return null;
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
@@ -49,50 +47,42 @@ fn run(
         if (tree.fullStructInit(&struct_init_buffer, node)) |struct_init| {
             try handleStructInit(
                 rule,
-                session_arena,
-                rule_arena,
+                config,
                 session,
                 doc,
                 node,
                 struct_init,
                 &lint_problems,
-                config,
             );
         }
 
         switch (tag) {
             .enum_literal => try handleEnumLiteral(
                 rule,
-                session_arena,
-                rule_arena,
+                config,
                 session,
                 doc,
                 node,
                 tree.nodeMainToken(node),
                 &lint_problems,
-                config,
             ),
             .field_access => try handleFieldAccess(
                 rule,
-                session_arena,
-                rule_arena,
+                config,
                 session,
                 doc,
                 node,
                 tree.nodeData(node).node_and_token.@"1",
                 &lint_problems,
-                config,
             ),
             .identifier => try handleIdentifierAccess(
                 rule,
-                session_arena,
-                rule_arena,
+                config,
                 session,
                 doc,
                 node,
                 tree.nodeMainToken(node),
                 &lint_problems,
-                config,
             ),
             else => {},
         }
@@ -113,15 +103,16 @@ fn run(
 
 fn handleStructInit(
     rule: zlinter.rules.LintRule,
-    session_arena: std.mem.Allocator,
-    rule_arena: std.mem.Allocator,
+    config: Config,
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     struct_init: Ast.full.StructInit,
     lint_problems: *std.ArrayList(zlinter.results.LintProblem),
-    config: Config,
 ) !void {
+    const session_arena = session.runtime.sessionArena();
+    const rule_arena = session.runtime.ruleArena();
+
     const tree = doc.tree(session);
     const struct_candidates = try resolveStructInitTypeDeclCandidates(
         session,
@@ -175,18 +166,20 @@ fn handleStructInit(
 
 fn handleIdentifierAccess(
     rule: zlinter.rules.LintRule,
-    session_arena: std.mem.Allocator,
-    rule_arena: std.mem.Allocator,
+    config: Config,
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     identifier_token: Ast.TokenIndex,
     lint_problems: *std.ArrayList(zlinter.results.LintProblem),
-    config: Config,
 ) !void {
     const tree = doc.tree(session);
 
-    const decl_candidates = try session.resolveDeclCandidatesOfNode(rule_arena, doc, node_index);
+    const decl_candidates = try session.resolveDeclCandidatesOfNode(
+        session.runtime.ruleArena(),
+        doc,
+        node_index,
+    );
     for (decl_candidates) |candidate| {
         // Check whether the identifier is itself the declaration, in which case
         // we should skip as its not the usage but the declaration of it and we
@@ -199,34 +192,30 @@ fn handleIdentifierAccess(
 
         try appendDeprecatedProblem(
             rule,
-            session_arena,
-            rule_arena,
+            config,
             session,
             tree,
             node_index,
             candidate.decl_id,
             "Deprecated: {s}",
             lint_problems,
-            config,
         );
     }
 }
 
 fn handleEnumLiteral(
     rule: zlinter.rules.LintRule,
-    session_arena: std.mem.Allocator,
-    rule_arena: std.mem.Allocator,
+    config: Config,
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     identifier_token: Ast.TokenIndex,
     lint_problems: *std.ArrayList(zlinter.results.LintProblem),
-    config: Config,
 ) !void {
     const tree = doc.tree(session);
     const decl_candidates = try resolveEnumLiteralDeclCandidates(
         session,
-        rule_arena,
+        session.runtime.ruleArena(),
         doc,
         node_index,
         tree.tokenSlice(identifier_token),
@@ -234,62 +223,61 @@ fn handleEnumLiteral(
     for (decl_candidates) |candidate| {
         try appendDeprecatedProblem(
             rule,
-            session_arena,
-            rule_arena,
+            config,
             session,
             tree,
             node_index,
             candidate.decl_id,
             "Deprecated: {s}",
             lint_problems,
-            config,
         );
     }
 }
 
 fn handleFieldAccess(
     rule: zlinter.rules.LintRule,
-    session_arena: std.mem.Allocator,
-    rule_arena: std.mem.Allocator,
+    config: Config,
     session: *zlinter.session.LintSession,
     doc: *const zlinter.session.LintDocument,
     node_index: Ast.Node.Index,
     identifier_token: Ast.TokenIndex,
     lint_problems: *std.ArrayList(zlinter.results.LintProblem),
-    config: Config,
 ) !void {
     const tree = doc.tree(session);
     _ = identifier_token;
 
-    const decl_candidates = try session.resolveDeclCandidatesOfNode(rule_arena, doc, node_index);
+    const decl_candidates = try session.resolveDeclCandidatesOfNode(
+        session.runtime.ruleArena(),
+        doc,
+        node_index,
+    );
     for (decl_candidates) |candidate| {
         try appendDeprecatedProblem(
             rule,
-            session_arena,
-            rule_arena,
+            config,
             session,
             tree,
             node_index,
             candidate.decl_id,
             "Deprecated: {s}",
             lint_problems,
-            config,
         );
     }
 }
 
 fn appendDeprecatedProblem(
     rule: zlinter.rules.LintRule,
-    session_arena: std.mem.Allocator,
-    rule_arena: std.mem.Allocator,
+    config: Config,
     session: *zlinter.session.LintSession,
     tree: Ast,
     node_index: Ast.Node.Index,
     decl_id: zlinter.session.DeclStore.DeclId,
     comptime message_fmt: []const u8,
     lint_problems: *std.ArrayList(zlinter.results.LintProblem),
-    config: Config,
 ) !void {
+    const session_arena = session.runtime.sessionArena();
+    const rule_arena = session.runtime.ruleArena();
+
     const doc_comment = try session.allocDeclDocComments(rule_arena, decl_id) orelse return;
     const deprecated_message = getDeprecationFromDoc(doc_comment) orelse return;
     const notes = try allocDeprecatedDeclNotes(session_arena, session, decl_id);
