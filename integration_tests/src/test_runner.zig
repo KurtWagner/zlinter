@@ -334,7 +334,7 @@ fn normalizeOutputAlloc(input: []const u8, arena: std.mem.Allocator) ![]const u8
 
     const normalized_input = normalized.items;
     var index: usize = 0;
-    while (std.mem.indexOfPos(u8, normalized_input, index, "lib/std/")) |lib_std_index| {
+    while (std.mem.findPosu8, normalized_input, index, "lib/std/")) |lib_std_index| {
         var path_start = lib_std_index;
         while (path_start > index and normalized_input[path_start - 1] != '[' and !std.ascii.isWhitespace(normalized_input[path_start - 1])) {
             path_start -= 1;
