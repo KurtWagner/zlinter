@@ -229,7 +229,11 @@ fn run(
                         else => unreachable,
                     };
                     var is_len_excluded = false;
-                    for (exclude_len) |exclude_name| {
+                    // Underscore has special meaning in containers so lets
+                    // completely skip for length checks.
+                    if (std.mem.eql(u8, name, "_")) {
+                        is_len_excluded = true;
+                    } else for (exclude_len) |exclude_name| {
                         if (std.mem.eql(u8, name, exclude_name)) {
                             is_len_excluded = true;
                             break;
@@ -732,6 +736,33 @@ test "length exclusions do not skip error style checks" {
                 .severity = .@"error",
                 .slice = "BadName",
                 .message = "Error fields should be snake_case",
+            },
+        },
+    );
+}
+
+test "length exclusions always ignores `_`" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const Kind = enum {
+        \\  a = 1,
+        \\  b = 2,
+        \\  _,
+        \\ };
+    ,
+        .{},
+        Config{
+            .enum_field = .{ .@"error" = .snake_case },
+            .enum_field_min_len = .{ .warning = .{ .len = 5 } },
+            .enum_field_max_len = .{ .warning = .{ .len = 10 } },
+            .enum_field_exclude_len = &.{"b"},
+        },
+        &.{
+            .{
+                .rule_id = "field_naming",
+                .severity = .warning,
+                .slice = "a",
+                .message = "Enum field names should have a length greater or equal to 5",
             },
         },
     );
