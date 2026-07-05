@@ -34,5 +34,31 @@
         .require_exhaustive_enum_switch = .{
             .severity = .off,
         },
+        .no_global_vars = .{
+            .severity = .warning,
+        },
+        .require_labeled_continue = .{
+            .severity = .warning,
+        },
+        .no_literal_args = .{
+            .exclude_fn_names = .{
+                "print",
+                "alloc",
+                "allocWithOptions",
+                "allocWithOptionsRetAddr",
+                "allocSentinel",
+                "alignedAlloc",
+                "allocAdvancedWithRetAddr",
+                "resize",
+                "realloc",
+                "reallocAdvanced",
+                "parseInt",
+                "debugPrintWithIndent",
+                "tokenLocation",
+                "expectEqual",
+                "renderLine",
+                "init",
+            },
+        },
     },
 }
