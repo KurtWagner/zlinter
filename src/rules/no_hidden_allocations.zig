@@ -198,7 +198,7 @@ fn pathEndsWith(path: []const u8, suffix: []const u8) bool {
 }
 
 fn isPathSep(char: u8) bool {
-    return char == std.fs.path.sep_posix or char == std.fs.path.sep_windows;
+    return char == std.Io.Dir.path.sep_posix or char == std.Io.Dir.path.sep_windows;
 }
 
 test pathEndsWith {

@@ -12,7 +12,7 @@ pub fn loadFakeDocument(
 
     const io = std.testing.io;
 
-    if (std.fs.path.dirname(file_name)) |dir_name|
+    if (std.Io.Dir.path.dirname(file_name)) |dir_name|
         try dir.createDirPath(io, dir_name);
 
     const file = try dir.createFile(io, file_name, .{});
@@ -123,7 +123,7 @@ pub const paths = struct {
         comptime var result: []const u8 = "";
         result = result ++ parts[0];
         inline for (1..parts.len) |i| {
-            result = result ++ std.fs.path.sep_str ++ parts[i];
+            result = result ++ std.Io.Dir.path.sep_str ++ parts[i];
         }
         return result;
     }
@@ -137,7 +137,7 @@ pub const paths = struct {
         comptime var result: []const u8 = "";
         inline for (0..posix_path.len) |i| {
             result = result ++ std.fmt.comptimePrint("{c}", .{switch (posix_path[i]) {
-                std.fs.path.sep_posix => std.fs.path.sep,
+                std.Io.Dir.path.sep_posix => std.Io.Dir.path.sep,
                 else => |c| c,
             }});
         }
@@ -364,7 +364,7 @@ pub fn createFiles(dir: std.Io.Dir, file_paths: [][]const u8) !void {
 
     const io = std.testing.io;
     for (file_paths) |file_path| {
-        if (std.fs.path.dirname(file_path)) |parent|
+        if (std.Io.Dir.path.dirname(file_path)) |parent|
             try dir.createDirPath(io, parent);
         (try dir.createFile(io, file_path, .{})).close(io);
     }

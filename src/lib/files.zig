@@ -35,7 +35,7 @@ pub fn allocLintFiles(runtime: *const LintRuntime, dir: std.Io.Dir, maybe_files:
 
     if (maybe_files) |files| {
         for (files) |file_or_dir| {
-            const abs_path = try std.fs.path.resolve(gpa, &.{
+            const abs_path = try std.Io.Dir.path.resolve(gpa, &.{
                 root_abs_path,
                 file_or_dir,
             });
@@ -96,7 +96,7 @@ fn walkDirectory(
     file_paths: *std.StringHashMap(void),
     parent_abs_path: []const u8,
 ) !void {
-    std.debug.assert(std.fs.path.isAbsolute(parent_abs_path));
+    std.debug.assert(std.Io.Dir.path.isAbsolute(parent_abs_path));
 
     var walker = try dir.walk(allocator);
     defer walker.deinit();
@@ -105,7 +105,7 @@ fn walkDirectory(
         if (item.kind != .file) continue;
         if (!try isLintableFilePath(item.path)) continue;
 
-        const resolved = try std.fs.path.resolve(
+        const resolved = try std.Io.Dir.path.resolve(
             allocator,
             &.{
                 parent_abs_path,
@@ -123,7 +123,7 @@ fn putLintFilePath(
     file_paths: *std.StringHashMap(void),
     abs_path: []const u8,
 ) !void {
-    std.debug.assert(std.fs.path.isAbsolute(abs_path));
+    std.debug.assert(std.Io.Dir.path.isAbsolute(abs_path));
 
     errdefer allocator.free(abs_path);
 
@@ -137,11 +137,11 @@ fn putLintFilePath(
 pub fn isLintableFilePath(file_path: []const u8) !bool {
     const extension = ".zig";
 
-    const basename = std.fs.path.basename(file_path);
+    const basename = std.Io.Dir.path.basename(file_path);
     if (basename.len <= extension.len) return false; // Can't just be ".zig"
     if (!std.mem.endsWith(u8, basename, extension)) return false;
 
-    var components = std.fs.path.componentIterator(file_path);
+    var components = std.Io.Dir.path.componentIterator(file_path);
     while (components.next()) |component| {
         if (std.mem.eql(u8, component.name, ".zig-cache")) return false;
         if (std.mem.eql(u8, component.name, "zig-out")) return false;
@@ -233,18 +233,18 @@ test "allocLintFiles - with default args" {
     }
 
     try std.testing.expectEqual(2, lint_files.len);
-    const cwd_rel_path_0 = try std.fs.path.relative(std.testing.allocator, cwd, null, cwd, lint_files[0].abs_path);
+    const cwd_rel_path_0 = try std.Io.Dir.path.relative(std.testing.allocator, cwd, null, cwd, lint_files[0].abs_path);
     defer std.testing.allocator.free(cwd_rel_path_0);
 
-    const cwd_rel_path_1 = try std.fs.path.relative(std.testing.allocator, cwd, null, cwd, lint_files[1].abs_path);
+    const cwd_rel_path_1 = try std.Io.Dir.path.relative(std.testing.allocator, cwd, null, cwd, lint_files[1].abs_path);
     defer std.testing.allocator.free(cwd_rel_path_1);
 
     try testing.expectContainsExactlyStrings(&.{
         testing.paths.posix("a.zig"),
         testing.paths.posix("src/A.zig"),
     }, &.{ cwd_rel_path_0, cwd_rel_path_1 });
-    try std.testing.expect(std.fs.path.isAbsolute(lint_files[0].abs_path));
-    try std.testing.expect(std.fs.path.isAbsolute(lint_files[1].abs_path));
+    try std.testing.expect(std.Io.Dir.path.isAbsolute(lint_files[0].abs_path));
+    try std.testing.expect(std.Io.Dir.path.isAbsolute(lint_files[1].abs_path));
 }
 
 test "allocLintFiles - with arg files" {
@@ -298,18 +298,18 @@ test "allocLintFiles - with arg files" {
     }
 
     try std.testing.expectEqual(2, lint_files.len);
-    const cwd_rel_path_0 = try std.fs.path.relative(std.testing.allocator, cwd, null, cwd, lint_files[0].abs_path);
+    const cwd_rel_path_0 = try std.Io.Dir.path.relative(std.testing.allocator, cwd, null, cwd, lint_files[0].abs_path);
     defer std.testing.allocator.free(cwd_rel_path_0);
 
-    const cwd_rel_path_1 = try std.fs.path.relative(std.testing.allocator, cwd, null, cwd, lint_files[1].abs_path);
+    const cwd_rel_path_1 = try std.Io.Dir.path.relative(std.testing.allocator, cwd, null, cwd, lint_files[1].abs_path);
     defer std.testing.allocator.free(cwd_rel_path_1);
 
     try testing.expectContainsExactlyStrings(&.{
         testing.paths.posix("a.zig"),
         testing.paths.posix("src/A.zig"),
     }, &.{ cwd_rel_path_0, cwd_rel_path_1 });
-    try std.testing.expect(std.fs.path.isAbsolute(lint_files[0].abs_path));
-    try std.testing.expect(std.fs.path.isAbsolute(lint_files[1].abs_path));
+    try std.testing.expect(std.Io.Dir.path.isAbsolute(lint_files[0].abs_path));
+    try std.testing.expect(std.Io.Dir.path.isAbsolute(lint_files[1].abs_path));
 }
 
 /// Returns true if the directory contains a "build.zig" file.
@@ -390,8 +390,8 @@ fn resolveConfigurationPath(
     build_root: []const u8,
     config_path: []const u8,
 ) ![]const u8 {
-    if (std.fs.path.isAbsolute(config_path)) return gpa.dupe(u8, config_path);
-    return std.fs.path.join(gpa, &.{ build_root, config_path });
+    if (std.Io.Dir.path.isAbsolute(config_path)) return gpa.dupe(u8, config_path);
+    return std.Io.Dir.path.join(gpa, &.{ build_root, config_path });
 }
 
 pub fn resolveLazyPath(
@@ -408,7 +408,7 @@ pub fn resolveLazyPath(
             else
                 build_root_path;
 
-            return try std.fs.path.resolve(
+            return try std.Io.Dir.path.resolve(
                 fba.allocator(),
                 &.{ root, source_path.sub_path.slice(config) },
             );
@@ -428,7 +428,7 @@ pub fn resolveLazyPath(
                 .install_include,
                 => return null,
             };
-            return try std.fs.path.resolve(
+            return try std.Io.Dir.path.resolve(
                 fba.allocator(),
                 &.{ root, sub_path },
             );

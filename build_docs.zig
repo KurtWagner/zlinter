@@ -46,7 +46,7 @@ pub fn main(init: std.process.Init) !void {
         if (entry.kind != .file) continue;
         if (!std.mem.endsWith(u8, entry.basename, ".zig")) continue;
 
-        const file_path = try std.fs.path.join(gpa, &.{ rules_dir_path, entry.path });
+        const file_path = try std.Io.Dir.path.join(gpa, &.{ rules_dir_path, entry.path });
         errdefer gpa.free(file_path);
         try rule_files.append(gpa, file_path);
     }
@@ -62,7 +62,7 @@ pub fn main(init: std.process.Init) !void {
     for (file_names) |file_name| {
         defer content.clearRetainingCapacity();
 
-        const basename = std.fs.path.basename(file_name);
+        const basename = std.Io.Dir.path.basename(file_name);
         const rule_name = basename[0 .. basename.len - ".zig".len];
 
         try writer.interface.writeAll("## `");

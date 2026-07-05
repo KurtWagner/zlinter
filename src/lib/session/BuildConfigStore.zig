@@ -57,7 +57,7 @@ pub fn resolve(
     var fba_buffer: [std.fs.max_path_bytes * 2]u8 = undefined;
     var fba: std.heap.FixedBufferAllocator = .init(&fba_buffer);
 
-    const normal_path = std.fs.path.resolve(
+    const normal_path = std.Io.Dir.path.resolve(
         fba.allocator(),
         &.{ self.runtime.cwd, input_path },
     ) catch unreachable;
@@ -199,7 +199,7 @@ fn findBuildRoot(
                 return .{ .path = dir };
         }
 
-        const parent = std.fs.path.dirname(dir) orelse ".";
+        const parent = std.Io.Dir.path.dirname(dir) orelse ".";
         if (std.mem.eql(u8, parent, dir)) {
             std.log.err("Could not find build.zig for '{s}'", .{src_path});
             return error.FileNotFound;
@@ -235,7 +235,7 @@ fn cacheResolvedConfigPaths(
             oom(self.config_id_by_path.putNoClobber(self.runtime.sessionArena(), key, config_id));
         }
 
-        const parent = std.fs.path.dirname(path) orelse cached_ancestor_path;
+        const parent = std.Io.Dir.path.dirname(path) orelse cached_ancestor_path;
         if (std.mem.eql(u8, parent, path))
             break;
 

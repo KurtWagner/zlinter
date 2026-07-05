@@ -39,10 +39,10 @@ pub fn build(b: *std.Build) !void {
         if (item.kind != .file) continue;
         if (!std.mem.endsWith(u8, item.path, input_suffix)) continue;
 
-        const parent_dir = std.fs.path.dirname(item.path).?;
+        const parent_dir = std.Io.Dir.path.dirname(item.path).?;
 
         // Format: <rule_name>/<test_name>/<test_name>.input.zig
-        const rule_name = item.path[0 .. std.mem.indexOfScalar(u8, item.path, std.fs.path.sep) orelse {
+        const rule_name = item.path[0 .. std.mem.indexOfScalar(u8, item.path, std.Io.Dir.path.sep) orelse {
             std.log.err("Test case file skipped as its invalid: {s}", .{item.path});
             continue;
         }];
@@ -75,7 +75,7 @@ pub fn build(b: *std.Build) !void {
                 .{ test_name, suffix },
             ) catch unreachable;
 
-            const input_path = std.fs.path.resolve(
+            const input_path = std.Io.Dir.path.resolve(
                 path_fba.allocator(),
                 &.{ test_cases_path, parent_dir, filename },
             ) catch unreachable;

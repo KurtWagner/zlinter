@@ -165,7 +165,7 @@ fn runTest(
         defer temp_dir.close(io);
 
         const temp_path = try arena.print(
-            ".zig-cache" ++ std.fs.path.sep_str ++ "tmp" ++ std.fs.path.sep_str ++ "{s}.input.zig",
+            ".zig-cache" ++ std.Io.Dir.path.sep_str ++ "tmp" ++ std.Io.Dir.path.sep_str ++ "{s}.input.zig",
             .{rule_name},
         );
 
@@ -180,7 +180,7 @@ fn runTest(
             io,
             arena,
             input_zig_file.?,
-            ".zig-cache" ++ std.fs.path.sep_str ++ "tmp" ++ std.fs.path.sep_str ++ "zlinter.zon",
+            ".zig-cache" ++ std.Io.Dir.path.sep_str ++ "tmp" ++ std.Io.Dir.path.sep_str ++ "zlinter.zon",
         );
 
         var lint_args: std.ArrayList([]const u8) = try .initCapacity(arena, 32);
@@ -256,8 +256,8 @@ fn copyFixtureZlinterZonForFix(
             else => return err,
         };
 
-    const input_dir = std.fs.path.dirname(input_zig_file) orelse ".";
-    const fixture_config_path = try std.fs.path.join(
+    const input_dir = std.Io.Dir.path.dirname(input_zig_file) orelse ".";
+    const fixture_config_path = try std.Io.Dir.path.join(
         arena,
         &.{ input_dir, "zlinter.zon" },
     );
@@ -328,7 +328,7 @@ fn normalizeOutputAlloc(input: []const u8, arena: std.mem.Allocator) ![]const u8
             // This assumes that '\' is never in output, which is currently true
             // If this ever changes we will need something more sophisticated
             // to identify strings that look like paths
-            else => normalized.appendAssumeCapacity(if (std.fs.path.isSep(c)) std.fs.path.sep_posix else c),
+            else => normalized.appendAssumeCapacity(if (std.Io.Dir.path.isSep(c)) std.Io.Dir.path.sep_posix else c),
         }
     }
 

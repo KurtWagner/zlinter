@@ -27,7 +27,7 @@ fn format(
             input.file_store.fileSource(file_result.file_id),
         ) catch |e| return logAndReturnWriteFailure("Render", e);
 
-        const cwd_rel_path = oom(std.fs.path.relative(
+        const cwd_rel_path = oom(std.Io.Dir.path.relative(
             file_arena.allocator(),
             input.runtime.cwd,
             null,
@@ -150,7 +150,7 @@ fn renderNoteTitle(
     ))
         note_abs_path
     else
-        oom(std.fs.path.relative(
+        oom(std.Io.Dir.path.relative(
             allocator,
             input.runtime.cwd,
             null,
@@ -176,12 +176,12 @@ fn isStdLibPath(abs_path: []const u8, zig_lib_directory: []const u8) bool {
 
     var rest = abs_path[zig_lib_directory.len..];
     if (rest.len == 0) return false;
-    if (std.fs.path.isSep(rest[0])) rest = rest[1..];
+    if (std.Io.Dir.path.isSep(rest[0])) rest = rest[1..];
 
     return std.mem.startsWith(
         u8,
         rest,
-        "std" ++ std.fs.path.sep_str,
+        "std" ++ std.Io.Dir.path.sep_str,
     );
 }
 

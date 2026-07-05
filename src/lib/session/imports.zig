@@ -6,7 +6,7 @@ pub const Kind = enum(u5) {
     module = 4,
 
     pub fn init(import_path: []const u8) Kind {
-        return if (std.mem.endsWith(u8, import_path, ".zig") and !std.fs.path.isAbsolute(import_path))
+        return if (std.mem.endsWith(u8, import_path, ".zig") and !std.Io.Dir.path.isAbsolute(import_path))
             .relative
         else if (std.mem.eql(u8, import_path, "std"))
             .stdlib
@@ -182,7 +182,7 @@ pub fn resolveFile(
 ) !?FileStore.FileId {
     const parent_file_id = context.parent_file_id;
     const parent_abs_path = context.file_store.fileAbsPath(parent_file_id);
-    const parent_file_dir = std.fs.path.dirname(parent_abs_path) orelse ".";
+    const parent_file_dir = std.Io.Dir.path.dirname(parent_abs_path) orelse ".";
 
     return switch (Kind.init(import_path)) {
         .relative => try context.file_store.resolveFrom(

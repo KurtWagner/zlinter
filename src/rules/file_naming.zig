@@ -40,8 +40,8 @@ fn run(
     const tree = doc.tree(session);
     if (tree.errors.len > 0) return null;
     const abs_path = doc.absPath(session);
-    const basename = std.fs.path.basename(abs_path);
-    const stem = std.fs.path.stem(basename);
+    const basename = std.Io.Dir.path.basename(abs_path);
+    const stem = std.Io.Dir.path.stem(basename);
     const check_name = stem;
 
     const message, const severity = msg: {

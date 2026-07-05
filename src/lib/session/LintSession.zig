@@ -887,7 +887,7 @@ pub fn initDocument(
     defer zone.end();
 
     const abs_path = self.file_store.fileAbsPath(file_id);
-    std.debug.assert(std.fs.path.isAbsolute(abs_path));
+    std.debug.assert(std.Io.Dir.path.isAbsolute(abs_path));
 
     const source = self.file_store.fileSource(file_id);
     const tree = self.file_store.fileTree(file_id);

@@ -293,7 +293,7 @@ fn runLinterRules(
         try lint_config_store.index(
             runtime.io,
             runtime.sessionArena(),
-            std.fs.path.dirname(file_abs_path).?,
+            std.Io.Dir.path.dirname(file_abs_path).?,
             std.Io.Dir.cwd(),
         );
 
@@ -375,7 +375,7 @@ fn runLinterRules(
                 &doc,
                 .{
                     .config = lint_config_store.lookup(
-                        std.fs.path.dirname(file_abs_path).?,
+                        std.Io.Dir.path.dirname(file_abs_path).?,
                         rule_id,
                     ),
                 },
@@ -543,7 +543,7 @@ fn runFormatter(
 }
 
 fn allocCwdRelPath(gpa: std.mem.Allocator, cwd: []const u8, abs_path: []const u8) ![]const u8 {
-    return std.fs.path.relative(gpa, cwd, null, cwd, abs_path);
+    return std.Io.Dir.path.relative(gpa, cwd, null, cwd, abs_path);
 }
 
 fn cmpFix(context: void, a: zlinter.results.LintProblemFix, b: zlinter.results.LintProblemFix) bool {
@@ -933,12 +933,12 @@ const LintConfigStore = struct {
         dir_abs_path: []const u8,
         cwd: std.Io.Dir,
     ) error{InvalidLintConfig}!void {
-        std.debug.assert(std.fs.path.isAbsolute(dir_abs_path));
+        std.debug.assert(std.Io.Dir.path.isAbsolute(dir_abs_path));
 
         const normalized_slice = std.mem.trimEnd(
             u8,
             dir_abs_path,
-            std.fs.path.sep_str,
+            std.Io.Dir.path.sep_str,
         );
         if (normalized_slice.len == 0) return;
 
@@ -948,7 +948,7 @@ const LintConfigStore = struct {
         var maybe_normalized_copy: ?[]const u8 = null;
 
         for (normalized_slice, 0..) |c, i| {
-            if (!std.fs.path.isSep(c)) continue;
+            if (!std.Io.Dir.path.isSep(c)) continue;
 
             if (self.needsIndexing(normalized_slice[0..i])) {
                 if (maybe_normalized_copy == null)
@@ -1024,13 +1024,13 @@ const LintConfigStore = struct {
         const zone = tracy.traceNamed(@src(), "LintConfigStore.lookup");
         defer zone.end();
 
-        std.debug.assert(std.fs.path.isAbsolute(dir_abs_path));
+        std.debug.assert(std.Io.Dir.path.isAbsolute(dir_abs_path));
         std.debug.assert(dir_abs_path.len > 0);
 
         const normalized = std.mem.trimEnd(
             u8,
             dir_abs_path,
-            std.fs.path.sep_str,
+            std.Io.Dir.path.sep_str,
         );
         std.debug.assert(normalized.len > 0);
 
@@ -1042,7 +1042,7 @@ const LintConfigStore = struct {
 
         var rhs = normalized.len;
         while (rhs > 0) : (rhs -= 1) {
-            if (std.fs.path.isSep(normalized[rhs - 1])) {
+            if (std.Io.Dir.path.isSep(normalized[rhs - 1])) {
                 const parent_dir = normalized[0 .. rhs - 1];
                 if (self.configByDir(parent_dir)) |config| {
                     const lint_config = self.configs.items[config];
@@ -1088,7 +1088,7 @@ const LintConfigStore = struct {
             var fba_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
             var fba_path: std.heap.FixedBufferAllocator = .init(&fba_path_buffer);
 
-            const lint_config_abs_path = std.fs.path.resolve(
+            const lint_config_abs_path = std.Io.Dir.path.resolve(
                 fba_path.allocator(),
                 &.{ dir_abs_path, "zlinter.zon" },
             ) catch unreachable;
