@@ -167,10 +167,10 @@ fn tokensToJson(tree: Ast, arena: std.mem.Allocator) !std.json.Array {
             .string = @tagName(tree.tokens.items(.tag)[token_index]),
         });
         try token_object.put(arena, "start", std.json.Value{
-            .number_string = try std.fmt.allocPrint(arena, "{d}", .{start_offset}),
+            .number_string = try arena.print("{d}", .{start_offset}),
         });
         try token_object.put(arena, "len", std.json.Value{
-            .number_string = try std.fmt.allocPrint(arena, "{d}", .{tree.tokenSlice(token_index).len}),
+            .number_string = try arena.print("{d}", .{tree.tokenSlice(token_index).len}),
         });
         // Add more meta data for tokens here..
 

@@ -107,7 +107,7 @@ fn run(
             .severity = config.severity,
             .start = .startOfNode(tree, node),
             .end = .endOfNode(tree, node),
-            .message = try std.fmt.allocPrint(session_arena, "Missing `errdefer` cleanup", .{}),
+            .message = try session_arena.print("Missing `errdefer` cleanup", .{}),
         });
     }
 

@@ -157,7 +157,7 @@ fn run(
                     .severity = config.decl_name_min_len.severity(),
                     .start = .startOfToken(tree, name_token),
                     .end = .endOfToken(tree, name_token),
-                    .message = try std.fmt.allocPrint(session_arena, "Declaration names should have a length greater or equal to {d}", .{min_len}),
+                    .message = try session_arena.print("Declaration names should have a length greater or equal to {d}", .{min_len}),
                 });
                 emitted_len_diagnostic = true;
             }
@@ -173,7 +173,7 @@ fn run(
                     .severity = config.decl_name_max_len.severity(),
                     .start = .startOfToken(tree, name_token),
                     .end = .endOfToken(tree, name_token),
-                    .message = try std.fmt.allocPrint(session_arena, "Declaration names should have a length less or equal to {d}", .{max_len}),
+                    .message = try session_arena.print("Declaration names should have a length less or equal to {d}", .{max_len}),
                 });
             }
         };
@@ -194,7 +194,7 @@ fn run(
                 .severity = style_diagnostic.style_with_severity.severity(),
                 .start = .startOfToken(tree, name_token),
                 .end = .endOfToken(tree, name_token),
-                .message = try std.fmt.allocPrint(session_arena, "{s} declaration should be {s}", .{
+                .message = try session_arena.print("{s} declaration should be {s}", .{
                     style_diagnostic.var_desc,
                     style.name(),
                 }),

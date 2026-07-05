@@ -146,7 +146,7 @@ fn run(
                                         .severity = min_len.severity(),
                                         .start = .startOfToken(tree, token),
                                         .end = .endOfToken(tree, token),
-                                        .message = try std.fmt.allocPrint(session_arena, "Error field names should have a length greater or equal to {d}", .{len}),
+                                        .message = try session_arena.print("Error field names should have a length greater or equal to {d}", .{len}),
                                     });
                                     emitted_len_diagnostic = true;
                                 }
@@ -158,7 +158,7 @@ fn run(
                                         .severity = max_len.severity(),
                                         .start = .startOfToken(tree, token),
                                         .end = .endOfToken(tree, token),
-                                        .message = try std.fmt.allocPrint(session_arena, "Error field names should have a length less or equal to {d}", .{len}),
+                                        .message = try session_arena.print("Error field names should have a length less or equal to {d}", .{len}),
                                     });
                                 }
                             };
@@ -171,7 +171,7 @@ fn run(
                                     .severity = config.error_field.severity(),
                                     .start = .startOfToken(tree, token),
                                     .end = .endOfToken(tree, token),
-                                    .message = try std.fmt.allocPrint(session_arena, "Error fields should be {s}", .{style.name()}),
+                                    .message = try session_arena.print("Error fields should be {s}", .{style.name()}),
                                 });
                             }
                         }
@@ -255,7 +255,7 @@ fn run(
                                     .severity = min_len.severity(),
                                     .start = .startOfToken(tree, name_token),
                                     .end = .endOfToken(tree, name_token),
-                                    .message = try std.fmt.allocPrint(session_arena, "{s} field names should have a length greater or equal to {d}", .{ container_name, len }),
+                                    .message = try session_arena.print("{s} field names should have a length greater or equal to {d}", .{ container_name, len }),
                                 });
                                 emitted_len_diagnostic = true;
                             }
@@ -267,7 +267,7 @@ fn run(
                                     .severity = max_len.severity(),
                                     .start = .startOfToken(tree, name_token),
                                     .end = .endOfToken(tree, name_token),
-                                    .message = try std.fmt.allocPrint(session_arena, "{s} field names should have a length less or equal to {d}", .{ container_name, len }),
+                                    .message = try session_arena.print("{s} field names should have a length less or equal to {d}", .{ container_name, len }),
                                 });
                             }
                         };
@@ -280,7 +280,7 @@ fn run(
                                 .severity = style_with_severity.severity(),
                                 .start = .startOfToken(tree, name_token),
                                 .end = .endOfToken(tree, name_token),
-                                .message = try std.fmt.allocPrint(session_arena, "{s} fields should be {s}", .{ field_desc, style.name() }),
+                                .message = try session_arena.print("{s} fields should be {s}", .{ field_desc, style.name() }),
                             });
                         }
                     }

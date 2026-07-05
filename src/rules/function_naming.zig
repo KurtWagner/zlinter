@@ -90,7 +90,7 @@ fn run(
                     const style = config.function_that_returns_type.style() orelse break :msg .{ null, null };
                     if (!style.check(fn_name)) {
                         break :msg .{
-                            try std.fmt.allocPrint(session_arena, "Callable returning `type` should be {s}", .{style.name()}),
+                            try session_arena.print("Callable returning `type` should be {s}", .{style.name()}),
                             config.function_that_returns_type.severity(),
                         };
                     }
@@ -98,7 +98,7 @@ fn run(
                     const style = config.function.style() orelse break :msg .{ null, null };
                     if (!style.check(fn_name)) {
                         break :msg .{
-                            try std.fmt.allocPrint(session_arena, "Callable should be {s}", .{style.name()}),
+                            try session_arena.print("Callable should be {s}", .{style.name()}),
                             config.function.severity(),
                         };
                     }
@@ -188,7 +188,7 @@ fn run(
                         .severity = style_with_severity.severity(),
                         .start = .startOfToken(tree, identifer_token),
                         .end = .endOfToken(tree, identifer_token),
-                        .message = try std.fmt.allocPrint(session_arena, "{s} should be {s}", .{ desc, style.name() }),
+                        .message = try session_arena.print("{s} should be {s}", .{ desc, style.name() }),
                         .notes = try allocResolvedDeclNotes(
                             session_arena,
                             session,

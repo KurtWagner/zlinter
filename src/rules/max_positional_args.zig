@@ -68,7 +68,7 @@ fn run(
             .severity = config.severity,
             .start = .startOfToken(tree, firstParamStartToken(tree, fn_proto) orelse tree.firstToken(fn_proto.ast.params[0])),
             .end = .endOfNode(tree, fn_proto.ast.params[fn_proto.ast.params.len - 1]),
-            .message = try std.fmt.allocPrint(session_arena, "Exceeded maximum positional arguments of {d}, found {d}.", .{ config.max, fn_proto.ast.params.len }),
+            .message = try session_arena.print("Exceeded maximum positional arguments of {d}, found {d}.", .{ config.max, fn_proto.ast.params.len }),
         });
     }
 

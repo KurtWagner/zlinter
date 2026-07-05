@@ -66,7 +66,7 @@ fn testDescription(test_name: []const u8, rule_name: []const u8, arena: std.mem.
         return "";
 
     var buffer: [512]u8 = undefined;
-    return std.fmt.allocPrint(arena, "{s} - ", .{
+    return arena.print("{s} - ", .{
         prettifyTestName(test_name, &buffer),
     });
 }

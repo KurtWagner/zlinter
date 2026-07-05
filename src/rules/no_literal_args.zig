@@ -188,7 +188,7 @@ fn run(
                         .severity = config.detect_bool_literal,
                         .start = .startOfNode(tree, param_node),
                         .end = .endOfNode(tree, param_node),
-                        .message = try std.fmt.allocPrint(session_arena, "Avoid bool literal arguments as they're ambiguous.", .{}),
+                        .message = try session_arena.print("Avoid bool literal arguments as they're ambiguous.", .{}),
                     }),
                 .string => if (config.detect_string_literal != .off)
                     try lint_problems.append(session_arena, .{
@@ -196,7 +196,7 @@ fn run(
                         .severity = config.detect_string_literal,
                         .start = .startOfNode(tree, param_node),
                         .end = .endOfNode(tree, param_node),
-                        .message = try std.fmt.allocPrint(session_arena, "Avoid string literal arguments as they're ambiguous.", .{}),
+                        .message = try session_arena.print("Avoid string literal arguments as they're ambiguous.", .{}),
                     }),
                 .char => if (config.detect_char_literal != .off)
                     try lint_problems.append(session_arena, .{
@@ -204,7 +204,7 @@ fn run(
                         .severity = config.detect_char_literal,
                         .start = .startOfNode(tree, param_node),
                         .end = .endOfNode(tree, param_node),
-                        .message = try std.fmt.allocPrint(session_arena, "Avoid char literal arguments as they're ambiguous.", .{}),
+                        .message = try session_arena.print("Avoid char literal arguments as they're ambiguous.", .{}),
                     }),
                 .number => if (config.detect_number_literal != .off)
                     try lint_problems.append(session_arena, .{
@@ -212,7 +212,7 @@ fn run(
                         .severity = config.detect_number_literal,
                         .start = .startOfNode(tree, param_node),
                         .end = .endOfNode(tree, param_node),
-                        .message = try std.fmt.allocPrint(session_arena, "Avoid number literal arguments as they're ambiguous.", .{}),
+                        .message = try session_arena.print("Avoid number literal arguments as they're ambiguous.", .{}),
                     }),
             }
         }

@@ -188,7 +188,7 @@ fn run(
                 .severity = order_with_severity.severity(),
                 .start = actual_start,
                 .end = actual_end,
-                .message = try std.fmt.allocPrint(session_arena, "{s} fields should be in {s} order", .{
+                .message = try session_arena.print("{s} fields should be in {s} order", .{
                     container_kind_name,
                     order.name(),
                 }),

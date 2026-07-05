@@ -80,7 +80,7 @@ fn run(
                     .severity = severity,
                     .start = .startOfToken(tree, tree.firstToken(node)),
                     .end = .endOfNode(tree, fn_decl.ast.proto_node),
-                    .message = try std.fmt.allocPrint(session_arena, "{s} function is missing a doc comment", .{label}),
+                    .message = try session_arena.print("{s} function is missing a doc comment", .{label}),
                 });
                 continue :nodes;
             }
@@ -99,7 +99,7 @@ fn run(
                     .severity = severity,
                     .start = .startOfToken(tree, tree.firstToken(node)),
                     .end = .endOfToken(tree, var_decl.ast.mut_token + 1),
-                    .message = try std.fmt.allocPrint(session_arena, "{s} declaration is missing a doc comment", .{label}),
+                    .message = try session_arena.print("{s} declaration is missing a doc comment", .{label}),
                 });
             }
         }
