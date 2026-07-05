@@ -150,7 +150,7 @@ fn looksLikeUrl(content: []const u8) bool {
     // such as `http://`, `https://a`, and `http://a.`.
     inline for (&.{ "http://", "https://" }) |prefix| {
         var search_start: usize = 0;
-        while (std.mem.findPosu8, content, search_start, prefix)) |index| {
+        while (std.mem.findPos(u8, content, search_start, prefix)) |index| {
             const prefix_is_word_start = index == 0 or std.mem.findScalar(u8, "([{", content[index - 1]) != null;
             if (prefix_is_word_start and content.len >= index + prefix.len + 3) return true;
             search_start = index + 1;
