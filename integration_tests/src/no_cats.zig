@@ -29,7 +29,7 @@ fn run(
 
     const tree = doc.tree(session);
     var token: Ast.TokenIndex = 0;
-    while (token < tree.tokens.len) : (token += 1) {
+    while (token < tree.tokens.len) : (token += 1)
         if (tree.tokens.items(.tag)[token] == .identifier) {
             const name = tree.tokenSlice(token);
             if (std.ascii.findIgnoreCase(name, "cats") != null) {
@@ -41,8 +41,7 @@ fn run(
                     .message = try session_arena.dupe(u8, config.message orelse "I'm scared of cats"),
                 });
             }
-        }
-    }
+        };
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(

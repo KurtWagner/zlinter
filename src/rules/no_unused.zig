@@ -239,7 +239,7 @@ fn containsBlankLine(bytes: []const u8) bool {
     var saw_newline = false;
 
     var i: usize = 0;
-    while (i < bytes.len) : (i += 1) {
+    while (i < bytes.len) : (i += 1)
         switch (bytes[i]) {
             '\n' => {
                 if (saw_newline and !line_has_non_whitespace) return true;
@@ -248,8 +248,7 @@ fn containsBlankLine(bytes: []const u8) bool {
             },
             '\r', ' ', '\t' => {},
             else => line_has_non_whitespace = true,
-        }
-    }
+        };
 
     return false;
 }

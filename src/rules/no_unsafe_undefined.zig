@@ -204,24 +204,22 @@ fn optionalNodeEquals(optional_node: Ast.Node.OptionalIndex, expected: Ast.Node.
 
 fn isOptionalType(tree: Ast, type_node: Ast.Node.Index) bool {
     var current = type_node;
-    while (true) {
+    while (true)
         switch (tree.nodeTag(current)) {
             .optional_type => return true,
             .grouped_expression => current = tree.nodeData(current).node_and_token[0],
             else => return false,
-        }
-    }
+        };
 }
 
 fn isPointerType(tree: Ast, type_node: Ast.Node.Index) bool {
     var current = type_node;
-    while (true) {
+    while (true)
         switch (tree.nodeTag(current)) {
             .optional_type => current = tree.nodeData(current).node,
             .grouped_expression => current = tree.nodeData(current).node_and_token[0],
             else => return tree.fullPtrType(current) != null,
-        }
-    }
+        };
 }
 
 fn isPrimitiveScalarType(
@@ -236,7 +234,7 @@ fn isPrimitiveScalarType(
 
 fn directPrimitiveScalarType(tree: Ast, type_node: Ast.Node.Index) bool {
     var current = type_node;
-    while (true) {
+    while (true)
         switch (tree.nodeTag(current)) {
             .grouped_expression => current = tree.nodeData(current).node_and_token[0],
             else => {
@@ -249,8 +247,7 @@ fn directPrimitiveScalarType(tree: Ast, type_node: Ast.Node.Index) bool {
                     .named => false,
                 };
             },
-        }
-    }
+        };
 }
 
 fn resolvedDeclIsPrimitiveScalar(
@@ -330,7 +327,7 @@ fn resolvedDeclIsEnumOrUnion(
 
 fn directEnumOrUnionType(tree: Ast, type_node: Ast.Node.Index) bool {
     var current = type_node;
-    while (true) {
+    while (true)
         switch (tree.nodeTag(current)) {
             .optional_type => current = tree.nodeData(current).node,
             .grouped_expression => current = tree.nodeData(current).node_and_token[0],
@@ -342,8 +339,7 @@ fn directEnumOrUnionType(tree: Ast, type_node: Ast.Node.Index) bool {
                     else => false,
                 };
             },
-        }
-    }
+        };
 }
 
 test {

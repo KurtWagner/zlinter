@@ -359,13 +359,12 @@ fn sourceRangeIsBlankOnly(
 ) bool {
     if (start_line >= end_line) return true;
     var line = start_line;
-    while (line < end_line) : (line += 1) {
+    while (line < end_line) : (line += 1)
         if (!isBlankLine(lineSlice(
             source,
             line_starts,
             line,
         ))) return false;
-    }
     return true;
 }
 
@@ -402,12 +401,11 @@ fn isBlankLine(line: []const u8) bool {
 
 fn isAttachableImportCommentLine(line: []const u8) bool {
     var i: usize = 0;
-    while (i < line.len) : (i += 1) {
+    while (i < line.len) : (i += 1)
         switch (line[i]) {
             ' ', '\t', '\r' => continue,
             else => break,
-        }
-    }
+        };
     const trimmed = line[i..];
     return std.mem.startsWith(u8, trimmed, "//") and
         !std.mem.startsWith(u8, trimmed, "//!");

@@ -216,7 +216,7 @@ fn isComparisonExpr(tag: Ast.Node.Tag) bool {
 fn isNestedWithinLiteralBoolExprCondition(tree: Ast, doc: *const zlinter.session.LintDocument, node: Ast.Node.Index) bool {
     var it = doc.nodeAncestorIterator(node);
     var seen_bool_expr = false;
-    while (it.next()) |ancestor| {
+    while (it.next()) |ancestor|
         switch (tree.nodeTag(ancestor)) {
             .grouped_expression => continue,
             .bool_not,
@@ -232,16 +232,14 @@ fn isNestedWithinLiteralBoolExprCondition(tree: Ast, doc: *const zlinter.session
             .@"while",
             => return seen_bool_expr,
             else => return false,
-        }
-    }
+        };
     return false;
 }
 
 fn unwrapGroupedExpression(tree: Ast, node: Ast.Node.Index) Ast.Node.Index {
     var current = node;
-    while (tree.nodeTag(current) == .grouped_expression) {
+    while (tree.nodeTag(current) == .grouped_expression)
         current = tree.nodeData(current).node_and_token[0];
-    }
     return current;
 }
 

@@ -4,7 +4,7 @@
         .require_braces = .{
             // TODO: #163 - change all to .{ .warning = .multi_statement_only }
             .if_statement = .off,
-            .while_statement = .off,
+            .while_statement = .{ .@"error" = .multi_statement_only },
             .for_statement = .{ .@"error" = .multi_statement_only },
             .catch_statement = .{ .@"error" = .multi_statement_only },
             .switch_case_statement = .{ .@"error" = .multi_statement_only },

@@ -76,12 +76,11 @@ fn prettifyTestName(test_name: []const u8, buffer: []u8) []const u8 {
 
     buffer[0] = std.ascii.toUpper(test_name[0]);
     var i: usize = 1;
-    while (i < test_name.len) : (i += 1) {
+    while (i < test_name.len) : (i += 1)
         buffer[i] = switch (test_name[i]) {
             '-', '_', '.' => ' ',
             else => |c| c,
         };
-    }
     return buffer[0..test_name.len];
 }
 
@@ -332,9 +331,10 @@ fn normalizeOutputAlloc(input: []const u8, arena: std.mem.Allocator) ![]const u8
     var index: usize = 0;
     while (std.mem.findPos(u8, normalized_input, index, "lib/std/")) |lib_std_index| {
         var path_start = lib_std_index;
-        while (path_start > index and normalized_input[path_start - 1] != '[' and !std.ascii.isWhitespace(normalized_input[path_start - 1])) {
+        while (path_start > index and
+            normalized_input[path_start - 1] != '[' and
+            !std.ascii.isWhitespace(normalized_input[path_start - 1]))
             path_start -= 1;
-        }
 
         try result.appendSlice(arena, normalized_input[index..path_start]);
         try result.appendSlice(arena, "<stdlib>/");

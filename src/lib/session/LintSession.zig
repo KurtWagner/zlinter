@@ -238,7 +238,7 @@ fn initBuildConfig(
 
     if (compile_units) |selectors| {
         var it = matched_compile_units.?.iterator(.{ .kind = .unset });
-        while (it.next()) |index| {
+        while (it.next()) |index|
             switch (selectors[index]) {
                 .name => |name| {
                     std.log.err("Selected compile unit \"{s}\" was not found in the evaluated build configuration. Available compile units: {s}", .{
@@ -248,8 +248,7 @@ fn initBuildConfig(
                     return error.InvalidBuildConfig;
                 },
                 .exe, .lib, .obj, .@"test", .all => {},
-            }
-        }
+            };
     }
 
     return config_id;
@@ -1648,9 +1647,9 @@ pub fn allocDeclDocComments(
     if (first_token == 0) return null;
 
     var first_doc_token = first_token;
-    while (first_doc_token > 0 and tree.tokenTag(first_doc_token - 1) == .doc_comment) {
+    while (first_doc_token > 0 and tree.tokenTag(first_doc_token - 1) == .doc_comment)
         first_doc_token -= 1;
-    }
+
     if (first_doc_token == first_token) return null;
 
     var comments_text = std.ArrayList(u8).empty;

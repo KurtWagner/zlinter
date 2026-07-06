@@ -10,9 +10,8 @@ skipper: comments_module.LazyRuleSkipper,
 context_scope_by_node: []?DeclStore.ScopeId,
 
 pub fn deinit(self: *LintDocument, gpa: std.mem.Allocator) void {
-    while (self.lineage.pop()) |connections| {
+    while (self.lineage.pop()) |connections|
         connections.deinit(gpa);
-    }
 
     self.lineage.deinit(gpa);
     gpa.free(self.context_scope_by_node);

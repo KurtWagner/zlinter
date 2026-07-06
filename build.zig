@@ -879,7 +879,7 @@ fn readHtmlTemplate(b: *std.Build, path: []const u8) ![]const u8 {
     const build_timestamp = b.fmt("{d}", .{@divTrunc(timestamp.nanoseconds, std.time.ns_per_ms)});
     const zig_version = zig_version_string;
 
-    while (true) {
+    while (true)
         if (file_reader.interface.streamDelimiter(&out.writer, '{')) |_| {
             file_reader.interface.toss(1); // Toss '{'
 
@@ -901,8 +901,7 @@ fn readHtmlTemplate(b: *std.Build, path: []const u8) ![]const u8 {
         } else |e| switch (e) {
             error.EndOfStream => break,
             else => return e,
-        }
-    }
+        };
 
     return try out.toOwnedSlice();
 }

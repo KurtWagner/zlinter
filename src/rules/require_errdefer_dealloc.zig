@@ -170,9 +170,8 @@ fn processBlock(
         };
 
     var remaining_it = cleanup_symbols.valueIterator();
-    while (remaining_it.next()) |node| {
+    while (remaining_it.next()) |node|
         try problems.append(rule_arena, node.*);
-    }
 }
 
 const DeclRef = struct {

@@ -125,9 +125,8 @@ fn iterateChildren(
     comptime callback: fn (@TypeOf(context), Ast, Ast.Node.Index) Error!void,
 ) Error!void {
     var it = ast.ChildIterator.init(tree, node);
-    while (it.next(tree)) |child_node| {
+    while (it.next(tree)) |child_node|
         try callback(context, tree, child_node);
-    }
 }
 
 fn errorsToJson(tree: Ast, arena: std.mem.Allocator) !std.json.Array {

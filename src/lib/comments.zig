@@ -1025,7 +1025,7 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
                             var maybe_first: ?Token.Index = null;
                             var maybe_last: ?Token.Index = null;
                             var found_close_parenthesis = false;
-                            while (p.peek()) |token_index| {
+                            while (p.peek()) |token_index|
                                 switch (p.tokens[token_index].tag) {
                                     .close_parenthesis => {
                                         found_close_parenthesis = true;
@@ -1039,8 +1039,7 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
 
                                         p.skip();
                                     },
-                                }
-                            }
+                                };
 
                             if (!found_close_parenthesis) {
                                 p.i = open_parenthesis;
@@ -1066,14 +1065,13 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
 
                         const maybe_last_token = token: {
                             var maybe_last_token: ?Token.Index = null;
-                            while (p.peek()) |next| {
+                            while (p.peek()) |next|
                                 if (p.tokens[next].tag.isComment()) {
                                     break :token maybe_last_token;
                                 } else {
                                     maybe_last_token = p.i;
                                     p.skip();
-                                }
-                            }
+                                };
                             break :token maybe_last_token;
                         };
 
@@ -1093,14 +1091,13 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
 
                         const maybe_last_token = token: {
                             var maybe_last_token: ?Token.Index = null;
-                            while (p.peek()) |next| {
+                            while (p.peek()) |next|
                                 if (p.tokens[next].tag.isComment()) {
                                     break :token maybe_last_token;
                                 } else {
                                     maybe_last_token = p.i;
                                     p.skip();
-                                }
-                            }
+                                };
                             break :token maybe_last_token;
                         };
 
@@ -1123,8 +1120,13 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
         };
 
         // Skip until we see another comment tag or EOF
+        // TODO: Fix require_braces - the braces are required to disambiguate the else
+        // zlinter-disable-next-line require_braces - false positive
         while (p.peek()) |index| {
-            if (p.tokens[index].tag.isComment()) break else p.i += 1;
+            if (p.tokens[index].tag.isComment())
+                break
+            else
+                p.i += 1;
         }
 
         try comments.append(gpa, .{
@@ -1822,9 +1824,8 @@ pub const LazyRuleSkipper = struct {
                 });
 
                 var rule_it = index.rules.iterator();
-                while (rule_it.next()) |entry| {
+                while (rule_it.next()) |entry|
                     entry.value_ptr.setRangeValue(range, set.value);
-                }
             }
         }
         self.index = index;

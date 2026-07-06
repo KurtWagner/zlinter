@@ -212,7 +212,7 @@ pub fn unwrapNode(
 ) Ast.Node.Index {
     var current = node;
 
-    while (true) {
+    while (true)
         switch (tree.nodeTag(current)) {
             .unwrap_optional => if (options.unwrap_optional_unwrap) {
                 current = tree.nodeData(current).node_and_token.@"0";
@@ -230,8 +230,7 @@ pub fn unwrapNode(
                 current = tree.nodeData(current).extra_and_node.@"1";
             } else break,
             else => break,
-        }
-    }
+        };
     return current;
 }
 

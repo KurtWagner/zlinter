@@ -65,13 +65,12 @@ fn allDetectionsOff(config: Config) bool {
 fn unwrapLiteralWrapperExpression(tree: Ast, node: Ast.Node.Index) Ast.Node.Index {
     var current = node;
 
-    while (true) {
+    while (true)
         switch (tree.nodeTag(current)) {
             .grouped_expression => current = tree.nodeData(current).node_and_token[0],
             .@"comptime" => current = tree.nodeData(current).node,
             else => return current,
-        }
-    }
+        };
 }
 
 fn calleeName(tree: Ast, node: Ast.Node.Index) ?[]const u8 {

@@ -43,11 +43,8 @@ const redundant_types = [_][]const u8{
 
 fn unwrapParens(tree: Ast, node: Ast.Node.Index) Ast.Node.Index {
     var current = node;
-
-    while (tree.nodeTag(current) == .grouped_expression) {
+    while (tree.nodeTag(current) == .grouped_expression)
         current = tree.nodeData(current).node_and_token[0];
-    }
-
     return current;
 }
 

@@ -75,7 +75,7 @@ pub fn main(init: std.process.Init) !u8 {
     var total_fixes: usize = 0;
     const result = result: {
         var remaining_fix_passes = @max(1, args.fix_passes);
-        while (remaining_fix_passes > 0) {
+        while (remaining_fix_passes > 0)
             if (run(
                 &runtime,
                 gpa,
@@ -100,8 +100,7 @@ pub fn main(init: std.process.Init) !u8 {
                     printer.tty.ansiOrEmpty(&.{.reset}),
                 });
                 break :result RunResult.tool_error;
-            }
-        }
+            };
         unreachable;
     };
     if (total_fixes > 0) {
@@ -1032,7 +1031,7 @@ const LintConfigStore = struct {
         }
 
         var rhs = normalized.len;
-        while (rhs > 0) : (rhs -= 1) {
+        while (rhs > 0) : (rhs -= 1)
             if (std.Io.Dir.path.isSep(normalized[rhs - 1])) {
                 const parent_dir = normalized[0 .. rhs - 1];
                 if (self.configByDir(parent_dir)) |config| {
@@ -1040,8 +1039,7 @@ const LintConfigStore = struct {
                     if (lint_config.rule_configs_on.isSet(rule_id))
                         return lint_config.rule_configs[rule_id];
                 }
-            }
-        }
+            };
         std.log.info("No zlinter.zon for {s}", .{dir_abs_path});
         return self.configs.items[self.base_config_id].rule_configs[rule_id];
     }
