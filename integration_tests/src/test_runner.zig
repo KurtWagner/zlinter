@@ -136,10 +136,6 @@ fn runTest(
             arena,
         );
 
-        // TODO: Update to expect certain exit codes based on input
-        // try std.testing.expect(lint_output.term.exited == 0);
-        // try expectEqualStringsNormalized(arena, "", fix_output.stderr);
-
         expectFileContentsEquals(
             io,
             stdout,

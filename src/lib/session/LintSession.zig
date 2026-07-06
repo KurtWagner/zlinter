@@ -718,8 +718,7 @@ pub fn moduleIdsForFile(
             .module_id_by_import_name = .empty,
         });
         self.indexModuleFiles(module_id, self.runtime.sessionArena());
-        break :fallback self.module_ids_by_file.get(file_id) orelse
-            unreachable;
+        break :fallback self.module_ids_by_file.get(file_id).?;
     };
 
     return cached.items;

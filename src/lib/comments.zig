@@ -969,6 +969,7 @@ pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemor
                                 },
                                 .colon => {
                                     // TODO: Maybe one day report this mistake to user, for now lets just ignore it and keeping parsing
+                                    // zlinter-disable-next-line no_comment_out_code
                                     // const slice = p.tokens[next].getSlice(source);
                                     // std.log.warn("Unexpected delimitor '{s}'. Expected a rule name", .{slice});
                                 },
