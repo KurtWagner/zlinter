@@ -268,12 +268,11 @@ fn runLinterRules(
         var item_timers = SlowestItemQueue.init(runtime.sessionArena());
         defer item_timers.deinit();
 
-        for (rule_elapsed_times, 0..) |elapsed_ns, rule_id| {
+        for (rule_elapsed_times, 0..) |elapsed_ns, rule_id|
             item_timers.add(.{
                 .name = rules[rule_id].rule_id,
                 .elapsed_ns = elapsed_ns,
             });
-        }
         item_timers.unloadAndPrint("Rules", printer);
     };
 
@@ -442,11 +441,9 @@ fn containsProblem(
     results: []const zlinter.results.LintResult,
     problem: zlinter.results.LintProblem,
 ) bool {
-    for (results) |result| {
-        for (result.problems) |existing_problem| {
+    for (results) |result|
+        for (result.problems) |existing_problem|
             if (sameProblem(existing_problem, problem)) return true;
-        }
-    }
     return false;
 }
 
@@ -454,9 +451,8 @@ fn containsProblemInSlice(
     problems: []const zlinter.results.LintProblem,
     problem: zlinter.results.LintProblem,
 ) bool {
-    for (problems) |existing_problem| {
+    for (problems) |existing_problem|
         if (sameProblem(existing_problem, problem)) return true;
-    }
     return false;
 }
 
@@ -506,7 +502,7 @@ fn runFormatter(
     var results_count: usize = 0;
     for (file_lint_problems.values()) |results| {
         results_count += results.len;
-        for (results) |result| {
+        for (results) |result|
             problems: for (result.problems) |problem| {
                 if (problem.disabled_by_comment) continue :problems;
                 switch (problem.severity) {
@@ -514,8 +510,7 @@ fn runFormatter(
                     .warning => warning_count += 1,
                     .off => {},
                 }
-            }
-        }
+            };
     }
     if (max_warnings) |max| {
         if (warning_count > max) {
@@ -527,9 +522,8 @@ fn runFormatter(
         session_arena,
         results_count,
     );
-    for (file_lint_problems.values()) |results| {
+    for (file_lint_problems.values()) |results|
         flattened.appendSliceAssumeCapacity(results);
-    }
 
     try formatter.format(.{
         .results = try flattened.toOwnedSlice(session_arena),
@@ -570,7 +564,7 @@ fn runFixes(
         var lint_fixes = std.ArrayList(zlinter.results.LintProblemFix).empty;
 
         const results = entry.value_ptr.*;
-        for (results) |result| {
+        for (results) |result|
             problems: for (result.problems) |err| {
                 if (err.disabled_by_comment) {
                     total_disabled_by_comment += 1;
@@ -580,8 +574,7 @@ fn runFixes(
                 if (err.fix) |fix| {
                     try lint_fixes.append(runtime.sessionArena(), fix);
                 }
-            }
-        }
+            };
 
         // Sort by range start and then remove overlaps to avoid conflicting
         // changes. This is needed as we do text based fixes.
@@ -645,9 +638,8 @@ fn runFixes(
 
             var buffer: [1024]u8 = undefined;
             var writer = new_file.writer(runtime.io, &buffer);
-            for (output_slices.items) |output_slice| {
+            for (output_slices.items) |output_slice|
                 try writer.interface.writeAll(output_slice);
-            }
             try writer.interface.flush();
         }
     }
@@ -763,11 +755,15 @@ fn enabledRules(filter_rule_ids: ?[]const []const u8) std.bit_set.Static(rules.l
 
     bitset.toggleAll();
     for (rules, 0..) |rule, i| {
-        filters: for (filter_rule_ids.?) |filter_id| {
+        var matched = false;
+        for (filter_rule_ids.?) |filter_id|
             if (std.mem.eql(u8, rule.rule_id, filter_id)) {
-                bitset.set(i);
-                break :filters;
-            }
+                matched = true;
+                break;
+            };
+
+        if (matched) {
+            bitset.set(i);
         }
     }
     return bitset;
@@ -851,9 +847,8 @@ const SlowestItemQueue = struct {
     }
 
     fn deinit(self: *SlowestItemQueue) void {
-        for (self.queue.items) |item| {
+        for (self.queue.items) |item|
             self.gpa.free(item.name);
-        }
         self.queue.deinit(self.gpa);
         self.* = undefined;
     }
@@ -1133,12 +1128,11 @@ const LintConfigStore = struct {
             };
 
             var self: LintConfig = .empty;
-            inline for (0..rules.len) |i| {
+            inline for (0..rules.len) |i|
                 if (@field(zon.rules, rule_names[i])) |*v| {
                     self.rule_configs[i] = @ptrCast(@alignCast(v));
                     self.rule_configs_on.set(i);
-                }
-            }
+                };
 
             return self;
         }

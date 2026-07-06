@@ -88,9 +88,8 @@ fn run(
         }
     }
 
-    for (lint_problems.items) |*problem| {
+    for (lint_problems.items) |*problem|
         problem.severity = config.severity;
-    }
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
@@ -220,7 +219,7 @@ fn handleEnumLiteral(
         node_index,
         tree.tokenSlice(identifier_token),
     );
-    for (decl_candidates) |candidate| {
+    for (decl_candidates) |candidate|
         try appendDeprecatedProblem(
             rule,
             config,
@@ -231,7 +230,6 @@ fn handleEnumLiteral(
             "Deprecated: {s}",
             lint_problems,
         );
-    }
 }
 
 fn handleFieldAccess(
@@ -251,7 +249,7 @@ fn handleFieldAccess(
         doc,
         node_index,
     );
-    for (decl_candidates) |candidate| {
+    for (decl_candidates) |candidate|
         try appendDeprecatedProblem(
             rule,
             config,
@@ -262,7 +260,6 @@ fn handleFieldAccess(
             "Deprecated: {s}",
             lint_problems,
         );
-    }
 }
 
 fn appendDeprecatedProblem(

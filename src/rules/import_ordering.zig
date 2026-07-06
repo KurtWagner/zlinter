@@ -392,12 +392,11 @@ fn lineEndExclusive(
 }
 
 fn isBlankLine(line: []const u8) bool {
-    for (line) |c| {
+    for (line) |c|
         switch (c) {
             ' ', '\t', '\r', '\n' => {},
             else => return false,
-        }
-    }
+        };
     return true;
 }
 

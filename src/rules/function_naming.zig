@@ -147,7 +147,7 @@ fn run(
                     param_kinds.items,
                 );
 
-                for (type_classifications) |classification| {
+                for (type_classifications) |classification|
                     switch (classification.summary) {
                         .@"fn", .fn_returns_type => try param_kinds.append(rule_arena, .{
                             .name = identifier,
@@ -161,8 +161,7 @@ fn run(
                             else => {},
                         },
                         else => {},
-                    }
-                }
+                    };
 
                 classifications: for (type_classifications) |classification| {
                     const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const desc: []const u8 = style: {
@@ -229,9 +228,8 @@ fn classifyReturnType(
         doc,
         payload_node,
     ) catch return null;
-    for (type_candidates) |candidate| {
+    for (type_candidates) |candidate|
         if (functionReturnsType(candidate.summary)) return candidate.summary;
-    }
     return type_candidates[0].summary;
 }
 
@@ -267,7 +265,7 @@ fn classifyParamTypeCandidates(
         null;
 
     if (maybe_type_name) |type_name| {
-        for (seen_param_kinds) |param_kind| {
+        for (seen_param_kinds) |param_kind|
             if (std.mem.eql(u8, param_kind.name, type_name)) {
                 var candidates = std.ArrayList(
                     zlinter.session.LintSession.ValueTypeAnnotationCandidate,
@@ -283,8 +281,7 @@ fn classifyParamTypeCandidates(
                     },
                 });
                 return candidates.items;
-            }
-        }
+            };
     }
 
     const candidates = try session.resolveValueTypeAnnotationCandidates(

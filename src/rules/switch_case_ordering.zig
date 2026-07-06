@@ -36,7 +36,7 @@ fn run(
         const node: Ast.Node.Index = @enumFromInt(index);
         const switch_info = tree.fullSwitch(node) orelse continue;
 
-        for (switch_info.ast.cases, 0..) |case_node, i| {
+        for (switch_info.ast.cases, 0..) |case_node, i|
             if (zlinter.ast.isSwitchElseProng(tree, case_node)) {
                 if (i != switch_info.ast.cases.len - 1) {
                     try lint_problems.append(session_arena, .{
@@ -47,8 +47,7 @@ fn run(
                         .message = try session_arena.dupe(u8, "`else` should be last in switch statements"),
                     });
                 }
-            }
-        }
+            };
     }
 
     return if (lint_problems.items.len > 0)
@@ -75,7 +74,7 @@ test "switch_case_ordering else is last" {
         \\}
     ;
 
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             rule,
             source,
@@ -90,7 +89,6 @@ test "switch_case_ordering else is last" {
                 },
             },
         );
-    }
 
     try zlinter.testing.testRunRule(
         rule,

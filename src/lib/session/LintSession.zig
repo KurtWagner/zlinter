@@ -308,12 +308,11 @@ fn compileUnitSelectorsMatch(
     matched_selectors: *std.bit_set.Dynamic,
 ) bool {
     var matched = false;
-    for (selectors, 0..) |selector, index| {
+    for (selectors, 0..) |selector, index|
         if (compileUnitSelectorMatches(selector, step_name, kind)) {
             matched_selectors.set(index);
             matched = true;
-        }
-    }
+        };
     return matched;
 }
 
@@ -472,9 +471,8 @@ pub fn compileContextIdForModule(
     self: *const LintContext,
     module_id: ModuleStore.ModuleId,
 ) ?CompileContext.Id {
-    for (self.compile_contexts.items(.root_module), 0..) |root_module, index| {
+    for (self.compile_contexts.items(.root_module), 0..) |root_module, index|
         if (root_module == module_id) return .fromIndex(index);
-    }
     return null;
 }
 
@@ -636,9 +634,8 @@ pub fn resolveFileTypes(
     );
 
     const module_ids = self.moduleIdsForFile(file_id);
-    for (module_ids) |module_id| {
+    for (module_ids) |module_id|
         self.resolveFileTypesForModule(file_id, module_id);
-    }
 }
 
 /// Ensures declarations are available for module-specific lazy resolution.
@@ -738,9 +735,8 @@ fn ensureModuleIdsByFile(
 
     if (self.module_file_index_built) return;
 
-    for (self.compile_contexts.items(.root_module)) |root_module_id| {
+    for (self.compile_contexts.items(.root_module)) |root_module_id|
         self.indexModuleFiles(root_module_id, gpa);
-    }
 
     self.module_file_index_built = true;
 }
@@ -903,9 +899,8 @@ pub fn initDocument(
 
     {
         oom(doc.lineage.resize(gpa, tree.nodes.len));
-        for (0..tree.nodes.len) |i| {
+        for (0..tree.nodes.len) |i|
             doc.lineage.set(i, .{});
-        }
 
         const QueueItem = struct {
             parent: ?Ast.Node.Index = null,
@@ -937,12 +932,11 @@ pub fn initDocument(
                 .children = children,
             });
 
-            for (children) |child| {
+            for (children) |child|
                 oom(queue.append(gpa, .{
                     .parent = item.node,
                     .node = child,
                 }));
-            }
         }
     }
 }
@@ -1069,14 +1063,13 @@ pub fn resolveDeclCandidatesOfNode(
 
     var candidates = std.ArrayList(DeclCandidate).empty;
     const module_ids = self.moduleIdsForFile(doc.file_id);
-    for (module_ids) |module_id| {
+    for (module_ids) |module_id|
         if (self.resolveDeclOfNodeForModule(module_id, doc, node)) |decl_id| {
             try candidates.append(arena, .{
                 .module_id = module_id,
                 .decl_id = decl_id,
             });
-        }
-    }
+        };
 
     const owned = try self.runtime.sessionArena().dupe(
         DeclCandidate,
@@ -1190,14 +1183,13 @@ pub fn resolveTypeCandidatesOfNode(
 ) ![]const TypeCandidate {
     var candidates = std.ArrayList(TypeCandidate).empty;
     const module_ids = self.moduleIdsForFile(doc.file_id);
-    for (module_ids) |module_id| {
+    for (module_ids) |module_id|
         if (self.resolveTypeOfNodeForModule(module_id, doc, node)) |resolved| {
             try candidates.append(arena, .{
                 .module_id = module_id,
                 .type = resolved,
             });
-        }
-    }
+        };
     return candidates.items;
 }
 
@@ -1210,14 +1202,13 @@ pub fn resolveEnumCandidatesOfNode(
 ) ![]const EnumCandidate {
     var candidates = std.ArrayList(EnumCandidate).empty;
     const module_ids = self.moduleIdsForFile(doc.file_id);
-    for (module_ids) |module_id| {
+    for (module_ids) |module_id|
         if (self.resolveEnumDeclOfNodeForModule(module_id, doc, node)) |decl_id| {
             try candidates.append(arena, .{
                 .module_id = module_id,
                 .decl_id = decl_id,
             });
-        }
-    }
+        };
     return candidates.items;
 }
 
@@ -1231,15 +1222,14 @@ pub fn resolveEnumTagNameCandidatesOfNode(
 ) ![]const []const u8 {
     var candidates = std.ArrayList([]const u8).empty;
     const module_ids = self.moduleIdsForFile(doc.file_id);
-    for (module_ids) |module_id| {
+    for (module_ids) |module_id|
         if (self.resolveEnumTagNameOfNodeForModule(
             module_id,
             doc,
             node,
         )) |tag_name| {
             try candidates.append(arena, tag_name);
-        }
-    }
+        };
     return candidates.items;
 }
 

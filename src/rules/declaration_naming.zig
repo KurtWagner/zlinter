@@ -148,9 +148,8 @@ fn run(
         var emitted_len_diagnostic = false;
         if (config.decl_name_min_len.len()) |min_len| {
             if (name.len < min_len) {
-                for (config.decl_name_exclude_len) |exclude_name| {
+                for (config.decl_name_exclude_len) |exclude_name|
                     if (std.mem.eql(u8, name, exclude_name)) continue :nodes;
-                }
 
                 try lint_problems.append(session_arena, .{
                     .rule_id = rule.rule_id,
@@ -164,9 +163,8 @@ fn run(
         }
         if (!emitted_len_diagnostic) if (config.decl_name_max_len.len()) |max_len| {
             if (name.len > max_len) {
-                for (config.decl_name_exclude_len) |exclude_name| {
+                for (config.decl_name_exclude_len) |exclude_name|
                     if (std.mem.eql(u8, name, exclude_name)) continue :nodes;
-                }
 
                 try lint_problems.append(session_arena, .{
                     .rule_id = rule.rule_id,
@@ -671,7 +669,7 @@ test "export excluded" {
         "export const NotGood: u32 = 10;",
         "export const notGood: u32 = 10;",
         "export const no_good = u32;",
-    }) |source| {
+    }) |source|
         try zlinter.testing.testRunRule(
             buildRule(.{}),
             source,
@@ -679,7 +677,6 @@ test "export excluded" {
             Config{ .exclude_export = true },
             &.{},
         );
-    }
 }
 
 test "extern included" {
@@ -734,7 +731,7 @@ test "extern excluded" {
         "extern const NotGood: u32;",
         "extern const notGood: u32;",
         "extern const no_good: type;",
-    }) |source| {
+    }) |source|
         try zlinter.testing.testRunRule(
             buildRule(.{}),
             source,
@@ -742,7 +739,6 @@ test "extern excluded" {
             Config{ .exclude_extern = true },
             &.{},
         );
-    }
 }
 
 test "name lengths" {

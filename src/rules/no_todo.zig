@@ -127,19 +127,17 @@ fn looksLikeIssueId(content: []const u8) bool {
 }
 
 test looksLikeIssueId {
-    inline for (&.{ "#0", "#1234", "foo #1234 bar", "(#42)", "TODO(#123): fix", std.fmt.comptimePrint("#{d}", .{std.math.maxInt(usize)}) }) |valid| {
+    inline for (&.{ "#0", "#1234", "foo #1234 bar", "(#42)", "TODO(#123): fix", std.fmt.comptimePrint("#{d}", .{std.math.maxInt(usize)}) }) |valid|
         std.testing.expect(looksLikeIssueId(valid)) catch |e| {
             std.debug.print("Expected '{s}' to look like an issue id\n", .{valid});
             return e;
         };
-    }
 
-    inline for (&.{ "", "#", "#-1", "0", "1234", "not #abc", "TODO(#abc)", std.fmt.comptimePrint("{d}", .{std.math.maxInt(usize)}) }) |valid| {
+    inline for (&.{ "", "#", "#-1", "0", "1234", "not #abc", "TODO(#abc)", std.fmt.comptimePrint("{d}", .{std.math.maxInt(usize)}) }) |valid|
         std.testing.expect(!looksLikeIssueId(valid)) catch |e| {
             std.debug.print("Expected '{s}' to NOT look like an issue id\n", .{valid});
             return e;
         };
-    }
 }
 
 // Just needs to be good enough... not perfect.
@@ -160,19 +158,17 @@ fn looksLikeUrl(content: []const u8) bool {
 }
 
 test looksLikeUrl {
-    inline for (&.{ "http://a.c", "https://github.com/user/repo/issue/12" }) |valid| {
+    inline for (&.{ "http://a.c", "https://github.com/user/repo/issue/12" }) |valid|
         std.testing.expect(looksLikeUrl(valid)) catch |e| {
             std.debug.print("Expected '{s}' to look like a url id\n", .{valid});
             return e;
         };
-    }
 
-    inline for (&.{ "", "http", "https", "http://", "https://a", "http://a.", "abc_https://abc", "not-url-http://a.cc" }) |valid| {
+    inline for (&.{ "", "http", "https", "http://", "https://a", "http://a.", "abc_https://abc", "not-url-http://a.cc" }) |valid|
         std.testing.expect(!looksLikeUrl(valid)) catch |e| {
             std.debug.print("Expected '{s}' to NOT look like a url id\n", .{valid});
             return e;
         };
-    }
 }
 
 test containsAllowedTrackingReference {
@@ -204,12 +200,11 @@ test containsAllowedTrackingReference {
         .{ .content = "see https://example.com/10", .config = issue_enabled, .expected = false },
         .{ .content = "fix #10", .config = both_enabled, .expected = true },
         .{ .content = "fix https://example.com/10", .config = both_disabled, .expected = false },
-    }) |case| {
+    }) |case|
         try std.testing.expectEqual(
             case.expected,
             containsAllowedTrackingReference(case.content, case.config),
         );
-    }
 }
 
 test "TODO comment default config excludes issue and URL references" {

@@ -114,12 +114,11 @@ fn run(
                             value_node,
                         );
 
-                        for (tag_candidates) |tag_name| {
+                        for (tag_candidates) |tag_name|
                             if (containsString(complete_tags, tag_name)) {
                                 try used_tag_set.put(tag_name, {});
                                 continue :case_values;
-                            }
-                        }
+                            };
                     }
                 }
             }
@@ -127,12 +126,11 @@ fn run(
             if (else_case_node) |case_node| {
                 missing_tags.clearRetainingCapacity();
 
-                for (complete_tags) |tag| {
+                for (complete_tags) |tag|
                     if (!used_tag_set.contains(tag)) try missing_tags.append(
                         rule_arena,
                         tag,
                     );
-                }
 
                 const else_token = elseCaseToken(tree, case_node);
                 try lint_problems.append(session_arena, .{
@@ -270,9 +268,8 @@ fn allocEnumDeclNotes(
 }
 
 fn containsString(haystack: []const []const u8, needle: []const u8) bool {
-    for (haystack) |item| {
+    for (haystack) |item|
         if (std.mem.eql(u8, item, needle)) return true;
-    }
     return false;
 }
 

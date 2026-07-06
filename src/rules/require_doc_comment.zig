@@ -204,7 +204,7 @@ test "require_doc_comment - public" {
         \\pub const name_with_comment = "jack";
     ;
 
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             rule,
             source,
@@ -231,7 +231,6 @@ test "require_doc_comment - public" {
                 },
             },
         );
-    }
 
     // off
     try zlinter.testing.testRunRule(
@@ -268,7 +267,7 @@ test "require_doc_comment - private" {
         \\const name_with_comment = "jack";
     ;
 
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             rule,
             source,
@@ -295,7 +294,6 @@ test "require_doc_comment - private" {
                 },
             },
         );
-    }
 
     try zlinter.testing.testRunRule(
         rule,
@@ -312,7 +310,7 @@ test "require_doc_comment - file" {
         \\
     ;
 
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             rule,
             source,
@@ -327,7 +325,6 @@ test "require_doc_comment - file" {
                 },
             },
         );
-    }
 
     try zlinter.testing.testRunRule(
         rule,
@@ -344,7 +341,7 @@ test "require_doc_comment - file only" {
         \\
     ;
 
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             rule,
             source,
@@ -363,7 +360,6 @@ test "require_doc_comment - file only" {
                 },
             },
         );
-    }
 }
 
 test "hasDocComments - function prototype without params" {

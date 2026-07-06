@@ -135,9 +135,8 @@ fn builtinHasParamContent(
     const param = params[0];
     if (tree.nodeTag(param) != .string_literal) return false;
 
-    for (contents) |c| {
+    for (contents) |c|
         if (try stringLiteralContentEquals(rule_arena, tree, param, c)) return true;
-    }
     return false;
 }
 
@@ -247,7 +246,7 @@ test "excludes based on configurable contents" {
         \\ @panic("other");
         ,
         \\ const a = @abs(-10);
-    }) |source| {
+    }) |source|
         try zlinter.testing.testRunRule(
             buildRule(.{}),
             "pub fn main() void { " ++ source ++ "}",
@@ -259,7 +258,6 @@ test "excludes based on configurable contents" {
             },
             &.{},
         );
-    }
 }
 
 test "no_panic reports malformed and unusual builtin calls" {
@@ -338,7 +336,7 @@ test "no_panic" {
         \\}
     ;
 
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             rule,
             source,
@@ -357,7 +355,6 @@ test "no_panic" {
                 },
             },
         );
-    }
 
     // Off:
     try zlinter.testing.testRunRule(

@@ -73,14 +73,13 @@ fn format(
             }) catch |e| return logAndReturnWriteFailure("Problem title", e);
 
             if (problem.notes) |notes| {
-                for (notes) |note| {
+                for (notes) |note|
                     renderNoteTitle(
                         input,
                         file_arena.allocator(),
                         note,
                         writer,
                     ) catch |e| return e;
-                }
             }
 
             writer.writeByte('\n') catch |e| return logAndReturnWriteFailure("Newline", e);

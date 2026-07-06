@@ -82,7 +82,7 @@ test {
 
 test "no_global_vars reports top-level and nested container vars" {
     const rule = buildRule(.{});
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             rule,
             \\var i_am_a_global_var: u32 = 67;
@@ -124,7 +124,6 @@ test "no_global_vars reports top-level and nested container vars" {
                 },
             },
         );
-    }
 }
 
 test "no_global_vars severity off suppresses reports" {
@@ -140,7 +139,7 @@ test "no_global_vars severity off suppresses reports" {
 
 test "no_global_vars reports modifier forms" {
     const rule = buildRule(.{});
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             rule,
             \\pub var pub_global: u32 = 1;
@@ -177,12 +176,11 @@ test "no_global_vars reports modifier forms" {
                 },
             },
         );
-    }
 }
 
 test "no_global_vars reports nested container vars" {
     const rule = buildRule(.{});
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             rule,
             \\const Outer = struct {
@@ -200,7 +198,6 @@ test "no_global_vars reports nested container vars" {
                 .message = "Global `var` reduces testability and makes the program harder to reason about",
             }},
         );
-    }
 }
 
 test "no_global_vars ignores local vars and const container members" {

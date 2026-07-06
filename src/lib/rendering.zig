@@ -23,10 +23,9 @@ pub const LintFileRenderer = struct {
             allocator,
             source.len / 40,
         );
-        for (0..source.len) |i| {
+        for (0..source.len) |i|
             if (source[i] == '\n')
                 try line_ends.append(allocator, i);
-        }
         if (source[source.len - 1] != '\n')
             try line_ends.append(allocator, source.len - 1);
 
@@ -45,9 +44,8 @@ pub const LintFileRenderer = struct {
     }
 
     fn lineNumber(self: Self, byte_offset: usize) usize {
-        for (self.line_ends, 0..) |line_end, i| {
+        for (self.line_ends, 0..) |line_end, i|
             if (byte_offset <= line_end) return i;
-        }
         return self.line_ends.len;
     }
 

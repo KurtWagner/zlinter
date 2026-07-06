@@ -100,6 +100,8 @@ fn runTest(
     const zig_bin = args[1];
     const rule_name = args[2];
     // ignore arg index 3, which is test name
+    // TODO: Fix require_braces false positive, this requires braces but rule thinks it doesnt
+    // zlinter-disable-next-line require_braces - false positive
     for (args[4..]) |arg| {
         if (std.mem.endsWith(u8, arg, input_zig_suffix))
             input_zig_file = arg
@@ -317,15 +319,14 @@ fn normalizeOutputAlloc(input: []const u8, arena: std.mem.Allocator) ![]const u8
 
     var normalized: std.ArrayList(u8) = try .initCapacity(arena, input.len);
     // Removes "\r". e.g., "\r\n"
-    for (input) |c| {
+    for (input) |c|
         switch (c) {
             '\r' => {}, // i.e., 0x0d
             // This assumes that '\' is never in output, which is currently true
             // If this ever changes we will need something more sophisticated
             // to identify strings that look like paths
             else => normalized.appendAssumeCapacity(if (std.Io.Dir.path.isSep(c)) std.Io.Dir.path.sep_posix else c),
-        }
-    }
+        };
 
     const normalized_input = normalized.items;
     var index: usize = 0;

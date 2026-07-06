@@ -172,9 +172,8 @@ fn run(
         }
 
         if (calleeName(tree, call.ast.fn_expr)) |fn_name| {
-            for (config.exclude_fn_names) |exclude_fn_name| {
+            for (config.exclude_fn_names) |exclude_fn_name|
                 if (std.mem.eql(u8, exclude_fn_name, fn_name)) continue :nodes;
-            }
         }
 
         params: for (call.ast.params) |param_node| {
@@ -240,7 +239,7 @@ test "bool" {
         \\}
     ;
 
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             rule,
             source,
@@ -266,7 +265,6 @@ test "bool" {
                 },
             },
         );
-    }
 
     // Off:
     try zlinter.testing.testRunRule(
@@ -537,7 +535,7 @@ test "number" {
         \\}
     ;
 
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             rule,
             source,
@@ -563,7 +561,6 @@ test "number" {
                 },
             },
         );
-    }
 
     // Off:
     try zlinter.testing.testRunRule(
@@ -590,7 +587,7 @@ test "number negatives" {
         \\}
     ;
 
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             rule,
             source,
@@ -616,7 +613,6 @@ test "number negatives" {
                 },
             },
         );
-    }
 
     // Off:
     try zlinter.testing.testRunRule(
@@ -642,7 +638,7 @@ test "char" {
         \\}
     ;
 
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             rule,
             source,
@@ -662,7 +658,6 @@ test "char" {
                 },
             },
         );
-    }
 
     // Off:
     try zlinter.testing.testRunRule(
@@ -688,7 +683,7 @@ test "string" {
         \\}
     ;
 
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             rule,
             source,
@@ -710,7 +705,6 @@ test "string" {
                 },
             },
         );
-    }
 
     // Off:
     try zlinter.testing.testRunRule(

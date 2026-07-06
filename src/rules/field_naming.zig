@@ -130,12 +130,11 @@ fn run(
                         const max_len = config.error_field_max_len;
                         const exclude_len = config.error_field_exclude_len;
                         var is_len_excluded = false;
-                        for (exclude_len) |exclude_name| {
+                        for (exclude_len) |exclude_name|
                             if (std.mem.eql(u8, name, exclude_name)) {
                                 is_len_excluded = true;
                                 break;
-                            }
-                        }
+                            };
 
                         if (!is_len_excluded) {
                             var emitted_len_diagnostic = false;
@@ -182,13 +181,12 @@ fn run(
         } else if (tree.fullContainerDecl(&buffer, node)) |container_decl| {
             const container_tag = if (node == .root) .keyword_struct else tree.tokens.items(.tag)[container_decl.ast.main_token];
 
-            fields: for (container_decl.ast.members) |member| {
+            fields: for (container_decl.ast.members) |member|
                 if (tree.fullContainerField(member)) |container_field| {
                     const type_summary = if (session.decl_store.declIdByNode(doc.file_id, member)) |decl_id| summary: {
                         const summary_candidates = try session.resolveDeclValueSummaryCandidates(decl_id);
-                        for (summary_candidates) |candidate| {
+                        for (summary_candidates) |candidate|
                             break :summary candidate.summary;
-                        }
                         break :summary null;
                     } else null;
                     const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const field_desc: []const u8 = tuple: {
@@ -233,12 +231,11 @@ fn run(
                     // completely skip for length checks.
                     if (std.mem.eql(u8, name, "_")) {
                         is_len_excluded = true;
-                    } else for (exclude_len) |exclude_name| {
+                    } else for (exclude_len) |exclude_name|
                         if (std.mem.eql(u8, name, exclude_name)) {
                             is_len_excluded = true;
                             break;
-                        }
-                    }
+                        };
                     const container_name: []const u8 = switch (container_tag) {
                         .keyword_struct => "Struct",
                         .keyword_enum => "Enum",
@@ -284,8 +281,7 @@ fn run(
                             });
                         }
                     }
-                }
-            }
+                };
         }
     }
 

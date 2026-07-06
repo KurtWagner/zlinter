@@ -40,12 +40,11 @@ pub fn deinit(self: BuildInfo, gpa: std.mem.Allocator) void {
     }
 
     if (self.compile_units) |selectors| {
-        for (selectors) |selector| {
+        for (selectors) |selector|
             switch (selector) {
                 .name => |name| gpa.free(name),
                 .exe, .lib, .obj, .@"test", .all => {},
-            }
-        }
+            };
         gpa.free(selectors);
     }
 }

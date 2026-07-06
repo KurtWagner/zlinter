@@ -76,12 +76,11 @@ pub fn deinit(self: Args, allocator: std.mem.Allocator) void {
         "filter_paths",
         "unknown_args",
         "rules",
-    }) |field_name| {
+    }) |field_name|
         if (@field(self, field_name)) |v| {
             for (v) |s| allocator.free(s);
             allocator.free(v);
-        }
-    }
+        };
 
     self.build_info.deinit(allocator);
 }
@@ -219,9 +218,8 @@ pub fn allocParse(
             }
 
             const rule_exists: bool = exists: {
-                for (available_rules) |available_rule| {
+                for (available_rules) |available_rule|
                     if (std.mem.eql(u8, available_rule.rule_id, args[index])) break :exists true;
-                }
                 break :exists false;
             };
             if (!rule_exists) {
@@ -267,17 +265,15 @@ pub fn allocParse(
             }
 
             const field_names = comptime std.meta.fieldNames(@FieldType(Args, "format"));
-            inline for (field_names, 0..) |field_name, i| {
+            inline for (field_names, 0..) |field_name, i|
                 if (std.mem.eql(u8, args[index], field_name)) {
                     format = @enumFromInt(i);
                     continue :state State.parsing;
-                }
-            }
+                };
             rendering.process_printer.println(.err, "--format only supports: {s}", .{comptime formats: {
                 var formats: []u8 = "";
-                for (std.meta.fieldNames(@FieldType(Args, "format"))) |name| {
+                for (std.meta.fieldNames(@FieldType(Args, "format"))) |name|
                     formats = @constCast(formats ++ name ++ " ");
-                }
                 break :formats formats;
             }});
             return error.InvalidArgs;
@@ -397,7 +393,7 @@ pub fn printHelp(printer: *rendering.Printer) void {
     printer.print(.out, "{s}Usage:{s} ", .{ printer.tty.ansiOrEmpty(&.{ .underline, .bold }), printer.tty.ansiOrEmpty(&.{.reset}) });
     printer.print(.out, "zig build <lint step> -- [--include <path>...] [--exclude <path>...] [--filter <path>...] [--rule <name>...] [--fix] [--quiet] [--max-warnings <u32>]\n\n", .{});
     printer.print(.out, "{s}Options:{s}\n", .{ printer.tty.ansiOrEmpty(&.{ .underline, .bold }), printer.tty.ansiOrEmpty(&.{.reset}) });
-    for (flags) |tuple| {
+    for (flags) |tuple|
         printer.print(
             .out,
             "  {s}{s: <" ++ std.fmt.comptimePrint("{d}", .{width + 2}) ++ "}{s}{s}\n",
@@ -408,7 +404,6 @@ pub fn printHelp(printer: *rendering.Printer) void {
                 tuple[1],
             },
         );
-    }
     printer.flush() catch @panic("Failed to flush help docs");
 }
 
@@ -1162,9 +1157,8 @@ const testing = struct {
             .help = false,
             .fix_passes = default_fix_passes,
         };
-        inline for (comptime std.meta.fieldNames(@TypeOf(overrides))) |field_name| {
+        inline for (comptime std.meta.fieldNames(@TypeOf(overrides))) |field_name|
             @field(result, field_name) = @field(overrides, field_name);
-        }
         return result;
     }
 

@@ -186,7 +186,7 @@ const StepBuilder = struct {
         if (selectors.len == 0)
             @panic("setCompileUnits requires at least one selector");
 
-        for (selectors) |selector| {
+        for (selectors) |selector|
             self.compile_units.append(arena, switch (selector) {
                 .exe => .exe,
                 .lib => .lib,
@@ -195,7 +195,6 @@ const StepBuilder = struct {
                 .all => .all,
                 .explicit => |compile| .{ .name = compile.step.name },
             }) catch @panic("OOM");
-        }
     }
 
     /// Set the paths to include or exclude when running the linter.
@@ -472,14 +471,13 @@ pub fn build(b: *std.Build) void {
         // zlinter-disable-next-line declaration_naming - this looks like a false positive based on use of @typeInfo it things its a type?
         const builtin_rule_values = @typeInfo(BuiltinLintRule).@"enum".field_values;
         var build_rules = b.allocator.alloc(BuiltRule, builtin_rule_values.len) catch @panic("OOM");
-        inline for (builtin_rule_values, 0..) |field_value, i| {
+        inline for (builtin_rule_values, 0..) |field_value, i|
             build_rules[i] = buildBuiltinRule(
                 b,
                 @enumFromInt(field_value),
                 .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import },
                 .{},
             );
-        }
 
         break :step buildStep(
             b,
@@ -611,22 +609,20 @@ fn buildStep(
     // from runtime include and exclude to reflect the previous BuildInfo logic
     if (include.len > 0) {
         run.addArg("--include");
-        for (include) |source| {
+        for (include) |source|
             switch (source) {
                 .file_path => |path| run.addFileArg(path),
                 .dir_path => |path| run.addDirectoryArg(path),
-            }
-        }
+            };
     }
 
     if (exclude.len > 0) {
         run.addArg("--exclude");
-        for (exclude) |source| {
+        for (exclude) |source|
             switch (source) {
                 .file_path => |path| run.addFileArg(path),
                 .dir_path => |path| run.addDirectoryArg(path),
-            }
-        }
+            };
     }
 
     run.addArg("--stdin");
@@ -707,11 +703,10 @@ fn createTracyModule(
 
 fn checkNoNameCollision(comptime name: []const u8) []const u8 {
     comptime {
-        for (std.meta.fieldNames(BuiltinLintRule)) |core_name| {
+        for (std.meta.fieldNames(BuiltinLintRule)) |core_name|
             if (std.ascii.eqlIgnoreCase(core_name, name)) {
                 @compileError(name ++ " collides with a core rule. Consider prefixing your rule with a namespace. e.g., yourname.some_rule");
-            }
-        }
+            };
     }
     return name;
 }

@@ -247,7 +247,7 @@ fn unwrapGroupedExpression(tree: Ast, node: Ast.Node.Index) Ast.Node.Index {
 
 test "bad cases" {
     const rule = buildRule(.{});
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         inline for (&.{
             .{ "if (1 == 1) {}", "1 == 1" },
             .{ "if ((1) == (1)) {}", "(1) == (1)" },
@@ -288,8 +288,7 @@ test "bad cases" {
                     },
                 },
             );
-        }
-    }
+        };
     try zlinter.testing.testRunRule(
         rule,
         "pub fn main() void { var a = 1 == 1; }",
@@ -307,7 +306,7 @@ test "good cases" {
         "if (a == 1) {}",
         "if (1 >= a) {}",
         "if (a and true) {}",
-    }) |source| {
+    }) |source|
         try zlinter.testing.testRunRule(
             rule,
             "pub fn main() void {\n" ++ source ++ "\n}",
@@ -315,7 +314,6 @@ test "good cases" {
             Config{ .severity = .warning },
             &.{},
         );
-    }
 }
 
 test {

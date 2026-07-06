@@ -129,7 +129,7 @@ test "no_orelse_unreachable" {
         \\const k = l orelse (1);
     ;
 
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             rule,
             source,
@@ -164,7 +164,6 @@ test "no_orelse_unreachable" {
                 },
             },
         );
-    }
 
     // Off:
     try zlinter.testing.testRunRule(

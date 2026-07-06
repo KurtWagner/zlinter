@@ -56,9 +56,8 @@ fn isRedundantComptimeType(tree: Ast, type_expr: Ast.Node.Index) bool {
     if (tree.nodeTag(unwrapped) != .identifier) return false;
 
     const slice = tree.tokenSlice(tree.firstToken(unwrapped));
-    for (redundant_types) |t| {
+    for (redundant_types) |t|
         if (std.mem.eql(u8, slice, t)) return true;
-    }
     return false;
 }
 
@@ -145,9 +144,8 @@ fn redundantComptimeFixRange(
 
     if (end <= comptime_end) return null;
 
-    for (source[comptime_end..end]) |c| {
+    for (source[comptime_end..end]) |c|
         if (!std.ascii.isWhitespace(c)) return null;
-    }
 
     return .{
         .start = start,

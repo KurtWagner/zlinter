@@ -91,12 +91,11 @@ fn run(
         // is identifier a method on Allocator e.g., something.alloc(..) or something.create(..)
         const is_allocator_method = is_allocator_method: {
             const actual_name = tree.tokenSlice(identifier);
-            inline for (@typeInfo(std.mem.Allocator).@"struct".decl_names) |decl_name| {
+            inline for (@typeInfo(std.mem.Allocator).@"struct".decl_names) |decl_name|
                 if (comptime std.meta.hasMethod(std.mem.Allocator, decl_name)) {
                     if (std.mem.eql(u8, actual_name, decl_name))
                         break :is_allocator_method true;
-                }
-            }
+                };
             break :is_allocator_method false;
         };
         if (!is_allocator_method) continue :nodes;
@@ -169,9 +168,8 @@ fn resolveAllocatorDecl(
     const rule_arena = session.runtime.ruleArena();
     const decl_candidates = session.resolveDeclCandidatesOfNode(rule_arena, doc, lhs) catch return null;
 
-    for (decl_candidates) |candidate| {
+    for (decl_candidates) |candidate|
         return session.resolveDeclAliasCandidate(candidate).decl_id;
-    }
     return null;
 }
 

@@ -29,9 +29,8 @@ pub fn main(init: std.process.Init) !void {
     );
 
     {
-        for (rule_names) |rule_name| {
+        for (rule_names) |rule_name|
             try output_file_writer.interface.print("@import(\"{s}\").buildRule(.{{}}),\n", .{rule_name});
-        }
     }
 
     try output_file_writer.interface.writeAll(
@@ -42,13 +41,12 @@ pub fn main(init: std.process.Init) !void {
     );
 
     {
-        for (rule_names) |rule_name| {
+        for (rule_names) |rule_name|
             try output_file_writer.interface.print("pub const @\"{s}\": @import(\"{s}\").Config = @import(\"{s}.zon\");\n", .{
                 rule_name,
                 rule_name,
                 rule_name,
             });
-        }
     }
 
     try output_file_writer.interface.writeAll(
@@ -62,9 +60,8 @@ pub fn main(init: std.process.Init) !void {
     );
 
     {
-        for (rule_names) |rule_name| {
+        for (rule_names) |rule_name|
             try output_file_writer.interface.print("@alignCast(@ptrCast(@constCast(&@field(config_namespace, \"{s}\")))),\n", .{rule_name});
-        }
     }
 
     try output_file_writer.interface.writeAll(
@@ -78,9 +75,8 @@ pub fn main(init: std.process.Init) !void {
     );
 
     {
-        for (rule_names) |rule_name| {
+        for (rule_names) |rule_name|
             try output_file_writer.interface.print("@import(\"{s}\").Config,\n", .{rule_name});
-        }
     }
 
     try output_file_writer.interface.writeAll(
@@ -96,9 +92,8 @@ pub fn main(init: std.process.Init) !void {
     );
 
     {
-        for (rule_names) |rule_name| {
+        for (rule_names) |rule_name|
             try output_file_writer.interface.print("@\"{s}\": ?@import(\"{s}\").Config = null,\n", .{ rule_name, rule_name });
-        }
     }
 
     try output_file_writer.interface.writeAll(
@@ -113,9 +108,8 @@ pub fn main(init: std.process.Init) !void {
     );
 
     {
-        for (rule_names) |rule_name| {
+        for (rule_names) |rule_name|
             try output_file_writer.interface.print("\"{s}\",\n", .{rule_name});
-        }
     }
 
     try output_file_writer.interface.writeAll(

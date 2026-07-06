@@ -125,7 +125,7 @@ fn writeFileRuleConfig(content: []const u8, gpa: std.mem.Allocator, writer: anyt
 
     var config_written: bool = false;
     var struct_buffer: [2]Ast.Node.Index = undefined;
-    for (tree.rootDecls()) |decl| {
+    for (tree.rootDecls()) |decl|
         if (tree.fullVarDecl(decl)) |var_decl| {
             const name = tree.tokenSlice(var_decl.ast.mut_token + 1);
             if (!std.mem.eql(u8, name, "Config")) continue;
@@ -172,8 +172,7 @@ fn writeFileRuleConfig(content: []const u8, gpa: std.mem.Allocator, writer: anyt
 
                 config_written = true;
             }
-        }
-    }
+        };
     if (!config_written) @panic("Config missing");
 }
 

@@ -158,9 +158,8 @@ test "isLintableFilePath" {
         "file.zig",
         "some/path/file.zig",
         "./some/path/file.zig",
-    }) |file_path| {
+    }) |file_path|
         try std.testing.expect(try isLintableFilePath(testing.paths.posix(file_path)));
-    }
 
     // Bad extensions:
     inline for (&.{
@@ -171,9 +170,8 @@ test "isLintableFilePath" {
         "zig",
         "src/.zig",
         "src/zig",
-    }) |file_path| {
+    }) |file_path|
         try std.testing.expect(!try isLintableFilePath(testing.paths.posix(file_path)));
-    }
 
     // Bad parent directory
     inline for (&.{
@@ -185,9 +183,8 @@ test "isLintableFilePath" {
         "zig-pkg/file.zig",
         "./zig-pkg/file.zig",
         "/other/parent/zig-pkg/file.zig",
-    }) |file_path| {
+    }) |file_path|
         try std.testing.expect(!try isLintableFilePath(testing.paths.posix(file_path)));
-    }
 }
 
 test "allocLintFiles - with default args" {

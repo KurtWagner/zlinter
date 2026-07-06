@@ -721,36 +721,33 @@ pub const CommentsDocument = struct {
                     std.debug.print("DISABLE:\n", .{});
                     std.debug.print(" for {s}:{d}\n", .{ file_path, disable.line_start });
                     if (disable.rule_ids) |rule_ids| {
-                        for (self.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
+                        for (self.tokens[rule_ids.first .. rule_ids.last + 1]) |token|
                             std.debug.print(
                                 "- {s}\n",
                                 .{source[token.first_byte .. token.first_byte + token.len]},
                             );
-                        }
                     }
                 },
                 .disable_lint => |disable| {
                     std.debug.print("DISABLE:\n", .{});
                     std.debug.print(" for {s}:{d}\n", .{ file_path, disable.line_start });
                     if (disable.rule_ids) |rule_ids| {
-                        for (self.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
+                        for (self.tokens[rule_ids.first .. rule_ids.last + 1]) |token|
                             std.debug.print(
                                 "- {s}\n",
                                 .{source[token.first_byte .. token.first_byte + token.len]},
                             );
-                        }
                     }
                 },
                 .enable_lint => |enable| {
                     std.debug.print("ENABLE:\n", .{});
                     std.debug.print(" for {s}:{d}\n", .{ file_path, enable.line_start });
                     if (enable.rule_ids) |rule_ids| {
-                        for (self.tokens[rule_ids.first .. rule_ids.last + 1]) |token| {
+                        for (self.tokens[rule_ids.first .. rule_ids.last + 1]) |token|
                             std.debug.print(
                                 "- {s}\n",
                                 .{source[token.first_byte .. token.first_byte + token.len]},
                             );
-                        }
                     }
                 },
                 .line => |line| {
@@ -1812,9 +1809,8 @@ pub const LazyRuleSkipper = struct {
                             self.gpa,
                             line_count,
                         ));
-                        for (global_ops.items) |op| {
+                        for (global_ops.items) |op|
                             result.value_ptr.setRangeValue(op.range, op.value);
-                        }
                     }
                     result.value_ptr.setRangeValue(range, set.value);
                 }

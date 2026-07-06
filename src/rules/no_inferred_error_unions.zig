@@ -161,7 +161,7 @@ test "no_inferred_error_unions - valid function declarations" {
         \\fn privateAllowInferred() !void {
         \\ return error.Always;
         \\}
-    }) |source| {
+    }) |source|
         try zlinter.testing.testRunRule(
             buildRule(.{}),
             source,
@@ -169,7 +169,6 @@ test "no_inferred_error_unions - valid function declarations" {
             Config{},
             &.{},
         );
-    }
 }
 
 test "no_inferred_error_unions - Invalid function declarations - off" {

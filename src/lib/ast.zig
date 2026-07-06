@@ -51,9 +51,8 @@ pub const NodeLineageIterator = struct {
     pub fn next(self: *Self) error{OutOfMemory}!?struct { Ast.Node.Index, NodeConnections } {
         if (self.queue.pop()) |node| {
             const connections = self.lineage.get(@intFromEnum(node));
-            for (connections.children orelse &.{}) |child| {
+            for (connections.children orelse &.{}) |child|
                 try self.queue.append(self.gpa, child);
-            }
             return .{ node, connections };
         }
         return null;
@@ -263,9 +262,8 @@ pub fn isRootImplicitStruct(tree: Ast) bool {
 
 /// Returns true if the container is a namespace (i.e., no fields just declarations)
 pub fn isContainerNamespace(tree: Ast, container_decl: Ast.full.ContainerDecl) bool {
-    for (container_decl.ast.members) |member| {
+    for (container_decl.ast.members) |member|
         if (tree.nodeTag(member).isContainerField()) return false;
-    }
     return true;
 }
 
@@ -487,9 +485,8 @@ pub fn isFieldVarAccess(tree: Ast, node: Ast.Node.Index, var_names: []const []co
     const identifier_token = fieldVarAccess(tree, node) orelse return false;
     const actual_var_name = tree.tokenSlice(identifier_token);
 
-    for (var_names) |var_name| {
+    for (var_names) |var_name|
         if (std.mem.eql(u8, actual_var_name, var_name)) return true;
-    }
     return false;
 }
 
@@ -688,9 +685,8 @@ pub fn isEnumLiteral(tree: Ast, node: Ast.Node.Index, enum_names: []const []cons
     if (tree.nodeTag(node) != .enum_literal) return false;
 
     const actual_enum_name = tree.tokenSlice(tree.nodeMainToken(node));
-    for (enum_names) |enum_name| {
+    for (enum_names) |enum_name|
         if (std.mem.eql(u8, actual_enum_name, enum_name)) return true;
-    }
     return false;
 }
 
@@ -794,7 +790,7 @@ pub fn findFnCall(
         return call;
     }
 
-    for (doc.lineage.items(.children)[@intFromEnum(node)] orelse &.{}) |child| {
+    for (doc.lineage.items(.children)[@intFromEnum(node)] orelse &.{}) |child|
         if (findFnCall(
             doc,
             file_store,
@@ -802,7 +798,6 @@ pub fn findFnCall(
             call_buffer,
             names,
         )) |call| return call;
-    }
     return null;
 }
 
@@ -916,11 +911,10 @@ pub fn fnCall(
         const fn_name_slice = tree.tokenSlice(fn_call.call_identifier_token);
         if (names.len == 0) return fn_call;
 
-        for (names) |name| {
+        for (names) |name|
             if (std.mem.eql(u8, name, fn_name_slice)) {
                 return fn_call;
-            }
-        }
+            };
     }
     return null;
 }

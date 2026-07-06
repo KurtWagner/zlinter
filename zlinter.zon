@@ -5,11 +5,11 @@
             // TODO: #163 - change all to .{ .warning = .multi_statement_only }
             .if_statement = .off,
             .while_statement = .off,
-            .for_statement = .off,
-            .catch_statement = .{ .warning = .multi_statement_only },
-            .switch_case_statement = .{ .warning = .multi_statement_only },
-            .defer_statement = .{ .warning = .multi_statement_only },
-            .errdefer_statement = .{ .warning = .multi_statement_only },
+            .for_statement = .{ .@"error" = .multi_statement_only },
+            .catch_statement = .{ .@"error" = .multi_statement_only },
+            .switch_case_statement = .{ .@"error" = .multi_statement_only },
+            .defer_statement = .{ .@"error" = .multi_statement_only },
+            .errdefer_statement = .{ .@"error" = .multi_statement_only },
         },
         .no_panic = .{
             .severity = .off,

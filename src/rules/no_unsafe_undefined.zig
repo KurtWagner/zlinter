@@ -290,7 +290,7 @@ fn isEnumOrUnionType(
     if (try resolvedDeclIsEnumOrUnion(session, doc, type_node)) return true;
 
     const candidates = try session.resolveValueTypeAnnotationCandidates(doc, type_node);
-    for (candidates) |candidate| {
+    for (candidates) |candidate|
         switch (candidate.summary) {
             .instance => |instance| switch (instance.kind) {
                 .@"enum", .@"union" => return true,
@@ -301,8 +301,7 @@ fn isEnumOrUnionType(
                 else => {},
             },
             else => {},
-        }
-    }
+        };
 
     return false;
 }

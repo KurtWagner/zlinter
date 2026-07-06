@@ -159,29 +159,24 @@ pub const LintTextStyle = enum {
 
     test "check" {
         // Off:
-        inline for (&.{ "snake_case", "camelCase", "TitleCase", "a", "A" }) |content| {
+        inline for (&.{ "snake_case", "camelCase", "TitleCase", "a", "A" }) |content|
             try std.testing.expect(LintTextStyle.off.check(content));
-        }
 
         // Snake case:
-        inline for (&.{ "snake_case", "a", "a_b_c" }) |content| {
+        inline for (&.{ "snake_case", "a", "a_b_c" }) |content|
             try std.testing.expect(LintTextStyle.snake_case.check(content));
-        }
 
         // Title case:
-        inline for (&.{ "TitleCase", "A", "AB" }) |content| {
+        inline for (&.{ "TitleCase", "A", "AB" }) |content|
             try std.testing.expect(LintTextStyle.title_case.check(content));
-        }
 
         // Camel case:
-        inline for (&.{ "camelCase", "a", "aB" }) |content| {
+        inline for (&.{ "camelCase", "a", "aB" }) |content|
             try std.testing.expect(LintTextStyle.camel_case.check(content));
-        }
 
         // Macro case:
-        inline for (&.{ "MACRO_CASE", "A", "1", "1B" }) |content| {
+        inline for (&.{ "MACRO_CASE", "A", "1", "1B" }) |content|
             try std.testing.expect(LintTextStyle.macro_case.check(content));
-        }
     }
 
     pub inline fn name(self: LintTextStyle) []const u8 {

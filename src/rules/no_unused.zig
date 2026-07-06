@@ -493,7 +493,7 @@ test "no_unused" {
         \\}
     ;
 
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             rule,
             source,
@@ -545,7 +545,6 @@ test "no_unused" {
                 },
             },
         );
-    }
 
     // Off
     try zlinter.testing.testRunRule(

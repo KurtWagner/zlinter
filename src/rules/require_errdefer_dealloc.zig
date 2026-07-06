@@ -101,7 +101,7 @@ fn run(
 
     var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
 
-    for (problem_nodes.items) |node| {
+    for (problem_nodes.items) |node|
         try lint_problems.append(session_arena, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
@@ -109,7 +109,6 @@ fn run(
             .end = .endOfNode(tree, node),
             .message = try session_arena.print("Missing `errdefer` cleanup", .{}),
         });
-    }
 
     return if (lint_problems.items.len > 0)
         try zlinter.results.LintResult.init(
@@ -134,7 +133,7 @@ fn processBlock(
 
     var call_buffer: [1]Ast.Node.Index = undefined;
 
-    for (doc.lineage.items(.children)[@intFromEnum(block_node)] orelse &.{}) |child_node| {
+    for (doc.lineage.items(.children)[@intFromEnum(block_node)] orelse &.{}) |child_node|
         if (try declRequiringCleanup(session, doc, rule_arena, child_node)) |decl_ref| {
             try cleanup_symbols.put(
                 try rule_arena.dupe(u8, tree.tokenSlice(decl_ref.decl_name_token)),
@@ -147,7 +146,7 @@ fn processBlock(
             rule_arena,
         )) |defer_block| {
             // Remove any tracked declarations that are cleaned up within defer/errdefer
-            for (defer_block.children) |defer_block_child| {
+            for (defer_block.children) |defer_block_child|
                 if (zlinter.ast.findFnCall(
                     doc,
                     &session.file_store,
@@ -159,8 +158,7 @@ fn processBlock(
                         .single_field => |info| _ = cleanup_symbols.remove(tree.tokenSlice(info.field_main_token)),
                         .enum_literal, .other, .direct => {},
                     }
-                }
-            }
+                };
         } else if (zlinter.ast.isBlock(tree, child_node)) {
             try processBlock(
                 session,
@@ -169,8 +167,7 @@ fn processBlock(
                 problems,
                 rule_arena,
             );
-        }
-    }
+        };
 
     var remaining_it = cleanup_symbols.valueIterator();
     while (remaining_it.next()) |node| {
@@ -236,11 +233,10 @@ fn declRequiringCleanup(
         var_decl_id,
         "deinit",
     );
-    for (deinit_candidates) |candidate| {
+    for (deinit_candidates) |candidate|
         if (declIsPublicDeinit(session, candidate.decl_id)) {
             return .{ .decl_name_token = var_decl.ast.mut_token + 1 };
-        }
-    }
+        };
 
     return null;
 }
@@ -290,9 +286,8 @@ fn hasNonFreeingAllocatorParam(
         switch (tag) {
             .identifier => {
                 const slice = tree.tokenSlice(tree.nodeMainToken(param_node));
-                for (skip_var_and_field_names) |str| {
+                for (skip_var_and_field_names) |str|
                     if (std.mem.eql(u8, slice, str)) return true;
-                }
             },
             .field_access => if (zlinter.ast.isFieldVarAccess(tree, param_node, skip_var_and_field_names)) return true,
             else => if (zlinter.ast.fnCall(

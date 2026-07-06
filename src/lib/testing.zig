@@ -37,12 +37,11 @@ pub fn loadFakeDocument(
     });
 
     var has_compile_context = false;
-    for (session.compile_contexts.items(.root_module)) |root_module| {
+    for (session.compile_contexts.items(.root_module)) |root_module|
         if (root_module == module_id) {
             has_compile_context = true;
             break;
-        }
-    }
+        };
     if (!has_compile_context) {
         _ = session.appendCompileContext(.{
             .root_module = module_id,
@@ -122,9 +121,8 @@ pub const paths = struct {
 
         comptime var result: []const u8 = "";
         result = result ++ parts[0];
-        inline for (1..parts.len) |i| {
+        inline for (1..parts.len) |i|
             result = result ++ std.Io.Dir.path.sep_str ++ parts[i];
-        }
         return result;
     }
 
@@ -135,12 +133,11 @@ pub const paths = struct {
         @setEvalBranchQuota(10000);
 
         comptime var result: []const u8 = "";
-        inline for (0..posix_path.len) |i| {
+        inline for (0..posix_path.len) |i|
             result = result ++ std.fmt.comptimePrint("{c}", .{switch (posix_path[i]) {
                 std.Io.Dir.path.sep_posix => std.Io.Dir.path.sep,
                 else => |c| c,
             }});
-        }
         return result;
     }
 };
@@ -163,7 +160,7 @@ pub fn expectContainsExactlyStrings(expected: []const []const u8, actual: []cons
     std.mem.sort([]const u8, copy_expected, {}, comparators.stringLessThan);
     std.mem.sort([]const u8, copy_actual, {}, comparators.stringLessThan);
 
-    for (0..copy_expected.len) |i| {
+    for (0..copy_expected.len) |i|
         std.testing.expectEqualStrings(copy_expected[i], copy_actual[i]) catch |e| {
             std.log.err("Expected: &.{{", .{});
             for (copy_expected) |str| std.log.err("  \"{s}\"", .{str});
@@ -175,7 +172,6 @@ pub fn expectContainsExactlyStrings(expected: []const []const u8, actual: []cons
 
             return e;
         };
-    }
 }
 
 /// Test that asserts an array of node indexes match another by using node source
@@ -244,12 +240,11 @@ pub fn expectSingleNodeOfTag(tree: Ast, comptime tags: []const Ast.Node.Tag) !As
     var i: u32 = @intFromEnum(Ast.Node.Index.root);
     while (i < tree.nodes.len) : (i += 1) {
         const node: Ast.Node.Index = @enumFromInt(i);
-        inline for (tags) |tag| {
+        inline for (tags) |tag|
             if (tree.nodeTag(node) == tag) {
                 if (found != null) return error.TestExpectedSingleNodeTag;
                 found = node;
-            }
-        }
+            };
     }
 
     return found orelse error.TestExpectedSingleNodeTag;
@@ -269,11 +264,10 @@ pub fn expectNodeOfTagFirst(
 
     while (try it.next()) |node_and_children| {
         const node = node_and_children[0];
-        inline for (tags) |tag| {
+        inline for (tags) |tag|
             if (tree.nodeTag(node) == tag) {
                 return node;
-            }
-        }
+            };
     }
     return error.TestExpectedSingleNodeTag;
 }

@@ -66,9 +66,8 @@ pub fn normalizeIdentifierName(name: []const u8) []const u8 {
 test "normalizeIdentifierName" {
     try std.testing.expectEqualStrings("A.b.c", normalizeIdentifierName("@\"A.b.c\""));
 
-    inline for (&.{ "", "a", "abc", "ABC", "snake_case", "camelCase", "TitleCase" }) |str| {
+    inline for (&.{ "", "a", "abc", "ABC", "snake_case", "camelCase", "TitleCase" }) |str|
         try std.testing.expectEqualStrings(str, normalizeIdentifierName(str));
-    }
 }
 
 pub fn debugPrintMultilineString(source: []const u8, writer: anytype, indent: usize) void {

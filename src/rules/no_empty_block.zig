@@ -253,11 +253,10 @@ fn isWhitespaceOnlyBlock(tree: Ast, node: Ast.Node.Index) bool {
 
     // Comments are intentionally treated as documentation, so any non-whitespace
     // byte between braces means the block is allowed.
-    for (start..end) |i| {
+    for (start..end) |i|
         if (!std.ascii.isWhitespace(tree.source[i])) {
             return false;
-        }
-    }
+        };
     return true;
 }
 
@@ -352,7 +351,7 @@ test "if blocks" {
         \\ } else {}
         \\}
     ;
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             buildRule(.{}),
             source,
@@ -376,7 +375,6 @@ test "if blocks" {
                 },
             },
         );
-    }
 
     // Off:
     try zlinter.testing.testRunRule(
@@ -444,7 +442,7 @@ test "while blocks" {
         \\ }
         \\}
     ;
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             buildRule(.{}),
             source,
@@ -477,7 +475,6 @@ test "while blocks" {
                 },
             },
         );
-    }
 
     // Off:
     try zlinter.testing.testRunRule(
@@ -545,7 +542,7 @@ test "for blocks" {
         \\ }
         \\}
     ;
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             buildRule(.{}),
             source,
@@ -578,7 +575,6 @@ test "for blocks" {
                 },
             },
         );
-    }
 
     // Off:
     try zlinter.testing.testRunRule(
@@ -667,7 +663,7 @@ test "nested statement bodies" {
         \\    for (items) |_| if (true) {} else {};
         \\}
     ;
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             buildRule(.{}),
             source,
@@ -719,7 +715,6 @@ test "nested statement bodies" {
                 },
             },
         );
-    }
 }
 
 test "defer blocks" {
@@ -736,7 +731,7 @@ test "defer blocks" {
         \\ }
         \\}
     ;
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             buildRule(.{}),
             source,
@@ -761,7 +756,6 @@ test "defer blocks" {
                 },
             },
         );
-    }
 
     // Off:
     try zlinter.testing.testRunRule(
@@ -787,7 +781,7 @@ test "errdefer blocks" {
         \\ }
         \\}
     ;
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             buildRule(.{}),
             source,
@@ -812,7 +806,6 @@ test "errdefer blocks" {
                 },
             },
         );
-    }
 
     // Off:
     try zlinter.testing.testRunRule(
@@ -838,7 +831,7 @@ test "catch blocks" {
         \\ };
         \\}
     ;
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             buildRule(.{}),
             source,
@@ -863,7 +856,6 @@ test "catch blocks" {
                 },
             },
         );
-    }
 
     // Off:
     try zlinter.testing.testRunRule(
@@ -890,7 +882,7 @@ test "switch case blocks" {
         \\ }
         \\ }
     ;
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             buildRule(.{}),
             source,
@@ -915,7 +907,6 @@ test "switch case blocks" {
                 },
             },
         );
-    }
 
     // Off:
     try zlinter.testing.testRunRule(
@@ -934,7 +925,7 @@ test "function declaration blocks" {
         \\fn alsoEmpty() void {}
     ;
 
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             buildRule(.{}),
             source,
@@ -955,7 +946,6 @@ test "function declaration blocks" {
                 },
             },
         );
-    }
 
     // Off:
     try zlinter.testing.testRunRule(
@@ -1007,7 +997,7 @@ test "empty ABI stubs are reported when disabled" {
         \\pub fn __runtime_hook() linksection(".text.special") void {}
     ;
 
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             buildRule(.{}),
             source,
@@ -1043,7 +1033,6 @@ test "empty ABI stubs are reported when disabled" {
                 },
             },
         );
-    }
 }
 
 test "empty non-function blocks are still reported" {
@@ -1082,7 +1071,7 @@ test "test blocks" {
         \\    // deliberate
         \\}
     ;
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             buildRule(.{}),
             source,
@@ -1103,7 +1092,6 @@ test "test blocks" {
                 },
             },
         );
-    }
 
     try zlinter.testing.testRunRule(
         buildRule(.{}),
@@ -1122,7 +1110,7 @@ test "comptime blocks" {
         \\    // deliberate
         \\}
     ;
-    inline for (&.{ .warning, .@"error" }) |severity| {
+    inline for (&.{ .warning, .@"error" }) |severity|
         try zlinter.testing.testRunRule(
             buildRule(.{}),
             source,
@@ -1137,7 +1125,6 @@ test "comptime blocks" {
                 },
             },
         );
-    }
 
     try zlinter.testing.testRunRule(
         buildRule(.{}),

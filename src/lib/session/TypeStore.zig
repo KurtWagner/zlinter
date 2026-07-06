@@ -735,9 +735,8 @@ pub fn primitiveFromName(name: []const u8) ?Primitive {
         }
     }
 
-    inline for (&.{ "void", "noreturn" }) |primitive_name| {
+    inline for (&.{ "void", "noreturn" }) |primitive_name|
         if (std.mem.eql(u8, name, primitive_name)) return .{ .named = name };
-    }
 
     return null;
 }

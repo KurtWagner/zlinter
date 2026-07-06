@@ -47,9 +47,8 @@ const AnsiCode = enum(u32) {
 // Private as it does not check ansi support, use get(..) instead.
 inline fn sequence(comptime codes: []const AnsiCode) []const u8 {
     comptime var result: []const u8 = codes[0].toString();
-    inline for (1..codes.len) |i| {
+    inline for (1..codes.len) |i|
         result = result ++ ";" ++ comptime codes[i].toString();
-    }
     return "\x1B[" ++ result ++ "m";
 }
 

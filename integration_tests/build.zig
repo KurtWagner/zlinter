@@ -89,17 +89,15 @@ pub fn build(b: *std.Build) !void {
         try run_integration_test_steps.append(b.allocator, &run_integration_test.step);
     }
 
-    for (run_integration_test_steps.items) |run_integration_test_step| {
+    for (run_integration_test_steps.items) |run_integration_test_step|
         test_step.dependOn(run_integration_test_step);
-    }
 
     // zig build lint -
     const lint_cmd = b.step("lint", "Lint source code.");
     lint_cmd.dependOn(step: {
         var builder = zlinter.builder(b, .{ .target = target });
-        inline for (@typeInfo(zlinter.BuiltinLintRule).@"enum".field_values) |field_value| {
+        inline for (@typeInfo(zlinter.BuiltinLintRule).@"enum".field_values) |field_value|
             builder.addRule(.{ .builtin = @enumFromInt(field_value) }, .{});
-        }
         builder.setCompileUnits(&.{.all});
         builder.addRule(.{ .custom = .{ .name = "no_cats", .path = "src/no_cats.zig" } }, .{});
         break :step builder.build();
