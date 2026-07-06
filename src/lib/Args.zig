@@ -999,6 +999,7 @@ test "allocParse with duplicate build config" {
 }
 
 test "allocParse fuzz" {
+    // zlinter-disable-next-line no_unsafe_undefined - undefined seed here is fine.
     var seed: u64 = undefined;
     std.testing.io.random(std.mem.asBytes(&seed));
 
