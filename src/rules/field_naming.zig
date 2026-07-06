@@ -163,8 +163,8 @@ fn run(
                             };
                         }
 
-                        if (config.error_field.style()) |style| {
-                            if (!style.check(name)) {
+                        if (config.error_field.style()) |style|
+                            if (!style.check(name))
                                 try lint_problems.append(session_arena, .{
                                     .rule_id = rule.rule_id,
                                     .severity = config.error_field.severity(),
@@ -172,8 +172,6 @@ fn run(
                                     .end = .endOfToken(tree, token),
                                     .message = try session_arena.print("Error fields should be {s}", .{style.name()}),
                                 });
-                            }
-                        }
                     },
                     else => {},
                 }
@@ -229,9 +227,9 @@ fn run(
                     var is_len_excluded = false;
                     // Underscore has special meaning in containers so lets
                     // completely skip for length checks.
-                    if (std.mem.eql(u8, name, "_")) {
-                        is_len_excluded = true;
-                    } else for (exclude_len) |exclude_name|
+                    if (std.mem.eql(u8, name, "_"))
+                        is_len_excluded = true
+                    else for (exclude_len) |exclude_name|
                         if (std.mem.eql(u8, name, exclude_name)) {
                             is_len_excluded = true;
                             break;
@@ -270,8 +268,8 @@ fn run(
                         };
                     }
 
-                    if (style_with_severity.style()) |style| {
-                        if (!style.check(name)) {
+                    if (style_with_severity.style()) |style|
+                        if (!style.check(name))
                             try lint_problems.append(session_arena, .{
                                 .rule_id = rule.rule_id,
                                 .severity = style_with_severity.severity(),
@@ -279,8 +277,6 @@ fn run(
                                 .end = .endOfToken(tree, name_token),
                                 .message = try session_arena.print("{s} fields should be {s}", .{ field_desc, style.name() }),
                             });
-                        }
-                    }
                 };
         }
     }

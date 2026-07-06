@@ -233,9 +233,8 @@ fn declRequiringCleanup(
         "deinit",
     );
     for (deinit_candidates) |candidate|
-        if (declIsPublicDeinit(session, candidate.decl_id)) {
+        if (declIsPublicDeinit(session, candidate.decl_id))
             return .{ .decl_name_token = var_decl.ast.mut_token + 1 };
-        };
 
     return null;
 }

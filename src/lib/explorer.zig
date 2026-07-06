@@ -30,7 +30,7 @@ pub fn jsonTree(
         .{ .array = try errorsToJson(tree, arena) },
     );
 
-    if (tree.errors.len == 0) {
+    if (tree.errors.len == 0)
         if (tree.renderAlloc(arena)) |rendering| {
             try root_json_object.put(
                 arena,
@@ -39,8 +39,7 @@ pub fn jsonTree(
             );
         } else |_| {
             // Ignore.
-        }
-    }
+        };
 
     const Context = struct {
         arena: std.mem.Allocator,

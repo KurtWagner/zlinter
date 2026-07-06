@@ -1670,9 +1670,8 @@ test "lineNumber binary search coverage" {
     for (doc_comments.line_starts, 0..) |line_start, i| {
         try std.testing.expectEqual(i, doc_comments.lineNumber(line_start));
 
-        if (i + 1 < doc_comments.line_starts.len) {
+        if (i + 1 < doc_comments.line_starts.len)
             try std.testing.expectEqual(i, doc_comments.lineNumber(doc_comments.line_starts[i + 1] - 1));
-        }
     }
 
     try std.testing.expectEqual(@as(usize, 11), doc_comments.lineNumber(source.len));
@@ -1686,6 +1685,8 @@ fn testParse(
     inline for (&.{ "\n", "\r\n" }) |new_line| {
         comptime var source: [:0]const u8 = "";
         if (lines.len > 0) source = source ++ lines[0];
+        // TODO: fix this false positive, it thinks braces arent needed.
+        // zlinter-disable-next-line require_braces
         if (lines.len > 1) {
             inline for (lines[1..]) |line|
                 source = source ++ new_line ++ line;
@@ -1744,9 +1745,8 @@ pub const LazyRuleSkipper = struct {
         const index = self.ensureBuilt();
 
         const line = self.doc.lineNumber(problem.start.byte_offset);
-        if (index.rules.get(problem.rule_id)) |bits| {
+        if (index.rules.get(problem.rule_id)) |bits|
             return !bits.isSet(line);
-        }
 
         return !index.all.isSet(line);
     }

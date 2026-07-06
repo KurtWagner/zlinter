@@ -37,8 +37,8 @@ fn run(
         const switch_info = tree.fullSwitch(node) orelse continue;
 
         for (switch_info.ast.cases, 0..) |case_node, i|
-            if (zlinter.ast.isSwitchElseProng(tree, case_node)) {
-                if (i != switch_info.ast.cases.len - 1) {
+            if (zlinter.ast.isSwitchElseProng(tree, case_node))
+                if (i != switch_info.ast.cases.len - 1)
                     try lint_problems.append(session_arena, .{
                         .rule_id = rule.rule_id,
                         .severity = config.else_is_last,
@@ -46,8 +46,6 @@ fn run(
                         .end = .endOfNode(tree, case_node),
                         .message = try session_arena.dupe(u8, "`else` should be last in switch statements"),
                     });
-                }
-            };
     }
 
     return if (lint_problems.items.len > 0)

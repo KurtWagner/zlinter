@@ -482,7 +482,7 @@ fn summarizeTypeExpr(
         .unwrap_pointer = false,
     });
 
-    if (tree.fullArrayType(node)) |array_type| {
+    if (tree.fullArrayType(node)) |array_type|
         return .{
             .array = .{
                 .child_type = ChildType.fromSummary(
@@ -490,7 +490,6 @@ fn summarizeTypeExpr(
                 ),
             },
         };
-    }
 
     if (tree.fullPtrType(node)) |ptr_type| {
         if (ptr_type.size == .slice) {
@@ -506,7 +505,7 @@ fn summarizeTypeExpr(
         return summarizeTypeExpr(tree, ptr_type.ast.child_type);
     }
 
-    if (tree.fullSlice(node)) |slice_type| {
+    if (tree.fullSlice(node)) |slice_type|
         return .{
             .slice = .{
                 .child_type = ChildType.fromSummary(
@@ -514,7 +513,6 @@ fn summarizeTypeExpr(
                 ),
             },
         };
-    }
 
     if (tree.nodeTag(node) == .identifier) {
         const name = tree.getNodeSource(node);
@@ -523,16 +521,14 @@ fn summarizeTypeExpr(
     }
 
     var fn_proto_buffer: [1]Ast.Node.Index = undefined;
-    if (tree.fullFnProto(&fn_proto_buffer, node)) |fn_proto| {
+    if (tree.fullFnProto(&fn_proto_buffer, node)) |fn_proto|
         return summarizeFnProto(tree, fn_proto, .summary);
-    }
 
     if (summarizePtrFnType(tree, node, .summary)) |ptr_fn_summary| return ptr_fn_summary;
 
     var container_decl_buffer: [2]Ast.Node.Index = undefined;
-    if (tree.fullContainerDecl(&container_decl_buffer, node)) |container_decl| {
+    if (tree.fullContainerDecl(&container_decl_buffer, node)) |container_decl|
         return summarizeContainerDecl(tree, container_decl, .instance);
-    }
 
     switch (tree.nodeTag(node)) {
         .error_set_decl,
@@ -554,7 +550,7 @@ fn summarizeValueExpr(
         .unwrap_optional_unwrap = false,
     });
 
-    if (tree.fullArrayType(node)) |array_type| {
+    if (tree.fullArrayType(node)) |array_type|
         return .{
             .array = .{
                 .child_type = ChildType.fromSummary(
@@ -562,7 +558,6 @@ fn summarizeValueExpr(
                 ),
             },
         };
-    }
 
     if (tree.fullPtrType(node)) |ptr_type| {
         if (ptr_type.size == .slice) {
@@ -578,7 +573,7 @@ fn summarizeValueExpr(
         return summarizeValueExpr(tree, ptr_type.ast.child_type);
     }
 
-    if (tree.fullSlice(node)) |slice_type| {
+    if (tree.fullSlice(node)) |slice_type|
         return .{
             .slice = .{
                 .child_type = ChildType.fromSummary(
@@ -586,7 +581,6 @@ fn summarizeValueExpr(
                 ),
             },
         };
-    }
 
     switch (tree.nodeTag(node)) {
         .identifier => {
@@ -620,24 +614,21 @@ fn summarizeValueExpr(
         => {
             const builtin_name = tree.tokenSlice(tree.nodeMainToken(node));
             if (std.mem.eql(u8, builtin_name, "@import")) return .{ .type = .{ .kind = .namespace } };
-            if (std.mem.eql(u8, builtin_name, "@Type") or std.mem.eql(u8, builtin_name, "@TypeOf")) {
+            if (std.mem.eql(u8, builtin_name, "@Type") or std.mem.eql(u8, builtin_name, "@TypeOf"))
                 return .{ .type = .unknown };
-            }
         },
         else => {},
     }
 
     var fn_proto_buffer: [1]Ast.Node.Index = undefined;
-    if (tree.fullFnProto(&fn_proto_buffer, node)) |fn_proto| {
+    if (tree.fullFnProto(&fn_proto_buffer, node)) |fn_proto|
         return summarizeFnProto(tree, fn_proto, .type_value);
-    }
 
     if (summarizePtrFnType(tree, node, .type_value)) |ptr_fn_summary| return ptr_fn_summary;
 
     var container_decl_buffer: [2]Ast.Node.Index = undefined;
-    if (tree.fullContainerDecl(&container_decl_buffer, node)) |container_decl| {
+    if (tree.fullContainerDecl(&container_decl_buffer, node)) |container_decl|
         return summarizeContainerDecl(tree, container_decl, .type_value);
-    }
 
     return .unknown;
 }
@@ -687,53 +678,45 @@ fn summarizeContainerDecl(
 pub fn primitiveFromName(name: []const u8) ?Primitive {
     if (std.mem.eql(u8, name, "bool")) return .bool;
 
-    if (std.mem.eql(u8, name, "comptime_int")) {
+    if (std.mem.eql(u8, name, "comptime_int"))
         return .{ .number = .{
             .name = name,
             .kind = .comptime_int,
         } };
-    }
 
-    if (std.mem.eql(u8, name, "comptime_float")) {
+    if (std.mem.eql(u8, name, "comptime_float"))
         return .{ .number = .{
             .name = name,
             .kind = .comptime_float,
         } };
-    }
 
-    if (std.mem.eql(u8, name, "usize")) {
+    if (std.mem.eql(u8, name, "usize"))
         return .{ .number = .{
             .name = name,
             .kind = .unsigned_int,
         } };
-    }
 
-    if (std.mem.eql(u8, name, "isize")) {
+    if (std.mem.eql(u8, name, "isize"))
         return .{ .number = .{
             .name = name,
             .kind = .signed_int,
         } };
-    }
 
-    if (name.len > 1 and (name[0] == 'u' or name[0] == 'i')) {
-        if (parsePrimitiveIntBits(name[1..])) |bits| {
+    if (name.len > 1 and (name[0] == 'u' or name[0] == 'i'))
+        if (parsePrimitiveIntBits(name[1..])) |bits|
             return .{ .number = .{
                 .name = name,
                 .kind = if (name[0] == 'u') .unsigned_int else .signed_int,
                 .bits = bits,
             } };
-        }
-    }
 
-    if (name.len > 1 and name[0] == 'f') {
-        if (parsePrimitiveIntBits(name[1..])) |bits| {
+    if (name.len > 1 and name[0] == 'f')
+        if (parsePrimitiveIntBits(name[1..])) |bits|
             return .{ .number = .{
                 .name = name,
                 .kind = .float,
                 .bits = bits,
             } };
-        }
-    }
 
     inline for (&.{ "void", "noreturn" }) |primitive_name|
         if (std.mem.eql(u8, name, primitive_name)) return .{ .named = name };

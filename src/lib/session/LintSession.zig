@@ -506,9 +506,8 @@ fn resolveBuildModule(
         const current_module_id = module_id_by_build_module_index.get(current_build_module_index).?;
 
         // This exact build module may already have been populated by an earlier compile step.
-        if (self.module_store.moduleIdsByImportName(current_module_id).count() != 0) {
+        if (self.module_store.moduleIdsByImportName(current_module_id).count() != 0)
             continue;
-        }
 
         const build_module = current_build_module_index.get(build_config);
 
@@ -752,11 +751,10 @@ fn appendModuleForFile(
     if (!entry.found_existing)
         entry.value_ptr.* = .empty;
 
-    if (self.module_store.rootFileId(module_id) == file_id) {
-        oom(entry.value_ptr.insert(self.runtime.sessionArena(), 0, module_id));
-    } else {
+    if (self.module_store.rootFileId(module_id) == file_id)
+        oom(entry.value_ptr.insert(self.runtime.sessionArena(), 0, module_id))
+    else
         oom(entry.value_ptr.append(self.runtime.sessionArena(), module_id));
-    }
 }
 
 const ReachKey = enum(u64) {
@@ -1719,9 +1717,8 @@ fn immediateDeclForNode(
     const zone = tracy.traceNamed(@src(), "LintContext.immediateDeclForNode");
     defer zone.end();
 
-    if (self.decl_store.declIdByNode(doc.file_id, node)) |decl_id| {
+    if (self.decl_store.declIdByNode(doc.file_id, node)) |decl_id|
         return decl_id;
-    }
 
     const context_scope_id = self.contextScopeForNode(doc, node) orelse return null;
 
@@ -1746,28 +1743,25 @@ fn contextScopeForNode(
     defer zone.end();
 
     const node_index = @intFromEnum(node);
-    if (node_index < doc.context_scope_by_node.len) {
-        if (doc.context_scope_by_node[node_index]) |scope_id| {
+    if (node_index < doc.context_scope_by_node.len)
+        if (doc.context_scope_by_node[node_index]) |scope_id|
             return scope_id;
-        }
-    }
 
     var current: ?Ast.Node.Index = node;
     while (current) |current_node| {
         if (self.decl_store.scopeIdByNode(doc.file_id, current_node)) |scope_id| {
-            if (node_index < doc.context_scope_by_node.len) {
+            if (node_index < doc.context_scope_by_node.len)
                 @constCast(doc).context_scope_by_node[node_index] = scope_id;
-            }
             return scope_id;
         }
 
         current = doc.lineage.items(.parent)[@intFromEnum(current_node)];
     }
     const root_scope_id = self.decl_store.scopeIdByNode(doc.file_id, .root);
+    // zlinter-disable-next-line require_braces
     if (root_scope_id) |scope_id| {
-        if (node_index < doc.context_scope_by_node.len) {
+        if (node_index < doc.context_scope_by_node.len)
             @constCast(doc).context_scope_by_node[node_index] = scope_id;
-        }
     }
     return root_scope_id;
 }

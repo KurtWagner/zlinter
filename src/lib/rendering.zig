@@ -86,45 +86,43 @@ pub const LintFileRenderer = struct {
             const is_end = end_line == line_index;
             const is_middle = !is_start and !is_end;
 
-            if (is_middle) {
+            if (is_middle)
                 try self.renderLine(
                     line_index,
                     0,
                     if (self.getLine(line_index).len == 0) 0 else self.getLine(line_index).len - 1,
                     writer,
                     tty,
-                );
-            } else if (is_start and is_end) {
+                )
+            else if (is_start and is_end)
                 try self.renderLine(
                     line_index,
                     start_column,
                     end_column,
                     writer,
                     tty,
-                );
-            } else if (is_start) {
+                )
+            else if (is_start)
                 try self.renderLine(
                     line_index,
                     start_column,
                     if (self.getLine(line_index).len == 0) 0 else self.getLine(line_index).len - 1,
                     writer,
                     tty,
-                );
-            } else if (is_end) {
+                )
+            else if (is_end)
                 try self.renderLine(
                     line_index,
                     0,
                     end_column,
                     writer,
                     tty,
-                );
-            } else {
+                )
+            else
                 @panic("No possible");
-            }
 
-            if (!is_end) {
+            if (!is_end)
                 try writer.writeByte('\n');
-            }
         }
     }
 

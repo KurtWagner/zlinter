@@ -44,7 +44,7 @@ fn run(
         const tag = tree.nodeTag(node);
 
         var struct_init_buffer: [2]Ast.Node.Index = undefined;
-        if (tree.fullStructInit(&struct_init_buffer, node)) |struct_init| {
+        if (tree.fullStructInit(&struct_init_buffer, node)) |struct_init|
             try handleStructInit(
                 rule,
                 config,
@@ -54,7 +54,6 @@ fn run(
                 struct_init,
                 &lint_problems,
             );
-        }
 
         switch (tag) {
             .enum_literal => try handleEnumLiteral(
@@ -183,11 +182,9 @@ fn handleIdentifierAccess(
         // Check whether the identifier is itself the declaration, in which case
         // we should skip as its not the usage but the declaration of it and we
         // dont want to list the declaration as deprecated only its usages
-        if (session.decl_store.declFileId(candidate.decl_id) == doc.file_id) {
-            if (session.decl_store.declNameToken(candidate.decl_id)) |name_token| {
+        if (session.decl_store.declFileId(candidate.decl_id) == doc.file_id)
+            if (session.decl_store.declNameToken(candidate.decl_id)) |name_token|
                 if (name_token == identifier_token) continue;
-            }
-        }
 
         try appendDeprecatedProblem(
             rule,

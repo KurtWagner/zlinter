@@ -77,9 +77,8 @@ fn run(
         _ = call_node;
 
         // if configured, skip if a parent is a test block
-        if (config.exclude_tests and doc.isEnclosedInTestBlock(session, node)) {
+        if (config.exclude_tests and doc.isEnclosedInTestBlock(session, node))
             continue :nodes;
-        }
 
         // unwrap field access lhs and identifier (e.g., lhs.identifier)
         const node_data = tree.nodeData(node);
@@ -92,10 +91,9 @@ fn run(
         const is_allocator_method = is_allocator_method: {
             const actual_name = tree.tokenSlice(identifier);
             inline for (@typeInfo(std.mem.Allocator).@"struct".decl_names) |decl_name|
-                if (comptime std.meta.hasMethod(std.mem.Allocator, decl_name)) {
+                if (comptime std.meta.hasMethod(std.mem.Allocator, decl_name))
                     if (std.mem.eql(u8, actual_name, decl_name))
                         break :is_allocator_method true;
-                };
             break :is_allocator_method false;
         };
         if (!is_allocator_method) continue :nodes;
@@ -151,9 +149,8 @@ fn isCalleeOfCall(
     var ancestors = doc.nodeAncestorIterator(node);
     while (ancestors.next()) |parent| {
         var call_buffer: [1]Ast.Node.Index = undefined;
-        if (tree.fullCall(&call_buffer, parent)) |call| {
+        if (tree.fullCall(&call_buffer, parent)) |call|
             return if (call.ast.fn_expr == current) parent else null;
-        }
         current = parent;
     }
 

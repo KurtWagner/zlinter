@@ -134,15 +134,13 @@ fn run(
             try resolved_summaries.append(rule_arena, .{ .summary = .{ .type = .unknown } });
         }
 
-        if (config.exclude_aliases) {
-            if (var_decl.ast.init_node.unwrap()) |init_node| {
-                if (tree.nodeTag(init_node) == .field_access) {
-                    const last_token = tree.lastToken(init_node);
-                    const field_name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(last_token));
-                    if (std.mem.eql(u8, field_name, name)) continue :nodes;
-                }
+        if (config.exclude_aliases) if (var_decl.ast.init_node.unwrap()) |init_node| {
+            if (tree.nodeTag(init_node) == .field_access) {
+                const last_token = tree.lastToken(init_node);
+                const field_name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(last_token));
+                if (std.mem.eql(u8, field_name, name)) continue :nodes;
             }
-        }
+        };
 
         // Check name length:
         var emitted_len_diagnostic = false;

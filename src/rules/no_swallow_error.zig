@@ -61,9 +61,7 @@ fn run(
         config.detect_empty_catch == .off and
         config.detect_empty_else == .off and
         config.detect_else_unreachable == .off)
-    {
         return null;
-    }
 
     const session_arena = session.runtime.sessionArena();
     const rule_arena = session.runtime.ruleArena();
@@ -116,9 +114,8 @@ fn run(
                     }
                 },
                 else => if (tree.fullIf(node)) |if_info| {
-                    if (if_info.error_token == null) {
+                    if (if_info.error_token == null)
                         continue :nodes;
-                    }
 
                     if (if_info.ast.else_expr.unwrap()) |else_node| {
                         const unwrapped_else = unwrapGroupedExpr(tree, else_node);
@@ -157,9 +154,8 @@ fn run(
 
         if (maybe_problem) |problem| {
             // if configured, skip if a parent is a test block
-            if (config.exclude_tests and doc.isEnclosedInTestBlock(session, node)) {
+            if (config.exclude_tests and doc.isEnclosedInTestBlock(session, node))
                 continue :nodes;
-            }
 
             try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
@@ -200,16 +196,14 @@ fn classifyBlockTwo(tree: Ast, node: Ast.Node.Index) BlockClassification {
     const lhs = data.opt_node_and_opt_node.@"0".unwrap();
     const rhs = data.opt_node_and_opt_node.@"1".unwrap();
 
-    if (lhs == null and rhs == null) {
+    if (lhs == null and rhs == null)
         return if (emptyBlockContainsLineComment(tree, node))
             .empty_with_comment
         else
             .empty;
-    }
-    if (lhs) |lhs_node| {
+    if (lhs) |lhs_node|
         if (rhs == null and tree.nodeTag(lhs_node) == .unreachable_literal)
             return .@"unreachable";
-    }
     return .none;
 }
 

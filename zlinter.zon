@@ -2,8 +2,8 @@
 .{
     .rules = .{
         .require_braces = .{
-            // TODO: #163 - change all to .{ .warning = .multi_statement_only }
-            .if_statement = .off,
+            // TODO: Fix a lot of the false positive in require braces where it doesnt think braces are required.
+            .if_statement = .{ .warning = .multi_statement_only },
             .while_statement = .{ .@"error" = .multi_statement_only },
             .for_statement = .{ .@"error" = .multi_statement_only },
             .catch_statement = .{ .@"error" = .multi_statement_only },

@@ -106,9 +106,8 @@ pub fn isEnclosedInTestBlock(
             .@"if", .if_simple => if (common.isTestOnlyCondition(
                 document_tree,
                 document_tree.fullIf(parent).?,
-            )) {
-                return true;
-            },
+            ))
+                return true,
             else => {},
         }
         next = parent;

@@ -65,24 +65,21 @@ fn run(
             if (tree.fullContainerDecl(
                 &container_decl_buffer,
                 node,
-            )) |container_decl| {
+            )) |container_decl|
                 break :kind switch (tree.tokens.items(.tag)[tree.nodeMainToken(node)]) {
                     .keyword_union => .{ config.union_field_order, "Union" },
                     .keyword_struct => {
                         if (container_decl.layout_token) |layout_token| {
-                            if (config.exclude_extern_structs and tree.tokens.items(.tag)[layout_token] == .keyword_extern) {
+                            if (config.exclude_extern_structs and tree.tokens.items(.tag)[layout_token] == .keyword_extern)
                                 break :kind null;
-                            }
-                            if (config.exclude_packed_structs and tree.tokens.items(.tag)[layout_token] == .keyword_packed) {
+                            if (config.exclude_packed_structs and tree.tokens.items(.tag)[layout_token] == .keyword_packed)
                                 break :kind null;
-                            }
                         }
                         break :kind .{ config.struct_field_order, "Struct" };
                     },
                     .keyword_enum => .{ config.enum_field_order, "Enum" },
                     else => null,
                 };
-            }
             break :kind null;
         } orelse continue :nodes;
 

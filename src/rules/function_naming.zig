@@ -88,25 +88,23 @@ fn run(
             const error_message: ?[]const u8, const severity: ?zlinter.rules.LintProblemSeverity = msg: {
                 if (functionReturnsType(return_type)) {
                     const style = config.function_that_returns_type.style() orelse break :msg .{ null, null };
-                    if (!style.check(fn_name)) {
+                    if (!style.check(fn_name))
                         break :msg .{
                             try session_arena.print("Callable returning `type` should be {s}", .{style.name()}),
                             config.function_that_returns_type.severity(),
                         };
-                    }
                 } else {
                     const style = config.function.style() orelse break :msg .{ null, null };
-                    if (!style.check(fn_name)) {
+                    if (!style.check(fn_name))
                         break :msg .{
                             try session_arena.print("Callable should be {s}", .{style.name()}),
                             config.function.severity(),
                         };
-                    }
                 }
                 break :msg .{ null, null };
             };
 
-            if (error_message) |message| {
+            if (error_message) |message|
                 try lint_problems.append(
                     session_arena,
                     .{
@@ -117,7 +115,6 @@ fn run(
                         .message = message,
                     },
                 );
-            }
         }
 
         // Check arguments:
@@ -264,7 +261,7 @@ fn classifyParamTypeCandidates(
     else
         null;
 
-    if (maybe_type_name) |type_name| {
+    if (maybe_type_name) |type_name|
         for (seen_param_kinds) |param_kind|
             if (std.mem.eql(u8, param_kind.name, type_name)) {
                 var candidates = std.ArrayList(
@@ -282,7 +279,6 @@ fn classifyParamTypeCandidates(
                 });
                 return candidates.items;
             };
-    }
 
     const candidates = try session.resolveValueTypeAnnotationCandidates(
         doc,
@@ -316,9 +312,8 @@ fn allocResolvedDeclNotes(
 
 /// Returns fn proto if node is fn proto and has a name token.
 fn namedFnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?Ast.full.FnProto {
-    if (fnProto(tree, buffer, node)) |fn_proto| {
+    if (fnProto(tree, buffer, node)) |fn_proto|
         if (fn_proto.name_token != null) return fn_proto;
-    }
     return null;
 }
 
@@ -330,9 +325,8 @@ fn fnProto(tree: Ast, buffer: *[1]Ast.Node.Index, node: Ast.Node.Index) ?Ast.ful
         .fn_proto_one => tree.fnProtoOne(buffer, node),
         .fn_proto_simple => tree.fnProtoSimple(buffer, node),
         else => null,
-    }) |fn_proto| {
+    }) |fn_proto|
         return fn_proto;
-    }
     return null;
 }
 

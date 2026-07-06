@@ -46,12 +46,11 @@ pub fn build(b: *std.Build) !void {
             std.log.err("Test case file skipped as its invalid: {s}", .{item.path});
             continue;
         }];
-        if (test_focus_on_rule) |r| {
+        if (test_focus_on_rule) |r|
             if (!std.mem.eql(u8, rule_name, r)) {
                 std.log.warn("Skipping {s}", .{rule_name});
                 continue;
-            }
-        }
+            };
 
         const test_name = item.basename[0..(item.basename.len - input_suffix.len)];
 
@@ -107,9 +106,8 @@ pub fn build(b: *std.Build) !void {
 fn addFileArgIfExists(b: *std.Build, step: *std.Build.Step.Run, raw_path: []const u8) void {
     const path = b.path(raw_path);
     const exists = if (std.Io.Dir.cwd().access(b.graph.io, raw_path, .{})) true else |e| e != error.FileNotFound;
-    if (exists) {
+    if (exists)
         step.addFileArg(path);
-    }
 }
 
 /// Creates compiled units that the linter should be capable of discovering

@@ -46,8 +46,8 @@ fn run(
 
     const message, const severity = msg: {
         if (ast.isRootImplicitStruct(tree)) {
-            if (config.file_struct.style()) |style| {
-                if (!style.check(check_name)) {
+            if (config.file_struct.style()) |style|
+                if (!style.check(check_name))
                     break :msg .{
                         try session_arena.print(
                             "File `{s}` is an implicit struct, so its name should be {s}",
@@ -55,10 +55,8 @@ fn run(
                         ),
                         config.file_struct.severity(),
                     };
-                }
-            }
-        } else if (config.file_namespace.style()) |style| {
-            if (!style.check(check_name)) {
+        } else if (config.file_namespace.style()) |style|
+            if (!style.check(check_name))
                 break :msg .{
                     try session_arena.print(
                         "File `{s}` is a namespace, so its name should be {s}",
@@ -66,8 +64,6 @@ fn run(
                     ),
                     config.file_namespace.severity(),
                 };
-            }
-        }
 
         return null;
     };

@@ -367,11 +367,11 @@ pub const LintProblemFix = struct {
         const has_newline = std.mem.findScalar(u8, self.text, '\n') != null;
 
         writer.print("{s}  .text ={s}", .{ indent_str, if (has_newline) "\n" else "" });
-        if (has_newline or has_quote) {
-            strings.debugPrintMultilineString(self.text, writer, indent + 2);
-        } else {
+        if (has_newline or has_quote)
+            strings.debugPrintMultilineString(self.text, writer, indent + 2)
+        else
             writer.print("\"{s}\"", .{self.text});
-        }
+
         writer.print("{s}{s},\n", .{ if (has_newline or has_quote) "\n" else "", indent_str });
         writer.print("{s}}},\n", .{indent_str});
     }

@@ -57,9 +57,8 @@ test "containsUpper" {
 pub fn normalizeIdentifierName(name: []const u8) []const u8 {
     if (name.len <= 3) return name;
 
-    if (name[0] == '@' and name[1] == '"' and name[name.len - 1] == '"') {
+    if (name[0] == '@' and name[1] == '"' and name[name.len - 1] == '"')
         return name[2 .. name.len - 1];
-    }
     return name;
 }
 

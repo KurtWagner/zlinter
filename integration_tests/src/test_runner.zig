@@ -37,15 +37,15 @@ pub fn main(init: std.process.Init) !void {
         arena,
         args,
         environ_map,
-    )) {
+    ))
         try stdout.print(
             ansi_bold ++ "{s}" ++ ansi_reset ++ " - {s}" ++ ansi_green_bold ++ "passed" ++ ansi_reset ++ "\n",
             .{
                 rule_name,
                 try testDescription(test_name, rule_name, arena),
             },
-        );
-    } else |err| {
+        )
+    else |err| {
         if (err == error.OutOfMemory) @panic("OOM");
         fail = true;
         try stdout.print(

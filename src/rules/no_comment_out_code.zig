@@ -71,7 +71,7 @@ fn run(
         if (content_accumulator.items.len > 0 and
             !isNextLine(prev_line, line))
         {
-            if (try looksLikeCode(content_accumulator.items[0..], rule_arena)) {
+            if (try looksLikeCode(content_accumulator.items[0..], rule_arena))
                 try lint_problems.append(session_arena, .{
                     .rule_id = rule.rule_id,
                     .severity = config.severity,
@@ -79,7 +79,6 @@ fn run(
                     .end = .endOfComment(doc.comments, last_comment.?),
                     .message = try session_arena.dupe(u8, "Avoid code in comments"),
                 });
-            }
 
             content_accumulator.clearAndFree(rule_arena);
             first_comment = null;
@@ -94,7 +93,7 @@ fn run(
     }
 
     if (content_accumulator.items.len > 0) {
-        if (try looksLikeCode(content_accumulator.items[0..], rule_arena)) {
+        if (try looksLikeCode(content_accumulator.items[0..], rule_arena))
             try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
                 .severity = config.severity,
@@ -102,7 +101,6 @@ fn run(
                 .end = .endOfComment(doc.comments, last_comment.?),
                 .message = try session_arena.dupe(u8, "Avoid code in comments"),
             });
-        }
 
         content_accumulator.clearAndFree(rule_arena);
         first_comment = null;

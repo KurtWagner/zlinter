@@ -83,9 +83,9 @@ pub fn main(init: std.process.Init) !u8 {
                 printer,
             )) |r| {
                 total_fixes += r.fixes_applied;
-                if (r.fixes_applied == 0 or remaining_fix_passes == 1) {
-                    break :result r;
-                } else {
+                if (r.fixes_applied == 0 or remaining_fix_passes == 1)
+                    break :result r
+                else {
                     remaining_fix_passes -= 1;
                     printer.print(.out, "{s}{d} fix passes remaining{s}\n", .{
                         printer.tty.ansiOrEmpty(&.{.bold}),
@@ -103,7 +103,7 @@ pub fn main(init: std.process.Init) !u8 {
             };
         unreachable;
     };
-    if (total_fixes > 0) {
+    if (total_fixes > 0)
         printer.print(
             .out,
             "{s}Total of {d} issues fixed{s}\n",
@@ -113,7 +113,6 @@ pub fn main(init: std.process.Init) !u8 {
                 printer.tty.ansiOrEmpty(&.{.reset}),
             },
         );
-    }
     try printer.flush();
 
     return result.exit_code.int();
@@ -299,12 +298,11 @@ fn runLinterRules(
         defer {
             const ns = rule_timer.lapNanoseconds();
             printer.println(.verbose, "  - Total elapsed {d}ms", .{ns / std.time.ns_per_ms});
-            if (maybe_slowest_files) |*slowest_files| {
+            if (maybe_slowest_files) |*slowest_files|
                 slowest_files.add(.{
                     .name = file_abs_path,
                     .elapsed_ns = ns,
                 });
-            }
         }
 
         var doc: zlinter.session.LintDocument = undefined;
@@ -377,29 +375,26 @@ fn runLinterRules(
                         rule_id,
                     ),
                 },
-            )) |result| {
+            )) |result|
                 appendDedupedResult(
                     runtime.sessionArena(),
                     &results,
                     &doc,
                     result,
                 );
-            }
 
             const ns = timer.lapNanoseconds();
-            if (maybe_rule_elapsed_times) |*rule_elapsed_time| {
+            if (maybe_rule_elapsed_times) |*rule_elapsed_time|
                 rule_elapsed_time[rule_index] += ns;
-            }
             printer.println(.verbose, "    - {s}: {d}ms", .{ rule.rule_id, ns / std.time.ns_per_ms });
         }
 
-        if (results.items.len > 0) {
+        if (results.items.len > 0)
             oom(file_lint_problems.putNoClobber(
                 runtime.sessionArena(),
                 file_id,
                 oom(results.toOwnedSlice(runtime.sessionArena())),
             ));
-        }
     }
 }
 
@@ -511,10 +506,10 @@ fn runFormatter(
                 }
             };
     }
+    // zlinter-disable-next-line require_braces
     if (max_warnings) |max| {
-        if (warning_count > max) {
+        if (warning_count > max)
             run_result = .lint_error;
-        }
     }
 
     var flattened = try std.ArrayList(zlinter.results.LintResult).initCapacity(
@@ -570,9 +565,8 @@ fn runFixes(
                     continue :problems;
                 }
 
-                if (err.fix) |fix| {
+                if (err.fix) |fix|
                     try lint_fixes.append(runtime.sessionArena(), fix);
-                }
             };
 
         // Sort by range start and then remove overlaps to avoid conflicting
@@ -601,26 +595,23 @@ fn runFixes(
         var content_index: usize = 0;
         var previous_fix: ?zlinter.results.LintProblemFix = null;
         fixes: for (lint_fixes.items) |fix| {
-            if (previous_fix) |p| {
+            if (previous_fix) |p|
                 if (fix.start <= p.end) {
                     // Skip this fix as it collides with previous fixes range
                     // and may cause an invalid result.
                     continue :fixes;
-                }
-            }
+                };
             previous_fix = fix;
 
             oom(output_slices.append(runtime.fileArena(), file_content[content_index..fix.start]));
-            if (fix.text.len > 0) {
+            if (fix.text.len > 0)
                 oom(output_slices.append(runtime.fileArena(), fix.text));
-            }
             content_index = fix.end;
             total_fixes += 1;
             file_fixes += 1;
         }
-        if (content_index < file_content.len - 1) {
+        if (content_index < file_content.len - 1)
             oom(output_slices.append(runtime.fileArena(), file_content[content_index..file_content.len]));
-        }
 
         printer.print(.out, "{s}{d} fixes{s} applied to: {s}\n", .{
             printer.tty.ansiOrEmpty(&.{.bold}),
@@ -712,13 +703,11 @@ fn buildExcludesIndex(
     var index = std.BufSet.init(gpa);
     errdefer index.deinit();
 
-    if (exclude_lint_paths) |files| {
+    if (exclude_lint_paths) |files|
         for (files) |file| try index.insert(file.abs_path);
-    }
 
-    if (build_exclude_lint_paths) |files| {
+    if (build_exclude_lint_paths) |files|
         for (files) |file| try index.insert(file.abs_path);
-    }
 
     return index;
 }
@@ -761,9 +750,8 @@ fn enabledRules(filter_rule_ids: ?[]const []const u8) std.bit_set.Static(rules.l
                 break;
             };
 
-        if (matched) {
+        if (matched)
             bitset.set(i);
-        }
     }
     return bitset;
 }
@@ -860,11 +848,9 @@ const SlowestItemQueue = struct {
         };
 
         if (self.queue.push(self.gpa, owned_item)) {
-            if (self.queue.count() > self.max) {
-                if (self.queue.popMin()) |removed| {
+            if (self.queue.count() > self.max)
+                if (self.queue.popMin()) |removed|
                     self.gpa.free(removed.name);
-                }
-            }
         } else |_| self.gpa.free(owned_name);
     }
 

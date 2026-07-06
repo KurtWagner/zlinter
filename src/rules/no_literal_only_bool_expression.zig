@@ -75,7 +75,6 @@ fn run(
                 const lhs, const rhs = .{ data.node_and_node[0], data.node_and_node[1] };
                 if (isLiteral(tree, unwrapGroupedExpression(tree, lhs)) != null and
                     isLiteral(tree, unwrapGroupedExpression(tree, rhs)) != null)
-                {
                     try lint_problems.append(session_arena, .{
                         .rule_id = rule.rule_id,
                         .severity = config.severity,
@@ -83,13 +82,11 @@ fn run(
                         .end = .endOfNode(tree, node),
                         .message = try session_arena.dupe(u8, "Condition is always true or false"),
                     });
-                }
             },
             else => if (tree.fullIf(node)) |full_if| {
                 const cond_expr = unwrapGroupedExpression(tree, full_if.ast.cond_expr);
                 if (classifyLiteralBoolExpr(tree, cond_expr) != null and
                     !isComparisonExpr(tree.nodeTag(cond_expr)))
-                {
                     try lint_problems.append(session_arena, .{
                         .rule_id = rule.rule_id,
                         .severity = config.severity,
@@ -97,7 +94,6 @@ fn run(
                         .end = .endOfNode(tree, cond_expr),
                         .message = try session_arena.dupe(u8, "Condition is always true or false"),
                     });
-                }
             } else if (tree.fullWhile(node)) |full_while| {
                 const cond_expr = unwrapGroupedExpression(tree, full_while.ast.cond_expr);
                 if (classifyLiteralBoolExpr(tree, cond_expr)) |kind| {

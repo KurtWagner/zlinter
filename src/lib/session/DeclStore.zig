@@ -149,9 +149,7 @@ const ImportMemberKey = struct {
             if (maybe_module_id) |module_id| {
                 std.hash.autoHash(hasher, true);
                 std.hash.autoHash(hasher, module_id);
-            } else {
-                std.hash.autoHash(hasher, false);
-            }
+            } else std.hash.autoHash(hasher, false);
             // zlinter-enable no_literal_args
         }
 
@@ -163,9 +161,7 @@ const ImportMemberKey = struct {
             if (maybe_file_id) |file_id| {
                 std.hash.autoHash(hasher, true);
                 std.hash.autoHash(hasher, file_id);
-            } else {
-                std.hash.autoHash(hasher, false);
-            }
+            } else std.hash.autoHash(hasher, false);
             // zlinter-enable no_literal_args
         }
     };
@@ -274,15 +270,14 @@ pub fn debugPrintFileDecls(
             name,
             @tagName(self.declKind(decl_id)),
         });
-        if (self.declResolvedType(decl_id)) |type_id| {
-            TypeStore.debugPrintSummary(type_store.summary(type_id));
-        } else if (self.declKind(decl_id) == .label) {
-            std.debug.print("n/a", .{});
-        } else if (self.declAstNode(decl_id) == null and self.declTypeNode(decl_id) == null) {
-            std.debug.print("untyped", .{});
-        } else {
+        if (self.declResolvedType(decl_id)) |type_id|
+            TypeStore.debugPrintSummary(type_store.summary(type_id))
+        else if (self.declKind(decl_id) == .label)
+            std.debug.print("n/a", .{})
+        else if (self.declAstNode(decl_id) == null and self.declTypeNode(decl_id) == null)
+            std.debug.print("untyped", .{})
+        else
             std.debug.print("unresolved", .{});
-        }
         std.debug.print(")\n", .{});
     }
 }
@@ -345,9 +340,8 @@ pub fn resolveDeclByNode(
     const unwrapped = ast.unwrapNode(tree, node, .{
         .unwrap_optional_unwrap = false,
     });
-    if (isThisBuiltinCall(tree, unwrapped)) {
+    if (isThisBuiltinCall(tree, unwrapped))
         return self.rootDecl(file_id);
-    }
 
     const scope_id = self.declScopeId(context_decl_id) orelse return null;
     return self.resolveExprDeclFromScope(
@@ -474,9 +468,8 @@ pub fn resolvedContainerDecl(
         .unwrap_optional_unwrap = false,
     });
 
-    if (isThisBuiltinCall(tree, init_expr)) {
+    if (isThisBuiltinCall(tree, init_expr))
         return self.rootDecl(file_id);
-    }
 
     return decl_id;
 }
@@ -520,26 +513,23 @@ pub fn resolveDeclType(
 
     if (node == .root) return TypeStore.summarizeRoot();
 
-    if (tree.fullVarDecl(node)) |var_decl| {
+    if (tree.fullVarDecl(node)) |var_decl|
         return self.resolveVarDeclType(
             ctx,
             decl_id,
             var_decl,
         );
-    }
 
-    if (tree.fullContainerField(node)) |field| {
+    if (tree.fullContainerField(node)) |field|
         return self.resolveContainerFieldType(
             ctx,
             decl_id,
             field,
         );
-    }
 
     var fn_proto_buffer: [1]std.zig.Ast.Node.Index = undefined;
-    if (tree.fullFnProto(&fn_proto_buffer, node)) |fn_proto| {
+    if (tree.fullFnProto(&fn_proto_buffer, node)) |fn_proto|
         return TypeStore.summarizeFnProto(tree, fn_proto, .summary);
-    }
 
     return null;
 }
@@ -551,10 +541,9 @@ fn resolveVarDeclType(
     var_decl: std.zig.Ast.full.VarDecl,
 ) ?TypeStore.TypeSummary {
     const tree = ctx.file_store.fileTree(self.declFileId(decl_id));
-    if (var_decl.ast.type_node.unwrap()) |type_node| {
+    if (var_decl.ast.type_node.unwrap()) |type_node|
         return valueSummaryFromTypeAnnotation(tree, type_node) orelse
             explicitTypeAnnotationSummary(tree, type_node);
-    }
     const init_node = var_decl.ast.init_node.unwrap() orelse return null;
     if (self.resolveCallReturnType(
         ctx,
@@ -581,10 +570,9 @@ fn resolveContainerFieldType(
     field: std.zig.Ast.full.ContainerField,
 ) ?TypeStore.TypeSummary {
     const tree = ctx.file_store.fileTree(self.declFileId(decl_id));
-    if (field.ast.type_expr.unwrap()) |type_node| {
+    if (field.ast.type_expr.unwrap()) |type_node|
         return valueSummaryFromTypeAnnotation(tree, type_node) orelse
             explicitTypeAnnotationSummary(tree, type_node);
-    }
     const value_node = field.ast.value_expr.unwrap() orelse return null;
     if (self.resolveCallReturnType(
         ctx,
@@ -701,9 +689,8 @@ fn resolveInstanceValueType(
             target_node,
         ) orelse return null;
 
-        if (target_summary.typeValueKind() == .@"enum") {
+        if (target_summary.typeValueKind() == .@"enum")
             return .{ .instance = .{ .kind = .@"enum" } };
-        }
     }
 
     return null;
@@ -898,9 +885,8 @@ pub fn resolveMemberDecl(
         ctx,
         parent_decl_id,
         member_name,
-    )) |decl_id| {
+    )) |decl_id|
         return decl_id;
-    }
 
     const node = self.declAstNode(parent_decl_id) orelse return null;
 
@@ -921,23 +907,20 @@ pub fn resolveMemberDecl(
         parent_file_id,
         init_node,
         member_name,
-    )) |decl_id| {
+    )) |decl_id|
         return decl_id;
-    }
 
     if (self.resolveExprDecl(
         ctx,
         parent_decl_id,
         init_node,
-    )) |target_decl_id| {
-        if (target_decl_id != parent_decl_id) {
+    )) |target_decl_id|
+        if (target_decl_id != parent_decl_id)
             if (self.resolveMemberDecl(
                 ctx,
                 target_decl_id,
                 member_name,
             )) |decl_id| return decl_id;
-        }
-    }
 
     var struct_init_buffer: [2]std.zig.Ast.Node.Index = undefined;
     if (tree.fullStructInit(&struct_init_buffer, init_node)) |struct_init| {
@@ -959,14 +942,13 @@ pub fn resolveMemberDecl(
     if (tree.fullContainerDecl(
         &container_decl_buffer,
         unwrapped_init,
-    )) |container_decl| {
+    )) |container_decl|
         return self.resolveContainerMember(
             ctx.file_store,
             parent_file_id,
             container_decl,
             member_name,
         );
-    }
 
     return null;
 }
@@ -984,13 +966,12 @@ pub fn resolveDeclTypeMember(
     const zone = tracy.traceNamed(@src(), "DeclStore.resolveDeclTypeMember");
     defer zone.end();
 
-    if (self.declResolvedTypeTarget(decl_id)) |target| {
+    if (self.declResolvedTypeTarget(decl_id)) |target|
         if (self.resolveTypeTargetMember(
             ctx,
             target,
             member_name,
         )) |member_decl_id| return member_decl_id;
-    }
 
     const target = self.resolveDeclTypeTargetForValue(
         ctx,
@@ -1060,13 +1041,12 @@ fn resolveDeclTypeTargetForValueDepth(
 ) ?TypeTarget {
     if (remaining_depth == 0) return null;
 
-    if (self.declTypeNode(decl_id)) |type_node| {
+    if (self.declTypeNode(decl_id)) |type_node|
         if (self.resolveTypeExprTarget(
             ctx,
             decl_id,
             type_node,
         )) |type_decl_id| return type_decl_id;
-    }
 
     if (self.resolveDeclTypeDecl(
         ctx,
@@ -1148,9 +1128,7 @@ fn resolveValueTypeTarget(
             const call_name = tree.tokenSlice(call_name_token);
             if (std.mem.eql(u8, call_name, "init") or
                 std.mem.eql(u8, call_name, "initCapacity"))
-            {
                 break :type_expr target_node;
-            }
             break :type_expr node;
         } else node;
 
@@ -1277,12 +1255,11 @@ pub fn resolveTypeFactoryResultTarget(
         if (!nodeBelongsToTree(tree, expr)) continue;
 
         var container_decl_buffer: [2]std.zig.Ast.Node.Index = undefined;
-        if (tree.fullContainerDecl(&container_decl_buffer, expr) != null) {
+        if (tree.fullContainerDecl(&container_decl_buffer, expr) != null)
             return if (self.declByAstNode(file_id, expr)) |decl_id|
                 .{ .decl = decl_id }
             else
                 .{ .container = .{ .file_id = file_id, .node = expr } };
-        }
 
         return self.resolveTypeExprTarget(
             ctx.withParent(file_id),
@@ -1856,7 +1833,7 @@ fn walkBlock(
         parent_scope_id,
         null,
     );
-    if (blockLabel(tree, node)) |label_token| {
+    if (blockLabel(tree, node)) |label_token|
         _ = self.putDecl(
             tree,
             file_id,
@@ -1866,7 +1843,6 @@ fn walkBlock(
             null,
             .label,
         );
-    }
 
     var buffer: [2]std.zig.Ast.Node.Index = undefined;
     const statements = tree.blockStatements(&buffer, node).?;

@@ -90,9 +90,8 @@ fn isUnreachableBlock(tree: Ast, node: Ast.Node.Index) bool {
     const lhs = data.opt_node_and_opt_node.@"0".unwrap();
     const rhs = data.opt_node_and_opt_node.@"1".unwrap();
 
-    if (lhs) |lhs_node| {
+    if (lhs) |lhs_node|
         return rhs == null and tree.nodeTag(lhs_node) == .unreachable_literal;
-    }
     return false;
 }
 
