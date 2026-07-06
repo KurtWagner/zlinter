@@ -1,0 +1,9 @@
+.{
+    .rules = .{
+        .no_inferred_error_unions = .{
+            .severity = .@"error",
+            .allow_private = false,
+            .allow_anyerror = false,
+        },
+    },
+}
