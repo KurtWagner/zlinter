@@ -699,12 +699,10 @@ fn buildExcludesIndex(
             break :exclude try zlinter.files.allocLintFiles(runtime, dir, p, gpa);
         } else break :exclude null;
     };
-    defer {
-        if (exclude_lint_paths) |exclude| {
-            for (exclude) |*lint_file| lint_file.deinit(gpa);
-            gpa.free(exclude);
-        }
-    }
+    defer if (exclude_lint_paths) |exclude| {
+        for (exclude) |*lint_file| lint_file.deinit(gpa);
+        gpa.free(exclude);
+    };
 
     const build_exclude_lint_paths: ?[]zlinter.files.LintFile = exclude: {
         // `--include` argument supersedes build defined includes and excludes
@@ -715,12 +713,10 @@ fn buildExcludesIndex(
             break :exclude try zlinter.files.allocLintFiles(runtime, dir, p, gpa);
         } else break :exclude null;
     };
-    defer {
-        if (build_exclude_lint_paths) |files| {
-            for (files) |*file| file.deinit(gpa);
-            gpa.free(files);
-        }
-    }
+    defer if (build_exclude_lint_paths) |files| {
+        for (files) |*file| file.deinit(gpa);
+        gpa.free(files);
+    };
 
     var index = std.BufSet.init(gpa);
     errdefer index.deinit();

@@ -70,21 +70,19 @@ fn run(
             .greater_than,
             .less_or_equal,
             .greater_or_equal,
-            => {
-                if (!isNestedWithinLiteralBoolExprCondition(tree, doc, node)) {
-                    const data = tree.nodeData(node);
-                    const lhs, const rhs = .{ data.node_and_node[0], data.node_and_node[1] };
-                    if (isLiteral(tree, unwrapGroupedExpression(tree, lhs)) != null and
-                        isLiteral(tree, unwrapGroupedExpression(tree, rhs)) != null)
-                    {
-                        try lint_problems.append(session_arena, .{
-                            .rule_id = rule.rule_id,
-                            .severity = config.severity,
-                            .start = .startOfNode(tree, node),
-                            .end = .endOfNode(tree, node),
-                            .message = try session_arena.dupe(u8, "Condition is always true or false"),
-                        });
-                    }
+            => if (!isNestedWithinLiteralBoolExprCondition(tree, doc, node)) {
+                const data = tree.nodeData(node);
+                const lhs, const rhs = .{ data.node_and_node[0], data.node_and_node[1] };
+                if (isLiteral(tree, unwrapGroupedExpression(tree, lhs)) != null and
+                    isLiteral(tree, unwrapGroupedExpression(tree, rhs)) != null)
+                {
+                    try lint_problems.append(session_arena, .{
+                        .rule_id = rule.rule_id,
+                        .severity = config.severity,
+                        .start = .startOfNode(tree, node),
+                        .end = .endOfNode(tree, node),
+                        .message = try session_arena.dupe(u8, "Condition is always true or false"),
+                    });
                 }
             },
             else => if (tree.fullIf(node)) |full_if| {

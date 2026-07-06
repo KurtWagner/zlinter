@@ -156,9 +156,7 @@ fn processBlock(
                     &.{"deinit"},
                 )) |call| {
                     switch (call.kind) {
-                        .single_field => |info| {
-                            _ = cleanup_symbols.remove(tree.tokenSlice(info.field_main_token));
-                        },
+                        .single_field => |info| _ = cleanup_symbols.remove(tree.tokenSlice(info.field_main_token)),
                         .enum_literal, .other, .direct => {},
                     }
                 }
@@ -308,10 +306,9 @@ fn hasNonFreeingAllocatorParam(
                     // e.g., checking for `arena.allocator()` call. Unfortunately
                     // currently won't capture deeply nested, like `parent.arena.allocator()`
                     // but this seems super unlikely so who cares for a linter...
-                    .single_field => |info| {
-                        for (skip_var_and_field_names) |str|
-                            if (std.mem.eql(u8, tree.tokenSlice(info.field_main_token), str)) return true;
-                    },
+                    .single_field => |info| for (skip_var_and_field_names) |str|
+                        if (std.mem.eql(u8, tree.tokenSlice(info.field_main_token), str))
+                            return true,
                     .enum_literal, .other, .direct => {},
                 }
             },

@@ -711,14 +711,12 @@ pub const CommentsDocument = struct {
     pub fn debugPrint(self: CommentsDocument, file_path: []const u8, source: []const u8) void {
         for (self.comments) |comment| {
             switch (comment.kind) {
-                .todo => |todo| {
-                    std.debug.print("TODO: '{s}'\n", .{
-                        if (todo.content) |content|
-                            source[self.tokens[content.first].first_byte .. self.tokens[content.last].first_byte + self.tokens[content.last].len]
-                        else
-                            "",
-                    });
-                },
+                .todo => |todo| std.debug.print("TODO: '{s}'\n", .{
+                    if (todo.content) |content|
+                        source[self.tokens[content.first].first_byte .. self.tokens[content.last].first_byte + self.tokens[content.last].len]
+                    else
+                        "",
+                }),
                 .disable_lint_lines => |disable| {
                     std.debug.print("DISABLE:\n", .{});
                     std.debug.print(" for {s}:{d}\n", .{ file_path, disable.line_start });

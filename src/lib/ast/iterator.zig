@@ -467,13 +467,11 @@ pub const ChildIterator = union(enum) {
         var array: @FieldType(ChildIterator, "array") = @splat(.none);
         comptime std.debug.assert(tuple.len <= array.len);
         var i: usize = 0;
-        inline for (tuple) |item| {
+        inline for (tuple) |item|
             switch (@TypeOf(item)) {
-                Ast.Node.OptionalIndex => {
-                    if (item != .none) {
-                        array[i] = item;
-                        i += 1;
-                    }
+                Ast.Node.OptionalIndex => if (item != .none) {
+                    array[i] = item;
+                    i += 1;
                 },
                 Ast.Node.Index => {
                     std.debug.assert(item != .root);
@@ -481,8 +479,7 @@ pub const ChildIterator = union(enum) {
                     i += 1;
                 },
                 else => comptime unreachable,
-            }
-        }
+            };
         return .{ .array = array };
     }
 };

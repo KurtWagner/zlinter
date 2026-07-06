@@ -184,22 +184,18 @@ fn run(
 
             const error_msg = error_msg: {
                 switch (requirement) {
-                    .all => {
-                        if (!has_braces)
+                    .all => if (!has_braces)
+                        break :error_msg try session_arena.dupe(
+                            u8,
+                            "Expects braces whether on a single or across multiple lines",
+                        ),
+                    .multi_statement_only => if (has_braces) {
+                        const children = doc.lineage.items(.children)[@intFromEnum(expr_node)] orelse &.{};
+                        if (children.len == 1)
                             break :error_msg try session_arena.dupe(
                                 u8,
-                                "Expects braces whether on a single or across multiple lines",
+                                "Expects no braces when there's only one statement",
                             );
-                    },
-                    .multi_statement_only => {
-                        if (has_braces) {
-                            const children = doc.lineage.items(.children)[@intFromEnum(expr_node)] orelse &.{};
-                            if (children.len == 1)
-                                break :error_msg try session_arena.dupe(
-                                    u8,
-                                    "Expects no braces when there's only one statement",
-                                );
-                        }
                     },
                     .multi_line_only => {
                         const on_single_line = tree.tokensOnSameLine(first_token, last_token);

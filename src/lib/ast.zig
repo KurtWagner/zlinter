@@ -900,14 +900,12 @@ pub fn fnCall(
                     },
                 };
             },
-            .identifier => {
-                break :maybe_fn_call .{
-                    .params = call.ast.params,
-                    .call_identifier_token = tree.nodeMainToken(fn_expr_node),
-                    .kind = .{
-                        .direct = {},
-                    },
-                };
+            .identifier => break :maybe_fn_call .{
+                .params = call.ast.params,
+                .call_identifier_token = tree.nodeMainToken(fn_expr_node),
+                .kind = .{
+                    .direct = {},
+                },
             },
             else => std.log.debug("fnCall does not handle fn_expr of tag {s}", .{@tagName(fn_expr_node_tag)}),
         }

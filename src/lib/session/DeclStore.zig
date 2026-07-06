@@ -836,13 +836,11 @@ fn resolveExprDeclFromScope(
     });
 
     switch (tree.nodeTag(node)) {
-        .identifier => {
-            return self.lookupVisibleDecl(
-                scope_id,
-                tree.getNodeSource(node),
-                skip_decl_id,
-            );
-        },
+        .identifier => return self.lookupVisibleDecl(
+            scope_id,
+            tree.getNodeSource(node),
+            skip_decl_id,
+        ),
         .field_access => {
             const target_node, const member_token = tree.nodeData(node).node_and_token;
             if (self.resolveImportMember(

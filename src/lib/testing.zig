@@ -339,7 +339,7 @@ fn expectDeepEquals(T: type, expected: []const T, actual: []const T) !void {
     // TODO: Once we're 0.15.x plus can we just implement fmt methods and use `{f}`?
     if (!std.meta.hasMethod(T, "debugPrint")) @compileError("Type " ++ @typeName(T) + " requires debugPrint method");
 
-    std.testing.expectEqualDeep(expected, actual) catch |e| {
+    std.testing.expectEqualDeep(expected, actual) catch |e|
         switch (e) {
             error.TestExpectedEqual => {
                 std.debug.print(
@@ -354,8 +354,7 @@ fn expectDeepEquals(T: type, expected: []const T, actual: []const T) !void {
 
                 return e;
             },
-        }
-    };
+        };
 }
 
 /// Create empty files (test only)

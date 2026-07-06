@@ -160,9 +160,10 @@ fn classifyUndefined(
     var next_parent = maybe_parent;
     while (next_parent) |parent| {
         switch (tree.nodeTag(parent)) {
-            .@"return" => {
-                if (optionalNodeEquals(tree.nodeData(parent).opt_node, node)) return .return_value;
-            },
+            .@"return" => if (optionalNodeEquals(
+                tree.nodeData(parent).opt_node,
+                node,
+            )) return .return_value,
             .@"break" => {
                 const maybe_break_value = tree.nodeData(parent).opt_token_and_opt_node[1];
                 if (optionalNodeEquals(maybe_break_value, node)) return .break_value;

@@ -149,12 +149,10 @@ fn run(
 
                 for (type_classifications) |classification| {
                     switch (classification.summary) {
-                        .@"fn", .fn_returns_type => {
-                            try param_kinds.append(rule_arena, .{
-                                .name = identifier,
-                                .kind = classification.summary,
-                            });
-                        },
+                        .@"fn", .fn_returns_type => try param_kinds.append(rule_arena, .{
+                            .name = identifier,
+                            .kind = classification.summary,
+                        }),
                         .type => |type_value| switch (type_value.kind) {
                             .@"fn", .fn_returns_type => try param_kinds.append(rule_arena, .{
                                 .name = identifier,

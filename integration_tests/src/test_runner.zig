@@ -296,14 +296,13 @@ fn expectFileContentsEquals(
     const normalized_expected = try normalizeOutputAlloc(contents, arena);
     const normalized_actual = try normalizeOutputAlloc(actual, arena);
 
-    std.testing.expectEqualStrings(normalized_expected, normalized_actual) catch |err| {
+    std.testing.expectEqualStrings(normalized_expected, normalized_actual) catch |err|
         switch (err) {
             error.TestExpectedEqual => {
                 try printWithHeader(stdout, "Expected contents from:", file_path);
                 return err;
             },
-        }
-    };
+        };
 }
 
 fn expectEqualStringsNormalized(arena: std.mem.Allocator, expected: []const u8, actual: []const u8) !void {
