@@ -24,6 +24,7 @@ A **linter** is a tool that automatically checks source code for style issues, b
 - [Getting Started](#getting-started)
 - [Autofix](#autofix)
 - [Custom Rules](#custom-rules)
+- [Custom Formatters](#custom-formatters)
 - [Built-in Rules](RULES.md)
   - [declaration_naming](RULES.md#declaration_naming)
   - [field_ordering](RULES.md#field_ordering)
@@ -193,6 +194,28 @@ builder.addRule(.{
 ```
 
 Alternatively, take a look at <https://github.com/KurtWagner/zlinter-custom-rule-example>, which is a minimal custom rule example with accompanying zig project.
+
+## Custom formatters
+
+Formatters control how lint results are printed out.
+
+At the moment, zlinter only ships with the built in
+[`DefaultFormatter`](./src/lib/formatters/DefaultFormatter.zig), so there is
+not yet a supported integration path for downstream projects to plug in custom
+formatters.
+
+That said, there are plenty of reasons someone may want to add another
+formatter, for example JSON, ZON, or XML output for other tools to consume.
+If that is something you need, contributions in this area are very welcome.
+
+Formatter related code lives under [`zlinter.formatters`](./src/lib/formatters.zig).
+The core interface is [`Formatter`](./src/lib/formatters/Formatter.zig), which
+receives lint results, file store access, and runtime context, and writes to
+the supplied writer.
+
+If you are interested in contributing a formatter, the existing
+[`DefaultFormatter`](./src/lib/formatters/DefaultFormatter.zig) is the best
+place to start.
 
 ## Configuration
 
