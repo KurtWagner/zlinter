@@ -546,8 +546,8 @@ fn buildStep(
     options: BuildOptions,
 ) *std.Build.Step {
     const zlinter_lib_module: *std.Build.Module, const exe_file: std.Build.LazyPath, const build_rules_exe_file: std.Build.LazyPath = switch (zlinter) {
-        .dependency => |d| .{ d.module("zlinter"), d.path("src/exe/run_linter.zig"), d.path("build_rules.zig") },
-        .module => |m| .{ m, b.path("src/exe/run_linter.zig"), b.path("build_rules.zig") },
+        .dependency => |d| .{ d.module("zlinter"), d.path("src/exe/cli.zig"), d.path("build_rules.zig") },
+        .module => |m| .{ m, b.path("src/exe/cli.zig"), b.path("build_rules.zig") },
     };
 
     const zlinter_import = std.Build.Module.Import{

@@ -361,7 +361,7 @@ fn runLinterRules(
             const rule_id: RuleId = @intCast(rule_index);
 
             const rule = rules[rule_id];
-            const rule_zone = tracy.traceNamed(@src(), "run_linter.rule");
+            const rule_zone = tracy.traceNamed(@src(), "cli.rule");
             defer rule_zone.end();
             rule_zone.addText(rule.rule_id);
             rule_zone.addText(file_abs_path);
