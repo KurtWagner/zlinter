@@ -206,4 +206,4 @@ const std = @import("std");
 const zlinter = @import("zlinter");
 const LintRuntime = zlinter.session.LintRuntime;
 const ExitCode = @import("common.zig").ExitCode;
-const lint = @import("lint.zig");
+const lint = @import("mode/lint.zig");
