@@ -63,6 +63,16 @@ help: bool,
 /// no more fixes being applied.
 fix_passes: u8,
 
+/// The execution mode to run. Defaults to lint.
+mode: Mode,
+
+const Mode = enum {
+    /// Default mode when executing the linter with and without fix arg
+    lint,
+    /// Experimental mode being implemented that provides file lint diagnositcs to editors
+    lsp,
+};
+
 const default_fix_passes = 20;
 
 pub fn deinit(self: Args, allocator: std.mem.Allocator) void {
@@ -117,6 +127,7 @@ pub fn allocParse(
     var verbose: bool = false;
     var help: bool = false;
     var fix_passes: u8 = default_fix_passes;
+    var mode: Mode = .lint;
 
     var unknown_args = std.ArrayList([]const u8).empty;
     defer unknown_args.deinit(gpa);
@@ -157,6 +168,7 @@ pub fn allocParse(
         stdin_arg,
         fix_passes_arg,
         max_warnings_arg,
+        mode_arg,
     };
 
     const flags: std.StaticStringMap(State) = .initComptime(.{
@@ -176,6 +188,7 @@ pub fn allocParse(
         .{ "-h", .help_arg },
         .{ "--fix-passes", .fix_passes_arg },
         .{ "--max-warnings", .max_warnings_arg },
+        .{ "--mode", .mode_arg },
     });
 
     state: switch (State.parsing) {
@@ -340,6 +353,21 @@ pub fn allocParse(
             };
             continue :state State.parsing;
         },
+        .mode_arg => {
+            index += 1;
+
+            if (index == args.len) {
+                rendering.process_printer.println(.err, "--mode missing value", .{});
+                return error.InvalidArgs;
+            }
+
+            mode = std.meta.stringToEnum(Mode, args[index]) orelse {
+                rendering.process_printer.println(.err, "--mode expects lint (default) or lsp", .{});
+                return error.InvalidArgs;
+            };
+
+            continue :state State.parsing;
+        },
         .unknown_arg => {
             try unknown_args.append(gpa, try gpa.dupe(u8, args[index]));
             continue :state State.parsing;
@@ -370,6 +398,7 @@ pub fn allocParse(
         .build_info = build_info orelse .default,
         .help = help,
         .fix_passes = fix_passes,
+        .mode = mode,
     };
 }
 
@@ -1105,6 +1134,53 @@ test "allocParse with invalid --max-warnings arg" {
     }
 }
 
+test "allocParse with invalid --mode arg" {
+    inline for (&.{ "-1", "alsp", "zlinter" }) |arg| {
+        var stdin_fbs = std.Io.Reader.fixed("");
+
+        var stderr_sink: std.Io.Writer.Allocating = .init(std.testing.allocator);
+        defer stderr_sink.deinit();
+        rendering.process_printer.stderr = &stderr_sink.writer;
+
+        try std.testing.expectError(error.InvalidArgs, allocParse(
+            testing.cliArgs(&.{ "--mode", arg }),
+            &.{},
+            std.testing.allocator,
+            &stdin_fbs,
+        ));
+
+        try std.testing.expectEqualStrings("--mode expects lint (default) or lsp\n", stderr_sink.written());
+    }
+}
+
+test "allocParse with --mode lsp" {
+    var stdin_fbs = std.Io.Reader.fixed("");
+
+    const args = try allocParse(
+        testing.cliArgs(&.{ "--mode", "lsp" }),
+        &.{},
+        std.testing.allocator,
+        &stdin_fbs,
+    );
+    defer args.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(Mode.lsp, args.mode);
+}
+
+test "allocParse with --mode lint" {
+    var stdin_fbs = std.Io.Reader.fixed("");
+
+    const args = try allocParse(
+        testing.cliArgs(&.{ "--mode", "lint" }),
+        &.{},
+        std.testing.allocator,
+        &stdin_fbs,
+    );
+    defer args.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(Mode.lint, args.mode);
+}
+
 const testing = struct {
     const zig_exe = "/test/zig";
     const zig_lib_directory = "/test/zig/lib";
@@ -1156,6 +1232,7 @@ const testing = struct {
             .build_info = .default,
             .help = false,
             .fix_passes = default_fix_passes,
+            .mode = .lint,
         };
         inline for (comptime std.meta.fieldNames(@TypeOf(overrides))) |field_name|
             @field(result, field_name) = @field(overrides, field_name);
