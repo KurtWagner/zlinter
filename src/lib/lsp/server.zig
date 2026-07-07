@@ -40,23 +40,26 @@ const LspNotificationMethod = enum {
 // zlinter-enable field_naming
 
 pub const LspServer = struct {
-    gpa: std.mem.Allocator,
+    runtime: *const LintRuntime,
+    session: *LintSession,
     reader: *std.Io.Reader,
     writer: *std.Io.Writer,
 
     /// Arena that lives the duration of every message being handled.
-    handle_arena: std.heap.ArenaAllocator,
+    handle_arena: *std.heap.ArenaAllocator,
 
     pub fn init(
-        gpa: std.mem.Allocator,
+        runtime: *const LintRuntime,
+        session: *LintSession,
         reader: *std.Io.Reader,
         writer: *std.Io.Writer,
     ) LspServer {
         return .{
-            .gpa = gpa,
+            .runtime = runtime,
+            .session = session,
             .reader = reader,
             .writer = writer,
-            .handle_arena = .init(gpa),
+            .handle_arena = runtime.file_arena,
         };
     }
 
@@ -551,3 +554,5 @@ test {
 const std = @import("std");
 const builtin = @import("builtin");
 const LspResponse = @import("LspResponse.zig");
+const LintSession = @import("../session/LintSession.zig");
+const LintRuntime = @import("../session/LintRuntime.zig");

@@ -6,7 +6,6 @@ pub fn run(
     printer: *zlinter.rendering.Printer,
     lint_files: []const zlinter.files.LintFile,
 ) !ExitCode {
-    _ = args;
     _ = printer;
     _ = lint_files;
 
@@ -16,8 +15,19 @@ pub fn run(
     var stdout_buf: [8 * 1024]u8 = undefined;
     var stdout = std.Io.File.stdout().writer(runtime.io, &stdout_buf);
 
+    var session: zlinter.session.LintSession = .{
+        .runtime = runtime,
+        .file_store = .init(runtime),
+        .module_store = .init(runtime),
+        .build_config_store = .init(runtime),
+        .type_store = .init(runtime),
+        .decl_store = .init(runtime),
+    };
+    try session.init(args.build_info);
+
     var server: zlinter.lsp.server.LspServer = .init(
-        runtime.sessionArena(),
+        runtime,
+        &session,
         &stdin.interface,
         &stdout.interface,
     );
