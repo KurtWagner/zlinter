@@ -470,9 +470,9 @@ pub fn build(b: *std.Build) void {
         // TODO: Fix this false positive in declaration naming rule.
         // zlinter-disable-next-line declaration_naming - this looks like a false positive based on use of @typeInfo it things its a type?
         const builtin_rule_values = @typeInfo(BuiltinLintRule).@"enum".field_values;
-        var build_rules = b.allocator.alloc(BuiltRule, builtin_rule_values.len) catch @panic("OOM");
+        var build_lint_builtin = b.allocator.alloc(BuiltRule, builtin_rule_values.len) catch @panic("OOM");
         inline for (builtin_rule_values, 0..) |field_value, i|
-            build_rules[i] = buildBuiltinRule(
+            build_lint_builtin[i] = buildBuiltinRule(
                 b,
                 @enumFromInt(field_value),
                 .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import },
@@ -481,7 +481,7 @@ pub fn build(b: *std.Build) void {
 
         break :step buildStep(
             b,
-            build_rules,
+            build_lint_builtin,
             .{ .module = zlinter_lib_module },
             include.items,
             exclude.items,
@@ -562,9 +562,9 @@ fn buildStep(
     compile_units: ?[]const BuildInfo.CompileUnitSelector,
     options: BuildOptions,
 ) *std.Build.Step {
-    const zlinter_lib_module: *std.Build.Module, const exe_file: std.Build.LazyPath, const build_rules_exe_file: std.Build.LazyPath = switch (zlinter) {
-        .dependency => |d| .{ d.module("zlinter"), d.path("src/exe/run_linter.zig"), d.path("build_rules.zig") },
-        .module => |m| .{ m, b.path("src/exe/run_linter.zig"), b.path("build_rules.zig") },
+    const zlinter_lib_module: *std.Build.Module, const exe_file: std.Build.LazyPath, const build_lint_builtin_exe_file: std.Build.LazyPath = switch (zlinter) {
+        .dependency => |d| .{ d.module("zlinter"), d.path("src/exe/cli.zig"), d.path("build_lint_builtin.zig") },
+        .module => |m| .{ m, b.path("src/exe/cli.zig"), b.path("build_lint_builtin.zig") },
     };
 
     const zlinter_import = std.Build.Module.Import{
@@ -589,17 +589,17 @@ fn buildStep(
     // --------------------------------------------------------------------
     // Generate dynamic rules and rules config
     // --------------------------------------------------------------------
-    const rules_module = createRulesModule(
+    const lint_builtin_module = createLintBuiltinModule(
         b,
         zlinter_import,
         rules,
-        addBuildRulesStep(
+        createRulesBuiltinStep(
             b,
-            build_rules_exe_file,
+            build_lint_builtin_exe_file,
             rules,
         ),
     );
-    exe_module.addImport("rules", rules_module);
+    exe_module.addImport("lint_builtin", lint_builtin_module);
 
     // --------------------------------------------------------------------
     // Generate linter exe
@@ -809,13 +809,13 @@ fn buildBuiltinRule(
     };
 }
 
-fn addBuildRulesStep(
+fn createRulesBuiltinStep(
     b: *std.Build,
     root_source_path: std.Build.LazyPath,
     rules: []const BuiltRule,
 ) std.Build.LazyPath {
     var run = b.addRunArtifact(b.addExecutable(.{
-        .name = "build_rules",
+        .name = "build_lint_builtin",
         .root_module = b.createModule(.{
             .root_source_file = root_source_path,
             .target = b.graph.host,
@@ -830,11 +830,11 @@ fn addBuildRulesStep(
     return output;
 }
 
-fn createRulesModule(
+fn createLintBuiltinModule(
     b: *std.Build,
     zlinter_import: std.Build.Module.Import,
     rules: []const BuiltRule,
-    build_rules_output: std.Build.LazyPath,
+    build_lint_builtin_output: std.Build.LazyPath,
 ) *std.Build.Module {
     var rule_imports = std.ArrayList(std.Build.Module.Import).empty;
     for (rules) |r| rule_imports.append(b.allocator, r.import) catch @panic("OOM");
@@ -851,7 +851,7 @@ fn createRulesModule(
     defer b.allocator.free(rules_imports);
 
     const module = b.createModule(.{
-        .root_source_file = build_rules_output,
+        .root_source_file = build_lint_builtin_output,
         .imports = rules_imports,
     });
 
