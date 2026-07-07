@@ -523,23 +523,6 @@ pub fn build(b: *std.Build) void {
 
         break :step &install_step.step;
     });
-
-    // ------------------------------------------------------------------------
-    // zig build lsp
-    // ------------------------------------------------------------------------
-    const lsp_cmd = b.step("lsp", "Start LSP");
-    lsp_cmd.dependOn(step: {
-        const doc_build_run = b.addRunArtifact(b.addExecutable(.{
-            .name = "lsp",
-            .root_module = b.createModule(.{
-                .root_source_file = b.path("src/exe/lsp.zig"),
-                .target = b.graph.host,
-                .optimize = optimize,
-                .imports = &.{zlinter_import},
-            }),
-        }));
-        break :step &doc_build_run.step;
-    });
 }
 
 fn toZonString(val: anytype, allocator: std.mem.Allocator) []const u8 {

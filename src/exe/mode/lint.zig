@@ -1,6 +1,6 @@
 const default_formatter = zlinter.formatters.DefaultFormatter{};
 
-pub fn runLintMode(
+pub fn run(
     runtime: *const LintRuntime,
     args: zlinter.Args,
     printer: *zlinter.rendering.Printer,

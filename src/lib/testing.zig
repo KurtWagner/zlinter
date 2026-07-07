@@ -488,6 +488,65 @@ pub fn testRunRule(
     try expectDeepEquals(LintProblemExpectation, expected, actual.items);
 }
 
+pub fn expectJsonValueEqual(a: std.json.Value, b: std.json.Value) !void {
+    const is_eql = std.meta.activeTag(a) == std.meta.activeTag(b) and is_eql: switch (a) {
+        .null => true,
+        .bool => |value| value == b.bool,
+        .integer => |value| value == b.integer,
+        .float => |value| value == b.float,
+        .number_string => |value| std.mem.eql(u8, value, b.number_string),
+        .string => |value| std.mem.eql(u8, value, b.string),
+        .array => |array| {
+            const other = b.array;
+            if (array.items.len != other.items.len) break :is_eql false;
+
+            for (array.items, other.items) |left, right|
+                try expectJsonValueEqual(left, right);
+
+            break :is_eql true;
+        },
+
+        .object => |object| {
+            const other = b.object;
+
+            if (object.count() != other.count()) break :is_eql false;
+
+            var iterator = object.iterator();
+            while (iterator.next()) |entry| {
+                const other_value = other.get(entry.key_ptr.*) orelse break :is_eql false;
+                try expectJsonValueEqual(entry.value_ptr.*, other_value);
+            }
+
+            break :is_eql true;
+        },
+    };
+    if (!is_eql)
+        return error.TestExpectedEqual;
+}
+
+pub fn expectJsonEqual(
+    json_a: []const u8,
+    json_b: []const u8,
+) !void {
+    const parsed_a = try std.json.parseFromSlice(
+        std.json.Value,
+        std.testing.allocator,
+        json_a,
+        .{},
+    );
+    defer parsed_a.deinit();
+
+    const parsed_b = try std.json.parseFromSlice(
+        std.json.Value,
+        std.testing.allocator,
+        json_b,
+        .{},
+    );
+    defer parsed_b.deinit();
+
+    try expectJsonValueEqual(parsed_a.value, parsed_b.value);
+}
+
 const builtin = @import("builtin");
 const LintDocument = @import("session/LintDocument.zig");
 const LintSession = @import("session/LintSession.zig");

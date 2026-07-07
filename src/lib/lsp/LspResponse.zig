@@ -77,6 +77,7 @@ pub const LspDiagnostic = struct {
     }
 };
 
+// zlinter-disable-next-line no_inferred_error_unions - not even sure what the errors are.
 pub fn jsonStringify(self: @This(), jws: anytype) !void {
     try jws.beginObject();
 
@@ -157,7 +158,7 @@ test "textDocument/publishDiagnostics json" {
         \\}
     ;
 
-    std.testing.expectEqualStrings(
+    testing.expectJsonEqual(
         expected,
         actual,
     ) catch |e| {
@@ -173,5 +174,6 @@ test {
     std.testing.refAllDecls(@This());
 }
 
+const testing = @import("../testing.zig");
 const std = @import("std");
 const LintProblem = @import("../results.zig").LintProblem;
