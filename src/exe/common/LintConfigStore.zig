@@ -312,8 +312,9 @@ test {
     std.testing.refAllDecls(@This());
 }
 
-const zlinter = @import("zlinter");
-const RuleIndex = zlinter.rules.RuleIndex;
 const lint_builtin = @import("lint_builtin");
 const std = @import("std");
-const RulesConfig = @import("lint_builtin").RulesConfig;
+const zlinter = @import("zlinter");
+
+const RulesConfig = lint_builtin.RulesConfig;
+const RuleIndex = zlinter.rules.RuleIndex;

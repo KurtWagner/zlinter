@@ -587,12 +587,13 @@ test {
     std.testing.refAllDecls(@This());
 }
 
-const zlinter = @import("zlinter");
 const std = @import("std");
+const zlinter = @import("zlinter");
+const ExitCode = @import("../common.zig").ExitCode;
+const lint_builtin = @import("lint_builtin");
+const LintConfigStore = @import("../common/LintConfigStore.zig");
+
 const Ast = std.zig.Ast;
 const oom = zlinter.allocations.oom;
 const LintRuntime = zlinter.session.LintRuntime;
 const tracy = zlinter.tracy;
-const ExitCode = @import("../common.zig").ExitCode;
-const lint_builtin = @import("lint_builtin");
-const LintConfigStore = @import("../common/LintConfigStore.zig");

@@ -201,9 +201,11 @@ test {
     std.testing.refAllDecls(@This());
 }
 
+const common = @import("common.zig");
+const lint = @import("mode/lint.zig");
 const lint_builtin = @import("lint_builtin"); // Generated in build_rules.zig
 const std = @import("std");
 const zlinter = @import("zlinter");
+
+const ExitCode = common.ExitCode;
 const LintRuntime = zlinter.session.LintRuntime;
-const ExitCode = @import("common.zig").ExitCode;
-const lint = @import("mode/lint.zig");
