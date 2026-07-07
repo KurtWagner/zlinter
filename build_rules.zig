@@ -22,7 +22,6 @@ pub fn main(init: std.process.Init) !void {
     try output_file_writer.interface.writeAll(
         \\const zlinter = @import("zlinter");
         \\
-        \\pub const RuleId = u32;
         \\
         \\pub const rules = [_]zlinter.rules.LintRule{
         \\

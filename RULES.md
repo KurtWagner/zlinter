@@ -589,6 +589,7 @@ Disallows the use of global vars
 All use of global vars is required to be explicitly enabled with a comment
 
 It is also recommended to encapsulate global state into a struct and giving it a instance var:
+
 ```
 const SomeState = struct {
    foo: u32,
@@ -816,7 +817,6 @@ pub fn divide(x: i32, y: i32) i32 {
 }
 ```
 
-
 **Config options:**
 
 * `severity`
@@ -861,7 +861,6 @@ fn add(comptime a: comptime_int, comptime b: comptime_int) comptime_int { ... }
 `no_redundant_comptime` supports auto fixes with the `--fix` flag.
 Fixes are not applied when the surrounding layout is comment-adjacent or otherwise ambiguous.
 
-
 **Config options:**
 
 * `severity`
@@ -886,7 +885,7 @@ doSomething() catch {
 ```
 
 This is because typically in this siutation it's safe to assume the author
- has put some thought into it being swallowed. This can be disabled by
+has put some thought into it being swallowed. This can be disabled by
 setting `.exclude_comments = false`
 
 **Config options:**
@@ -1210,7 +1209,6 @@ pub fn message(age: u8, allocator: std.mem.Allocator) error{ OutOfMemory, Invali
 }
 ```
 
-
 **Config options:**
 
 * `severity`
@@ -1309,4 +1307,3 @@ Enforces an order of values in `switch` statements.
   * The severity for when `else` is not last in a `switch` (off, warning, error).
 
   * **Default:** `.warning`
-

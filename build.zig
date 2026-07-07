@@ -572,17 +572,17 @@ fn buildStep(
     // --------------------------------------------------------------------
     // Generate dynamic rules and rules config
     // --------------------------------------------------------------------
-    const rules_module = createRulesModule(
+    const lint_builtin_module = createLintBuiltinModule(
         b,
         zlinter_import,
         rules,
-        addBuildRulesStep(
+        createRulesBuiltinStep(
             b,
             build_rules_exe_file,
             rules,
         ),
     );
-    exe_module.addImport("rules", rules_module);
+    exe_module.addImport("lint_builtin", lint_builtin_module);
 
     // --------------------------------------------------------------------
     // Generate linter exe
@@ -792,7 +792,7 @@ fn buildBuiltinRule(
     };
 }
 
-fn addBuildRulesStep(
+fn createRulesBuiltinStep(
     b: *std.Build,
     root_source_path: std.Build.LazyPath,
     rules: []const BuiltRule,
@@ -813,7 +813,7 @@ fn addBuildRulesStep(
     return output;
 }
 
-fn createRulesModule(
+fn createLintBuiltinModule(
     b: *std.Build,
     zlinter_import: std.Build.Module.Import,
     rules: []const BuiltRule,

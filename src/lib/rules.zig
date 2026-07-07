@@ -1,5 +1,9 @@
 //! Rules are run per file, identify and return "problems"
 
+pub const RuleIndex = enum(u32) {
+    _,
+};
+
 /// A linter rule with a unique id and a run method.
 pub const LintRule = struct {
     rule_id: []const u8,
