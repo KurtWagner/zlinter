@@ -541,8 +541,13 @@ fn testBody(comptime body: []const u8) []const u8 {
 }
 
 test {
+    // TODO: remove this, just being used to force it to be covered
+    var temp: LspResponse = undefined;
+    temp = undefined;
+
     std.testing.refAllDecls(@This());
 }
 
 const std = @import("std");
 const builtin = @import("builtin");
+const LspResponse = @import("LspResponse.zig");
