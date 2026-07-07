@@ -203,7 +203,7 @@ test {
 
 const common = @import("common.zig");
 const lint = @import("mode/lint.zig");
-const lint_builtin = @import("lint_builtin"); // Generated in build_rules.zig
+const lint_builtin = @import("lint_builtin"); // Generated in build_lint_builtin.zig
 const std = @import("std");
 const zlinter = @import("zlinter");
 
