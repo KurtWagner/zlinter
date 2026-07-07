@@ -4,9 +4,8 @@ pub fn runLintMode(
     runtime: *const LintRuntime,
     args: zlinter.Args,
     printer: *zlinter.rendering.Printer,
+    lint_files: []const zlinter.files.LintFile,
 ) !ExitCode {
-    const lint_files = try resolveFilesToLint(runtime, args);
-
     var total_fixes: usize = 0;
     const result = result: {
         var remaining_fix_passes = @max(1, args.fix_passes);
@@ -57,7 +56,7 @@ fn runLint(
     runtime: *const LintRuntime,
     args: zlinter.Args,
     printer: *zlinter.rendering.Printer,
-    lint_files: []zlinter.files.LintFile,
+    lint_files: []const zlinter.files.LintFile,
 ) !RunResult {
     const io = runtime.io;
 
@@ -130,51 +129,6 @@ fn runLint(
             args.quiet,
             args.max_warnings,
         );
-}
-
-fn resolveFilesToLint(
-    runtime: *const LintRuntime,
-    args: zlinter.Args,
-) ![]zlinter.files.LintFile {
-    var dir = try std.Io.Dir.cwd().openDir(
-        runtime.io,
-        "./",
-        .{ .iterate = true },
-    );
-    defer dir.close(runtime.io);
-
-    const lint_files = try zlinter.files.allocLintFiles(
-        runtime,
-        dir,
-        // `--include` argument supersedes build defined includes and excludes
-        args.include_paths orelse args.build_info.include_paths orelse null,
-        runtime.sessionArena(),
-    );
-
-    if (try buildExcludesIndex(
-        runtime,
-        runtime.sessionArena(),
-        dir,
-        args,
-    )) |*index| {
-        defer @constCast(index).deinit();
-
-        for (lint_files) |*file|
-            file.excluded = index.contains(file.abs_path);
-    }
-
-    if (try buildFilterIndex(
-        runtime,
-        dir,
-        args,
-    )) |*index| {
-        defer @constCast(index).deinit();
-
-        for (lint_files) |*file|
-            file.excluded = !index.contains(file.abs_path);
-    }
-
-    return lint_files;
 }
 
 /// Resolves lint files, prepares one session, and runs each enabled rule once
@@ -571,77 +525,6 @@ fn allocAstErrorMsg(
     return aw.toOwnedSlice();
 }
 
-// TODO: #164 Move buildExcludesIndex and buildFilterIndex to lib and write unit tests
-
-/// Returns an index of files to exclude if exclude configuration is found in args
-fn buildExcludesIndex(
-    runtime: *const LintRuntime,
-    // TODO: #164 Use arena
-    gpa: std.mem.Allocator,
-    dir: std.Io.Dir,
-    args: zlinter.Args,
-) !?std.BufSet {
-    if (args.exclude_paths == null and args.build_info.exclude_paths == null) return null;
-
-    const exclude_lint_paths: ?[]zlinter.files.LintFile = exclude: {
-        if (args.exclude_paths) |p| {
-            std.debug.assert(p.len > 0);
-            break :exclude try zlinter.files.allocLintFiles(runtime, dir, p, gpa);
-        } else break :exclude null;
-    };
-    defer if (exclude_lint_paths) |exclude| {
-        for (exclude) |*lint_file| lint_file.deinit(gpa);
-        gpa.free(exclude);
-    };
-
-    const build_exclude_lint_paths: ?[]zlinter.files.LintFile = exclude: {
-        // `--include` argument supersedes build defined includes and excludes
-        if (args.include_paths != null) break :exclude null;
-
-        if (args.build_info.exclude_paths) |p| {
-            std.debug.assert(p.len > 0);
-            break :exclude try zlinter.files.allocLintFiles(runtime, dir, p, gpa);
-        } else break :exclude null;
-    };
-    defer if (build_exclude_lint_paths) |files| {
-        for (files) |*file| file.deinit(gpa);
-        gpa.free(files);
-    };
-
-    var index = std.BufSet.init(gpa);
-    errdefer index.deinit();
-
-    if (exclude_lint_paths) |files|
-        for (files) |file| try index.insert(file.abs_path);
-
-    if (build_exclude_lint_paths) |files|
-        for (files) |file| try index.insert(file.abs_path);
-
-    return index;
-}
-
-/// Returns an index of files to only include if filter configuration is found in args
-fn buildFilterIndex(runtime: *const LintRuntime, dir: std.Io.Dir, args: zlinter.Args) !?std.BufSet {
-    const session_arena = runtime.sessionArena();
-
-    const filter_paths: []zlinter.files.LintFile = exclude: {
-        if (args.filter_paths) |p| {
-            std.debug.assert(p.len > 0);
-            break :exclude try zlinter.files.allocLintFiles(runtime, dir, p, session_arena);
-        } else return null;
-    };
-    defer {
-        for (filter_paths) |*lint_file| lint_file.deinit(session_arena);
-        session_arena.free(filter_paths);
-    }
-
-    var index = std.BufSet.init(session_arena);
-    errdefer index.deinit();
-
-    for (filter_paths) |file| try index.insert(file.abs_path);
-    return index;
-}
-
 /// Creates and returns a bitset representing enabled rules using the fixed
 /// indices in the rules array. This is what allows people to filter runs with
 /// the `--rule` CLI argument.
@@ -705,7 +588,6 @@ test {
 }
 
 const zlinter = @import("zlinter");
-
 const std = @import("std");
 const Ast = std.zig.Ast;
 const oom = zlinter.allocations.oom;
