@@ -50,8 +50,11 @@ fn format(
                 .warning => warning_count += 1,
             }
 
-            const start_line, const start_column = file_renderer.lineAndColumn(problem.start.byte_offset);
-            const end_line, const end_column = file_renderer.lineAndColumn(problem.end.byte_offset);
+            const problem_range = input.file_store.fileRange(
+                file_result.file_id,
+                problem.start.byte_offset,
+                problem.end.byte_offset,
+            );
 
             var severity_buffer: [32]u8 = undefined;
             writer.print("{s} {s} [{s}{s}:{d}:{d}{s}] {s}{s}{s}\n", .{
@@ -63,8 +66,8 @@ fn format(
                 cwd_rel_path,
                 // "+ 1" because line and column are zero indexed but
                 // when printing a link to a file it starts at 1.
-                start_line + 1,
-                start_column + 1,
+                problem_range.start.line + 1,
+                problem_range.start.column + 1,
                 input.tty.ansiOrEmpty(&.{.reset}),
 
                 input.tty.ansiOrEmpty(&.{.gray}),
@@ -85,10 +88,10 @@ fn format(
             writer.writeByte('\n') catch |e| return logAndReturnWriteFailure("Newline", e);
 
             file_renderer.render(
-                start_line,
-                start_column,
-                end_line,
-                end_column,
+                problem_range.start.line,
+                problem_range.start.column,
+                problem_range.end.line,
+                problem_range.end.column,
                 writer,
                 input.tty,
             ) catch |e| return logAndReturnWriteFailure("Problem lint", e);

@@ -53,8 +53,16 @@ pub const LspDiagnostic = struct {
 
     pub fn initFromProblem(
         problem: LintProblem,
+        file_store: *const FileStore,
+        file_id: FileId,
         arena: std.mem.Allocator,
     ) error{OutOfMemory}!?LspDiagnostic {
+        const range = file_store.fileRange(
+            file_id,
+            problem.start.byte_offset,
+            problem.end.byte_offset,
+        );
+
         return .{
             .code = try arena.dupe(u8, problem.rule_id),
             .message = try arena.dupe(u8, problem.message),
@@ -65,12 +73,12 @@ pub const LspDiagnostic = struct {
             },
             .range = .{
                 .start = .{
-                    .line = 0, // TODO: Hook up line and character
-                    .character = 0,
+                    .line = @intCast(range.start.line),
+                    .character = @intCast(range.start.column),
                 },
                 .end = .{
-                    .line = 0, // TODO: Hook up line and character
-                    .character = 0,
+                    .line = @intCast(range.end.line),
+                    .character = @intCast(range.end.column),
                 },
             },
         };
@@ -176,4 +184,6 @@ test {
 
 const testing = @import("../testing.zig");
 const std = @import("std");
+const FileId = @import("../session/FileStore.zig").FileId;
+const FileStore = @import("../session/FileStore.zig");
 const LintProblem = @import("../results.zig").LintProblem;
