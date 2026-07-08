@@ -513,6 +513,9 @@ pub const LspServer = struct {
 };
 
 test {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
     var stdin: std.Io.Reader = .fixed(comptime testBody(
         \\{"method":"initialize", "id":1}
     ) ++ testBody(
@@ -521,8 +524,10 @@ test {
     var stdout: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer stdout.deinit();
 
+    var session = testing.initFakeContext(arena.allocator(), std.testing.io);
     var server: LspServer = .init(
-        std.testing.allocator,
+        session.runtime,
+        &session,
         &stdin,
         &stdout.writer,
     );
@@ -556,3 +561,4 @@ const builtin = @import("builtin");
 const LspResponse = @import("LspResponse.zig");
 const LintSession = @import("../session/LintSession.zig");
 const LintRuntime = @import("../session/LintRuntime.zig");
+const testing = @import("../testing.zig");
