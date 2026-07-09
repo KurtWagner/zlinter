@@ -190,13 +190,11 @@ pub fn allocParse(
 
     var build_compile_units = std.ArrayList(CompileUnitSelector).empty;
     defer build_compile_units.deinit(gpa);
-    errdefer {
-        for (build_compile_units.items) |selector|
-            switch (selector) {
-                .name => |name| gpa.free(name),
-                .exe, .lib, .obj, .@"test", .all => {},
-            };
-    }
+    errdefer for (build_compile_units.items) |selector|
+        switch (selector) {
+            .name => |name| gpa.free(name),
+            .exe, .lib, .obj, .@"test", .all => {},
+        };
 
     const State = enum {
         parsing,
