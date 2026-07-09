@@ -1163,37 +1163,43 @@ const testing = struct {
     inline fn expected(comptime overrides: anytype) Args {
         assertTestOnly();
 
-        var result = Args{
-            .zig_exe = zig_exe,
-            .zig_lib_directory = zig_lib_directory,
-            .fix = false,
-            .quiet = false,
-            .max_warnings = null,
-            .include_paths = null,
-            .build_include_paths = null,
-            .filter_paths = null,
-            .exclude_paths = null,
-            .build_exclude_paths = null,
-            .build_compile_units = null,
-            .format = .default,
-            .unknown_args = null,
-            .rules = null,
-            .verbose = false,
-            .help = false,
-            .fix_passes = default_fix_passes,
-            .mode = .lint,
-        };
+        var result = Args.testDefault();
+        result.zig_exe = zig_exe;
+        result.zig_lib_directory = zig_lib_directory;
         inline for (comptime std.meta.fieldNames(@TypeOf(overrides))) |field_name|
             @field(result, field_name) = @field(overrides, field_name);
         return result;
     }
-
-    inline fn assertTestOnly() void {
-        comptime if (!builtin.is_test) @compileError("Test only");
-    }
 };
 
-const builtin = @import("builtin");
+inline fn assertTestOnly() void {
+    comptime if (!@import("builtin").is_test) @compileError("Test only");
+}
+
+pub inline fn testDefault() Args {
+    assertTestOnly();
+
+    return .{
+        .zig_exe = "zig",
+        .zig_lib_directory = ".",
+        .fix = false,
+        .quiet = false,
+        .max_warnings = null,
+        .include_paths = null,
+        .build_include_paths = null,
+        .filter_paths = null,
+        .exclude_paths = null,
+        .build_exclude_paths = null,
+        .build_compile_units = null,
+        .format = .default,
+        .unknown_args = null,
+        .rules = null,
+        .verbose = false,
+        .help = false,
+        .fix_passes = default_fix_passes,
+        .mode = .lint,
+    };
+}
 const std = @import("std");
 const LintRule = @import("./rules.zig").LintRule;
 const rendering = @import("./rendering.zig");
