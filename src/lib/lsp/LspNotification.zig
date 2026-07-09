@@ -12,6 +12,7 @@ pub const Method = enum {
 };
 // zlinter-enable field_naming
 
+// zlinter-disable field_naming - we dont control the naming of methods
 const MethodParams = union(enum) {
     initialized: InitializedParams,
     exit: ExitParams,
@@ -20,6 +21,7 @@ const MethodParams = union(enum) {
     @"textDocument/didSave": TextDocumentDidSaveParams,
     @"textDocument/didClose": TextDocumentDidCloseParams,
 };
+// zlinter-enable field_naming
 
 const TextDocumentDidOpenParams = struct {
     text_document: TextDocument,

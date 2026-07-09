@@ -19,14 +19,6 @@ const LspState = enum {
     stopping,
 };
 
-// zlinter-disable field_naming - we dont control the naming of methods
-const LspRequestMethod = enum {
-    initialize,
-    /// Polite shutdown request
-    shutdown,
-};
-// zlinter-enable field_naming
-
 pub const LspServer = struct {
     runtime: *const LintRuntime,
     session: *LintSession,
@@ -167,113 +159,57 @@ pub const LspServer = struct {
         body: []const u8,
         err: *LspError,
     ) error{ LspError, OutOfMemory }!LspState {
-        const parsed = std.json.parseFromSlice(
-            std.json.Value,
+        if (std.json.parseFromSlice(
+            LspNotification,
             self.handle_arena.allocator(),
             body,
             .{},
-        ) catch {
-            std.log.err("Json: '{s}'", .{body});
-            err.* = .{
-                .code = JsonRpcErrorCode.parse_error,
-                .message = self.tryDupe("Invalid JSON"),
-            };
-            return error.LspError;
-        };
-
-        const message = parsed.value;
-        const method_str = try self.readMethodFromMessage(
-            message,
-            err,
-        );
-
-        if (std.meta.stringToEnum(
-            LspRequestMethod,
-            method_str,
-        )) |method| {
-            // Is a request, expect id to respond with:
-            const id = try self.readIdFromMessage(
-                message,
+        )) |notification| {
+            return try self.handleNotification(
+                notification.value,
                 err,
             );
+        } else |_| {}
+
+        if (std.json.parseFromSlice(
+            LspRequest,
+            self.handle_arena.allocator(),
+            body,
+            .{},
+        )) |request| {
             return try self.handleRequest(
-                id,
-                method,
-                message,
+                request.value,
                 err,
             );
-        } else if (std.meta.stringToEnum(
-            LspNotification.Method,
-            method_str,
-        )) |method| {
-            // Is notification, no id, no response to send:
-            return try self.handleNotification(method, message, err);
-        } else if (message.object.get("id")) |id| {
-            // Assume request when there's an id so we need to respond with error:
-            err.* = .{
-                .code = .method_not_found,
-                .id = id,
-                .message = self.tryDupe("zlinter does not handle that method"),
-            };
-            return error.LspError;
-        }
+        } else |_| {}
+
         // else assume notification that we don't handle, ignore.
         return .running;
     }
 
-    fn readMethodFromMessage(
-        self: *LspServer,
-        message: std.json.Value,
-        err: *LspError,
-    ) error{LspError}![]const u8 {
-        const method_value = message.object.get("method") orelse {
-            err.* = .{
-                .code = JsonRpcErrorCode.invalid_params,
-                .message = self.tryDupe("Missing 'method' parameter"),
-            };
-            return error.LspError;
-        };
-
-        return switch (method_value) {
-            .string => |str| str,
-            else => {
-                err.* = .{
-                    .code = JsonRpcErrorCode.invalid_params,
-                    .message = self.tryDupe("Expected 'method' to be a string"),
-                };
-                return error.LspError;
-            },
-        };
-    }
-
-    fn readIdFromMessage(
-        self: *LspServer,
-        message: std.json.Value,
-        err: *LspError,
-    ) error{LspError}!std.json.Value {
-        return message.object.get("id") orelse {
-            err.* = .{
-                .code = JsonRpcErrorCode.invalid_params,
-                .message = self.tryDupe("Missing 'id' parameter"),
-            };
-            return error.LspError;
-        };
-    }
-
     fn handleRequest(
         self: *LspServer,
-        id: std.json.Value,
-        method: LspRequestMethod,
-        message: std.json.Value,
+        request: LspRequest,
         err: *LspError,
     ) error{ LspError, OutOfMemory }!LspState {
-        _ = message;
+        const id = switch (request.id) {
+            .integer => |value| std.json.Value{ .integer = value },
+            .string => |value| std.json.Value{ .string = value },
+        };
 
-        switch (method) {
+        switch (request.method_params) {
             .initialize => try self.sendInitializeResponse(id, err),
             .shutdown => {
                 try self.sendResponse(id, .null, err);
                 return .stopping;
+            },
+            .unknown => {
+                err.* = .{
+                    .code = .method_not_found,
+                    .id = id,
+                    .message = self.tryDupe("zlinter does not handle that method"),
+                };
+                return error.LspError;
             },
         }
         return .running;
@@ -281,28 +217,24 @@ pub const LspServer = struct {
 
     fn handleNotification(
         self: *LspServer,
-        method: LspNotification.Method,
-        message: std.json.Value,
+        notification: LspNotification,
         err: *LspError,
     ) error{ LspError, OutOfMemory }!LspState {
-        switch (method) {
+        switch (notification.method_params) {
             .initialized => {},
             .exit => return .stopping,
-            .@"textDocument/didOpen" =>
-            // TODO:
-            // - params.textDocument.uri or params.textDocument.text?
-            // - run linter on text
-            try self.publishEmptyDiagnostics(message, err),
-            .@"textDocument/didClose" => {},
-            .@"textDocument/didChange" =>
-            // TODO:
-            // - maintain uri to file id in file store
-            // - rerun linter
-            try self.publishEmptyDiagnostics(message, err),
-            .@"textDocument/didSave" =>
-            // TODO:
-            // - rerun linter
-            try self.publishEmptyDiagnostics(message, err),
+            .@"textDocument/didOpen" => |value| {
+                try self.publishEmptyDiagnostics(value.text_document.uri, err);
+            },
+            .@"textDocument/didClose" => |value| {
+                try self.publishEmptyDiagnostics(value.text_document.uri, err);
+            },
+            .@"textDocument/didChange" => |value| {
+                try self.publishEmptyDiagnostics(value.text_document.uri, err);
+            },
+            .@"textDocument/didSave" => |value| {
+                try self.publishEmptyDiagnostics(value.text_document.uri, err);
+            },
         }
         return .running;
     }
@@ -340,18 +272,9 @@ pub const LspServer = struct {
 
     fn publishEmptyDiagnostics(
         self: *LspServer,
-        msg: std.json.Value,
+        uri: std.Uri,
         err: *LspError,
     ) error{ LspError, OutOfMemory }!void {
-        const params = msg.object.get("params") orelse return;
-
-        const text_document =
-            params.object.get("textDocument") orelse
-            params.object.get("document") orelse
-            return;
-
-        const uri = text_document.object.get("uri") orelse return;
-
         var body: std.Io.Writer.Allocating = .init(self.handle_arena.allocator());
         body.writer.print(
             \\{{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{{"uri":{},"diagnostics":[]}}}}
@@ -551,3 +474,4 @@ const LintSession = @import("../session/LintSession.zig");
 const LintRuntime = @import("../session/LintRuntime.zig");
 const testing = @import("../testing.zig");
 const LspNotification = @import("LspNotification.zig");
+const LspRequest = @import("LspRequest.zig");
