@@ -27,18 +27,6 @@ const LspRequestMethod = enum {
 };
 // zlinter-enable field_naming
 
-// zlinter-disable field_naming - we dont control the naming of methods
-const LspNotificationMethod = enum {
-    initialized,
-    /// Forceful shutdown
-    exit,
-    @"textDocument/didOpen",
-    @"textDocument/didChange",
-    @"textDocument/didSave",
-    @"textDocument/didClose",
-};
-// zlinter-enable field_naming
-
 pub const LspServer = struct {
     runtime: *const LintRuntime,
     session: *LintSession,
@@ -215,7 +203,7 @@ pub const LspServer = struct {
                 err,
             );
         } else if (std.meta.stringToEnum(
-            LspNotificationMethod,
+            LspNotification.Method,
             method_str,
         )) |method| {
             // Is notification, no id, no response to send:
@@ -293,7 +281,7 @@ pub const LspServer = struct {
 
     fn handleNotification(
         self: *LspServer,
-        method: LspNotificationMethod,
+        method: LspNotification.Method,
         message: std.json.Value,
         err: *LspError,
     ) error{ LspError, OutOfMemory }!LspState {
@@ -562,3 +550,4 @@ const LspResponse = @import("LspResponse.zig");
 const LintSession = @import("../session/LintSession.zig");
 const LintRuntime = @import("../session/LintRuntime.zig");
 const testing = @import("../testing.zig");
+const LspNotification = @import("LspNotification.zig");
