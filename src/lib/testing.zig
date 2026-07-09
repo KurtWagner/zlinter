@@ -75,6 +75,28 @@ pub fn initFakeContext(
 ) LintSession {
     assertTestOnly();
 
+    const fake_args = arena.create(Args) catch @panic("failed to allocate fake args");
+    fake_args.* = .{
+        .zig_exe = "zig",
+        .zig_lib_directory = ".",
+        .fix = false,
+        .quiet = false,
+        .max_warnings = null,
+        .include_paths = null,
+        .build_include_paths = null,
+        .filter_paths = null,
+        .exclude_paths = null,
+        .build_exclude_paths = null,
+        .build_compile_units = null,
+        .format = .default,
+        .unknown_args = null,
+        .rules = null,
+        .verbose = false,
+        .help = false,
+        .fix_passes = 20,
+        .mode = .lint,
+    };
+
     const session_arena = arena.create(std.heap.ArenaAllocator) catch @panic("failed to allocate fake session arena");
     session_arena.* = .init(arena);
 
@@ -88,6 +110,7 @@ pub fn initFakeContext(
     runtime.* = .{
         .io = io,
         .verbose = false,
+        .args = fake_args,
         .session_arena = session_arena,
         .file_arena = file_arena_allocator,
         .rule_arena = rule_arena_allocator,
@@ -107,7 +130,7 @@ pub fn initFakeContext(
         .type_store = .init(runtime),
         .decl_store = .init(runtime),
     };
-    session.init(.default) catch @panic("failed to initialize fake lint session");
+    session.init() catch @panic("failed to initialize fake lint session");
     return session;
 }
 
@@ -489,6 +512,7 @@ pub fn testRunRule(
 }
 
 const builtin = @import("builtin");
+const Args = @import("Args.zig");
 const LintDocument = @import("session/LintDocument.zig");
 const LintSession = @import("session/LintSession.zig");
 const std = @import("std");

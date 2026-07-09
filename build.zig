@@ -128,7 +128,7 @@ const StepBuilder = struct {
     rules: std.ArrayList(BuiltRule),
     include: std.ArrayList(LintIncludeSource),
     exclude: std.ArrayList(LintExcludeSource),
-    compile_units: std.ArrayList(BuildInfo.CompileUnitSelector),
+    compile_units: std.ArrayList(CompileUnitSelector),
     options: BuildOptions,
     b: *std.Build,
 
@@ -193,7 +193,7 @@ const StepBuilder = struct {
                 .obj => .obj,
                 .@"test" => .@"test",
                 .all => .all,
-                .explicit => |compile| .{ .name = compile.step.name },
+                .explicit => |compile| .{ .explicit = compile },
             }) catch @panic("OOM");
     }
 
@@ -542,7 +542,7 @@ fn buildStep(
     },
     include: []const LintIncludeSource,
     exclude: []const LintExcludeSource,
-    compile_units: ?[]const BuildInfo.CompileUnitSelector,
+    compile_units: ?[]const CompileUnitSelector,
     options: BuildOptions,
 ) *std.Build.Step {
     const zlinter_lib_module: *std.Build.Module, const exe_file: std.Build.LazyPath, const build_lint_builtin_exe_file: std.Build.LazyPath = switch (zlinter) {
@@ -623,20 +623,20 @@ fn buildStep(
             };
     }
 
-    run.addArg("--stdin");
-
-    var buff = std.Io.Writer.Allocating.init(b.allocator);
-
-    buff.writer.writeInt(u32, 0, .little) catch @panic("stdin write failed");
-    std.zon.stringify.serialize(BuildInfo{
-        .compile_units = compile_units,
-    }, .{}, &buff.writer) catch @panic("Invalid build info");
-
-    const stdin_bytes = buff.written();
-    const zon_len = stdin_bytes.len - @sizeOf(u32);
-    std.mem.writeInt(u32, stdin_bytes[0..@sizeOf(u32)], @intCast(zon_len), .little);
-
-    run.setStdIn(.{ .bytes = stdin_bytes });
+    if (compile_units) |selectors| {
+        for (selectors) |selector|
+            switch (selector) {
+                .exe => run.addArg("--build-exe-compile-units"),
+                .lib => run.addArg("--build-lib-compile-units"),
+                .obj => run.addArg("--build-obj-compile-units"),
+                .@"test" => run.addArg("--build-test-compile-units"),
+                .all => run.addArg("--build-all-compile-units"),
+                .explicit => |compile| {
+                    run.addArg("--build-named-compile-unit");
+                    run.addArg(compile.step.name);
+                },
+            };
+    }
 
     return &run.step;
 }
@@ -899,7 +899,6 @@ fn readHtmlTemplate(b: *std.Build, path: []const u8) ![]const u8 {
     return try out.toOwnedSlice();
 }
 
-const BuildInfo = @import("src/lib/BuildInfo.zig");
 const std = @import("std");
 const zig_version_string = @import("builtin").zig_version_string;
 pub const version = @import("./src/lib/version.zig");

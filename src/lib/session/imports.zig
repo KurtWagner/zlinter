@@ -235,10 +235,31 @@ test "resolveFile - root import uses supplied root file id" {
         "child.zig",
         &child_path_buffer,
     )];
+    const fake_args = Args{
+        .zig_exe = "zig",
+        .zig_lib_directory = ".",
+        .fix = false,
+        .quiet = false,
+        .max_warnings = null,
+        .include_paths = null,
+        .build_include_paths = null,
+        .filter_paths = null,
+        .exclude_paths = null,
+        .build_exclude_paths = null,
+        .build_compile_units = null,
+        .format = .default,
+        .unknown_args = null,
+        .rules = null,
+        .verbose = false,
+        .help = false,
+        .fix_passes = 20,
+        .mode = .lint,
+    };
 
     var runtime: LintRuntime = .{
         .io = std.testing.io,
         .verbose = false,
+        .args = &fake_args,
         .session_arena = &arena,
         .file_arena = &file_arena,
         .rule_arena = &rule_arena,
@@ -282,6 +303,7 @@ test "resolveFile - root import uses supplied root file id" {
 }
 
 const Ast = std.zig.Ast;
+const Args = @import("../Args.zig");
 const ast = @import("../ast.zig");
 const FileStore = @import("FileStore.zig");
 const LintRuntime = @import("LintRuntime.zig");

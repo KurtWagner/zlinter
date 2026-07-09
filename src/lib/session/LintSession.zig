@@ -174,36 +174,33 @@ const ModuleResolution = struct {
     }
 };
 
-pub fn init(self: *LintContext, lint_build_info: BuildInfo) !void {
+pub fn init(self: *LintContext) !void {
     const zone = tracy.traceNamed(@src(), "LintContext.init");
     defer zone.end();
 
     // Maybe one day we will care enough to use a fake for tests but for now
     // it's fine to ignore...
     self.root_build_config_id = if (!builtin.is_test)
-        try self.initBuildConfig(lint_build_info)
+        try self.initBuildConfig()
     else
         null;
 }
 
-fn initBuildConfig(
-    self: *LintContext,
-    lint_build_info: BuildInfo,
-) !BuildConfigStore.ConfigId {
+fn initBuildConfig(self: *LintContext) !BuildConfigStore.ConfigId {
     const zone = tracy.traceNamed(@src(), "LintContext.initBuildConfig");
     defer zone.end();
 
     const config_id = try self.build_config_store.resolve(".");
 
     const build_config = self.build_config_store.buildConfig(config_id);
-    const compile_units = lint_build_info.compile_units;
-    const auto_kind = if (compile_units == null)
+    const build_compile_units = self.runtime.args.build_compile_units;
+    const auto_kind = if (build_compile_units == null)
         resolveDefaultCompileUnitKind(build_config)
     else
         null;
 
     var matched_compile_units: ?std.bit_set.Dynamic =
-        if (compile_units) |selectors|
+        if (build_compile_units) |selectors|
             try .initEmpty(self.runtime.sessionArena(), selectors.len)
         else
             null;
@@ -219,7 +216,7 @@ fn initBuildConfig(
         const step_name = step.name.slice(build_config);
         const kind = compileUnitKind(compile);
 
-        const should_consume = if (compile_units) |selectors| should_consume: {
+        const should_consume = if (build_compile_units) |selectors| should_consume: {
             const matched = &(matched_compile_units.?);
             break :should_consume compileUnitSelectorsMatch(selectors, step_name, kind, matched);
         } else auto_kind != null and auto_kind.? == kind;
@@ -236,7 +233,7 @@ fn initBuildConfig(
         );
     }
 
-    if (compile_units) |selectors| {
+    if (build_compile_units) |selectors| {
         var it = matched_compile_units.?.iterator(.{ .kind = .unset });
         while (it.next()) |index|
             switch (selectors[index]) {
@@ -301,7 +298,7 @@ fn resolveDefaultCompileUnitKind(build_config: *const std.Build.Configuration) ?
 }
 
 fn compileUnitSelectorsMatch(
-    selectors: []const BuildInfo.CompileUnitSelector,
+    selectors: []const Args.CompileUnitSelector,
     step_name: []const u8,
     kind: CompileUnitKind,
     matched_selectors: *std.bit_set.Dynamic,
@@ -316,7 +313,7 @@ fn compileUnitSelectorsMatch(
 }
 
 fn compileUnitSelectorMatches(
-    selector: BuildInfo.CompileUnitSelector,
+    selector: Args.CompileUnitSelector,
     step_name: []const u8,
     kind: CompileUnitKind,
 ) bool {
@@ -377,7 +374,7 @@ test "compileUnitSelectorsMatch combines selectors with or semantics" {
     var matched = try std.bit_set.Dynamic.initEmpty(std.testing.allocator, 2);
     defer matched.deinit(std.testing.allocator);
 
-    const selectors = [_]BuildInfo.CompileUnitSelector{
+    const selectors = [_]Args.CompileUnitSelector{
         .exe,
         .{ .name = "special_test" },
     };
@@ -3201,8 +3198,8 @@ test "moduleIdsForFile includes shared dependency children" {
 }
 
 const ast = @import("../ast.zig");
+const Args = @import("../Args.zig");
 const BuildConfigStore = @import("BuildConfigStore.zig");
-const BuildInfo = @import("../BuildInfo.zig");
 const builtin = @import("builtin");
 const comments = @import("../comments.zig");
 const CompileContext = @import("CompileContext.zig");

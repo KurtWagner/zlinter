@@ -16,12 +16,8 @@ pub fn main(init: std.process.Init) !u8 {
 
     var stdout_buffer: [1024]u8 = undefined;
     var stderr_buffer: [1024]u8 = undefined;
-    var stdin_buffer: [1024]u8 = undefined;
-
     var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
     var stderr_writer = std.Io.File.stderr().writer(io, &stderr_buffer);
-    var stdin_reader = std.Io.File.stdin().reader(io, &stdin_buffer);
-
     var printer: *zlinter.rendering.Printer = zlinter.rendering.process_printer;
     printer.init(
         &stdout_writer.interface,
@@ -38,7 +34,6 @@ pub fn main(init: std.process.Init) !u8 {
             try init.minimal.args.toSlice(arena.allocator()),
             &lint_builtin.rules,
             gpa,
-            &stdin_reader.interface,
         ) catch |e| switch (e) {
             error.InvalidArgs => {
                 zlinter.Args.printHelp(printer);
@@ -67,7 +62,7 @@ pub fn main(init: std.process.Init) !u8 {
         return ExitCode.usage_error.int();
     }
 
-    var runtime: LintRuntime = .init(io, gpa, args);
+    var runtime: LintRuntime = .init(io, gpa, &args);
     defer runtime.deinit(gpa);
 
     const lint_files = try resolveFilesToLint(&runtime, args);

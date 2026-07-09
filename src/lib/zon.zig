@@ -63,9 +63,30 @@ test "parseFileAlloc" {
     defer file_arena.deinit();
     var rule_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer rule_arena.deinit();
+    const fake_args = Args{
+        .zig_exe = "zig",
+        .zig_lib_directory = ".",
+        .fix = false,
+        .quiet = false,
+        .max_warnings = null,
+        .include_paths = null,
+        .build_include_paths = null,
+        .filter_paths = null,
+        .exclude_paths = null,
+        .build_exclude_paths = null,
+        .build_compile_units = null,
+        .format = .default,
+        .unknown_args = null,
+        .rules = null,
+        .verbose = false,
+        .help = false,
+        .fix_passes = 20,
+        .mode = .lint,
+    };
     const runtime: LintRuntime = .{
         .io = std.testing.io,
         .verbose = false,
+        .args = &fake_args,
         .session_arena = &arena,
         .file_arena = &file_arena,
         .rule_arena = &rule_arena,
@@ -141,6 +162,7 @@ test "parseFileAlloc" {
 }
 
 const session = @import("session.zig");
+const Args = @import("Args.zig");
 const std = @import("std");
 const testing = @import("testing.zig");
 const LintRuntime = session.LintRuntime;

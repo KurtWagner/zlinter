@@ -6,6 +6,8 @@ io: std.Io,
 
 verbose: bool,
 
+args: *const Args,
+
 /// Externally owned slice to zig executable path
 zig_exe: []const u8,
 
@@ -24,7 +26,7 @@ file_arena: *std.heap.ArenaAllocator,
 /// Lives for the execution of a single rule run and fix on a file.
 rule_arena: *std.heap.ArenaAllocator,
 
-pub fn init(io: std.Io, gpa: std.mem.Allocator, args: Args) LintRuntime {
+pub fn init(io: std.Io, gpa: std.mem.Allocator, args: *const Args) LintRuntime {
     const session_arena = oom(gpa.create(std.heap.ArenaAllocator));
     session_arena.* = .init(gpa);
 
@@ -37,6 +39,7 @@ pub fn init(io: std.Io, gpa: std.mem.Allocator, args: Args) LintRuntime {
     return .{
         .io = io,
         .verbose = args.verbose,
+        .args = args,
         .session_arena = session_arena,
         .file_arena = file_arena,
         .rule_arena = rule_arena,
