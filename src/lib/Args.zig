@@ -30,6 +30,12 @@ max_warnings: ?u32,
 /// /// This is populated with the `--include <path>` flag.
 include_paths: ?[][]const u8,
 
+/// Build-provided include paths passed with `--build-include <path>`.
+///
+/// These are internal build configuration values. User `--include` paths
+/// supersede them entirely.
+build_include_paths: ?[][]const u8,
+
 /// Similar to `files` but will be used to filter out files after resolution.
 /// This is populated with the `--filter <path>` flag.
 filter_paths: ?[][]const u8,
@@ -37,6 +43,12 @@ filter_paths: ?[][]const u8,
 /// Exclude these from linting irrespective of how the files were resolved.
 /// This is populated with the `--exclude <path>` flag.
 exclude_paths: ?[][]const u8,
+
+/// Build-provided exclude paths passed with `--build-exclude <path>`.
+///
+/// These are internal build configuration values. User `--include` paths
+/// supersede them entirely.
+build_exclude_paths: ?[][]const u8,
 
 /// The format to print the lint result output in.
 format: enum { default },
@@ -83,6 +95,8 @@ pub fn deinit(self: Args, allocator: std.mem.Allocator) void {
     inline for (&.{
         "exclude_paths",
         "include_paths",
+        "build_include_paths",
+        "build_exclude_paths",
         "filter_paths",
         "unknown_args",
         "rules",
@@ -141,6 +155,14 @@ pub fn allocParse(
     defer exclude_paths.deinit(gpa);
     errdefer for (exclude_paths.items) |p| gpa.free(p);
 
+    var build_include_paths = std.ArrayList([]const u8).empty;
+    defer build_include_paths.deinit(gpa);
+    errdefer for (build_include_paths.items) |p| gpa.free(p);
+
+    var build_exclude_paths = std.ArrayList([]const u8).empty;
+    defer build_exclude_paths.deinit(gpa);
+    errdefer for (build_exclude_paths.items) |p| gpa.free(p);
+
     var filter_paths = std.ArrayList([]const u8).empty;
     defer filter_paths.deinit(gpa);
     errdefer for (filter_paths.items) |p| gpa.free(p);
@@ -165,6 +187,8 @@ pub fn allocParse(
         filter_path_arg,
         include_path_arg,
         exclude_path_arg,
+        build_include_path_arg,
+        build_exclude_path_arg,
         stdin_arg,
         fix_passes_arg,
         max_warnings_arg,
@@ -179,6 +203,8 @@ pub fn allocParse(
         .{ "--rule", .rule_arg },
         .{ "--include", .include_path_arg },
         .{ "--exclude", .exclude_path_arg },
+        .{ "--build-include", .build_include_path_arg },
+        .{ "--build-exclude", .build_exclude_path_arg },
         .{ "--filter", .filter_path_arg },
         .{ "--zig_exe", .zig_exe_arg },
         .{ "--zig_lib_directory", .zig_lib_directory_arg },
@@ -260,6 +286,24 @@ pub fn allocParse(
             }
             try exclude_paths.append(gpa, try gpa.dupe(u8, args[index]));
             continue :state if (index + 1 < args.len and notArgKey(args[index + 1])) State.exclude_path_arg else State.parsing;
+        },
+        .build_include_path_arg => {
+            index += 1;
+            if (index == args.len) {
+                rendering.process_printer.println(.err, "--build-include arg missing paths", .{});
+                return error.InvalidArgs;
+            }
+            try build_include_paths.append(gpa, try gpa.dupe(u8, args[index]));
+            continue :state if (index + 1 < args.len and notArgKey(args[index + 1])) State.build_include_path_arg else State.parsing;
+        },
+        .build_exclude_path_arg => {
+            index += 1;
+            if (index == args.len) {
+                rendering.process_printer.println(.err, "--build-exclude arg missing paths", .{});
+                return error.InvalidArgs;
+            }
+            try build_exclude_paths.append(gpa, try gpa.dupe(u8, args[index]));
+            continue :state if (index + 1 < args.len and notArgKey(args[index + 1])) State.build_exclude_path_arg else State.parsing;
         },
         .filter_path_arg => {
             index += 1;
@@ -389,8 +433,10 @@ pub fn allocParse(
         .quiet = quiet,
         .max_warnings = max_warnings,
         .include_paths = if (include_paths.items.len > 0) try include_paths.toOwnedSlice(gpa) else null,
+        .build_include_paths = if (build_include_paths.items.len > 0) try build_include_paths.toOwnedSlice(gpa) else null,
         .filter_paths = if (filter_paths.items.len > 0) try filter_paths.toOwnedSlice(gpa) else null,
         .exclude_paths = if (exclude_paths.items.len > 0) try exclude_paths.toOwnedSlice(gpa) else null,
+        .build_exclude_paths = if (build_exclude_paths.items.len > 0) try build_exclude_paths.toOwnedSlice(gpa) else null,
         .format = format,
         .unknown_args = if (unknown_args.items.len > 0) try unknown_args.toOwnedSlice(gpa) else null,
         .rules = if (rules.items.len > 0) try rules.toOwnedSlice(gpa) else null,
@@ -629,22 +675,10 @@ test "allocParse with filter files" {
     }
 }
 
-test "allocParse with only exclude_paths" {
-    const bytes =
-        \\.{
-        \\  .exclude_paths = .{"a/b.zig", "./c.zig", "d.zig"},
-        \\}
-    ;
-
-    var backing: std.Io.Writer.Allocating = .init(std.testing.allocator);
-    defer backing.deinit();
-
-    try backing.writer.writeInt(u32, @intCast(bytes.len), .little);
-    try backing.writer.writeAll(bytes);
-
-    var stdin_fbs = std.Io.Reader.fixed(backing.written());
+test "allocParse with only build exclude_paths" {
+    var stdin_fbs = std.Io.Reader.fixed("");
     const args = try allocParse(
-        testing.cliArgs(&.{"--stdin"}),
+        testing.cliArgs(&.{ "--build-exclude", "a/b.zig", "./c.zig", "d.zig" }),
         &.{},
         std.testing.allocator,
         &stdin_fbs,
@@ -652,28 +686,14 @@ test "allocParse with only exclude_paths" {
     defer args.deinit(std.testing.allocator);
 
     try std.testing.expectEqualDeep(testing.expected(.{
-        .build_info = BuildInfo{
-            .exclude_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig", "d.zig" }),
-        },
+        .build_exclude_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig", "d.zig" }),
     }), args);
 }
 
-test "allocParse with only include_paths" {
-    const bytes =
-        \\.{
-        \\  .include_paths = .{"a/b.zig", "./c.zig", "d.zig"},
-        \\}
-    ;
-
-    var backing: std.Io.Writer.Allocating = .init(std.testing.allocator);
-    defer backing.deinit();
-
-    try backing.writer.writeInt(u32, @intCast(bytes.len), .little);
-    try backing.writer.writeAll(bytes);
-
-    var stdin_fbs = std.Io.Reader.fixed(backing.written());
+test "allocParse with only build include_paths" {
+    var stdin_fbs = std.Io.Reader.fixed("");
     const args = try allocParse(
-        testing.cliArgs(&.{"--stdin"}),
+        testing.cliArgs(&.{ "--build-include", "a/b.zig", "./c.zig", "d.zig" }),
         &.{},
         std.testing.allocator,
         &stdin_fbs,
@@ -681,29 +701,14 @@ test "allocParse with only include_paths" {
     defer args.deinit(std.testing.allocator);
 
     try std.testing.expectEqualDeep(testing.expected(.{
-        .build_info = BuildInfo{
-            .include_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig", "d.zig" }),
-        },
+        .build_include_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig", "d.zig" }),
     }), args);
 }
 
-test "allocParse with include_paths and exclude_paths" {
-    const bytes =
-        \\.{
-        \\  .exclude_paths = .{"d.zig"},
-        \\  .include_paths = .{"a/b.zig", "./c.zig"},
-        \\}
-    ;
-
-    var backing: std.Io.Writer.Allocating = .init(std.testing.allocator);
-    defer backing.deinit();
-
-    try backing.writer.writeInt(u32, @intCast(bytes.len), .little);
-    try backing.writer.writeAll(bytes);
-
-    var stdin_fbs = std.Io.Reader.fixed(backing.written());
+test "allocParse with build include_paths and build exclude_paths" {
+    var stdin_fbs = std.Io.Reader.fixed("");
     const args = try allocParse(
-        testing.cliArgs(&.{"--stdin"}),
+        testing.cliArgs(&.{ "--build-include", "a/b.zig", "./c.zig", "--build-exclude", "d.zig" }),
         &.{},
         std.testing.allocator,
         &stdin_fbs,
@@ -711,10 +716,8 @@ test "allocParse with include_paths and exclude_paths" {
     defer args.deinit(std.testing.allocator);
 
     try std.testing.expectEqualDeep(testing.expected(.{
-        .build_info = BuildInfo{
-            .include_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig" }),
-            .exclude_paths = @constCast(&[_][]const u8{"d.zig"}),
-        },
+        .build_include_paths = @constCast(&[_][]const u8{ "a/b.zig", "./c.zig" }),
+        .build_exclude_paths = @constCast(&[_][]const u8{"d.zig"}),
     }), args);
 }
 
@@ -1223,8 +1226,10 @@ const testing = struct {
             .quiet = false,
             .max_warnings = null,
             .include_paths = null,
+            .build_include_paths = null,
             .filter_paths = null,
             .exclude_paths = null,
+            .build_exclude_paths = null,
             .format = .default,
             .unknown_args = null,
             .rules = null,

@@ -13,14 +13,6 @@ pub const CompileUnitSelector = union(enum) {
     name: []const u8,
 };
 
-/// Similar to `Args.include_paths` but is populated by the build runner and
-/// piped into the zlinter execution.
-include_paths: ?[]const []const u8 = null,
-
-/// Similar to `Args.exclude_paths` but is populated by the build runner and
-/// piped into the zlinter execution.
-exclude_paths: ?[]const []const u8 = null,
-
 /// Compile unit selectors whose module/import contexts should be used while
 /// linting. If null, zlinter defaults to executables if present, otherwise
 /// libraries, otherwise objects, otherwise tests.
@@ -29,16 +21,6 @@ compile_units: ?[]const CompileUnitSelector = null,
 pub const default: BuildInfo = .{};
 
 pub fn deinit(self: BuildInfo, gpa: std.mem.Allocator) void {
-    if (self.exclude_paths) |paths| {
-        for (paths) |p| gpa.free(p);
-        gpa.free(paths);
-    }
-
-    if (self.include_paths) |paths| {
-        for (paths) |p| gpa.free(p);
-        gpa.free(paths);
-    }
-
     if (self.compile_units) |selectors| {
         for (selectors) |selector|
             switch (selector) {

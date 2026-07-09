@@ -605,10 +605,8 @@ fn buildStep(
 
     if (b.graph.verbose) run.addArg("--verbose");
 
-    // TODO: #149 - we may want to separate "build config" include and exclude
-    // from runtime include and exclude to reflect the previous BuildInfo logic
     if (include.len > 0) {
-        run.addArg("--include");
+        run.addArg("--build-include");
         for (include) |source|
             switch (source) {
                 .file_path => |path| run.addFileArg(path),
@@ -617,7 +615,7 @@ fn buildStep(
     }
 
     if (exclude.len > 0) {
-        run.addArg("--exclude");
+        run.addArg("--build-exclude");
         for (exclude) |source|
             switch (source) {
                 .file_path => |path| run.addFileArg(path),
@@ -631,11 +629,6 @@ fn buildStep(
 
     buff.writer.writeInt(u32, 0, .little) catch @panic("stdin write failed");
     std.zon.stringify.serialize(BuildInfo{
-        // TODO: #149 - decide whether we want this to hang around for anything
-        // ideally we use addFileArg and addDirectoryArg so that the build
-        // dependency graph is correct.
-        .include_paths = null,
-        .exclude_paths = null,
         .compile_units = compile_units,
     }, .{}, &buff.writer) catch @panic("Invalid build info");
 
