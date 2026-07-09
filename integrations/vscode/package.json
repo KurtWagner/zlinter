@@ -1,0 +1,58 @@
+{
+    "name": "zlinter",
+    "displayName": "zlinter",
+    "description": "Display lint diagnostics when viewing zig source files",
+    "version": "0.0.1",
+    "private": true,
+    "publisher": "zlinter",
+    "engines": {
+        "vscode": "^1.90.0"
+    },
+    "main": "./out/extension.js",
+    "activationEvents": [
+        "onLanguage:zig"
+    ],
+    "scripts": {
+        "compile": "tsc -p .",
+        "watch": "tsc -w -p ."
+    },
+    "contributes": {
+        "configuration": {
+            "title": "zlinter",
+            "properties": {
+                "zlinter.serverCommand": {
+                    "type": "string",
+                    "default": "zig",
+                    "description": "Command used to launch zlinter's LSP mode."
+                },
+                "zlinter.serverArgs": {
+                    "type": "array",
+                    "default": [
+                        "build",
+                        "lint",
+                        "--",
+                        "--mode",
+                        "lsp"
+                    ],
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Arguments passed to the zlinter LSP command."
+                },
+                "zlinter.projectRootOverride": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Optional directory to use instead of discovering the nearest lint-capable Zig project for each file."
+                }
+            }
+        }
+    },
+    "devDependencies": {
+        "@types/node": "^20.14.12",
+        "@types/vscode": "^1.90.0",
+        "typescript": "^5.5.4"
+    },
+    "dependencies": {
+        "vscode-languageclient": "^9.0.0"
+    }
+}
