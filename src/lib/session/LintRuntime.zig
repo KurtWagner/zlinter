@@ -6,6 +6,9 @@ io: std.Io,
 
 verbose: bool,
 
+// TODO: Decide whether we still want to reference things like verbosity
+// and zig exe / stdlib dir information at the top level of the runtime
+// structure or whether args should be used... perhaps getters should be added?
 args: *const Args,
 
 /// Externally owned slice to zig executable path
