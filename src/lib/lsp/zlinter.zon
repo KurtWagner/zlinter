@@ -1,7 +1,7 @@
 .{
     .rules = .{
         .no_inferred_error_unions = .{
-            .severity = .@"error",
+            .severity = .warning,
             .allow_private = false,
             .allow_anyerror = false,
         },

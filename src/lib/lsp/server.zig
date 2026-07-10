@@ -1,17 +1,9 @@
 const LspError = struct {
-    code: JsonRpcErrorCode,
+    code: LspResponse.JsonRpcErrorCode,
     /// Optional id from the request to include in the response
-    id: ?std.json.Value = null,
+    id: ?LspRequest.Id = null,
     /// Optional explicit message otherwise will default to a name for the code
     message: ?[]const u8 = null,
-};
-
-const JsonRpcErrorCode = enum(i32) {
-    parse_error = -32700,
-    invalid_request = -32600,
-    method_not_found = -32601,
-    invalid_params = -32602,
-    internal_error = -32603,
 };
 
 const LspState = enum {
@@ -45,7 +37,6 @@ pub const LspServer = struct {
 
     pub fn run(self: *LspServer) error{ WriteFailed, LspError, OutOfMemory }!void {
         // TODO: Add some keep alive / tll logic?
-
         defer _ = self.handle_arena.reset(.free_all);
 
         var err: LspError = undefined;
@@ -53,7 +44,7 @@ pub const LspServer = struct {
         reading: while (state == .running) {
             defer _ = self.handle_arena.reset(.retain_capacity);
 
-            const body = self.readMessage(
+            const body = self.readBody(
                 self.handle_arena.allocator(),
                 &err,
             ) catch |e| {
@@ -67,7 +58,7 @@ pub const LspServer = struct {
                 continue :reading;
             };
 
-            state = self.handleMessage(
+            state = self.handleBody(
                 body,
                 &err,
             ) catch |e| {
@@ -80,7 +71,7 @@ pub const LspServer = struct {
         }
     }
 
-    fn readMessage(
+    fn readBody(
         self: *LspServer,
         arena: std.mem.Allocator,
         err: *LspError,
@@ -95,7 +86,7 @@ pub const LspServer = struct {
                     error.StreamTooLong => {}, // TODO: Usage error
                 }
                 err.* = .{
-                    .code = JsonRpcErrorCode.invalid_request,
+                    .code = .invalid_request,
                     .message = self.tryDupe("Failed to read headers"),
                 };
                 return error.LspError;
@@ -114,7 +105,7 @@ pub const LspServer = struct {
                 );
                 content_length = std.fmt.parseInt(u32, value, 10) catch {
                     err.* = .{
-                        .code = JsonRpcErrorCode.invalid_request,
+                        .code = .invalid_request,
                         .message = self.tryDupe("Failed to parse content length"),
                     };
                     return error.LspError;
@@ -124,14 +115,14 @@ pub const LspServer = struct {
 
         const len = content_length orelse {
             err.* = .{
-                .code = JsonRpcErrorCode.invalid_request,
+                .code = .invalid_request,
                 .message = self.tryDupe("Missing content length header"),
             };
             return error.LspError;
         };
         const body = arena.alloc(u8, len) catch {
             err.* = .{
-                .code = JsonRpcErrorCode.internal_error,
+                .code = .internal_error,
                 .message = self.tryDupe("Out of memory"),
             };
             return error.OutOfMemory;
@@ -140,11 +131,11 @@ pub const LspServer = struct {
         self.reader.readSliceAll(body) catch |e| {
             switch (e) {
                 error.EndOfStream => err.* = .{
-                    .code = JsonRpcErrorCode.invalid_request,
+                    .code = .invalid_request,
                     .message = self.tryDupe("Body was incomplete"),
                 },
                 error.ReadFailed => err.* = .{
-                    .code = JsonRpcErrorCode.internal_error,
+                    .code = .internal_error,
                     .message = self.tryDupe("Failed to ready the body"),
                 },
             }
@@ -154,7 +145,7 @@ pub const LspServer = struct {
         return body;
     }
 
-    fn handleMessage(
+    fn handleBody(
         self: *LspServer,
         body: []const u8,
         err: *LspError,
@@ -183,7 +174,6 @@ pub const LspServer = struct {
             );
         } else |_| {}
 
-        // else assume notification that we don't handle, ignore.
         return .running;
     }
 
@@ -192,21 +182,25 @@ pub const LspServer = struct {
         request: LspRequest,
         err: *LspError,
     ) error{ LspError, OutOfMemory }!LspState {
-        const id = switch (request.id) {
-            .integer => |value| std.json.Value{ .integer = value },
-            .string => |value| std.json.Value{ .string = value },
-        };
-
         switch (request.method_params) {
-            .initialize => try self.sendInitializeResponse(id, err),
+            .initialize => try self.sendInitializeResponse(request.id, err),
             .shutdown => {
-                try self.sendResponse(id, .null, err);
+                self.sendResponse(.{
+                    .payload = .{
+                        .result = .{
+                            .id = request.id,
+                            .value = .shutdown,
+                        },
+                    },
+                }, err) catch {
+                    // If we fail to acknowledge the shutdown we still want to stop.
+                };
                 return .stopping;
             },
             .unknown => {
                 err.* = .{
                     .code = .method_not_found,
-                    .id = id,
+                    .id = request.id,
                     .message = self.tryDupe("zlinter does not handle that method"),
                 };
                 return error.LspError;
@@ -223,170 +217,106 @@ pub const LspServer = struct {
         switch (notification.method_params) {
             .initialized => {},
             .exit => return .stopping,
-            .@"textDocument/didOpen" => |value| {
-                try self.publishEmptyDiagnostics(value.text_document.uri, err);
-            },
-            .@"textDocument/didClose" => |value| {
-                try self.publishEmptyDiagnostics(value.text_document.uri, err);
-            },
-            .@"textDocument/didChange" => |value| {
-                try self.publishEmptyDiagnostics(value.text_document.uri, err);
-            },
-            .@"textDocument/didSave" => |value| {
-                try self.publishEmptyDiagnostics(value.text_document.uri, err);
-            },
+            .@"textDocument/didOpen" => |value| try self.publishDiagnostics(
+                value.text_document.uri,
+                err,
+            ),
+            .@"textDocument/didClose" => |value| try self.publishDiagnostics(
+                value.text_document.uri,
+                err,
+            ),
+            .@"textDocument/didChange" => |value| try self.publishDiagnostics(
+                value.text_document.uri,
+                err,
+            ),
+            .@"textDocument/didSave" => |value| try self.publishDiagnostics(
+                value.text_document.uri,
+                err,
+            ),
         }
         return .running;
     }
 
     fn sendInitializeResponse(
         self: *LspServer,
-        id: std.json.Value,
+        id: LspRequest.Id,
         err: *LspError,
     ) error{ LspError, OutOfMemory }!void {
-        // change = 1 = full (not incremental)
-        const arena = self.handle_arena.allocator();
-
-        var text_document_sync: std.json.ObjectMap = .empty;
-        try text_document_sync.put(arena, "openClose", .{ .bool = true });
-        try text_document_sync.put(arena, "change", .{ .integer = 1 });
-        try text_document_sync.put(arena, "save", .{ .bool = true });
-
-        var capabilities: std.json.ObjectMap = .empty;
-        try capabilities.put(arena, "textDocumentSync", .{ .object = text_document_sync });
-        try capabilities.put(arena, "codeActionProvider", .{ .bool = false });
-
-        var server_info: std.json.ObjectMap = .empty;
-        try server_info.put(arena, "name", .{ .string = "zlinter" });
-        // TODO: Put zlinter version in the server info...
-        try server_info.put(arena, "version", .{ .string = "0.0.0" });
-
-        var result_obj: std.json.ObjectMap = .empty;
-        try result_obj.put(arena, "capabilities", .{ .object = capabilities });
-        try result_obj.put(arena, "serverInfo", .{ .object = server_info });
-
-        const result: std.json.Value = .{ .object = result_obj };
-
-        try self.sendResponse(id, result, err);
+        try self.sendResponse(.{
+            .payload = .{
+                .result = .{
+                    .id = id,
+                    .value = .{
+                        .initialize = .{
+                            .capabilities = .{
+                                .textDocumentSync = .{
+                                    .openClose = true,
+                                    .change = 1,
+                                    .save = true,
+                                },
+                                .codeActionProvider = false,
+                            },
+                            .serverInfo = .{
+                                .name = "zlinter",
+                                .version = "0.0.0",
+                            },
+                        },
+                    },
+                },
+            },
+        }, err);
     }
 
-    fn publishEmptyDiagnostics(
+    fn publishDiagnostics(
         self: *LspServer,
         uri: std.Uri,
         err: *LspError,
     ) error{ LspError, OutOfMemory }!void {
-        const body = try std.json.Stringify.valueAlloc(
-            self.handle_arena.allocator(),
-            LspResponse{
-                .method_params = .{
+        // TODO: Actualluy lint and publish...
+        try self.sendResponse(.{
+            .payload = .{
+                .notification = .{
                     .@"textDocument/publishDiagnostics" = .{
                         .uri = uri,
                         .diagnostics = &.{},
                     },
                 },
             },
-            .{},
-        );
-        try self.writeMessage(body, err);
-    }
-
-    fn sendResponse(
-        self: *LspServer,
-        id: std.json.Value,
-        result: std.json.Value,
-        err: *LspError,
-    ) error{ LspError, OutOfMemory }!void {
-        const arena = self.handle_arena.allocator();
-
-        var root_json_obj: std.json.ObjectMap = .empty;
-        try root_json_obj.put(
-            arena,
-            "jsonrpc",
-            .{ .string = "2.0" },
-        );
-        try root_json_obj.put(
-            arena,
-            "id",
-            id,
-        );
-
-        try root_json_obj.put(
-            arena,
-            "result",
-            result,
-        );
-
-        const body = try std.json.Stringify.valueAlloc(
-            arena,
-            std.json.Value{
-                .object = root_json_obj,
-            },
-            .{},
-        );
-        if (builtin.is_test)
-            std.log.info("LSP Error: {s}", .{body});
-
-        try self.writeMessage(body, err);
+        }, err);
     }
 
     fn sendError(
         self: *LspServer,
         err: LspError,
     ) error{ WriteFailed, LspError, OutOfMemory }!void {
-        const arena = self.handle_arena.allocator();
-
-        var root_json_obj: std.json.ObjectMap = .empty;
-        try root_json_obj.put(
-            arena,
-            "jsonrpc",
-            .{ .string = "2.0" },
-        );
-        if (err.id) |id| {
-            try root_json_obj.put(
-                arena,
-                "id",
-                id,
-            );
-        }
-
-        var err_json_obj: std.json.ObjectMap = .empty;
-        try err_json_obj.put(
-            arena,
-            "code",
-            .{ .integer = @intFromEnum(err.code) },
-        );
-        try err_json_obj.put(
-            arena,
-            "message",
-            .{
-                .string = err.message orelse switch (err.code) {
-                    .parse_error => "Parse error",
-                    .invalid_request => "Invalid request",
-                    .method_not_found => "Method not found",
-                    .invalid_params => "Invalid params",
-                    .internal_error => "Internal error",
+        try self.sendResponse(.{
+            .payload = .{
+                .@"error" = .{
+                    .id = err.id,
+                    .code = err.code,
+                    .message = err.message orelse switch (err.code) {
+                        .parse_error => "Parse error",
+                        .invalid_request => "Invalid request",
+                        .method_not_found => "Method not found",
+                        .invalid_params => "Invalid params",
+                        .internal_error => "Internal error",
+                    },
                 },
             },
-        );
-        try root_json_obj.put(
-            arena,
-            "error",
-            .{
-                .object = err_json_obj,
-            },
-        );
+        }, null);
+    }
 
+    fn sendResponse(
+        self: *LspServer,
+        response: LspResponse,
+        err: ?*LspError,
+    ) error{ LspError, OutOfMemory }!void {
         const body = try std.json.Stringify.valueAlloc(
-            arena,
-            std.json.Value{
-                .object = root_json_obj,
-            },
+            self.handle_arena.allocator(),
+            response,
             .{},
         );
-        if (builtin.is_test)
-            std.log.info("LSP Error: {s}", .{body});
-
-        try self.writeMessage(body, null);
+        try self.writeMessage(body, err);
     }
 
     fn writeMessage(self: *LspServer, body: []const u8, err: ?*LspError) error{ LspError, OutOfMemory }!void {

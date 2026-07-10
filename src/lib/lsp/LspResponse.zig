@@ -1,6 +1,36 @@
 const LspResponse = @This();
 
-method_params: MethodParams,
+payload: Payload,
+
+pub const JsonRpcErrorCode = enum(i32) {
+    parse_error = -32700,
+    invalid_request = -32600,
+    method_not_found = -32601,
+    invalid_params = -32602,
+    internal_error = -32603,
+};
+
+pub const ErrorPayload = struct {
+    id: ?LspRequest.Id = null,
+    code: JsonRpcErrorCode,
+    message: []const u8,
+};
+
+const Payload = union(enum) {
+    notification: MethodParams,
+    result: Result,
+    @"error": ErrorPayload,
+};
+
+pub const Result = struct {
+    id: LspRequest.Id,
+    value: ResultValue,
+};
+
+const ResultValue = union(enum) {
+    initialize: InitializeResult,
+    shutdown: void,
+};
 
 // zlinter-disable field_naming - we don't control the method names
 const Method = enum {
@@ -29,6 +59,27 @@ const PublishDiagnosticsParams = struct {
 
         try jws.endObject();
     }
+};
+
+const InitializeResult = struct {
+    capabilities: Capabilities,
+    serverInfo: ServerInfo,
+};
+
+const Capabilities = struct {
+    textDocumentSync: TextDocumentSync,
+    codeActionProvider: bool,
+};
+
+const TextDocumentSync = struct {
+    openClose: bool,
+    change: u8,
+    save: bool,
+};
+
+const ServerInfo = struct {
+    name: []const u8,
+    version: []const u8,
 };
 
 /// Diagnostic (lint result) returned by LSP
@@ -106,15 +157,53 @@ pub fn jsonStringify(self: @This(), jws: anytype) !void {
     try jws.objectField("jsonrpc");
     try jws.write("2.0");
 
-    try jws.objectField("method");
-    try jws.write(@tagName(std.meta.activeTag(self.method_params)));
+    switch (self.payload) {
+        .notification => |method_params| {
+            try jws.objectField("method");
+            try jws.write(@tagName(std.meta.activeTag(method_params)));
 
-    try jws.objectField("params");
-    switch (self.method_params) {
-        inline else => |payload| try jws.write(payload),
+            try jws.objectField("params");
+            switch (method_params) {
+                inline else => |payload| try jws.write(payload),
+            }
+        },
+        .result => |result| {
+            try jws.objectField("id");
+            try jsonStringifyId(result.id, jws);
+
+            try jws.objectField("result");
+            switch (result.value) {
+                .initialize => |value| try jws.write(value),
+                .shutdown => try jws.write(null),
+            }
+        },
+        .@"error" => |error_payload| {
+            if (error_payload.id) |id| {
+                try jws.objectField("id");
+                try jsonStringifyId(id, jws);
+            }
+
+            try jws.objectField("error");
+            try jws.beginObject();
+
+            try jws.objectField("code");
+            try jws.write(@intFromEnum(error_payload.code));
+
+            try jws.objectField("message");
+            try jws.write(error_payload.message);
+
+            try jws.endObject();
+        },
     }
 
     try jws.endObject();
+}
+
+fn jsonStringifyId(id: LspRequest.Id, jws: anytype) !void {
+    switch (id) {
+        .integer => |value| try jws.write(value),
+        .string => |value| try jws.write(value),
+    }
 }
 
 fn jsonStringifyUri(uri: std.Uri, jws: anytype) !void {
@@ -147,24 +236,26 @@ fn jsonStringifyUri(uri: std.Uri, jws: anytype) !void {
 
 test "textDocument/publishDiagnostics json" {
     const response: LspResponse = .{
-        .method_params = .{
-            .@"textDocument/publishDiagnostics" = .{
-                .uri = try std.Uri.parse("file://fake/file.zig"),
-                .diagnostics = &.{
-                    .{
-                        .range = .{
-                            .start = .{
-                                .line = 1,
-                                .character = 3,
+        .payload = .{
+            .notification = .{
+                .@"textDocument/publishDiagnostics" = .{
+                    .uri = try std.Uri.parse("file://fake/file.zig"),
+                    .diagnostics = &.{
+                        .{
+                            .range = .{
+                                .start = .{
+                                    .line = 1,
+                                    .character = 3,
+                                },
+                                .end = .{
+                                    .line = 2,
+                                    .character = 4,
+                                },
                             },
-                            .end = .{
-                                .line = 2,
-                                .character = 4,
-                            },
+                            .severity = .warning,
+                            .code = "no_deprecated",
+                            .message = "field `a` is deprecated, use `b` instead",
                         },
-                        .severity = .warning,
-                        .code = "no_deprecated",
-                        .message = "field `a` is deprecated, use `b` instead",
                     },
                 },
             },
@@ -220,6 +311,74 @@ test "textDocument/publishDiagnostics json" {
     };
 }
 
+test "initialize response json" {
+    const response: LspResponse = .{
+        .payload = .{
+            .result = .{
+                .id = .{ .integer = 1 },
+                .value = .{
+                    .initialize = .{
+                        .capabilities = .{
+                            .textDocumentSync = .{
+                                .openClose = true,
+                                .change = 1,
+                                .save = true,
+                            },
+                            .codeActionProvider = false,
+                        },
+                        .serverInfo = .{
+                            .name = "zlinter",
+                            .version = "0.0.0",
+                        },
+                    },
+                },
+            },
+        },
+    };
+
+    const actual = try std.json.Stringify.valueAlloc(
+        std.testing.allocator,
+        response,
+        .{},
+    );
+    defer std.testing.allocator.free(actual);
+    const expected =
+        \\{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"textDocumentSync":{"openClose":true,"change":1,"save":true},"codeActionProvider":false},"serverInfo":{"name":"zlinter","version":"0.0.0"}}}
+    ;
+
+    try testing.expectJsonEqual(
+        expected,
+        actual,
+    );
+}
+
+test "error response json" {
+    const response: LspResponse = .{
+        .payload = .{
+            .@"error" = .{
+                .id = .{ .string = "bad-request" },
+                .code = .invalid_request,
+                .message = "Invalid request",
+            },
+        },
+    };
+
+    const actual = try std.json.Stringify.valueAlloc(
+        std.testing.allocator,
+        response,
+        .{},
+    );
+    defer std.testing.allocator.free(actual);
+    const expected =
+        \\{"jsonrpc":"2.0","id":"bad-request","error":{"code":-32600,"message":"Invalid request"}}
+    ;
+
+    try testing.expectJsonEqual(
+        expected,
+        actual,
+    );
+}
+
 test {
     std.testing.refAllDecls(@This());
 }
@@ -229,3 +388,4 @@ const std = @import("std");
 const FileId = @import("../session/FileStore.zig").FileId;
 const FileStore = @import("../session/FileStore.zig");
 const LintProblem = @import("../results.zig").LintProblem;
+const LspRequest = @import("LspRequest.zig");
