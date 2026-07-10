@@ -243,6 +243,10 @@ fn cacheResolvedConfigPaths(
     }
 }
 
+test {
+    std.testing.refAllDecls(@This());
+}
+
 const files = @import("../files.zig");
 const LintRuntime = @import("LintRuntime.zig");
 const std = @import("std");
