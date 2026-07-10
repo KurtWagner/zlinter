@@ -17,6 +17,7 @@ pub const LspServer = struct {
     reader: *std.Io.Reader,
     writer: *std.Io.Writer,
     rules: []const LintRule,
+    lint_config_store: LintConfigStore,
 
     /// Arena that lives the duration of every message being handled.
     handle_arena: *std.heap.ArenaAllocator,
@@ -27,6 +28,7 @@ pub const LspServer = struct {
         reader: *std.Io.Reader,
         writer: *std.Io.Writer,
         rules: []const LintRule,
+        lint_config_store: LintConfigStore,
     ) LspServer {
         return .{
             .runtime = runtime,
@@ -35,6 +37,7 @@ pub const LspServer = struct {
             .writer = writer,
             .handle_arena = runtime.file_arena,
             .rules = rules,
+            .lint_config_store = lint_config_store,
         };
     }
 
@@ -282,13 +285,25 @@ pub const LspServer = struct {
             if (self.session.file_store.resolve(abs_path)) |file_id| {
                 var doc: LintDocument = undefined;
                 if (self.session.initDocument(file_id, self.handle_arena.allocator(), &doc)) {
-                    rules: for (self.rules) |rule| {
+                    self.lint_config_store.index(
+                        self.runtime.io,
+                        // TODO: We need to think about how we refresh this whemn files change
+                        self.runtime.sessionArena(),
+                        std.Io.Dir.path.dirname(abs_path).?,
+                        std.Io.Dir.cwd(),
+                    ) catch {};
+
+                    rules: for (self.rules, 0..) |rule, i| {
+                        const rule_idx: RuleIndex = @enumFromInt(i);
                         if (rule.run(
                             rule,
                             self.session,
                             &doc,
                             .{
-                                // TODO: Use LintConfigStore ehre for config
+                                .config = self.lint_config_store.lookup(
+                                    std.Io.Dir.path.dirname(abs_path).?,
+                                    rule_idx,
+                                ),
                             },
                         )) |result| {
                             const r = result orelse continue :rules;
@@ -397,6 +412,8 @@ test {
     var stdout: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer stdout.deinit();
 
+    var noop_config_store: NoopLintConfigStore = .init;
+
     var session = testing.initFakeContext(arena.allocator(), std.testing.io);
     var server: LspServer = .init(
         session.runtime,
@@ -404,6 +421,7 @@ test {
         &stdin,
         &stdout.writer,
         &.{},
+        noop_config_store.store(),
     );
     try server.run();
 
@@ -440,6 +458,8 @@ test "didOpen publishes valid empty diagnostics json" {
     var stdout: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer stdout.deinit();
 
+    var noop_config_store: NoopLintConfigStore = .init;
+
     var session = testing.initFakeContext(arena.allocator(), std.testing.io);
     var server: LspServer = .init(
         session.runtime,
@@ -447,6 +467,7 @@ test "didOpen publishes valid empty diagnostics json" {
         &stdin,
         &stdout.writer,
         &.{},
+        noop_config_store.store(),
     );
     try server.run();
 
@@ -470,4 +491,7 @@ const LspRequest = @import("LspRequest.zig");
 const fileUriToAbsPath = @import("../files.zig").fileUriToAbsPath;
 const FileStore = @import("../session/FileStore.zig");
 const LintRule = @import("../rules.zig").LintRule;
+const RuleIndex = @import("../rules.zig").RuleIndex;
 const LintDocument = @import("../session/LintDocument.zig");
+const LintConfigStore = @import("../session/LintConfigStore.zig");
+const NoopLintConfigStore = @import("../session/NoopLintConfigStore.zig");

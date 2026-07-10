@@ -13,6 +13,12 @@ pub fn run(
     var stdout_buf: [8 * 1024]u8 = undefined;
     var stdout = std.Io.File.stdout().writer(runtime.io, &stdout_buf);
 
+    var cli_lint_config_store: CliLintConfigStore = .init(
+        runtime.sessionArena(),
+        lint_builtin.rule_configs[0..],
+        lint_builtin.rules[0..],
+    );
+
     var session: zlinter.session.LintSession = .{
         .runtime = runtime,
         .file_store = .init(runtime),
@@ -29,6 +35,7 @@ pub fn run(
         &stdin.interface,
         &stdout.interface,
         lint_builtin.rules[0..],
+        cli_lint_config_store.store(),
     );
     try server.run();
     return ExitCode.success;
@@ -38,7 +45,7 @@ const std = @import("std");
 const zlinter = @import("zlinter");
 const ExitCode = @import("../common.zig").ExitCode;
 const lint_builtin = @import("lint_builtin");
-const LintConfigStore = @import("../common/LintConfigStore.zig");
+const CliLintConfigStore = @import("../common/CliLintConfigStore.zig");
 
 const Ast = std.zig.Ast;
 const oom = zlinter.allocations.oom;
