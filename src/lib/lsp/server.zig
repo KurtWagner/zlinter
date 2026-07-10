@@ -16,6 +16,7 @@ pub const LspServer = struct {
     session: *LintSession,
     reader: *std.Io.Reader,
     writer: *std.Io.Writer,
+    rules: []const LintRule,
 
     /// Arena that lives the duration of every message being handled.
     handle_arena: *std.heap.ArenaAllocator,
@@ -25,6 +26,7 @@ pub const LspServer = struct {
         session: *LintSession,
         reader: *std.Io.Reader,
         writer: *std.Io.Writer,
+        rules: []const LintRule,
     ) LspServer {
         return .{
             .runtime = runtime,
@@ -32,6 +34,7 @@ pub const LspServer = struct {
             .reader = reader,
             .writer = writer,
             .handle_arena = runtime.file_arena,
+            .rules = rules,
         };
     }
 
@@ -272,13 +275,44 @@ pub const LspServer = struct {
         uri: std.Uri,
         err: *LspError,
     ) error{ LspError, OutOfMemory }!void {
-        // TODO: Actualluy lint and publish...
+        var diagnostics: std.ArrayList(LspResponse.LspDiagnostic) = .empty;
+
+        // TODO: Cleanup up this trash, just getting something working
+        if (fileUriToAbsPath(self.handle_arena.allocator(), uri)) |abs_path|
+            if (self.session.file_store.resolve(abs_path)) |file_id| {
+                var doc: LintDocument = undefined;
+                if (self.session.initDocument(file_id, self.handle_arena.allocator(), &doc)) {
+                    rules: for (self.rules) |rule| {
+                        if (rule.run(
+                            rule,
+                            self.session,
+                            &doc,
+                            .{
+                                // TODO: Use LintConfigStore ehre for config
+                            },
+                        )) |result| {
+                            const r = result orelse continue :rules;
+                            for (r.problems) |problem|
+                                diagnostics.append(
+                                    self.handle_arena.allocator(),
+                                    .initFromProblem(
+                                        problem,
+                                        &self.session.file_store,
+                                        file_id,
+                                        self.handle_arena.allocator(),
+                                    ),
+                                ) catch {};
+                        } else |_| {}
+                    }
+                } else |_| {}
+            } else |_| {};
+
         try self.sendResponse(.{
             .payload = .{
                 .notification = .{
                     .@"textDocument/publishDiagnostics" = .{
                         .uri = uri,
-                        .diagnostics = &.{},
+                        .diagnostics = diagnostics.items,
                     },
                 },
             },
@@ -369,6 +403,7 @@ test {
         &session,
         &stdin,
         &stdout.writer,
+        &.{},
     );
     try server.run();
 
@@ -411,6 +446,7 @@ test "didOpen publishes valid empty diagnostics json" {
         &session,
         &stdin,
         &stdout.writer,
+        &.{},
     );
     try server.run();
 
@@ -431,3 +467,7 @@ const LintRuntime = @import("../session/LintRuntime.zig");
 const testing = @import("../testing.zig");
 const LspNotification = @import("LspNotification.zig");
 const LspRequest = @import("LspRequest.zig");
+const fileUriToAbsPath = @import("../files.zig").fileUriToAbsPath;
+const FileStore = @import("../session/FileStore.zig");
+const LintRule = @import("../rules.zig").LintRule;
+const LintDocument = @import("../session/LintDocument.zig");

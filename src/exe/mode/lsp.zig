@@ -28,6 +28,7 @@ pub fn run(
         &session,
         &stdin.interface,
         &stdout.interface,
+        lint_builtin.rules[0..],
     );
     try server.run();
     return ExitCode.success;

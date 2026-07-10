@@ -121,7 +121,7 @@ pub const LspDiagnostic = struct {
         file_store: *const FileStore,
         file_id: FileId,
         arena: std.mem.Allocator,
-    ) error{OutOfMemory}!?LspDiagnostic {
+    ) LspDiagnostic {
         const range = file_store.fileRange(
             file_id,
             problem.start.byte_offset,
@@ -129,10 +129,10 @@ pub const LspDiagnostic = struct {
         );
 
         return .{
-            .code = try arena.dupe(u8, problem.rule_id),
-            .message = try arena.dupe(u8, problem.message),
+            .code = arena.dupe(u8, problem.rule_id) catch @panic("OOM"),
+            .message = arena.dupe(u8, problem.message) catch @panic("OOM"),
             .severity = switch (problem.severity) {
-                .off => return null,
+                .off => unreachable,
                 .warning => .warning,
                 .@"error" => .@"error",
             },
