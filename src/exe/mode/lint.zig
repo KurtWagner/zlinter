@@ -245,58 +245,6 @@ fn runLinterRules(
     }
 }
 
-fn sameProblem(
-    lhs: zlinter.results.LintProblem,
-    rhs: zlinter.results.LintProblem,
-) bool {
-    return std.mem.eql(u8, lhs.rule_id, rhs.rule_id) and
-        lhs.severity == rhs.severity and
-        lhs.start.byte_offset == rhs.start.byte_offset and
-        lhs.end.byte_offset == rhs.end.byte_offset and
-        std.mem.eql(u8, lhs.message, rhs.message) and
-        sameProblemNotes(lhs.notes, rhs.notes);
-}
-
-fn sameProblemNotes(
-    lhs: ?[]zlinter.results.LintProblemNote,
-    rhs: ?[]zlinter.results.LintProblemNote,
-) bool {
-    if (lhs == null and rhs == null) return true;
-    const lhs_notes = lhs orelse return false;
-    const rhs_notes = rhs orelse return false;
-    if (lhs_notes.len != rhs_notes.len) return false;
-
-    for (lhs_notes, rhs_notes) |lhs_note, rhs_note| {
-        if (lhs_note.file_id != rhs_note.file_id) return false;
-        if (lhs_note.start.byte_offset != rhs_note.start.byte_offset) return false;
-        if (lhs_note.end.byte_offset != rhs_note.end.byte_offset) return false;
-        if (lhs_note.line != rhs_note.line) return false;
-        if (lhs_note.column != rhs_note.column) return false;
-        if (!std.mem.eql(u8, lhs_note.message, rhs_note.message)) return false;
-    }
-
-    return true;
-}
-
-fn containsProblem(
-    results: []const zlinter.results.LintResult,
-    problem: zlinter.results.LintProblem,
-) bool {
-    for (results) |result|
-        for (result.problems) |existing_problem|
-            if (sameProblem(existing_problem, problem)) return true;
-    return false;
-}
-
-fn containsProblemInSlice(
-    problems: []const zlinter.results.LintProblem,
-    problem: zlinter.results.LintProblem,
-) bool {
-    for (problems) |existing_problem|
-        if (sameProblem(existing_problem, problem)) return true;
-    return false;
-}
-
 fn appendDedupedResult(
     session_arena: std.mem.Allocator,
     results: *std.ArrayList(zlinter.results.LintResult),
@@ -309,8 +257,8 @@ fn appendDedupedResult(
         var deduped_problem = problem;
         deduped_problem.disabled_by_comment = doc.shouldSkipProblem(deduped_problem);
 
-        if (containsProblem(results.items, deduped_problem)) continue;
-        if (containsProblemInSlice(deduped_problems.items, deduped_problem)) continue;
+        if (containsEquivalentProblem(results.items, deduped_problem)) continue;
+        if (containsEquivalentProblemInSlice(deduped_problems.items, deduped_problem)) continue;
 
         oom(deduped_problems.append(session_arena, deduped_problem));
     }
@@ -321,6 +269,24 @@ fn appendDedupedResult(
         .file_id = result.file_id,
         .problems = oom(deduped_problems.toOwnedSlice(session_arena)),
     }));
+}
+
+fn containsEquivalentProblem(
+    results: []const zlinter.results.LintResult,
+    problem: zlinter.results.LintProblem,
+) bool {
+    for (results) |result| for (result.problems) |existing_problem|
+        if (existing_problem.isEquivalent(problem)) return true;
+    return false;
+}
+
+fn containsEquivalentProblemInSlice(
+    problems: []const zlinter.results.LintProblem,
+    problem: zlinter.results.LintProblem,
+) bool {
+    for (problems) |existing_problem|
+        if (existing_problem.isEquivalent(problem)) return true;
+    return false;
 }
 
 fn runFormatter(

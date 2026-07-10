@@ -273,6 +273,34 @@ pub const LintProblem = struct {
         return source[self.start.byte_offset .. self.end.byte_offset + 1];
     }
 
+    /// Used when deduping problems across compiled units (not as strict as equals)
+    pub fn isEquivalent(a: LintProblem, b: LintProblem) bool {
+        return std.mem.eql(u8, a.rule_id, b.rule_id) and
+            a.severity == b.severity and
+            a.start.byte_offset == b.start.byte_offset and
+            a.end.byte_offset == b.end.byte_offset and
+            std.mem.eql(u8, a.message, b.message) and
+            equivalentNotes(a.notes, b.notes);
+    }
+
+    fn equivalentNotes(a: ?[]LintProblemNote, b: ?[]LintProblemNote) bool {
+        if (a == null and b == null) return true;
+        const a_notes = a orelse return false;
+        const b_notes = b orelse return false;
+        if (a_notes.len != b_notes.len) return false;
+
+        for (a_notes, b_notes) |a_note, b_note| {
+            if (a_note.file_id != b_note.file_id) return false;
+            if (a_note.start.byte_offset != b_note.start.byte_offset) return false;
+            if (a_note.end.byte_offset != b_note.end.byte_offset) return false;
+            if (a_note.line != b_note.line) return false;
+            if (a_note.column != b_note.column) return false;
+            if (!std.mem.eql(u8, a_note.message, b_note.message)) return false;
+        }
+
+        return true;
+    }
+
     pub fn debugPrint(self: Self, writer: anytype) void {
         writer.print(".{{\n", .{});
         writer.print("  .rule_id = \"{s}\",\n", .{self.rule_id});
