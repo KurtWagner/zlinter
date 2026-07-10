@@ -211,10 +211,12 @@ test "allocLintFiles - with default args" {
 
     var cwd_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const cwd = cwd_buffer[0..try tmp_dir.dir.realPath(std.testing.io, &cwd_buffer)];
+    const fake_args = Args.testDefault();
 
     const runtime: LintRuntime = .{
         .io = std.testing.io,
         .verbose = false,
+        .args = &fake_args,
         .session_arena = &session_arena,
         .file_arena = &file_arena,
         .rule_arena = &rule_arena,
@@ -271,10 +273,12 @@ test "allocLintFiles - with arg files" {
 
     var cwd_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const cwd = cwd_buffer[0..try tmp_dir.dir.realPath(std.testing.io, &cwd_buffer)];
+    const fake_args = Args.testDefault();
 
     const runtime: LintRuntime = .{
         .io = std.testing.io,
         .verbose = false,
+        .args = &fake_args,
         .session_arena = &session_arena,
         .file_arena = &file_arena,
         .rule_arena = &rule_arena,
@@ -435,6 +439,7 @@ pub fn resolveLazyPath(
 }
 
 const LintRuntime = @import("session/LintRuntime.zig");
+const Args = @import("Args.zig");
 const std = @import("std");
 const testing = @import("testing.zig");
 const zlinter = @import("./zlinter.zig");

@@ -1,7 +1,6 @@
 //! The session of all document and rule executions. It'll live the duration
 //! of linting all zig source files.
 const LintSession = @This();
-const LintContext = LintSession;
 
 runtime: *const LintRuntime,
 
@@ -60,7 +59,7 @@ const FileNodeKey = struct {
 };
 
 const ModuleResolution = struct {
-    session: *LintContext,
+    session: *LintSession,
     module_id: ModuleStore.ModuleId,
 
     fn context(self: ModuleResolution, parent_file_id: FileStore.FileId) import_utils.ResolveContext {
@@ -174,36 +173,33 @@ const ModuleResolution = struct {
     }
 };
 
-pub fn init(self: *LintContext, lint_build_info: BuildInfo) !void {
-    const zone = tracy.traceNamed(@src(), "LintContext.init");
+pub fn init(self: *LintSession) !void {
+    const zone = tracy.traceNamed(@src(), "LintSession.init");
     defer zone.end();
 
     // Maybe one day we will care enough to use a fake for tests but for now
     // it's fine to ignore...
     self.root_build_config_id = if (!builtin.is_test)
-        try self.initBuildConfig(lint_build_info)
+        try self.initBuildConfig()
     else
         null;
 }
 
-fn initBuildConfig(
-    self: *LintContext,
-    lint_build_info: BuildInfo,
-) !BuildConfigStore.ConfigId {
-    const zone = tracy.traceNamed(@src(), "LintContext.initBuildConfig");
+fn initBuildConfig(self: *LintSession) !BuildConfigStore.ConfigId {
+    const zone = tracy.traceNamed(@src(), "LintSession.initBuildConfig");
     defer zone.end();
 
     const config_id = try self.build_config_store.resolve(".");
 
     const build_config = self.build_config_store.buildConfig(config_id);
-    const compile_units = lint_build_info.compile_units;
-    const auto_kind = if (compile_units == null)
+    const build_compile_units = self.runtime.args.build_compile_units;
+    const auto_kind = if (build_compile_units == null)
         resolveDefaultCompileUnitKind(build_config)
     else
         null;
 
     var matched_compile_units: ?std.bit_set.Dynamic =
-        if (compile_units) |selectors|
+        if (build_compile_units) |selectors|
             try .initEmpty(self.runtime.sessionArena(), selectors.len)
         else
             null;
@@ -219,7 +215,7 @@ fn initBuildConfig(
         const step_name = step.name.slice(build_config);
         const kind = compileUnitKind(compile);
 
-        const should_consume = if (compile_units) |selectors| should_consume: {
+        const should_consume = if (build_compile_units) |selectors| should_consume: {
             const matched = &(matched_compile_units.?);
             break :should_consume compileUnitSelectorsMatch(selectors, step_name, kind, matched);
         } else auto_kind != null and auto_kind.? == kind;
@@ -236,7 +232,7 @@ fn initBuildConfig(
         );
     }
 
-    if (compile_units) |selectors| {
+    if (build_compile_units) |selectors| {
         var it = matched_compile_units.?.iterator(.{ .kind = .unset });
         while (it.next()) |index|
             switch (selectors[index]) {
@@ -301,7 +297,7 @@ fn resolveDefaultCompileUnitKind(build_config: *const std.Build.Configuration) ?
 }
 
 fn compileUnitSelectorsMatch(
-    selectors: []const BuildInfo.CompileUnitSelector,
+    selectors: []const Args.CompileUnitSelector,
     step_name: []const u8,
     kind: CompileUnitKind,
     matched_selectors: *std.bit_set.Dynamic,
@@ -316,7 +312,7 @@ fn compileUnitSelectorsMatch(
 }
 
 fn compileUnitSelectorMatches(
-    selector: BuildInfo.CompileUnitSelector,
+    selector: Args.CompileUnitSelector,
     step_name: []const u8,
     kind: CompileUnitKind,
 ) bool {
@@ -377,7 +373,7 @@ test "compileUnitSelectorsMatch combines selectors with or semantics" {
     var matched = try std.bit_set.Dynamic.initEmpty(std.testing.allocator, 2);
     defer matched.deinit(std.testing.allocator);
 
-    const selectors = [_]BuildInfo.CompileUnitSelector{
+    const selectors = [_]Args.CompileUnitSelector{
         .exe,
         .{ .name = "special_test" },
     };
@@ -393,7 +389,7 @@ test "compileUnitSelectorsMatch combines selectors with or semantics" {
 }
 
 fn allocCompileUnitNamesForDebugging(
-    self: *LintContext,
+    self: *LintSession,
     build_config: *const std.Build.Configuration,
 ) ![]const u8 {
     var writer: std.Io.Writer.Allocating = .init(self.runtime.sessionArena());
@@ -417,11 +413,11 @@ fn allocCompileUnitNamesForDebugging(
 }
 
 fn consumeBuildConfigStep(
-    self: *LintContext,
+    self: *LintSession,
     config_id: BuildConfigStore.ConfigId,
     step_index: std.Build.Configuration.Step.Index,
 ) !void {
-    const zone = tracy.traceNamed(@src(), "LintContext.consumeBuildConfigStep");
+    const zone = tracy.traceNamed(@src(), "LintSession.consumeBuildConfigStep");
     defer zone.end();
 
     const build_config = self.build_config_store.buildConfig(config_id);
@@ -450,7 +446,7 @@ fn consumeBuildConfigStep(
 }
 
 pub fn appendCompileContext(
-    self: *LintContext,
+    self: *LintSession,
     context: CompileContext,
 ) CompileContext.Id {
     const id: CompileContext.Id = .fromIndex(self.compile_contexts.len);
@@ -460,14 +456,14 @@ pub fn appendCompileContext(
 }
 
 pub fn compileContext(
-    self: *const LintContext,
+    self: *const LintSession,
     id: CompileContext.Id,
 ) CompileContext {
     return self.compile_contexts.get(id.toIndex());
 }
 
 pub fn compileContextIdForModule(
-    self: *const LintContext,
+    self: *const LintSession,
     module_id: ModuleStore.ModuleId,
 ) ?CompileContext.Id {
     for (self.compile_contexts.items(.root_module), 0..) |root_module, index|
@@ -476,11 +472,11 @@ pub fn compileContextIdForModule(
 }
 
 fn resolveBuildModule(
-    self: *LintContext,
+    self: *LintSession,
     config_id: BuildConfigStore.ConfigId,
     build_module_index: std.Build.Configuration.Module.Index,
 ) !?ModuleStore.ModuleId {
-    const zone = tracy.traceNamed(@src(), "LintContext.resolveBuildModule");
+    const zone = tracy.traceNamed(@src(), "LintSession.resolveBuildModule");
     defer zone.end();
 
     const build_config = self.build_config_store.buildConfig(config_id);
@@ -561,11 +557,11 @@ fn resolveBuildModule(
 
 /// Resolves everything except its descendents (e.g., named imports)
 fn resolveBuildModuleShallow(
-    self: *LintContext,
+    self: *LintSession,
     config_id: BuildConfigStore.ConfigId,
     build_module_index: std.Build.Configuration.Module.Index,
 ) !?ModuleStore.ModuleId {
-    const zone = tracy.traceNamed(@src(), "LintContext.resolveBuildModuleShallow");
+    const zone = tracy.traceNamed(@src(), "LintSession.resolveBuildModuleShallow");
     defer zone.end();
 
     const build_root_path = self.build_config_store.buildRootPath(config_id);
@@ -591,8 +587,8 @@ fn resolveBuildModuleShallow(
     });
 }
 
-pub fn resolveFile(self: *LintContext, input_path: []const u8) !FileStore.FileId {
-    const zone = tracy.traceNamed(@src(), "LintContext.resolveFile");
+pub fn resolveFile(self: *LintSession, input_path: []const u8) !FileStore.FileId {
+    const zone = tracy.traceNamed(@src(), "LintSession.resolveFile");
     defer zone.end();
 
     const id = try self.file_store.resolve(input_path);
@@ -616,7 +612,7 @@ pub fn resolveFile(self: *LintContext, input_path: []const u8) !FileStore.FileId
 /// This avoids choosing one active module when imports can resolve to
 /// different declarations across compile units.
 pub fn resolveFileTypes(
-    self: *LintContext,
+    self: *LintSession,
     file_id: FileStore.FileId,
 ) void {
     self.decl_store.resolveFileTypes(
@@ -638,11 +634,11 @@ pub fn resolveFileTypes(
 
 /// Ensures declarations are available for module-specific lazy resolution.
 fn resolveFileTypesForModule(
-    self: *LintContext,
+    self: *LintSession,
     file_id: FileStore.FileId,
     module_id: ModuleStore.ModuleId,
 ) void {
-    const zone = tracy.traceNamed(@src(), "LintContext.resolveFileTypesForModule");
+    const zone = tracy.traceNamed(@src(), "LintSession.resolveFileTypesForModule");
     defer zone.end();
 
     _ = module_id;
@@ -652,11 +648,11 @@ fn resolveFileTypesForModule(
 /// Returns cached type information for a declaration in one module context,
 /// computing it on demand so module-specific import resolution is preserved.
 fn cacheResolvedDeclTypeForModule(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
 ) ResolvedDeclType {
-    const zone = tracy.traceNamed(@src(), "LintContext.cacheResolvedDeclTypeForModule");
+    const zone = tracy.traceNamed(@src(), "LintSession.cacheResolvedDeclTypeForModule");
     defer zone.end();
 
     const key: ResolvedDeclTypeKey = .{
@@ -686,7 +682,7 @@ fn cacheResolvedDeclTypeForModule(
 }
 
 fn resolutionForModule(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
 ) ModuleResolution {
     return .{
@@ -696,10 +692,10 @@ fn resolutionForModule(
 }
 
 pub fn moduleIdsForFile(
-    self: *LintContext,
+    self: *LintSession,
     file_id: FileStore.FileId,
 ) []const ModuleStore.ModuleId {
-    const zone = tracy.traceNamed(@src(), "LintContext.moduleIdsForFile");
+    const zone = tracy.traceNamed(@src(), "LintSession.moduleIdsForFile");
     defer zone.end();
     zone.setValue(file_id.toIndex());
 
@@ -719,15 +715,15 @@ pub fn moduleIdsForFile(
     return cached.items;
 }
 
-fn moduleIdsForDecl(self: *LintContext, decl_id: DeclStore.DeclId) []const ModuleStore.ModuleId {
+fn moduleIdsForDecl(self: *LintSession, decl_id: DeclStore.DeclId) []const ModuleStore.ModuleId {
     return self.moduleIdsForFile(self.decl_store.declFileId(decl_id));
 }
 
 fn ensureModuleIdsByFile(
-    self: *LintContext,
+    self: *LintSession,
     gpa: std.mem.Allocator,
 ) void {
-    const zone = tracy.traceNamed(@src(), "LintContext.ensureModuleIdsByFile");
+    const zone = tracy.traceNamed(@src(), "LintSession.ensureModuleIdsByFile");
     defer zone.end();
     zone.setValue(@intFromBool(self.module_file_index_built));
 
@@ -740,7 +736,7 @@ fn ensureModuleIdsByFile(
 }
 
 fn appendModuleForFile(
-    self: *LintContext,
+    self: *LintSession,
     file_id: FileStore.FileId,
     module_id: ModuleStore.ModuleId,
 ) void {
@@ -772,11 +768,11 @@ const ReachQueueItem = struct {
 };
 
 fn indexModuleFiles(
-    self: *LintContext,
+    self: *LintSession,
     root_module_id: ModuleStore.ModuleId,
     gpa: std.mem.Allocator,
 ) void {
-    const zone = tracy.traceNamed(@src(), "LintContext.indexModuleFiles");
+    const zone = tracy.traceNamed(@src(), "LintSession.indexModuleFiles");
     defer zone.end();
     zone.setValue(root_module_id.toIndex());
 
@@ -859,7 +855,7 @@ fn indexModuleFiles(
     }
 }
 
-pub fn debugPrintFileDecls(self: *const LintContext, file_id: FileStore.FileId) void {
+pub fn debugPrintFileDecls(self: *const LintSession, file_id: FileStore.FileId) void {
     self.decl_store.debugPrintFileDecls(
         file_id,
         &self.file_store,
@@ -871,12 +867,12 @@ pub fn debugPrintFileDecls(self: *const LintContext, file_id: FileStore.FileId) 
 ///
 /// Caller is responsible for calling deinit once done.
 pub fn initDocument(
-    self: *LintContext,
+    self: *LintSession,
     file_id: FileStore.FileId,
     gpa: std.mem.Allocator,
     doc: *LintDocument,
 ) !void {
-    const zone = tracy.traceNamed(@src(), "LintContext.initDocument");
+    const zone = tracy.traceNamed(@src(), "LintSession.initDocument");
     defer zone.end();
 
     const abs_path = self.file_store.fileAbsPath(file_id);
@@ -978,7 +974,7 @@ pub const DeclLocation = struct {
 
 /// Follows simple value aliases from a declaration in one module context.
 pub fn resolveDeclAliasForModule(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
 ) DeclStore.DeclId {
@@ -990,12 +986,12 @@ pub fn resolveDeclAliasForModule(
 
 /// Resolves the type summary for an expression node in a single module.
 fn resolveTypeOfNodeForModule(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     doc: *const LintDocument,
     node: Ast.Node.Index,
 ) ?ResolvedNodeType {
-    const zone = tracy.traceNamed(@src(), "LintContext.resolveTypeOfNode");
+    const zone = tracy.traceNamed(@src(), "LintSession.resolveTypeOfNode");
     defer zone.end();
 
     const immediate_decl_id = self.resolveDeclOfNodeForModule(module_id, doc, node);
@@ -1021,12 +1017,12 @@ fn resolveTypeOfNodeForModule(
 
 /// Resolves `node` to the declaration it directly names in a single module.
 pub fn resolveDeclOfNodeForModule(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     doc: *const LintDocument,
     node: Ast.Node.Index,
 ) ?DeclStore.DeclId {
-    const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclOfNode");
+    const zone = tracy.traceNamed(@src(), "LintSession.resolveDeclOfNode");
     defer zone.end();
 
     const key = ResolvedNodeDeclKey.init(module_id, doc.file_id, node);
@@ -1045,7 +1041,7 @@ pub fn resolveDeclOfNodeForModule(
 /// Resolves `node` to all declarations it names across the modules reachable
 /// from the file. This is the new semantic entrypoint for ambiguous lookup.
 pub fn resolveDeclCandidatesOfNode(
-    self: *LintContext,
+    self: *LintSession,
     arena: std.mem.Allocator,
     doc: *const LintDocument,
     node: Ast.Node.Index,
@@ -1082,12 +1078,12 @@ pub fn resolveDeclCandidatesOfNode(
 
 /// Resolves a member declaration from a container/type declaration.
 fn resolveDeclMemberForModule(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     parent_decl_id: DeclStore.DeclId,
     member_name: []const u8,
 ) ?DeclStore.DeclId {
-    const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclMember");
+    const zone = tracy.traceNamed(@src(), "LintSession.resolveDeclMember");
     defer zone.end();
 
     return self.resolutionForModule(module_id).memberDecl(parent_decl_id, member_name);
@@ -1096,7 +1092,7 @@ fn resolveDeclMemberForModule(
 /// Resolves a member declaration from a container/type declaration across all
 /// modules that can reach the declaration's file.
 pub fn resolveDeclMemberCandidates(
-    self: *LintContext,
+    self: *LintSession,
     arena: std.mem.Allocator,
     parent_decl_id: DeclStore.DeclId,
     member_name: []const u8,
@@ -1120,7 +1116,7 @@ pub fn resolveDeclMemberCandidates(
 /// Resolves a member declaration from each declaration candidate, preserving
 /// the candidate module used for lookup.
 pub fn resolveDeclMemberCandidatesFromCandidates(
-    self: *LintContext,
+    self: *LintSession,
     arena: std.mem.Allocator,
     parent_candidates: []const DeclCandidate,
     member_name: []const u8,
@@ -1143,7 +1139,7 @@ pub fn resolveDeclMemberCandidatesFromCandidates(
 /// Follows simple value aliases from a declaration candidate while preserving
 /// its module context.
 pub fn resolveDeclAliasCandidate(
-    self: *LintContext,
+    self: *LintSession,
     candidate: DeclCandidate,
 ) DeclCandidate {
     var current_decl_id = candidate.decl_id;
@@ -1173,7 +1169,7 @@ pub fn resolveDeclAliasCandidate(
 
 /// Resolves the type of `node` for every module reachable from the file.
 pub fn resolveTypeCandidatesOfNode(
-    self: *LintContext,
+    self: *LintSession,
     arena: std.mem.Allocator,
     doc: *const LintDocument,
     node: Ast.Node.Index,
@@ -1192,7 +1188,7 @@ pub fn resolveTypeCandidatesOfNode(
 
 /// Resolves `node` to all enum declarations it can name across reachable modules.
 pub fn resolveEnumCandidatesOfNode(
-    self: *LintContext,
+    self: *LintSession,
     arena: std.mem.Allocator,
     doc: *const LintDocument,
     node: Ast.Node.Index,
@@ -1212,7 +1208,7 @@ pub fn resolveEnumCandidatesOfNode(
 /// Resolves an expression to all enum tag names it can name across reachable
 /// modules.
 pub fn resolveEnumTagNameCandidatesOfNode(
-    self: *LintContext,
+    self: *LintSession,
     arena: std.mem.Allocator,
     doc: *const LintDocument,
     node: Ast.Node.Index,
@@ -1232,12 +1228,12 @@ pub fn resolveEnumTagNameCandidatesOfNode(
 
 /// Resolves a member from the type represented by a declaration.
 fn resolveDeclTypeMemberForModule(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     parent_decl_id: DeclStore.DeclId,
     member_name: []const u8,
 ) ?DeclStore.DeclId {
-    const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclTypeMember");
+    const zone = tracy.traceNamed(@src(), "LintSession.resolveDeclTypeMember");
     defer zone.end();
 
     return self.resolutionForModule(module_id).declTypeMember(parent_decl_id, member_name);
@@ -1246,7 +1242,7 @@ fn resolveDeclTypeMemberForModule(
 /// Resolves a member from the type represented by a declaration across all
 /// modules that can reach the declaration's file.
 pub fn resolveDeclTypeMemberCandidates(
-    self: *LintContext,
+    self: *LintSession,
     arena: std.mem.Allocator,
     parent_decl_id: DeclStore.DeclId,
     member_name: []const u8,
@@ -1270,11 +1266,11 @@ pub fn resolveDeclTypeMemberCandidates(
 
 /// Resolves the declaration named by a declaration's type expression.
 fn resolveDeclTypeDeclForModule(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
 ) ?DeclStore.DeclId {
-    const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclTypeDecl");
+    const zone = tracy.traceNamed(@src(), "LintSession.resolveDeclTypeDecl");
     defer zone.end();
 
     return self.resolutionForModule(module_id).declTypeDecl(decl_id);
@@ -1283,7 +1279,7 @@ fn resolveDeclTypeDeclForModule(
 /// Resolves the declaration named by a declaration's type expression across
 /// all modules that can reach the declaration's file.
 pub fn resolveDeclTypeDeclCandidates(
-    self: *LintContext,
+    self: *LintSession,
     arena: std.mem.Allocator,
     decl_id: DeclStore.DeclId,
 ) ![]const DeclCandidate {
@@ -1306,7 +1302,7 @@ pub fn resolveDeclTypeDeclCandidates(
 /// Resolves the declaration named by each candidate's type expression,
 /// preserving the candidate module used for lookup.
 pub fn resolveDeclTypeDeclCandidatesFromCandidates(
-    self: *LintContext,
+    self: *LintSession,
     arena: std.mem.Allocator,
     decl_candidates: []const DeclCandidate,
 ) ![]const DeclCandidate {
@@ -1327,7 +1323,7 @@ pub fn resolveDeclTypeDeclCandidatesFromCandidates(
 /// Returns the cached concrete type target for a declaration, when one was
 /// resolved while indexing the file.
 pub fn declResolvedTypeTarget(
-    self: *const LintContext,
+    self: *const LintSession,
     decl_id: DeclStore.DeclId,
 ) ?DeclStore.TypeTarget {
     return self.decl_store.declResolvedTypeTarget(decl_id);
@@ -1336,7 +1332,7 @@ pub fn declResolvedTypeTarget(
 /// Returns the cached concrete type declaration for a declaration, when one
 /// was resolved while indexing the file and is represented by a declaration.
 pub fn declResolvedTypeDecl(
-    self: *const LintContext,
+    self: *const LintSession,
     decl_id: DeclStore.DeclId,
 ) ?DeclStore.DeclId {
     return self.decl_store.declResolvedTypeDecl(decl_id);
@@ -1349,14 +1345,14 @@ pub const EnumInfo = struct {
 
     pub fn containerDecl(
         self: EnumInfo,
-        session: *const LintContext,
+        session: *const LintSession,
         buffer: *[2]Ast.Node.Index,
     ) ?Ast.full.ContainerDecl {
         const tree = session.file_store.fileTree(self.file_id);
         return tree.fullContainerDecl(buffer, self.container_node);
     }
 
-    pub fn tagName(self: EnumInfo, session: *const LintContext, member: Ast.Node.Index) ?[]const u8 {
+    pub fn tagName(self: EnumInfo, session: *const LintSession, member: Ast.Node.Index) ?[]const u8 {
         return enumMemberTagName(session.file_store.fileTree(self.file_id), member);
     }
 };
@@ -1376,7 +1372,7 @@ inline fn enumMemberTagName(tree: Ast, member: Ast.Node.Index) ?[]const u8 {
 /// values. This preserves enum identity where a coarse type summary such as
 /// `.instance = .enum` cannot list the enum's tags.
 fn resolveEnumDeclOfNodeForModule(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     doc: *const LintDocument,
     expr_node: Ast.Node.Index,
@@ -1403,7 +1399,7 @@ fn resolveEnumDeclOfNodeForModule(
 /// Returns enum declaration metadata for a declaration whose value is an enum
 /// container declaration.
 pub fn enumInfo(
-    self: *LintContext,
+    self: *LintSession,
     decl_id: DeclStore.DeclId,
 ) ?EnumInfo {
     const file_id = self.decl_store.declFileId(decl_id);
@@ -1431,7 +1427,7 @@ pub fn enumInfo(
 /// Resolves a switch case value expression to an enum tag name, including simple
 /// aliases such as `const tag = Enum.a; tag`.
 fn resolveEnumTagNameOfNodeForModule(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     doc: *const LintDocument,
     expr_node: Ast.Node.Index,
@@ -1462,7 +1458,7 @@ fn resolveEnumTagNameOfNodeForModule(
 }
 
 fn resolveFunctionReturnEnumDecl(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     fn_decl_id: DeclStore.DeclId,
 ) ?DeclStore.DeclId {
@@ -1485,7 +1481,7 @@ fn resolveFunctionReturnEnumDecl(
 }
 
 fn resolveDeclEnumType(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
 ) ?DeclStore.DeclId {
@@ -1500,7 +1496,7 @@ fn resolveDeclEnumType(
 }
 
 fn resolveEnumDeclFromValue(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
 ) ?DeclStore.DeclId {
@@ -1518,7 +1514,7 @@ fn resolveEnumDeclFromValue(
 }
 
 fn resolveEnumDeclFromValueExpr(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     context_decl_id: DeclStore.DeclId,
     value_node: Ast.Node.Index,
@@ -1546,7 +1542,7 @@ fn resolveEnumDeclFromValueExpr(
 }
 
 fn resolveEnumDeclAlias(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
 ) ?DeclStore.DeclId {
@@ -1574,7 +1570,7 @@ fn resolveEnumDeclAlias(
 }
 
 fn enumDeclIsNonExhaustive(
-    self: *LintContext,
+    self: *LintSession,
     tree: Ast,
     container_decl: Ast.full.ContainerDecl,
 ) bool {
@@ -1586,7 +1582,7 @@ fn enumDeclIsNonExhaustive(
 }
 
 fn tagNameFromDeclValue(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
 ) ?[]const u8 {
@@ -1600,7 +1596,7 @@ fn tagNameFromDeclValue(
 }
 
 fn tagNameFromValueExpr(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     context_decl_id: DeclStore.DeclId,
     value_node: Ast.Node.Index,
@@ -1632,7 +1628,7 @@ fn tagNameFromValueExpr(
 
 /// Allocates the leading doc comments for a declaration without comment tokens.
 pub fn allocDeclDocComments(
-    self: *const LintContext,
+    self: *const LintSession,
     arena: std.mem.Allocator,
     decl_id: DeclStore.DeclId,
 ) !?[]const u8 {
@@ -1673,7 +1669,7 @@ pub fn allocDeclDocComments(
 /// Prefer the declaration name when available because secondary diagnostics are
 /// easier to scan when they point at the identifier instead of the full decl.
 pub fn declLocation(
-    self: *const LintContext,
+    self: *const LintSession,
     decl_id: DeclStore.DeclId,
 ) ?DeclLocation {
     const file_id = self.decl_store.declFileId(decl_id);
@@ -1709,12 +1705,12 @@ pub fn declLocation(
 /// Expression lookup needs a lexical starting point, so this first finds the
 /// nearest declaration containing `node` and then resolves from that scope.
 fn immediateDeclForNode(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     doc: *const LintDocument,
     node: Ast.Node.Index,
 ) ?DeclStore.DeclId {
-    const zone = tracy.traceNamed(@src(), "LintContext.immediateDeclForNode");
+    const zone = tracy.traceNamed(@src(), "LintSession.immediateDeclForNode");
     defer zone.end();
 
     if (self.decl_store.declIdByNode(doc.file_id, node)) |decl_id|
@@ -1735,11 +1731,11 @@ fn immediateDeclForNode(
 /// document lineage here instead of token positions so local variables and
 /// function parameters resolve from their actual block/function scope.
 fn contextScopeForNode(
-    self: *const LintContext,
+    self: *const LintSession,
     doc: *const LintDocument,
     node: Ast.Node.Index,
 ) ?DeclStore.ScopeId {
-    const zone = tracy.traceNamed(@src(), "LintContext.contextScopeForNode");
+    const zone = tracy.traceNamed(@src(), "LintSession.contextScopeForNode");
     defer zone.end();
 
     const node_index = @intFromEnum(node);
@@ -1768,11 +1764,11 @@ fn contextScopeForNode(
 
 /// Resolves the value summary for a declaration in one module context.
 fn resolveDeclValueSummaryForModule(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
 ) ?TypeStore.TypeSummary {
-    const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclValueSummaryForModule");
+    const zone = tracy.traceNamed(@src(), "LintSession.resolveDeclValueSummaryForModule");
     defer zone.end();
 
     const key: ResolvedDeclSummaryKey = .{
@@ -1797,10 +1793,10 @@ fn resolveDeclValueSummaryForModule(
 /// Resolves value summaries for a declaration across every module that can
 /// reach its file.
 pub fn resolveDeclValueSummaryCandidates(
-    self: *LintContext,
+    self: *LintSession,
     decl_id: DeclStore.DeclId,
 ) ![]const DeclValueSummaryCandidate {
-    const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclValueSummaryCandidates");
+    const zone = tracy.traceNamed(@src(), "LintSession.resolveDeclValueSummaryCandidates");
     defer zone.end();
 
     if (self.decl_summary_cands_by_decl.get(decl_id)) |cached| {
@@ -1836,11 +1832,11 @@ pub fn resolveDeclValueSummaryCandidates(
 /// Resolves value summaries for existing declaration candidates while keeping
 /// each candidate's module context.
 pub fn resolveDeclValueSummaryCandidatesFromCandidates(
-    self: *LintContext,
+    self: *LintSession,
     arena: std.mem.Allocator,
     decl_candidates: []const DeclCandidate,
 ) ![]const DeclValueSummaryCandidate {
-    const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclValueSummaryCandidatesFromCandidates");
+    const zone = tracy.traceNamed(@src(), "LintSession.resolveDeclValueSummaryCandidatesFromCandidates");
     defer zone.end();
     zone.setValue(decl_candidates.len);
 
@@ -1862,11 +1858,11 @@ pub fn resolveDeclValueSummaryCandidatesFromCandidates(
 /// module-specific declaration resolution and source locations so callers can
 /// explain cross-module ambiguity consistently.
 pub fn resolveValueTypeAnnotationCandidates(
-    self: *LintContext,
+    self: *LintSession,
     doc: *const LintDocument,
     type_node: Ast.Node.Index,
 ) ![]const ValueTypeAnnotationCandidate {
-    const zone = tracy.traceNamed(@src(), "LintContext.resolveValueTypeAnnotationCandidates");
+    const zone = tracy.traceNamed(@src(), "LintSession.resolveValueTypeAnnotationCandidates");
     defer zone.end();
 
     const key: FileNodeKey = .{
@@ -1967,12 +1963,12 @@ pub fn resolveValueTypeAnnotationCandidates(
 
 /// Recursively summarizes a declaration's value in one module context.
 fn resolveDeclValueSummaryDepth(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
     remaining_depth: u8,
 ) ?TypeStore.TypeSummary {
-    const zone = tracy.traceNamed(@src(), "LintContext.resolveDeclValueSummaryDepth");
+    const zone = tracy.traceNamed(@src(), "LintSession.resolveDeclValueSummaryDepth");
     defer zone.end();
     zone.setValue(remaining_depth);
 
@@ -2042,7 +2038,7 @@ fn resolveDeclValueSummaryDepth(
 
 /// Recursively summarizes the Zig type of a declaration in one module context.
 fn resolveDeclTypeSummaryDepth(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
     remaining_depth: u8,
@@ -2114,7 +2110,7 @@ fn resolveDeclTypeSummaryDepth(
 }
 
 fn typeSummaryFromTarget(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     target: DeclStore.TypeTarget,
     remaining_depth: u8,
@@ -2156,7 +2152,7 @@ fn typeSummaryFromTypeNode(
 }
 
 fn resolveValueTypeAnnotationSummaryForModule(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     context_decl_id: DeclStore.DeclId,
     type_node: Ast.Node.Index,
@@ -2233,7 +2229,7 @@ fn directValueTypeAnnotationSummary(
 }
 
 fn resolvedValueTypeAnnotationSummary(
-    self: *LintContext,
+    self: *LintSession,
     source_decl_id: DeclStore.DeclId,
     summary: TypeStore.TypeSummary,
 ) TypeStore.TypeSummary {
@@ -2250,7 +2246,7 @@ fn resolvedValueTypeAnnotationSummary(
 }
 
 fn declIsExplicitTypeLiteral(
-    self: *LintContext,
+    self: *LintSession,
     decl_id: DeclStore.DeclId,
 ) bool {
     const file_id = self.decl_store.declFileId(decl_id);
@@ -2269,7 +2265,7 @@ fn declIsExplicitTypeLiteral(
 }
 
 fn typeSummaryFromValueNode(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     context_decl_id: DeclStore.DeclId,
     value_node: Ast.Node.Index,
@@ -2381,7 +2377,7 @@ fn typeSummaryFromValueNode(
 
 /// Resolves an `@import` root declaration in the active module context.
 fn resolveImportRootDecl(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     parent_file_id: FileStore.FileId,
     node: Ast.Node.Index,
@@ -2412,7 +2408,7 @@ fn resolveImportRootDecl(
 }
 
 fn typeSummaryFromResultValueNode(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     context_decl_id: DeclStore.DeclId,
     node: Ast.Node.Index,
@@ -2444,7 +2440,7 @@ fn typeSummaryFromResultValueNode(
 }
 
 fn typeSummaryFromSwitchResultValueNode(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     context_decl_id: DeclStore.DeclId,
     tree: Ast,
@@ -2478,7 +2474,7 @@ fn typeSummaryFromSwitchResultValueNode(
 }
 
 fn typeSummaryFromIfResultValueNode(
-    self: *LintContext,
+    self: *LintSession,
     module_id: ModuleStore.ModuleId,
     context_decl_id: DeclStore.DeclId,
     tree: Ast,
@@ -3201,8 +3197,8 @@ test "moduleIdsForFile includes shared dependency children" {
 }
 
 const ast = @import("../ast.zig");
+const Args = @import("../Args.zig");
 const BuildConfigStore = @import("BuildConfigStore.zig");
-const BuildInfo = @import("../BuildInfo.zig");
 const builtin = @import("builtin");
 const comments = @import("../comments.zig");
 const CompileContext = @import("CompileContext.zig");

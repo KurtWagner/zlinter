@@ -75,6 +75,9 @@ pub fn initFakeContext(
 ) LintSession {
     assertTestOnly();
 
+    const fake_args = arena.create(Args) catch @panic("failed to allocate fake args");
+    fake_args.* = Args.testDefault();
+
     const session_arena = arena.create(std.heap.ArenaAllocator) catch @panic("failed to allocate fake session arena");
     session_arena.* = .init(arena);
 
@@ -88,6 +91,7 @@ pub fn initFakeContext(
     runtime.* = .{
         .io = io,
         .verbose = false,
+        .args = fake_args,
         .session_arena = session_arena,
         .file_arena = file_arena_allocator,
         .rule_arena = rule_arena_allocator,
@@ -107,7 +111,7 @@ pub fn initFakeContext(
         .type_store = .init(runtime),
         .decl_store = .init(runtime),
     };
-    session.init(.default) catch @panic("failed to initialize fake lint session");
+    session.init() catch @panic("failed to initialize fake lint session");
     return session;
 }
 
@@ -548,6 +552,7 @@ pub fn expectJsonEqual(
 }
 
 const builtin = @import("builtin");
+const Args = @import("Args.zig");
 const LintDocument = @import("session/LintDocument.zig");
 const LintSession = @import("session/LintSession.zig");
 const std = @import("std");

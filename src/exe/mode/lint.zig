@@ -76,7 +76,7 @@ fn runLint(
         .type_store = .init(runtime),
         .decl_store = .init(runtime),
     };
-    try session.init(args.build_info);
+    try session.init();
 
     // Resolve the files to be linted once at the start and pass around file
     // ids to linting, fixing and rendering phases instead of absolute path.

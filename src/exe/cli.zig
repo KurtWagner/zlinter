@@ -16,12 +16,8 @@ pub fn main(init: std.process.Init) !u8 {
 
     var stdout_buffer: [1024]u8 = undefined;
     var stderr_buffer: [1024]u8 = undefined;
-    var stdin_buffer: [1024]u8 = undefined;
-
     var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
     var stderr_writer = std.Io.File.stderr().writer(io, &stderr_buffer);
-    var stdin_reader = std.Io.File.stdin().reader(io, &stdin_buffer);
-
     var printer: *zlinter.rendering.Printer = zlinter.rendering.process_printer;
     printer.init(
         &stdout_writer.interface,
@@ -38,7 +34,6 @@ pub fn main(init: std.process.Init) !u8 {
             try init.minimal.args.toSlice(arena.allocator()),
             &lint_builtin.rules,
             gpa,
-            &stdin_reader.interface,
         ) catch |e| switch (e) {
             error.InvalidArgs => {
                 zlinter.Args.printHelp(printer);
@@ -67,7 +62,7 @@ pub fn main(init: std.process.Init) !u8 {
         return ExitCode.usage_error.int();
     }
 
-    var runtime: LintRuntime = .init(io, gpa, args);
+    var runtime: LintRuntime = .init(io, gpa, &args);
     defer runtime.deinit(gpa);
 
     const lint_files = try resolveFilesToLint(&runtime, args);
@@ -103,8 +98,8 @@ fn resolveFilesToLint(
     const lint_files = try zlinter.files.allocLintFiles(
         runtime,
         dir,
-        // `--include` argument supersedes build defined includes and excludes
-        args.include_paths orelse args.build_info.include_paths orelse null,
+        // User include paths supersede build configured includes/excludes.
+        args.include_paths orelse args.build_include_paths orelse null,
         runtime.sessionArena(),
     );
 
@@ -144,7 +139,7 @@ fn buildExcludesIndex(
     dir: std.Io.Dir,
     args: zlinter.Args,
 ) !?std.BufSet {
-    if (args.exclude_paths == null and args.build_info.exclude_paths == null) return null;
+    if (args.exclude_paths == null and args.build_exclude_paths == null) return null;
 
     const exclude_lint_paths: ?[]zlinter.files.LintFile = exclude: {
         if (args.exclude_paths) |p| {
@@ -158,10 +153,10 @@ fn buildExcludesIndex(
     };
 
     const build_exclude_lint_paths: ?[]zlinter.files.LintFile = exclude: {
-        // `--include` argument supersedes build defined includes and excludes
+        // User include paths supersede build configured includes and excludes.
         if (args.include_paths != null) break :exclude null;
 
-        if (args.build_info.exclude_paths) |p| {
+        if (args.build_exclude_paths) |p| {
             std.debug.assert(p.len > 0);
             break :exclude try zlinter.files.allocLintFiles(runtime, dir, p, gpa);
         } else break :exclude null;

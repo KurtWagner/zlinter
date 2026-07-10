@@ -744,10 +744,12 @@ test "TypeStore.store deduplicates equivalent summaries" {
     defer file_arena.deinit();
     var rule_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer rule_arena.deinit();
+    const fake_args = Args.testDefault();
 
     var runtime: LintRuntime = .{
         .io = std.testing.io,
         .verbose = false,
+        .args = &fake_args,
         .session_arena = &session_arena,
         .file_arena = &file_arena,
         .rule_arena = &rule_arena,
@@ -787,6 +789,7 @@ test "TypeStore.store deduplicates equivalent summaries" {
 }
 
 const Ast = std.zig.Ast;
+const Args = @import("../Args.zig");
 const ast = @import("../ast.zig");
 const LintRuntime = @import("LintRuntime.zig");
 const std = @import("std");
