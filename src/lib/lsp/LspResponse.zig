@@ -10,12 +10,26 @@ const Method = enum {
 
 // zlinter-disable field_naming - we don't control the method names
 const MethodParams = union(Method) {
-    @"textDocument/publishDiagnostics": struct {
-        uri: []const u8,
-        diagnostics: []const LspDiagnostic,
-    },
+    @"textDocument/publishDiagnostics": PublishDiagnosticsParams,
 };
 // zlinter-enable field_naming
+
+const PublishDiagnosticsParams = struct {
+    uri: std.Uri,
+    diagnostics: []const LspDiagnostic,
+
+    pub fn jsonStringify(self: @This(), jws: anytype) !void {
+        try jws.beginObject();
+
+        try jws.objectField("uri");
+        try jsonStringifyUri(self.uri, jws);
+
+        try jws.objectField("diagnostics");
+        try jws.write(self.diagnostics);
+
+        try jws.endObject();
+    }
+};
 
 /// Diagnostic (lint result) returned by LSP
 pub const LspDiagnostic = struct {
@@ -103,11 +117,39 @@ pub fn jsonStringify(self: @This(), jws: anytype) !void {
     try jws.endObject();
 }
 
+fn jsonStringifyUri(uri: std.Uri, jws: anytype) !void {
+    try jws.beginWriteRaw();
+    defer jws.endWriteRaw();
+
+    try jws.writer.writeByte('"');
+    if (std.mem.eql(u8, uri.scheme, "file") and uri.host == null) {
+        try jws.writer.print("{s}://", .{uri.scheme});
+
+        const uri_path: std.Uri.Component = if (uri.path.isEmpty())
+            .{ .percent_encoded = "/" }
+        else
+            uri.path;
+        try uri_path.formatPath(jws.writer);
+
+        if (uri.query) |query| {
+            try jws.writer.writeByte('?');
+            try query.formatQuery(jws.writer);
+        }
+        if (uri.fragment) |fragment| {
+            try jws.writer.writeByte('#');
+            try fragment.formatFragment(jws.writer);
+        }
+    } else {
+        try std.Uri.writeToStream(&uri, jws.writer, .all);
+    }
+    try jws.writer.writeByte('"');
+}
+
 test "textDocument/publishDiagnostics json" {
     const response: LspResponse = .{
         .method_params = .{
             .@"textDocument/publishDiagnostics" = .{
-                .uri = "file://fake/file.zig",
+                .uri = try std.Uri.parse("file://fake/file.zig"),
                 .diagnostics = &.{
                     .{
                         .range = .{

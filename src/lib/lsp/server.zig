@@ -275,21 +275,19 @@ pub const LspServer = struct {
         uri: std.Uri,
         err: *LspError,
     ) error{ LspError, OutOfMemory }!void {
-        var body: std.Io.Writer.Allocating = .init(self.handle_arena.allocator());
-        body.writer.print(
-            \\{{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{{"uri":{},"diagnostics":[]}}}}
-        ,
-            .{std.json.fmt(uri, .{})},
-        ) catch |e| switch (e) {
-            error.WriteFailed => {
-                err.* = .{
-                    .code = .internal_error,
-                    .message = self.tryDupe("Failed to write body likely OOM"),
-                };
-                return error.OutOfMemory;
+        const body = try std.json.Stringify.valueAlloc(
+            self.handle_arena.allocator(),
+            LspResponse{
+                .method_params = .{
+                    .@"textDocument/publishDiagnostics" = .{
+                        .uri = uri,
+                        .diagnostics = &.{},
+                    },
+                },
             },
-        };
-        try self.writeMessage(body.written(), err);
+            .{},
+        );
+        try self.writeMessage(body, err);
     }
 
     fn sendResponse(
@@ -465,6 +463,34 @@ test {
     temp = undefined;
 
     std.testing.refAllDecls(@This());
+}
+
+test "didOpen publishes valid empty diagnostics json" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    var stdin: std.Io.Reader = .fixed(comptime testBody(
+        \\{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///tmp/did-open.zig","languageId":"zig","version":1,"text":"const x = 1;\n"}}}
+    ));
+    var stdout: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer stdout.deinit();
+
+    var session = testing.initFakeContext(arena.allocator(), std.testing.io);
+    var server: LspServer = .init(
+        session.runtime,
+        &session,
+        &stdin,
+        &stdout.writer,
+    );
+    try server.run();
+
+    const expected_body =
+        \\{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///tmp/did-open.zig","diagnostics":[]}}
+    ;
+    try std.testing.expectEqualStrings(
+        comptime testBody(expected_body),
+        stdout.written(),
+    );
 }
 
 const std = @import("std");
