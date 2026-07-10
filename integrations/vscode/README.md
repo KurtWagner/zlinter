@@ -1,4 +1,7 @@
-# zlinter vscode extension
+# zlinter vscode extension (experiment)
+
+This is NOT ready for use. Just an experiment of what a zlinter LSP and VScode extension could look like.
+// TODO: Write proper documentation for this
 
 Just playing around with the concept of an LSP.
 
