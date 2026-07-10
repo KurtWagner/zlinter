@@ -58,11 +58,6 @@ fn runLint(
     printer: *zlinter.rendering.Printer,
     lint_files: []const zlinter.files.LintFile,
 ) !RunResult {
-    const io = runtime.io;
-
-    var timer = Timer.createStarted(io);
-    var total_timer = Timer.createStarted(io);
-
     var file_lint_problems = std.array_hash_map.Auto(
         zlinter.session.FileStore.FileId,
         []zlinter.results.LintResult,
@@ -97,14 +92,12 @@ fn runLint(
         &session,
         lint_file_ids.items,
         printer,
-        &timer,
         &file_lint_problems,
         args,
     );
 
     printer.printBanner(.verbose);
     printer.println(.verbose, "Linted {d} files", .{lint_files.len});
-    printer.println(.verbose, "Took {d}ms", .{total_timer.lapMilliseconds()});
     printer.printBanner(.verbose);
 
     // ------------------------------------------------------------------------
@@ -137,7 +130,6 @@ fn runLinterRules(
     session: *zlinter.session.LintSession,
     lint_file_ids: []zlinter.session.FileStore.FileId,
     printer: *zlinter.rendering.Printer,
-    timer: *Timer,
     file_lint_problems: *std.array_hash_map.Auto(
         zlinter.session.FileStore.FileId,
         []zlinter.results.LintResult,
@@ -174,7 +166,7 @@ fn runLinterRules(
             continue :files;
         };
 
-        printer.println(.verbose, "  - Load document: {d}ms", .{timer.lapMilliseconds()});
+        printer.println(.verbose, "  - Load document:", .{});
         const tree = doc.tree(session);
         printer.println(.verbose, "    - {d} bytes", .{tree.source.len});
         printer.println(.verbose, "    - {d} nodes", .{tree.nodes.len});
@@ -211,10 +203,7 @@ fn runLinterRules(
 
             oom(results.append(runtime.sessionArena(), result));
         }
-        printer.println(.verbose, "  - Process syntax errors: {d}ms", .{timer.lapMilliseconds()});
-
         session.resolveFileTypes(file_id);
-
         printer.println(.verbose, "  - Rules", .{});
 
         var rule_it = enabled_rules.iterator(.{ .direction = .forward, .kind = .set });
@@ -559,31 +548,6 @@ const RunResult = struct {
     const tool_error: RunResult = .{ .exit_code = .tool_error };
     const lint_error: RunResult = .{ .exit_code = .lint_error };
 };
-
-const Timer = struct {
-    last_timestamp: std.Io.Timestamp,
-    io: std.Io,
-
-    pub fn createStarted(io: std.Io) Timer {
-        return .{
-            .last_timestamp = std.Io.Clock.now(.awake, io),
-            .io = io,
-        };
-    }
-
-    pub fn lapNanoseconds(self: *Timer) usize {
-        const current = std.Io.Clock.now(.awake, self.io);
-        const elapsed = self.last_timestamp.durationTo(current).toNanoseconds();
-        self.last_timestamp = current;
-        return @intCast(elapsed);
-    }
-
-    pub fn lapMilliseconds(self: *Timer) usize {
-        return self.lapNanoseconds() / std.time.ns_per_ms;
-    }
-};
-
-// TODO: #163 - remove this and timing logs from verbose as we have tracy now.
 
 test {
     std.testing.refAllDecls(@This());
