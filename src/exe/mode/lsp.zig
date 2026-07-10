@@ -2,13 +2,11 @@
 
 pub fn run(
     runtime: *const LintRuntime,
-    args: zlinter.Args,
-    printer: *zlinter.rendering.Printer,
-    lint_files: []const zlinter.files.LintFile,
+    _: zlinter.Args,
+    _: *zlinter.rendering.Printer,
+    // TODO: Check if in here before linting?
+    _: []const zlinter.files.LintFile,
 ) !ExitCode {
-    _ = printer;
-    _ = lint_files;
-
     var stdin_buf: [8 * 1024]u8 = undefined;
     var stdin = std.Io.File.stdin().reader(runtime.io, &stdin_buf);
 
@@ -23,7 +21,7 @@ pub fn run(
         .type_store = .init(runtime),
         .decl_store = .init(runtime),
     };
-    try session.init(args.build_info);
+    try session.init();
 
     var server: zlinter.lsp.server.LspServer = .init(
         runtime,
