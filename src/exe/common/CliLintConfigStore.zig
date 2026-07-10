@@ -1,33 +1,59 @@
-const LintConfigStore = @This();
+const CliLintConfigStore = @This();
 
 pub const LintConfigId = u32;
 
 base_config_id: LintConfigId,
 configs: std.ArrayList(LintConfig),
 config_by_dir_abs_path: std.StringHashMapUnmanaged(?LintConfigId),
+rules: []const LintRule,
 
-pub fn init(arena: std.mem.Allocator, base_rule_configs: [lint_builtin.rules.len]*anyopaque) LintConfigStore {
-    var self: LintConfigStore = .{
+const vtable: zlinter.session.LintConfigStore.VTable = .{
+    .index = index,
+    .lookup = lookup,
+};
+
+pub fn store(self: *CliLintConfigStore) zlinter.session.LintConfigStore {
+    return .{
+        .ptr = self,
+        .vtable = &vtable,
+    };
+}
+
+pub fn init(
+    arena: std.mem.Allocator,
+    base_rule_configs: []const *anyopaque,
+    rules: []const LintRule,
+) CliLintConfigStore {
+    var self: CliLintConfigStore = .{
         .configs = .empty,
         .config_by_dir_abs_path = .empty,
         .base_config_id = 0,
+        .rules = rules,
     };
 
-    self.configs.append(arena, .{
-        .rule_configs = base_rule_configs,
-        .rule_configs_on = .full,
+    const rule_configs: []*anyopaque = arena.alloc(
+        *anyopaque,
+        base_rule_configs.len,
+    ) catch @panic("OOM");
+    @memcpy(rule_configs, base_rule_configs);
+
+    self.configs.append(arena, LintConfig{
+        .rule_configs = rule_configs,
+        .rule_configs_on = std.bit_set.Dynamic.initFull(arena, base_rule_configs.len) catch @panic("OOM"),
     }) catch @panic("OOM");
 
     return self;
 }
 
 pub fn index(
-    self: *LintConfigStore,
+    ptr: *anyopaque,
     io: std.Io,
     arena: std.mem.Allocator,
     dir_abs_path: []const u8,
     cwd: std.Io.Dir,
 ) error{InvalidLintConfig}!void {
+    const self: *CliLintConfigStore = @ptrCast(@alignCast(ptr));
+
     std.debug.assert(std.Io.Dir.path.isAbsolute(dir_abs_path));
 
     const normalized_slice = std.mem.trimEnd(
@@ -70,7 +96,7 @@ pub fn index(
 
 /// Returns true if `insertIntoIndex` needs to be called for a path.
 fn needsIndexing(
-    self: *const LintConfigStore,
+    self: *const CliLintConfigStore,
     dir_abs_sub_path: []const u8,
 ) bool {
     return dir_abs_sub_path.len > 0 and
@@ -80,7 +106,7 @@ fn needsIndexing(
 /// Inserts a path into the index, should check `needsIndexing` before
 /// calling this.
 fn insertIntoIndex(
-    self: *LintConfigStore,
+    self: *CliLintConfigStore,
     io: std.Io,
     arena: std.mem.Allocator,
     dir_abs_sub_path: []const u8,
@@ -94,6 +120,7 @@ fn insertIntoIndex(
         arena,
         cwd,
         dir_abs_sub_path,
+        self.rules,
     )) |config| {
         const config_id: LintConfigId = @intCast(self.configs.items.len);
         self.configs.append(arena, config) catch @panic("OOM");
@@ -115,7 +142,13 @@ fn insertIntoIndex(
     }
 }
 
-pub fn lookup(self: *const LintConfigStore, dir_abs_path: []const u8, rule_idx: RuleIndex) *anyopaque {
+pub fn lookup(
+    ptr: *const anyopaque,
+    dir_abs_path: []const u8,
+    rule_idx: RuleIndex,
+) *anyopaque {
+    const self: *const CliLintConfigStore = @ptrCast(@alignCast(ptr));
+
     std.debug.assert(std.Io.Dir.path.isAbsolute(dir_abs_path));
     std.debug.assert(dir_abs_path.len > 0);
 
@@ -146,28 +179,23 @@ pub fn lookup(self: *const LintConfigStore, dir_abs_path: []const u8, rule_idx: 
     return self.configs.items[self.base_config_id].rule_configs[@intFromEnum(rule_idx)];
 }
 
-pub fn getConfig(self: *const LintConfigStore, config_id: LintConfigId, rule_idx: RuleIndex) *anyopaque {
+pub fn getConfig(self: *const CliLintConfigStore, config_id: LintConfigId, rule_idx: RuleIndex) *anyopaque {
     return self.configs.items[config_id].rule_configs[@intFromEnum(rule_idx)];
 }
 
-fn configByDir(self: *const LintConfigStore, dir_abs_path: []const u8) ?LintConfigId {
+fn configByDir(self: *const CliLintConfigStore, dir_abs_path: []const u8) ?LintConfigId {
     return self.config_by_dir_abs_path.get(dir_abs_path) orelse null;
 }
 
 const LintConfig = struct {
     const max_config_size_bytes = 10 * 1025;
 
-    rule_configs: [lint_builtin.rules.len]*anyopaque,
-    rule_configs_on: std.bit_set.Static(lint_builtin.rules.len),
+    rule_configs: []const *anyopaque,
+    rule_configs_on: std.bit_set.Dynamic,
 
     /// What users write in nested directories to overwrite specific rule configs.
     const Zon = struct {
         rules: RulesConfig,
-    };
-
-    pub const empty: LintConfig = .{
-        .rule_configs = undefined,
-        .rule_configs_on = .empty,
     };
 
     pub fn tryLoad(
@@ -175,6 +203,7 @@ const LintConfig = struct {
         arena: std.mem.Allocator,
         cwd: std.Io.Dir,
         dir_abs_path: []const u8,
+        rules: []const LintRule,
     ) error{InvalidLintConfig}!?LintConfig {
         var fba_path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
         var fba_path: std.heap.FixedBufferAllocator = .init(&fba_path_buffer);
@@ -227,18 +256,33 @@ const LintConfig = struct {
             return error.InvalidLintConfig;
         };
 
-        var self: LintConfig = .empty;
-        inline for (0..lint_builtin.rules.len) |i|
-            if (@field(zon.rules, lint_builtin.rule_names[i])) |*v| {
-                self.rule_configs[i] = @ptrCast(@alignCast(v));
+        var rule_configs = arena.alloc(
+            *anyopaque,
+            rules.len,
+        ) catch @panic("OOM");
+
+        var self: LintConfig = .{
+            .rule_configs = undefined,
+            .rule_configs_on = std.bit_set.Dynamic.initEmpty(
+                arena,
+                rules.len,
+            ) catch @panic("OOM"),
+        };
+
+        const field_names = comptime std.meta.fieldNames(RulesConfig);
+        inline for (field_names) |name|
+            if (@field(zon.rules, name)) |*v| {
+                const i = std.meta.fieldIndex(RulesConfig, name).?;
+                rule_configs[i] = @ptrCast(@alignCast(v));
                 self.rule_configs_on.set(i);
             };
 
+        self.rule_configs = rule_configs;
         return self;
     }
 };
 
-test "LintConfigStore.index errors on malformed zlinter.zon" {
+test "CliLintConfigStore.index errors on malformed zlinter.zon" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
@@ -259,13 +303,14 @@ test "LintConfigStore.index errors on malformed zlinter.zon" {
         &dir_abs_path_buffer,
     )];
 
-    var store = LintConfigStore.init(
+    var cli_store = CliLintConfigStore.init(
         arena.allocator(),
         lint_builtin.rule_configs,
     );
+    var config_store = cli_store.store();
     try std.testing.expectError(
         error.InvalidLintConfig,
-        store.index(
+        config_store.index(
             std.testing.io,
             arena.allocator(),
             dir_abs_path,
@@ -274,7 +319,7 @@ test "LintConfigStore.index errors on malformed zlinter.zon" {
     );
 }
 
-test "LintConfigStore.index errors when zlinter.zon is not readable as a file" {
+test "CliLintConfigStore.index errors when zlinter.zon is not readable as a file" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
@@ -293,13 +338,15 @@ test "LintConfigStore.index errors when zlinter.zon is not readable as a file" {
         &dir_abs_path_buffer,
     )];
 
-    var store = LintConfigStore.init(
+    var cli_store = CliLintConfigStore.init(
         arena.allocator(),
         lint_builtin.rule_configs,
     );
+    var config_store = cli_store.store();
+
     try std.testing.expectError(
         error.InvalidLintConfig,
-        store.index(
+        config_store.index(
             std.testing.io,
             arena.allocator(),
             dir_abs_path,
@@ -315,6 +362,7 @@ test {
 const lint_builtin = @import("lint_builtin");
 const std = @import("std");
 const zlinter = @import("zlinter");
+const LintRule = zlinter.rules.LintRule;
 
 const RulesConfig = lint_builtin.RulesConfig;
 const RuleIndex = zlinter.rules.RuleIndex;
