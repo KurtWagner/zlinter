@@ -39,36 +39,34 @@ pub fn jsonParse(
     tokens: while (true) {
         const token = try source.nextAlloc(allocator, options.allocate.?);
         switch (token) {
-            inline .string, .allocated_string => |key| {
-                if (std.mem.eql(u8, key, "id")) {
-                    id = switch (try source.nextAlloc(allocator, options.allocate.?)) {
-                        .number => |value| .{
-                            .integer = std.fmt.parseInt(i64, value, 10) catch
-                                return error.UnexpectedToken,
-                        },
-                        inline .string, .allocated_string => |value| .{
-                            .string = value,
-                        },
-                        else => return error.UnexpectedToken,
-                    };
-                } else if (std.mem.eql(u8, key, "method")) {
-                    const raw_method = switch (try source.nextAlloc(
-                        allocator,
-                        options.allocate.?,
-                    )) {
-                        inline .string, .allocated_string => |value| value,
-                        else => return error.UnexpectedToken,
-                    };
-                    method = std.meta.stringToEnum(Method, raw_method) orelse
-                        return error.InvalidEnumTag;
-                } else {
-                    _ = try std.json.innerParse(
-                        std.json.Value,
-                        allocator,
-                        source,
-                        options,
-                    );
-                }
+            inline .string, .allocated_string => |key| if (std.mem.eql(u8, key, "id")) {
+                id = switch (try source.nextAlloc(allocator, options.allocate.?)) {
+                    .number => |value| .{
+                        .integer = std.fmt.parseInt(i64, value, 10) catch
+                            return error.UnexpectedToken,
+                    },
+                    inline .string, .allocated_string => |value| .{
+                        .string = value,
+                    },
+                    else => return error.UnexpectedToken,
+                };
+            } else if (std.mem.eql(u8, key, "method")) {
+                const raw_method = switch (try source.nextAlloc(
+                    allocator,
+                    options.allocate.?,
+                )) {
+                    inline .string, .allocated_string => |value| value,
+                    else => return error.UnexpectedToken,
+                };
+                method = std.meta.stringToEnum(Method, raw_method) orelse
+                    return error.InvalidEnumTag;
+            } else {
+                _ = try std.json.innerParse(
+                    std.json.Value,
+                    allocator,
+                    source,
+                    options,
+                );
             },
             .object_end => break :tokens,
             else => return error.UnexpectedToken,

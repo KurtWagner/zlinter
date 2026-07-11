@@ -35,8 +35,11 @@ const TextDocumentDidSaveParams = struct {
 const TextDocumentDidCloseParams = struct {
     text_document: TextDocument,
 };
+
+// zlinter-disable declaration_naming
 const ExitParams = struct {};
 const InitializedParams = struct {};
+// zlinter-enable declaration_naming
 
 const TextDocument = struct {
     uri: std.Uri,
@@ -72,21 +75,20 @@ pub fn jsonParse(
                     };
                     method = std.meta.stringToEnum(Method, raw_method) orelse
                         return error.InvalidEnumTag;
-                } else if (std.mem.eql(u8, key, "params")) {
+                } else if (std.mem.eql(u8, key, "params"))
                     params_value = try std.json.innerParse(
                         std.json.Value,
                         allocator,
                         source,
                         options,
-                    );
-                } else {
+                    )
+                else
                     _ = try std.json.innerParse(
                         std.json.Value,
                         allocator,
                         source,
                         options,
                     );
-                }
             },
             .object_end => break :tokens,
             else => return error.UnexpectedToken,

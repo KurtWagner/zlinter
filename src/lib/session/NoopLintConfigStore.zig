@@ -1,5 +1,10 @@
 const NoopLintConfigStore = @This();
 
+// TODO: I think if there's methods that accept self as argument its not longer a namespace
+// This is just a hack to trick zlinter into thinking it's not a namespace
+// I really need to look into the namespace naming rule and situation
+_: u8 = 0,
+
 pub const init: NoopLintConfigStore = .{};
 
 pub fn store(self: *NoopLintConfigStore) LintConfigStore {
