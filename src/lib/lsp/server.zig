@@ -278,60 +278,85 @@ pub const LspServer = struct {
         uri: std.Uri,
         err: *LspError,
     ) error{ LspError, OutOfMemory }!void {
-        var diagnostics: std.ArrayList(LspResponse.LspDiagnostic) = .empty;
-
-        // TODO: Cleanup up this trash, just getting something working
-        if (fileUriToAbsPath(self.handle_arena.allocator(), uri)) |abs_path|
-            if (self.session.file_store.resolve(abs_path)) |file_id| {
-                var doc: LintDocument = undefined;
-                if (self.session.initDocument(file_id, self.handle_arena.allocator(), &doc)) {
-                    self.lint_config_store.index(
-                        self.runtime.io,
-                        // TODO: We need to think about how we refresh this whemn files change
-                        self.runtime.sessionArena(),
-                        std.Io.Dir.path.dirname(abs_path).?,
-                        std.Io.Dir.cwd(),
-                    ) catch {};
-
-                    rules: for (self.rules, 0..) |rule, i| {
-                        const rule_idx: RuleIndex = @enumFromInt(i);
-                        if (rule.run(
-                            rule,
-                            self.session,
-                            &doc,
-                            .{
-                                .config = self.lint_config_store.lookup(
-                                    std.Io.Dir.path.dirname(abs_path).?,
-                                    rule_idx,
-                                ),
-                            },
-                        )) |result| {
-                            const r = result orelse continue :rules;
-                            for (r.problems) |problem|
-                                diagnostics.append(
-                                    self.handle_arena.allocator(),
-                                    .initFromProblem(
-                                        problem,
-                                        &self.session.file_store,
-                                        file_id,
-                                        self.handle_arena.allocator(),
-                                    ),
-                                ) catch {};
-                        } else |_| {}
-                    }
-                } else |_| {}
-            } else |_| {};
-
         try self.sendResponse(.{
             .payload = .{
                 .notification = .{
                     .@"textDocument/publishDiagnostics" = .{
                         .uri = uri,
-                        .diagnostics = diagnostics.items,
+                        .diagnostics = self.getDiagnostics(uri),
                     },
                 },
             },
         }, err);
+    }
+
+    fn getDiagnostics(
+        self: *LspServer,
+        uri: std.Uri,
+    ) []const LspResponse.LspDiagnostic {
+        var diagnostics: std.ArrayList(LspResponse.LspDiagnostic) = .empty;
+
+        const abs_path = fileUriToAbsPath(self.handle_arena.allocator(), uri) orelse {
+            std.log.err("Failed to get absolute path from URI '{f}'", .{uri.fmt(.all)});
+            return diagnostics.items;
+        };
+
+        const file_id = self.session.file_store.resolve(abs_path) catch |e| {
+            std.log.err("Failed to resolve file '{s}' in file store: {t}", .{ abs_path, e });
+            return diagnostics.items;
+        };
+
+        var doc: LintDocument = undefined;
+        self.session.initDocument(file_id, self.handle_arena.allocator(), &doc) catch |e| {
+            std.log.err("Failed to init document '{s}'", .{ abs_path, e });
+            return diagnostics.items;
+        };
+
+        self.lint_config_store.index(
+            self.runtime.io,
+            // TODO: We need to think about how we refresh this whemn files change
+            self.runtime.sessionArena(),
+            std.Io.Dir.path.dirname(abs_path).?,
+            std.Io.Dir.cwd(),
+        ) catch |e| {
+            std.log.err("Invalid zlinter.zon seen in ancestors of '{s}': {t}", .{ abs_path, e });
+            return diagnostics.items;
+        };
+
+        rules: for (self.rules, 0..) |rule, i| {
+            const rule_idx: RuleIndex = @enumFromInt(i);
+
+            const result = rule.run(
+                rule,
+                self.session,
+                &doc,
+                .{
+                    .config = self.lint_config_store.lookup(
+                        std.Io.Dir.path.dirname(abs_path).?,
+                        rule_idx,
+                    ),
+                },
+            ) catch |e| switch (e) {
+                error.OutOfMemory => @panic("OOM"),
+                else => {
+                    std.log.err("Failed to lint '{s}' with '{s}': {t}", .{ abs_path, rule.rule_id, e });
+                    continue :rules;
+                },
+            } orelse continue :rules;
+
+            for (result.problems) |problem|
+                diagnostics.append(
+                    self.handle_arena.allocator(),
+                    .initFromProblem(
+                        problem,
+                        &self.session.file_store,
+                        file_id,
+                        self.handle_arena.allocator(),
+                    ),
+                ) catch @panic("OOM");
+        }
+
+        return diagnostics.items;
     }
 
     fn sendError(
