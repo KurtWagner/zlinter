@@ -67,12 +67,20 @@ pub fn main(init: std.process.Init) !u8 {
 
     const lint_files = try resolveFilesToLint(&runtime, args);
 
-    const exit_code = try lint.runLintMode(
-        &runtime,
-        args,
-        printer,
-        lint_files,
-    );
+    const exit_code = switch (args.mode) {
+        .lint => try lint.run(
+            &runtime,
+            args,
+            printer,
+            lint_files,
+        ),
+        .lsp => try lsp.run(
+            &runtime,
+            args,
+            printer,
+            lint_files,
+        ),
+    };
     return exit_code.int();
 }
 
@@ -198,6 +206,8 @@ test {
 
 const common = @import("common.zig");
 const lint = @import("mode/lint.zig");
+const lsp = @import("mode/lsp.zig");
+
 const lint_builtin = @import("lint_builtin"); // Generated in build_lint_builtin.zig
 const std = @import("std");
 const zlinter = @import("zlinter");

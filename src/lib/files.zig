@@ -438,6 +438,36 @@ pub fn resolveLazyPath(
     }
 }
 
+/// Converts a local file URI to an absolute path.
+///
+/// Returns null if `uri` is not a file URI or refers to a remote host.
+/// The caller owns the returned path. Panics if allocation fails.
+pub fn fileUriToAbsPath(
+    allocator: std.mem.Allocator,
+    uri: std.Uri,
+) ?[]u8 {
+    if (!std.mem.eql(u8, uri.scheme, "file"))
+        return null;
+
+    if (uri.host) |host| {
+        const host_text = switch (host) {
+            .raw => |value| value,
+            .percent_encoded => |value| value,
+        };
+
+        if (host_text.len != 0 and
+            !std.ascii.eqlIgnoreCase(host_text, "localhost"))
+            return null;
+    }
+
+    return switch (uri.path) {
+        .raw => |value| allocator.dupe(u8, value) catch @panic("OOM"),
+        .percent_encoded => |value| std.Uri.percentDecodeInPlace(
+            allocator.dupe(u8, value) catch @panic("OOM"),
+        ),
+    };
+}
+
 const LintRuntime = @import("session/LintRuntime.zig");
 const Args = @import("Args.zig");
 const std = @import("std");

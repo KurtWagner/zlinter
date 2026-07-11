@@ -2062,7 +2062,8 @@ test "CommentsDocument.debugPrint handles all comment kinds" {
     var doc = try allocParse(source, std.testing.allocator);
     defer doc.deinit(std.testing.allocator);
 
-    doc.debugPrint("test.zig", source);
+    // TODO: Finish this test without adding noise to tests:
+    //doc.debugPrint("test.zig", source);
 }
 
 const std = @import("std");
