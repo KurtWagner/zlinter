@@ -22,6 +22,8 @@ jobs:
     runs-on: ubuntu-22.04
     name: Test coverage
     timeout-minutes: 5
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: 'true'
     steps:
       - name: "Checkout repo"
         uses: actions/checkout@v4
@@ -45,7 +47,6 @@ jobs:
           cat zig-out/coverage/kcov-merged/cobertura.xml
 
       - name: "Upload coverage"
-        uses: coverallsapp/github-action@v2.3.7
+        uses: coverallsapp/github-action@v2
         with:
-          base-path: src
           debug: true
