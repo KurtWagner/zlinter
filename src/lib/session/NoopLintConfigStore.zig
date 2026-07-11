@@ -12,6 +12,7 @@ pub fn store(self: *NoopLintConfigStore) LintConfigStore {
 const vtable: LintConfigStore.VTable = .{
     .index = index,
     .lookup = lookup,
+    .reset = reset,
 };
 
 fn index(
@@ -37,6 +38,10 @@ fn lookup(
     _ = dir_abs_path;
     _ = rule_idx;
     @panic("Noop, nothing to lookup");
+}
+
+fn reset(ptr: *anyopaque) void {
+    _ = ptr;
 }
 
 test {

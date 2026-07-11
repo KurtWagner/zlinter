@@ -4,6 +4,7 @@ ptr: *anyopaque,
 vtable: *const VTable,
 
 pub const VTable = struct {
+    /// Indexes the file so that it can be looked up.
     index: *const fn (
         self: *anyopaque,
         io: std.Io,
@@ -12,11 +13,16 @@ pub const VTable = struct {
         cwd: std.Io.Dir,
     ) error{InvalidLintConfig}!void,
 
+    /// Resolves an indexed configuration for a given file. Index is always
+    /// called on a file first.
     lookup: *const fn (
         self: *const anyopaque,
         dir_abs_path: []const u8,
         rule_idx: RuleIndex,
     ) *anyopaque,
+
+    /// Should clear the index / store back to the original state.
+    reset: *const fn (self: *anyopaque) void,
 };
 
 pub fn index(
@@ -45,6 +51,10 @@ pub fn lookup(
         dir_abs_path,
         rule_idx,
     );
+}
+
+pub fn reset(self: LintConfigStore) void {
+    return self.vtable.reset(self.ptr);
 }
 
 test {

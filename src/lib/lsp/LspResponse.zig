@@ -61,21 +61,27 @@ const PublishDiagnosticsParams = struct {
     }
 };
 
+// zlinter-disable field_naming - we don't control the method names
 const InitializeResult = struct {
     capabilities: Capabilities,
     serverInfo: ServerInfo,
 };
+// zlinter-enable field_naming
 
+// zlinter-disable field_naming - we don't control the method names
 const Capabilities = struct {
     textDocumentSync: TextDocumentSync,
     codeActionProvider: bool,
 };
+// zlinter-enable field_naming
 
+// zlinter-disable field_naming - we don't control the method names
 const TextDocumentSync = struct {
     openClose: bool,
     change: u8,
     save: bool,
 };
+// zlinter-enable field_naming
 
 const ServerInfo = struct {
     name: []const u8,

@@ -2,14 +2,23 @@ const CliLintConfigStore = @This();
 
 pub const LintConfigId = u32;
 
+/// Points to the base config, should alwaus be zero but tracking anyway for completeness.
 base_config_id: LintConfigId,
+
+/// Indexed bu config index/id, contents of LintConfig allocated with corresponding indexed arena.
 configs: std.ArrayList(LintConfig),
+
+/// Indexed by config index/id, contains arena used to allocate the config
+arenas: std.ArrayList(std.heap.ArenaAllocator),
+
+/// Index of dir absolute path to resolved config id (if any)
 config_by_dir_abs_path: std.StringHashMapUnmanaged(?LintConfigId),
 rules: []const LintRule,
 
 const vtable: zlinter.session.LintConfigStore.VTable = .{
     .index = index,
     .lookup = lookup,
+    .reset = reset,
 };
 
 pub fn store(self: *CliLintConfigStore) zlinter.session.LintConfigStore {
@@ -26,12 +35,15 @@ pub fn init(
 ) CliLintConfigStore {
     var self: CliLintConfigStore = .{
         .configs = .empty,
+        .arenas = .empty,
         .config_by_dir_abs_path = .empty,
         .base_config_id = 0,
         .rules = rules,
     };
 
-    const rule_configs: []*anyopaque = arena.alloc(
+    var base_arena: std.heap.ArenaAllocator = .init(arena);
+
+    const rule_configs: []*anyopaque = base_arena.allocator().alloc(
         *anyopaque,
         base_rule_configs.len,
     ) catch @panic("OOM");
@@ -39,8 +51,9 @@ pub fn init(
 
     self.configs.append(arena, LintConfig{
         .rule_configs = rule_configs,
-        .rule_configs_on = std.bit_set.Dynamic.initFull(arena, base_rule_configs.len) catch @panic("OOM"),
+        .rule_configs_on = std.bit_set.Dynamic.initFull(base_arena.allocator(), base_rule_configs.len) catch @panic("OOM"),
     }) catch @panic("OOM");
+    self.arenas.append(arena, base_arena) catch @panic("OOM");
 
     return self;
 }
@@ -297,7 +310,7 @@ test "CliLintConfigStore.index errors on malformed zlinter.zon" {
     );
 
     var dir_abs_path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
-    const dir_abs_path = dir_abs_path_buffer[0..try tmp_dir.dir.realPath(
+    const dir_abs_path = dir_abs_path_buffer[0..try tmp_dir.dir.realPathFile(
         std.testing.io,
         "nested",
         &dir_abs_path_buffer,
@@ -305,7 +318,8 @@ test "CliLintConfigStore.index errors on malformed zlinter.zon" {
 
     var cli_store = CliLintConfigStore.init(
         arena.allocator(),
-        lint_builtin.rule_configs,
+        lint_builtin.rule_configs[0..],
+        lint_builtin.rules[0..],
     );
     var config_store = cli_store.store();
     try std.testing.expectError(
@@ -332,7 +346,7 @@ test "CliLintConfigStore.index errors when zlinter.zon is not readable as a file
     );
 
     var dir_abs_path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
-    const dir_abs_path = dir_abs_path_buffer[0..try tmp_dir.dir.realPath(
+    const dir_abs_path = dir_abs_path_buffer[0..try tmp_dir.dir.realPathFile(
         std.testing.io,
         "nested",
         &dir_abs_path_buffer,
@@ -340,7 +354,8 @@ test "CliLintConfigStore.index errors when zlinter.zon is not readable as a file
 
     var cli_store = CliLintConfigStore.init(
         arena.allocator(),
-        lint_builtin.rule_configs,
+        lint_builtin.rule_configs[0..],
+        lint_builtin.rules[0..],
     );
     var config_store = cli_store.store();
 
@@ -353,6 +368,67 @@ test "CliLintConfigStore.index errors when zlinter.zon is not readable as a file
             std.Io.Dir.cwd(),
         ),
     );
+}
+
+pub fn reset(ptr: *anyopaque) void {
+    const self: *CliLintConfigStore = @ptrCast(@alignCast(ptr));
+
+    const base_config = self.configs.items[self.base_config_id];
+
+    for (0..self.configs.items.len) |i|
+        if (i != self.base_config_id)
+            self.arenas.items[i].deinit();
+
+    // These are owned by an overrarching arena (not the arenas associated with the configs)
+    self.configs.clearRetainingCapacity();
+    self.config_by_dir_abs_path.clearRetainingCapacity();
+
+    // Plonk base config back in place
+    self.configs.appendAssumeCapacity(base_config);
+    self.base_config_id = 0;
+}
+
+test "CliLintConfigStore.reset keeps only the base config" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    var cli_store = CliLintConfigStore.init(
+        arena.allocator(),
+        lint_builtin.rule_configs[0..],
+        lint_builtin.rules[0..],
+    );
+    const base_config = cli_store.configs.items[0];
+
+    // Insert a fake configuration so the count is up by 1
+    var config_arena: std.heap.ArenaAllocator = .init(arena.allocator());
+    const rule_configs = try config_arena.allocator().alloc(
+        *anyopaque,
+        lint_builtin.rule_configs.len,
+    );
+    @memcpy(rule_configs, lint_builtin.rule_configs[0..]);
+
+    try cli_store.configs.append(arena.allocator(), .{
+        .rule_configs = rule_configs,
+        .rule_configs_on = try std.bit_set.Dynamic.initEmpty(
+            config_arena.allocator(),
+            lint_builtin.rule_configs.len,
+        ),
+    });
+    try cli_store.arenas.append(arena.allocator(), config_arena);
+    try cli_store.config_by_dir_abs_path.put(
+        arena.allocator(),
+        "/tmp/test",
+        1,
+    );
+
+    reset(&cli_store);
+
+    try std.testing.expectEqual(@as(usize, 1), cli_store.configs.items.len);
+    try std.testing.expectEqual(@as(LintConfigId, 0), cli_store.base_config_id);
+    try std.testing.expectEqual(@as(usize, 0), cli_store.config_by_dir_abs_path.count());
+    try std.testing.expectEqual(base_config.rule_configs.len, cli_store.configs.items[0].rule_configs.len);
+    try std.testing.expectEqual(base_config.rule_configs.ptr, cli_store.configs.items[0].rule_configs.ptr);
+    try std.testing.expectEqual(base_config.rule_configs_on.count(), cli_store.configs.items[0].rule_configs_on.count());
 }
 
 test {

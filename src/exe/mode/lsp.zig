@@ -41,6 +41,10 @@ pub fn run(
     return ExitCode.success;
 }
 
+test {
+    std.testing.refAllDecls(@This());
+}
+
 const std = @import("std");
 const zlinter = @import("zlinter");
 const ExitCode = @import("../common.zig").ExitCode;

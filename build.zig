@@ -335,6 +335,37 @@ pub fn build(b: *std.Build) void {
         };
     }
 
+    const exe_test_imports = &.{
+        zlinter_import,
+        std.Build.Module.Import{
+            .name = "lint_builtin",
+            .module = createLintBuiltinModule(
+                b,
+                zlinter_import,
+                rules[0..],
+                createRulesBuiltinStep(
+                    b,
+                    b.path("build_lint_builtin.zig"),
+                    rules[0..],
+                ),
+            ),
+        },
+        std.Build.Module.Import{
+            .name = "zlinter_build_config",
+            .module = createZlinterBuildConfigModule(b),
+        },
+    };
+
+    const cli_unit_tests_exe = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/exe/cli.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = exe_test_imports,
+        }),
+        .use_llvm = test_coverage,
+    });
+
     // ------------------------------------------------------------------------
     // zig build test
     // ------------------------------------------------------------------------
@@ -376,10 +407,18 @@ pub fn build(b: *std.Build) void {
         merge_coverage.addDirectoryArg(cover_run.addOutputDirectoryArg("unit_test_coverage"));
         cover_run.addArtifactArg(unit_tests_exe);
 
+        const cli_cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
+        cli_cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only" });
+        cli_cover_run.addPrefixedDirectoryArg("--include-pattern=", b.path("src"));
+        merge_coverage.addDirectoryArg(cli_cover_run.addOutputDirectoryArg("cli_unit_test_coverage"));
+        cli_cover_run.addArtifactArg(cli_unit_tests_exe);
+
         unit_test_step.dependOn(&install_coverage.step);
     } else {
         const run_unit_tests = b.addRunArtifact(unit_tests_exe);
+        const run_cli_unit_tests = b.addRunArtifact(cli_unit_tests_exe);
         unit_test_step.dependOn(&run_unit_tests.step);
+        unit_test_step.dependOn(&run_cli_unit_tests.step);
     }
 
     for (rule_imports) |rule_import| {
@@ -565,9 +604,7 @@ fn buildStep(
         .imports = &.{zlinter_import},
     });
 
-    const zlinter_build_config = b.addOptions();
-    zlinter_build_config.addOption(bool, "verbose", b.graph.verbose);
-    exe_module.addImport("zlinter_build_config", zlinter_build_config.createModule());
+    exe_module.addImport("zlinter_build_config", createZlinterBuildConfigModule(b));
 
     // --------------------------------------------------------------------
     // Generate dynamic rules and rules config
@@ -639,6 +676,12 @@ fn buildStep(
     }
 
     return &run.step;
+}
+
+fn createZlinterBuildConfigModule(b: *std.Build) *std.Build.Module {
+    const zlinter_build_config = b.addOptions();
+    zlinter_build_config.addOption(bool, "verbose", b.graph.verbose);
+    return zlinter_build_config.createModule();
 }
 
 fn createTracyModule(
