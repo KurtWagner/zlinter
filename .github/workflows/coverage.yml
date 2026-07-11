@@ -44,4 +44,7 @@ jobs:
           zig build unit-test -Dcoverage=true --summary all
 
       - name: "Upload coverage"
-        uses: coverallsapp/github-action@v2
+        uses: coverallsapp/github-action@v2.3.7
+        with:
+          base-path: src
+          debug: true
