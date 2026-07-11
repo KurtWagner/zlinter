@@ -67,6 +67,7 @@ pub fn jsonParse(
     tokens: while (true) {
         const token = try source.nextAlloc(allocator, options.allocate.?);
         switch (token) {
+            // zlinter-disable-next-line require_braces - I think its required here?
             inline .string, .allocated_string => |key| {
                 if (std.mem.eql(u8, key, "method")) {
                     const raw_method = switch (try source.nextAlloc(allocator, options.allocate.?)) {

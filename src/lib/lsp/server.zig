@@ -166,7 +166,9 @@ pub const LspServer = struct {
                 notification.value,
                 err,
             );
-        } else |_| {}
+        } else |_| {
+            // Ignored.
+        }
 
         if (std.json.parseFromSlice(
             LspRequest,
@@ -178,7 +180,9 @@ pub const LspServer = struct {
                 request.value,
                 err,
             );
-        } else |_| {}
+        } else |_| {
+            // Ignored.
+        }
 
         return .running;
     }
