@@ -43,6 +43,7 @@ jobs:
       - name: "Run unit tests with coverage"
         run: |
           kcov --version
+          rm -rf .zig-cache zig-out
           zig build unit-test -Dcoverage=true --summary all
           cat zig-out/coverage/kcov-merged/cobertura.xml
 
