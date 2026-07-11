@@ -42,6 +42,7 @@ jobs:
         run: |
           kcov --version
           zig build unit-test -Dcoverage=true --summary all
+          cat zig-out/coverage/kcov-merged/cobertura.xml
 
       - name: "Upload coverage"
         uses: coverallsapp/github-action@v2.3.7
