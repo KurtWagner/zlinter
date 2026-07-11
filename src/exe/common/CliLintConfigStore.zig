@@ -243,10 +243,12 @@ const LintConfig = struct {
                 return null;
             },
             else => {
-                std.log.err(
-                    "Could not read lint config '{s}' due to: {t}",
-                    .{ lint_config_abs_path, e },
-                );
+                // TODO: There must be a better way of expecting stderr in tests
+                if (!builtin.is_test)
+                    std.log.err(
+                        "Could not read lint config '{s}' due to: {t}",
+                        .{ lint_config_abs_path, e },
+                    );
                 return error.InvalidLintConfig;
             },
         };
@@ -262,10 +264,12 @@ const LintConfig = struct {
             .{},
         ) catch |e| {
             if (e == error.OutOfMemory) @panic("OOM");
-            std.log.err(
-                "Failed to parse lint config: '{s}' due to {t} - {f}",
-                .{ lint_config_abs_path, e, diagnostics },
-            );
+            // TODO: There must be a better way of expecting stderr in tests
+            if (!builtin.is_test)
+                std.log.err(
+                    "Failed to parse lint config: '{s}' due to {t} - {f}",
+                    .{ lint_config_abs_path, e, diagnostics },
+                );
             return error.InvalidLintConfig;
         };
 
@@ -436,6 +440,7 @@ test {
 }
 
 const lint_builtin = @import("lint_builtin");
+const builtin = @import("builtin");
 const std = @import("std");
 const zlinter = @import("zlinter");
 const LintRule = zlinter.rules.LintRule;

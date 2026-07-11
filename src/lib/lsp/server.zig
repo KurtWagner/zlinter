@@ -470,20 +470,48 @@ fn testBody(comptime body: []const u8) []const u8 {
 }
 
 test {
-    // TODO: remove this, just being used to force it to be covered
-    var temp: LspResponse = undefined;
-    temp = undefined;
-
     std.testing.refAllDecls(@This());
 }
 
+// TODO: Write some test helpers so make testing requests + responses easier to write and grok
 test "didOpen publishes valid empty diagnostics json" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var stdin: std.Io.Reader = .fixed(comptime testBody(
-        \\{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///tmp/did-open.zig","languageId":"zig","version":1,"text":"const x = 1;\n"}}}
-    ));
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    try testing.writeFile(
+        tmp_dir.dir,
+        "did-open.zig",
+        \\
+        \\const x = 1;
+        \\
+        ,
+    );
+
+    var abs_path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
+    const abs_path = abs_path_buffer[0..try tmp_dir.dir.realPathFile(
+        std.testing.io,
+        "did-open.zig",
+        &abs_path_buffer,
+    )];
+    const uri = try std.fmt.allocPrint(
+        arena.allocator(),
+        "file://{s}",
+        .{abs_path},
+    );
+    const body = try std.fmt.allocPrint(
+        arena.allocator(),
+        "{{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{{\"textDocument\":{{\"uri\":\"{s}\",\"languageId\":\"zig\",\"version\":1,\"text\":\"const x = 1;\\n\"}}}}}}",
+        .{uri},
+    );
+    const input = try std.fmt.allocPrint(
+        arena.allocator(),
+        "Content-Length: {d}\r\n\r\n{s}",
+        .{ body.len, body },
+    );
+    var stdin: std.Io.Reader = .fixed(input);
     var stdout: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer stdout.deinit();
 
@@ -500,11 +528,18 @@ test "didOpen publishes valid empty diagnostics json" {
     );
     try server.run();
 
-    const expected_body =
-        \\{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///tmp/did-open.zig","diagnostics":[]}}
-    ;
+    const expected_body = try std.fmt.allocPrint(
+        arena.allocator(),
+        "{{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/publishDiagnostics\",\"params\":{{\"uri\":\"{s}\",\"diagnostics\":[]}}}}",
+        .{uri},
+    );
+    const expected = try std.fmt.allocPrint(
+        arena.allocator(),
+        "Content-Length: {d}\r\n\r\n{s}",
+        .{ expected_body.len, expected_body },
+    );
     try std.testing.expectEqualStrings(
-        comptime testBody(expected_body),
+        expected,
         stdout.written(),
     );
 }
