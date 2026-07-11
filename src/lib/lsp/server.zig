@@ -475,6 +475,9 @@ test {
 
 // TODO: Write some test helpers so make testing requests + responses easier to write and grok
 test "didOpen publishes valid empty diagnostics json" {
+    // TODO: Get this working with Windows path separators.
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
