@@ -134,8 +134,7 @@ fn resolveFilesToLint(
 /// Returns an index of files to exclude if exclude configuration is found in args
 fn buildExcludesIndex(
     runtime: *const LintRuntime,
-    // TODO: #164 Use arena
-    gpa: std.mem.Allocator,
+    arena: std.mem.Allocator,
     dir: std.Io.Dir,
     args: zlinter.Args,
 ) !?std.BufSet {
@@ -144,12 +143,8 @@ fn buildExcludesIndex(
     const exclude_lint_paths: ?[]zlinter.files.LintFile = exclude: {
         if (args.exclude_paths) |p| {
             std.debug.assert(p.len > 0);
-            break :exclude try zlinter.files.allocLintFiles(runtime, dir, p, gpa);
+            break :exclude try zlinter.files.allocLintFiles(runtime, dir, p, arena);
         } else break :exclude null;
-    };
-    defer if (exclude_lint_paths) |exclude| {
-        for (exclude) |*lint_file| lint_file.deinit(gpa);
-        gpa.free(exclude);
     };
 
     const build_exclude_lint_paths: ?[]zlinter.files.LintFile = exclude: {
@@ -158,15 +153,11 @@ fn buildExcludesIndex(
 
         if (args.build_exclude_paths) |p| {
             std.debug.assert(p.len > 0);
-            break :exclude try zlinter.files.allocLintFiles(runtime, dir, p, gpa);
+            break :exclude try zlinter.files.allocLintFiles(runtime, dir, p, arena);
         } else break :exclude null;
     };
-    defer if (build_exclude_lint_paths) |files| {
-        for (files) |*file| file.deinit(gpa);
-        gpa.free(files);
-    };
 
-    var index = std.BufSet.init(gpa);
+    var index = std.BufSet.init(arena);
     errdefer index.deinit();
 
     if (exclude_lint_paths) |files|
