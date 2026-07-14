@@ -20,9 +20,12 @@ pub const LintFile = struct {
 ///
 /// If an explicit list of file paths was provided in the args, this will be
 /// used, otherwise it'll walk relative to working path.
-pub fn allocLintFiles(runtime: *const LintRuntime, dir: std.Io.Dir, maybe_files: ?[]const []const u8, gpa: std.mem.Allocator) ![]zlinter.files.LintFile {
-    const io = runtime.io;
-
+pub fn allocLintFiles(
+    io: std.Io,
+    dir: std.Io.Dir,
+    maybe_files: ?[]const []const u8,
+    gpa: std.mem.Allocator,
+) ![]zlinter.files.LintFile {
     var file_paths = std.StringHashMap(void).init(gpa);
     defer file_paths.deinit();
     errdefer {
@@ -85,6 +88,77 @@ pub fn allocLintFiles(runtime: *const LintRuntime, dir: std.Io.Dir, maybe_files:
     }
 
     return lint_files;
+}
+
+/// Returns an index of files to exclude if exclude configuration is found in args.
+pub fn buildExcludesIndex(
+    io: std.Io,
+    arena: std.mem.Allocator,
+    dir: std.Io.Dir,
+    args: Args,
+) !?std.BufSet {
+    if (args.exclude_paths == null and args.build_exclude_paths == null) return null;
+
+    const exclude_lint_paths: ?[]LintFile = exclude: {
+        if (args.exclude_paths) |paths| {
+            std.debug.assert(paths.len > 0);
+            break :exclude try allocLintFiles(io, dir, paths, arena);
+        } else break :exclude null;
+    };
+    defer if (exclude_lint_paths) |files| {
+        for (files) |*lint_file| lint_file.deinit(arena);
+        arena.free(files);
+    };
+
+    const build_exclude_lint_paths: ?[]LintFile = exclude: {
+        // User include paths supersede build configured includes and excludes.
+        if (args.include_paths != null) break :exclude null;
+
+        if (args.build_exclude_paths) |paths| {
+            std.debug.assert(paths.len > 0);
+            break :exclude try allocLintFiles(io, dir, paths, arena);
+        } else break :exclude null;
+    };
+    defer if (build_exclude_lint_paths) |files| {
+        for (files) |*lint_file| lint_file.deinit(arena);
+        arena.free(files);
+    };
+
+    var index = std.BufSet.init(arena);
+    errdefer index.deinit();
+
+    if (exclude_lint_paths) |files|
+        for (files) |file| try index.insert(file.abs_path);
+
+    if (build_exclude_lint_paths) |files|
+        for (files) |file| try index.insert(file.abs_path);
+
+    return index;
+}
+
+/// Returns an index of files to only include if filter configuration is found in args.
+pub fn buildFilterIndex(
+    io: std.Io,
+    arena: std.mem.Allocator,
+    dir: std.Io.Dir,
+    args: Args,
+) !?std.BufSet {
+    const filter_paths: []LintFile = exclude: {
+        if (args.filter_paths) |paths| {
+            std.debug.assert(paths.len > 0);
+            break :exclude try allocLintFiles(io, dir, paths, arena);
+        } else return null;
+    };
+    defer {
+        for (filter_paths) |*lint_file| lint_file.deinit(arena);
+        arena.free(filter_paths);
+    }
+
+    var index = std.BufSet.init(arena);
+    errdefer index.deinit();
+
+    for (filter_paths) |file| try index.insert(file.abs_path);
+    return index;
 }
 
 /// Walks a directory and its sub directories adding any zig source file
@@ -190,12 +264,6 @@ test "isLintableFilePath" {
 test "allocLintFiles - with default args" {
     var tmp_dir = std.testing.tmpDir(.{ .iterate = true });
     defer tmp_dir.cleanup();
-    var session_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer session_arena.deinit();
-    var file_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer file_arena.deinit();
-    var rule_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer rule_arena.deinit();
 
     try testing.createFiles(tmp_dir.dir, @constCast(&[_][]const u8{
         testing.paths.posix("a.zig"),
@@ -211,21 +279,8 @@ test "allocLintFiles - with default args" {
 
     var cwd_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const cwd = cwd_buffer[0..try tmp_dir.dir.realPath(std.testing.io, &cwd_buffer)];
-    const fake_args = Args.testDefault();
 
-    const runtime: LintRuntime = .{
-        .io = std.testing.io,
-        .verbose = false,
-        .args = &fake_args,
-        .session_arena = &session_arena,
-        .file_arena = &file_arena,
-        .rule_arena = &rule_arena,
-        .zig_exe = "zig",
-        .zig_lib_directory = ".",
-        .cwd = cwd,
-    };
-
-    const lint_files = try allocLintFiles(&runtime, tmp_dir.dir, null, std.testing.allocator);
+    const lint_files = try allocLintFiles(std.testing.io, tmp_dir.dir, null, std.testing.allocator);
     defer {
         for (lint_files) |*file| file.deinit(std.testing.allocator);
         std.testing.allocator.free(lint_files);
@@ -249,12 +304,6 @@ test "allocLintFiles - with default args" {
 test "allocLintFiles - with arg files" {
     var tmp_dir = std.testing.tmpDir(.{ .iterate = true });
     defer tmp_dir.cleanup();
-    var session_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer session_arena.deinit();
-    var file_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer file_arena.deinit();
-    var rule_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer rule_arena.deinit();
 
     try testing.createFiles(tmp_dir.dir, @constCast(&[_][]const u8{
         testing.paths.posix("a.zig"),
@@ -273,21 +322,8 @@ test "allocLintFiles - with arg files" {
 
     var cwd_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const cwd = cwd_buffer[0..try tmp_dir.dir.realPath(std.testing.io, &cwd_buffer)];
-    const fake_args = Args.testDefault();
 
-    const runtime: LintRuntime = .{
-        .io = std.testing.io,
-        .verbose = false,
-        .args = &fake_args,
-        .session_arena = &session_arena,
-        .file_arena = &file_arena,
-        .rule_arena = &rule_arena,
-        .zig_exe = "zig",
-        .zig_lib_directory = ".",
-        .cwd = cwd,
-    };
-
-    const lint_files = try allocLintFiles(&runtime, tmp_dir.dir, &.{
+    const lint_files = try allocLintFiles(std.testing.io, tmp_dir.dir, &.{
         testing.paths.posix("a.zig"),
         testing.paths.posix("src/"),
         testing.paths.posix("a.zig"), // Duplicate should be ignored
@@ -311,6 +347,85 @@ test "allocLintFiles - with arg files" {
     }, &.{ cwd_rel_path_0, cwd_rel_path_1 });
     try std.testing.expect(std.Io.Dir.path.isAbsolute(lint_files[0].abs_path));
     try std.testing.expect(std.Io.Dir.path.isAbsolute(lint_files[1].abs_path));
+}
+
+test "buildExcludesIndex prefers user include over build excludes" {
+    var tmp_dir = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp_dir.cleanup();
+
+    try testing.createFiles(tmp_dir.dir, @constCast(&[_][]const u8{
+        testing.paths.posix("src/keep.zig"),
+        testing.paths.posix("build_only.zig"),
+        testing.paths.posix("user_only.zig"),
+    }));
+
+    var cwd_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
+    const cwd = cwd_buffer[0..try tmp_dir.dir.realPath(std.testing.io, &cwd_buffer)];
+    var args = Args.testDefault();
+    args.include_paths = @constCast(&[_][]const u8{testing.paths.posix("src")});
+    args.exclude_paths = @constCast(&[_][]const u8{testing.paths.posix("user_only.zig")});
+    args.build_exclude_paths = @constCast(&[_][]const u8{testing.paths.posix("build_only.zig")});
+
+    var index = (try buildExcludesIndex(std.testing.io, std.testing.allocator, tmp_dir.dir, args)).?;
+    defer index.deinit();
+
+    const user_only = try std.Io.Dir.path.resolve(std.testing.allocator, &.{ cwd, testing.paths.posix("user_only.zig") });
+    defer std.testing.allocator.free(user_only);
+    const build_only = try std.Io.Dir.path.resolve(std.testing.allocator, &.{ cwd, testing.paths.posix("build_only.zig") });
+    defer std.testing.allocator.free(build_only);
+
+    try std.testing.expect(index.contains(user_only));
+    try std.testing.expect(!index.contains(build_only));
+}
+
+test "buildFilterIndex resolves filter files into absolute path index" {
+    var tmp_dir = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp_dir.cleanup();
+
+    try testing.createFiles(tmp_dir.dir, @constCast(&[_][]const u8{
+        testing.paths.posix("src/a.zig"),
+        testing.paths.posix("src/b.zig"),
+        testing.paths.posix("other/c.zig"),
+    }));
+
+    var cwd_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
+    const cwd = cwd_buffer[0..try tmp_dir.dir.realPath(
+        std.testing.io,
+        &cwd_buffer,
+    )];
+    var args = Args.testDefault();
+    args.filter_paths = @constCast(&[_][]const u8{
+        testing.paths.posix("src/a.zig"),
+        testing.paths.posix("other"),
+    });
+
+    var index = (try buildFilterIndex(
+        std.testing.io,
+        std.testing.allocator,
+        tmp_dir.dir,
+        args,
+    )).?;
+    defer index.deinit();
+
+    const a = try std.Io.Dir.path.resolve(
+        std.testing.allocator,
+        &.{ cwd, testing.paths.posix("src/a.zig") },
+    );
+    defer std.testing.allocator.free(a);
+    const c = try std.Io.Dir.path.resolve(
+        std.testing.allocator,
+        &.{ cwd, testing.paths.posix("other/c.zig") },
+    );
+    defer std.testing.allocator.free(c);
+    const b = try std.Io.Dir.path.resolve(
+        std.testing.allocator,
+        &.{ cwd, testing.paths.posix("src/b.zig") },
+    );
+    defer std.testing.allocator.free(b);
+
+    try std.testing.expect(index.contains(a));
+    try std.testing.expect(index.contains(c));
+    try std.testing.expect(!index.contains(b));
 }
 
 /// Returns true if the directory contains a "build.zig" file.
@@ -468,7 +583,6 @@ pub fn fileUriToAbsPath(
     };
 }
 
-const LintRuntime = @import("session/LintRuntime.zig");
 const Args = @import("Args.zig");
 const std = @import("std");
 const testing = @import("testing.zig");

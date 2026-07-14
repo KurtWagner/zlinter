@@ -96,15 +96,15 @@ fn resolveFilesToLint(
     defer dir.close(runtime.io);
 
     const lint_files = try zlinter.files.allocLintFiles(
-        runtime,
+        runtime.io,
         dir,
         // User include paths supersede build configured includes/excludes.
         args.include_paths orelse args.build_include_paths orelse null,
         runtime.sessionArena(),
     );
 
-    if (try buildExcludesIndex(
-        runtime,
+    if (try zlinter.files.buildExcludesIndex(
+        runtime.io,
         runtime.sessionArena(),
         dir,
         args,
@@ -115,8 +115,9 @@ fn resolveFilesToLint(
             file.excluded = index.contains(file.abs_path);
     }
 
-    if (try buildFilterIndex(
-        runtime,
+    if (try zlinter.files.buildFilterIndex(
+        runtime.io,
+        runtime.sessionArena(),
         dir,
         args,
     )) |*index| {
@@ -127,68 +128,6 @@ fn resolveFilesToLint(
     }
 
     return lint_files;
-}
-
-// TODO: #164 Move buildExcludesIndex and buildFilterIndex to lib and write unit tests
-
-/// Returns an index of files to exclude if exclude configuration is found in args
-fn buildExcludesIndex(
-    runtime: *const LintRuntime,
-    arena: std.mem.Allocator,
-    dir: std.Io.Dir,
-    args: zlinter.Args,
-) !?std.BufSet {
-    if (args.exclude_paths == null and args.build_exclude_paths == null) return null;
-
-    const exclude_lint_paths: ?[]zlinter.files.LintFile = exclude: {
-        if (args.exclude_paths) |p| {
-            std.debug.assert(p.len > 0);
-            break :exclude try zlinter.files.allocLintFiles(runtime, dir, p, arena);
-        } else break :exclude null;
-    };
-
-    const build_exclude_lint_paths: ?[]zlinter.files.LintFile = exclude: {
-        // User include paths supersede build configured includes and excludes.
-        if (args.include_paths != null) break :exclude null;
-
-        if (args.build_exclude_paths) |p| {
-            std.debug.assert(p.len > 0);
-            break :exclude try zlinter.files.allocLintFiles(runtime, dir, p, arena);
-        } else break :exclude null;
-    };
-
-    var index = std.BufSet.init(arena);
-    errdefer index.deinit();
-
-    if (exclude_lint_paths) |files|
-        for (files) |file| try index.insert(file.abs_path);
-
-    if (build_exclude_lint_paths) |files|
-        for (files) |file| try index.insert(file.abs_path);
-
-    return index;
-}
-
-/// Returns an index of files to only include if filter configuration is found in args
-fn buildFilterIndex(runtime: *const LintRuntime, dir: std.Io.Dir, args: zlinter.Args) !?std.BufSet {
-    const session_arena = runtime.sessionArena();
-
-    const filter_paths: []zlinter.files.LintFile = exclude: {
-        if (args.filter_paths) |p| {
-            std.debug.assert(p.len > 0);
-            break :exclude try zlinter.files.allocLintFiles(runtime, dir, p, session_arena);
-        } else return null;
-    };
-    defer {
-        for (filter_paths) |*lint_file| lint_file.deinit(session_arena);
-        session_arena.free(filter_paths);
-    }
-
-    var index = std.BufSet.init(session_arena);
-    errdefer index.deinit();
-
-    for (filter_paths) |file| try index.insert(file.abs_path);
-    return index;
 }
 
 test {
