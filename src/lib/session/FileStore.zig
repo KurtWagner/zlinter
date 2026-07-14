@@ -109,7 +109,7 @@ pub fn resolveFrom(
         },
     };
 
-    const tree = oom(std.zig.Ast.parse(session_arena, source, .zig));
+    const tree = oom(std.zig.Ast.parse(session_arena, source, .{ .mode = .zig }));
     const line_starts = oom(allocLineStarts(session_arena, source));
     const abs_path = oom(session_arena.dupe(u8, normal_path));
     const id: FileId = .fromIndex(self.files.len);

@@ -135,7 +135,7 @@ fn looksLikeCode(content: []const u8, rule_arena: std.mem.Allocator) !bool {
 
     const looks_like_statement = looks_like_statement: {
         const container_code = std.mem.printSentinel(buffer, statement_container_fmt, .{content}, 0) catch unreachable;
-        const tree = try Ast.parse(rule_arena, container_code, .zig);
+        const tree = try Ast.parse(rule_arena, container_code, .{ .mode = .zig });
 
         const root_and_wrap_fn_nodes = 5;
         if (tree.nodes.len <= root_and_wrap_fn_nodes) break :looks_like_statement false;
@@ -146,7 +146,7 @@ fn looksLikeCode(content: []const u8, rule_arena: std.mem.Allocator) !bool {
 
     const looks_like_declaration = looks_like_declaration: {
         const root_code = std.mem.printSentinel(buffer, declaration_container_fmt, .{content}, 0) catch unreachable;
-        const tree = try Ast.parse(rule_arena, root_code, .zig);
+        const tree = try Ast.parse(rule_arena, root_code, .{ .mode = .zig });
 
         const root_node = 1;
         if (tree.nodes.len <= root_node) break :looks_like_declaration false;
