@@ -101,7 +101,7 @@ test "writeImportPath - parses string literal import path" {
         \\const value = @import("pkg/module.zig");
     ;
 
-    var tree = try Ast.parse(std.testing.allocator, source, .zig);
+    var tree = try Ast.parse(std.testing.allocator, source, .{ .mode = .zig });
     defer tree.deinit(std.testing.allocator);
 
     var buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
@@ -119,7 +119,7 @@ test "writeImportPath - parses trailing comma builtin call" {
         \\const value = @import("pkg/module.zig",);
     ;
 
-    var tree = try Ast.parse(std.testing.allocator, source, .zig);
+    var tree = try Ast.parse(std.testing.allocator, source, .{ .mode = .zig });
     defer tree.deinit(std.testing.allocator);
 
     var buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
@@ -137,7 +137,7 @@ test "writeImportPath - rejects non-string import arguments" {
         \\const value = @import(123);
     ;
 
-    var tree = try Ast.parse(std.testing.allocator, source, .zig);
+    var tree = try Ast.parse(std.testing.allocator, source, .{ .mode = .zig });
     defer tree.deinit(std.testing.allocator);
 
     var buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;

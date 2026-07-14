@@ -9,7 +9,7 @@ pub fn parseToJsonStringAlloc(source: [:0]const u8, gpa: std.mem.Allocator) ![]c
 }
 
 pub fn parseToJsonTree(source: [:0]const u8, arena: std.mem.Allocator) !std.json.Value {
-    const tree = try Ast.parse(arena, source, .zig);
+    const tree = try Ast.parse(arena, source, .{ .mode = .zig });
     return jsonTree(tree, arena);
 }
 

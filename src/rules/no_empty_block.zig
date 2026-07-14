@@ -1142,7 +1142,7 @@ test "blockClosingBraceToken handles trailing semicolons" {
         \\}
     ;
 
-    var tree = try Ast.parse(std.testing.allocator, source, .zig);
+    var tree = try Ast.parse(std.testing.allocator, source, .{ .mode = .zig });
     defer tree.deinit(std.testing.allocator);
 
     const block = try zlinter.testing.expectSingleNodeOfTag(tree, &.{.block_two_semicolon});

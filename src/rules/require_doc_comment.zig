@@ -390,7 +390,7 @@ test "hasDocComments - unsupported nodes return false" {
         \\}
     ;
 
-    var tree = try Ast.parse(std.testing.allocator, source, .zig);
+    var tree = try Ast.parse(std.testing.allocator, source, .{ .mode = .zig });
     defer tree.deinit(std.testing.allocator);
 
     const test_decl = try zlinter.testing.expectSingleNodeOfTag(tree, &.{.test_decl});
@@ -403,7 +403,7 @@ test "hasAttachedDocComment - attached single-line comment" {
         \\pub fn hasDoc() void;
     ;
 
-    var tree = try Ast.parse(std.testing.allocator, source, .zig);
+    var tree = try Ast.parse(std.testing.allocator, source, .{ .mode = .zig });
     defer tree.deinit(std.testing.allocator);
 
     const node = try zlinter.testing.expectSingleNodeOfTag(
@@ -420,7 +420,7 @@ test "hasAttachedDocComment - attached multi-line comment" {
         \\pub fn hasMultiDoc() void;
     ;
 
-    var tree = try Ast.parse(std.testing.allocator, source, .zig);
+    var tree = try Ast.parse(std.testing.allocator, source, .{ .mode = .zig });
     defer tree.deinit(std.testing.allocator);
 
     const node = try zlinter.testing.expectSingleNodeOfTag(
@@ -437,7 +437,7 @@ test "hasAttachedDocComment - detached comment" {
         \\pub fn missingDoc() void;
     ;
 
-    var tree = try Ast.parse(std.testing.allocator, source, .zig);
+    var tree = try Ast.parse(std.testing.allocator, source, .{ .mode = .zig });
     defer tree.deinit(std.testing.allocator);
 
     const node = try zlinter.testing.expectSingleNodeOfTag(
@@ -455,7 +455,7 @@ test "hasAttachedDocComment - crlf line endings" {
     source[raw.len] = 0;
     const source_z: [:0]const u8 = source[0..raw.len :0];
 
-    var tree = try Ast.parse(std.testing.allocator, source_z, .zig);
+    var tree = try Ast.parse(std.testing.allocator, source_z, .{ .mode = .zig });
     defer tree.deinit(std.testing.allocator);
 
     const node = try zlinter.testing.expectSingleNodeOfTag(
@@ -506,7 +506,7 @@ test "require_doc_comment - attached doc comment suppresses report" {
 }
 
 fn expectPrototypeHasDocComment(source: [:0]const u8) !void {
-    var tree = try Ast.parse(std.testing.allocator, source, .zig);
+    var tree = try Ast.parse(std.testing.allocator, source, .{ .mode = .zig });
     defer tree.deinit(std.testing.allocator);
 
     const node = try zlinter.testing.expectSingleNodeOfTag(

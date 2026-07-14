@@ -118,7 +118,7 @@ fn writeFileRuleConfig(content: []const u8, gpa: std.mem.Allocator, writer: anyt
     const sentinel = try gpa.dupeSentinel(u8, content, 0);
     defer gpa.free(sentinel);
 
-    var tree = try Ast.parse(gpa, sentinel, .zig);
+    var tree = try Ast.parse(gpa, sentinel, .{ .mode = .zig });
     defer tree.deinit(gpa);
 
     try writer.writeAll("**Config options:**\n\n");

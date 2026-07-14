@@ -160,7 +160,7 @@ test "isBuiltinCall - matches builtin call node kinds" {
         std.testing.allocator,
         \\const value = @import("std");
     ,
-        .zig,
+        .{ .mode = .zig },
     );
     defer tree.deinit(std.testing.allocator);
 
@@ -173,7 +173,7 @@ test "isBuiltinCallNamed - matches builtin call name" {
         std.testing.allocator,
         \\const value = @typeInfo(u8);
     ,
-        .zig,
+        .{ .mode = .zig },
     );
     defer tree.deinit(std.testing.allocator);
 
@@ -186,7 +186,7 @@ test "isBuiltinCallNamed - rejects other builtin names" {
         std.testing.allocator,
         \\const value = @sizeOf(u8);
     ,
-        .zig,
+        .{ .mode = .zig },
     );
     defer tree.deinit(std.testing.allocator);
 
@@ -417,7 +417,7 @@ test "fnProtoReturnsError" {
         const source, const expected = tuple;
         errdefer std.debug.print("Failed source: '{s}' expected {}\n", .{ source, expected });
 
-        var tree = try Ast.parse(std.testing.allocator, source, .zig);
+        var tree = try Ast.parse(std.testing.allocator, source, .{ .mode = .zig });
         defer tree.deinit(std.testing.allocator);
 
         const actual = fnProtoReturnsError(
@@ -552,7 +552,7 @@ test "isSwitchElseProng - identifies else and rejects value prongs" {
         \\    };
         \\}
     ,
-        .zig,
+        .{ .mode = .zig },
     );
     defer tree.deinit(std.testing.allocator);
 
@@ -578,7 +578,7 @@ test "isSwitchElseProng - rejects non switch case nodes" {
     var tree = try Ast.parse(
         std.testing.allocator,
         "const value: u8 = 1;",
-        .zig,
+        .{ .mode = .zig },
     );
     defer tree.deinit(std.testing.allocator);
 
@@ -658,7 +658,7 @@ test "isFieldVarAccess" {
         var tree = try Ast.parse(
             std.testing.allocator,
             source,
-            .zig,
+            .{ .mode = .zig },
         );
         defer tree.deinit(std.testing.allocator);
 
@@ -744,7 +744,7 @@ test "isEnumLiteral" {
         var tree = try Ast.parse(
             std.testing.allocator,
             source,
-            .zig,
+            .{ .mode = .zig },
         );
         defer tree.deinit(std.testing.allocator);
 
@@ -1084,7 +1084,7 @@ test "declTypeNode - var declaration returns explicit type" {
     var tree = try Ast.parse(
         std.testing.allocator,
         "const typed: u32 = 1;",
-        .zig,
+        .{ .mode = .zig },
     );
     defer tree.deinit(std.testing.allocator);
 
@@ -1097,7 +1097,7 @@ test "declTypeNode - var declaration without explicit type returns null" {
     var tree = try Ast.parse(
         std.testing.allocator,
         "const inferred = 2;",
-        .zig,
+        .{ .mode = .zig },
     );
     defer tree.deinit(std.testing.allocator);
 
@@ -1112,7 +1112,7 @@ test "declTypeNode - function declaration returns return type" {
         \\    return true;
         \\}
     ,
-        .zig,
+        .{ .mode = .zig },
     );
     defer tree.deinit(std.testing.allocator);
 
@@ -1128,7 +1128,7 @@ test "declTypeNode - container field returns explicit type" {
         \\    field: i32,
         \\};
     ,
-        .zig,
+        .{ .mode = .zig },
     );
     defer tree.deinit(std.testing.allocator);
 
@@ -1147,7 +1147,7 @@ test "declTypeNode - container field with default returns explicit type" {
         \\    defaulted: u16 = 3,
         \\};
     ,
-        .zig,
+        .{ .mode = .zig },
     );
     defer tree.deinit(std.testing.allocator);
 
@@ -1160,7 +1160,7 @@ test "declTypeNode - function type value is not a declaration type" {
     var tree = try Ast.parse(
         std.testing.allocator,
         "const Callback = fn (u8) void;",
-        .zig,
+        .{ .mode = .zig },
     );
     defer tree.deinit(std.testing.allocator);
 
@@ -1205,7 +1205,7 @@ test "declNameToken - var declaration returns identifier token" {
     var tree = try Ast.parse(
         std.testing.allocator,
         "const typed: u32 = 1;",
-        .zig,
+        .{ .mode = .zig },
     );
     defer tree.deinit(std.testing.allocator);
 
@@ -1218,7 +1218,7 @@ test "declNameToken - function declaration returns identifier token" {
     var tree = try Ast.parse(
         std.testing.allocator,
         "fn named() void {}",
-        .zig,
+        .{ .mode = .zig },
     );
     defer tree.deinit(std.testing.allocator);
 
@@ -1231,7 +1231,7 @@ test "declNameToken - function prototype returns identifier token" {
     var tree = try Ast.parse(
         std.testing.allocator,
         "extern fn named() void;",
-        .zig,
+        .{ .mode = .zig },
     );
     defer tree.deinit(std.testing.allocator);
 
@@ -1250,7 +1250,7 @@ test "declNameToken - container field returns identifier token" {
         \\    field: i32,
         \\};
     ,
-        .zig,
+        .{ .mode = .zig },
     );
     defer tree.deinit(std.testing.allocator);
 
@@ -1269,7 +1269,7 @@ test "declNameToken - container field with default returns identifier token" {
         \\    defaulted: u16 = 3,
         \\};
     ,
-        .zig,
+        .{ .mode = .zig },
     );
     defer tree.deinit(std.testing.allocator);
 
@@ -1282,7 +1282,7 @@ test "declNameToken - anonymous function type returns null" {
     var tree = try Ast.parse(
         std.testing.allocator,
         "const Callback = fn (u8) void;",
-        .zig,
+        .{ .mode = .zig },
     );
     defer tree.deinit(std.testing.allocator);
 
@@ -1295,7 +1295,7 @@ test "declNameToken - non declaration returns null" {
     var tree = try Ast.parse(
         std.testing.allocator,
         "const typed: u32 = 1;",
-        .zig,
+        .{ .mode = .zig },
     );
     defer tree.deinit(std.testing.allocator);
 

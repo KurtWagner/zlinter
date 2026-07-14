@@ -41,7 +41,7 @@ pub const LintProblemLocation = struct {
         var tree = try Ast.parse(std.testing.allocator,
             \\pub const a = 1;
             \\pub const b = 2;
-        , .zig);
+        , .{ .mode = .zig });
         defer tree.deinit(std.testing.allocator);
 
         const a_decl = tree.rootDecls()[0];
@@ -64,7 +64,7 @@ pub const LintProblemLocation = struct {
         var tree = try Ast.parse(std.testing.allocator,
             \\pub const a = 1;
             \\pub const b = 2;
-        , .zig);
+        , .{ .mode = .zig });
         defer tree.deinit(std.testing.allocator);
 
         const a_decl = tree.rootDecls()[0];
@@ -89,7 +89,7 @@ pub const LintProblemLocation = struct {
         var tree = try Ast.parse(std.testing.allocator,
             \\pub const a = 1;
             \\pub const b = 2;
-        , .zig);
+        , .{ .mode = .zig });
         defer tree.deinit(std.testing.allocator);
 
         // `pub` on line 1
@@ -124,7 +124,7 @@ pub const LintProblemLocation = struct {
         var tree = try Ast.parse(std.testing.allocator,
             \\pub const a = 1;
             \\pub const b = 2;
-        , .zig);
+        , .{ .mode = .zig });
         defer tree.deinit(std.testing.allocator);
 
         // `pub` on line 1
