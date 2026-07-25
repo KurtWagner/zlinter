@@ -105,14 +105,14 @@ fn run(
         const name_token = var_decl.ast.mut_token + 1;
         const name = zlinter.strings.normalizeIdentifierName(tree.tokenSlice(name_token));
 
+        // TODO: Move @This() value classification into the declaration type resolver.
         const init_is_this_builtin = if (var_decl.ast.init_node.unwrap()) |init_node|
             isThisBuiltinCall(tree, init_node)
         else
             false;
 
         var resolved_summaries: std.ArrayList(ResolvedSummary) = .empty;
-        const summary_candidates = try session.resolveDeclValueSummaryCandidates(decl_id);
-        for (summary_candidates) |candidate| {
+        for (try session.resolveDeclValueSummaryCandidates(decl_id)) |candidate| {
             const resolved_summary: ResolvedSummary = .{
                 .summary = candidate.summary,
                 .source_decl_id = try resolvedSummarySourceDeclId(
@@ -125,11 +125,13 @@ fn run(
             };
             try resolved_summaries.append(rule_arena, resolved_summary);
         }
-        if (resolved_summaries.items.len == 0) {
-            try resolved_summaries.append(rule_arena, .{ .summary = .other });
-        }
+        if (resolved_summaries.items.len == 0)
+            try resolved_summaries.append(
+                rule_arena,
+                .{ .summary = .other },
+            );
+
         if (init_is_this_builtin) {
-            // TODO: Move @This() value classification into the declaration type resolver.
             resolved_summaries.clearRetainingCapacity();
             try resolved_summaries.append(rule_arena, .{ .summary = .{ .type = .unknown } });
         }
@@ -144,11 +146,15 @@ fn run(
 
         // Check name length:
         var emitted_len_diagnostic = false;
-        if (config.decl_name_min_len.len()) |min_len| {
-            if (name.len < min_len) {
+        if (config.decl_name_min_len.len()) |min_len| if (name.len < min_len) {
+            const skip_len_check: bool = skip_len_check: {
                 for (config.decl_name_exclude_len) |exclude_name|
-                    if (std.mem.eql(u8, name, exclude_name)) continue :nodes;
-
+                    if (std.mem.eql(u8, name, exclude_name)) {
+                        break :skip_len_check true;
+                    };
+                break :skip_len_check false;
+            };
+            if (!skip_len_check) {
                 try lint_problems.append(session_arena, .{
                     .rule_id = rule.rule_id,
                     .severity = config.decl_name_min_len.severity(),
@@ -158,19 +164,26 @@ fn run(
                 });
                 emitted_len_diagnostic = true;
             }
-        }
+        };
+
         if (!emitted_len_diagnostic) if (config.decl_name_max_len.len()) |max_len| {
             if (name.len > max_len) {
-                for (config.decl_name_exclude_len) |exclude_name|
-                    if (std.mem.eql(u8, name, exclude_name)) continue :nodes;
-
-                try lint_problems.append(session_arena, .{
-                    .rule_id = rule.rule_id,
-                    .severity = config.decl_name_max_len.severity(),
-                    .start = .startOfToken(tree, name_token),
-                    .end = .endOfToken(tree, name_token),
-                    .message = try session_arena.print("Declaration names should have a length less or equal to {d}", .{max_len}),
-                });
+                const skip_len_check: bool = skip_len_check: {
+                    for (config.decl_name_exclude_len) |exclude_name|
+                        if (std.mem.eql(u8, name, exclude_name)) {
+                            break :skip_len_check true;
+                        };
+                    break :skip_len_check false;
+                };
+                if (!skip_len_check) {
+                    try lint_problems.append(session_arena, .{
+                        .rule_id = rule.rule_id,
+                        .severity = config.decl_name_max_len.severity(),
+                        .start = .startOfToken(tree, name_token),
+                        .end = .endOfToken(tree, name_token),
+                        .message = try session_arena.print("Declaration names should have a length less or equal to {d}", .{max_len}),
+                    });
+                }
             }
         };
 
@@ -841,6 +854,35 @@ test "declaration_naming style off still checks function declaration length" {
                 .severity = .warning,
                 .slice = "BadFn",
                 .message = "Declaration names should have a length less or equal to 3",
+            },
+        },
+    );
+}
+
+test "name length exclusion does NOT skip other checks" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const thisIsNotSnakeCase: u32 = 1;
+        \\ const THIS_BAD = 2;
+    ,
+        .{},
+        Config{
+            .decl_name_max_len = .{ .warning = .{ .len = 10 } },
+            .decl_name_min_len = .{ .warning = .{ .len = 9 } },
+            .decl_name_exclude_len = &.{ "thisIsNotSnakeCase", "THIS_BAD" },
+        },
+        &.{
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "thisIsNotSnakeCase",
+                .message = "Constant declaration should be snake_case",
+            },
+            .{
+                .rule_id = "declaration_naming",
+                .severity = .@"error",
+                .slice = "THIS_BAD",
+                .message = "Constant declaration should be snake_case",
             },
         },
     );
