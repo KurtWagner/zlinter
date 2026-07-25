@@ -12,7 +12,7 @@
     },
     .paths = .{
         "build.zig",
-        "build_rules.zig",
+        "build_lint_builtin.zig",
         "build_docs.zig",
         "build.zig.zon",
         "src",
