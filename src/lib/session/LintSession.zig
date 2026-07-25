@@ -1829,31 +1829,6 @@ pub fn resolveDeclValueSummaryCandidates(
     return owned;
 }
 
-/// Resolves value summaries for existing declaration candidates while keeping
-/// each candidate's module context.
-pub fn resolveDeclValueSummaryCandidatesFromCandidates(
-    self: *LintSession,
-    arena: std.mem.Allocator,
-    decl_candidates: []const DeclCandidate,
-) ![]const DeclValueSummaryCandidate {
-    const zone = tracy.traceNamed(@src(), "LintSession.resolveDeclValueSummaryCandidatesFromCandidates");
-    defer zone.end();
-    zone.setValue(decl_candidates.len);
-
-    var candidates = std.ArrayList(DeclValueSummaryCandidate).empty;
-    for (decl_candidates) |candidate| {
-        const summary = self.resolveDeclValueSummaryForModule(
-            candidate.module_id,
-            candidate.decl_id,
-        ) orelse continue;
-        try candidates.append(arena, .{
-            .module_id = candidate.module_id,
-            .summary = summary,
-        });
-    }
-    return candidates.items;
-}
-
 /// Classifies a type annotation by the kinds of values it admits. This keeps
 /// module-specific declaration resolution and source locations so callers can
 /// explain cross-module ambiguity consistently.
