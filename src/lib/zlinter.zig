@@ -7,6 +7,7 @@ pub const comments = @import("comments.zig");
 pub const explorer = @import("explorer.zig");
 pub const files = @import("files.zig");
 pub const formatters = @import("formatters.zig");
+pub const lsp = @import("lsp.zig");
 pub const rendering = @import("rendering.zig");
 pub const results = @import("results.zig");
 pub const rules = @import("rules.zig");
@@ -16,7 +17,6 @@ pub const testing = @import("testing.zig");
 pub const tracy = @import("tracy");
 pub const version = @import("version.zig");
 pub const zon = @import("zon.zig");
-pub const lsp = @import("lsp.zig");
 
 test {
     @import("std").testing.refAllDecls(@This());

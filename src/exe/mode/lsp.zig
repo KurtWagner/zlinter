@@ -48,8 +48,8 @@ test {
 const std = @import("std");
 const zlinter = @import("zlinter");
 const ExitCode = @import("../common.zig").ExitCode;
-const lint_builtin = @import("lint_builtin");
 const CliLintConfigStore = @import("../common/CliLintConfigStore.zig");
+const lint_builtin = @import("lint_builtin");
 
 const Ast = std.zig.Ast;
 const oom = zlinter.allocations.oom;

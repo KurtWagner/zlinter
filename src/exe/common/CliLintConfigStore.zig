@@ -439,8 +439,8 @@ test {
     std.testing.refAllDecls(@This());
 }
 
-const lint_builtin = @import("lint_builtin");
 const builtin = @import("builtin");
+const lint_builtin = @import("lint_builtin");
 const std = @import("std");
 const zlinter = @import("zlinter");
 const LintRule = zlinter.rules.LintRule;

@@ -389,8 +389,8 @@ test {
     std.testing.refAllDecls(@This());
 }
 
-const testing = @import("../testing.zig");
 const std = @import("std");
+const testing = @import("../testing.zig");
 const FileId = @import("../session/FileStore.zig").FileId;
 const FileStore = @import("../session/FileStore.zig");
 const LintProblem = @import("../results.zig").LintProblem;

@@ -142,8 +142,8 @@ test "parseFileAlloc" {
     try std.testing.expect(it.next() == null);
 }
 
-const session = @import("session.zig");
 const Args = @import("Args.zig");
+const session = @import("session.zig");
 const std = @import("std");
 const testing = @import("testing.zig");
 const LintRuntime = session.LintRuntime;

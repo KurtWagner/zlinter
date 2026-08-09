@@ -54,5 +54,5 @@ test {
 }
 
 const RuleIndex = @import("../rules.zig").RuleIndex;
-const std = @import("std");
 const LintConfigStore = @import("LintConfigStore.zig");
+const std = @import("std");

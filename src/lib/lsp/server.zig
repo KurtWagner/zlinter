@@ -547,18 +547,18 @@ test "didOpen publishes valid empty diagnostics json" {
     );
 }
 
-const std = @import("std");
 const builtin = @import("builtin");
-const LspResponse = @import("LspResponse.zig");
-const LintSession = @import("../session/LintSession.zig");
 const LintRuntime = @import("../session/LintRuntime.zig");
-const testing = @import("../testing.zig");
+const LintSession = @import("../session/LintSession.zig");
 const LspNotification = @import("LspNotification.zig");
 const LspRequest = @import("LspRequest.zig");
+const LspResponse = @import("LspResponse.zig");
+const std = @import("std");
+const testing = @import("../testing.zig");
 const fileUriToAbsPath = @import("../files.zig").fileUriToAbsPath;
 const FileStore = @import("../session/FileStore.zig");
 const LintRule = @import("../rules.zig").LintRule;
 const RuleIndex = @import("../rules.zig").RuleIndex;
-const LintDocument = @import("../session/LintDocument.zig");
 const LintConfigStore = @import("../session/LintConfigStore.zig");
+const LintDocument = @import("../session/LintDocument.zig");
 const NoopLintConfigStore = @import("../session/NoopLintConfigStore.zig");

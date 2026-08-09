@@ -6,13 +6,13 @@ pub const CompileContext = @import("session/CompileContext.zig");
 pub const DeclStore = @import("session/DeclStore.zig");
 pub const FileStore = @import("session/FileStore.zig");
 pub const imports = @import("session/imports.zig");
+pub const LintConfigStore = @import("session/LintConfigStore.zig");
 pub const LintDocument = @import("session/LintDocument.zig");
 pub const LintRuntime = @import("session/LintRuntime.zig");
 pub const LintSession = @import("session/LintSession.zig");
 pub const ModuleStore = @import("session/ModuleStore.zig");
-pub const TypeStore = @import("session/TypeStore.zig");
-pub const LintConfigStore = @import("session/LintConfigStore.zig");
 pub const NoopLintConfigStore = @import("session/NoopLintConfigStore.zig");
+pub const TypeStore = @import("session/TypeStore.zig");
 
 pub const max_zig_file_size_bytes = common.max_zig_file_size_bytes;
 

@@ -136,9 +136,8 @@ test {
 
 const common = @import("common.zig");
 const lint = @import("mode/lint.zig");
-const lsp = @import("mode/lsp.zig");
-
 const lint_builtin = @import("lint_builtin"); // Generated in build_lint_builtin.zig
+const lsp = @import("mode/lsp.zig");
 const std = @import("std");
 const zlinter = @import("zlinter");
 

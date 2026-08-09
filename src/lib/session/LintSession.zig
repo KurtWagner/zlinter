@@ -3171,8 +3171,8 @@ test "moduleIdsForFile includes shared dependency children" {
     try std.testing.expect(found_root2);
 }
 
-const ast = @import("../ast.zig");
 const Args = @import("../Args.zig");
+const ast = @import("../ast.zig");
 const BuildConfigStore = @import("BuildConfigStore.zig");
 const builtin = @import("builtin");
 const comments = @import("../comments.zig");

@@ -551,8 +551,8 @@ pub fn expectJsonEqual(
     try expectJsonValueEqual(parsed_a.value, parsed_b.value);
 }
 
-const builtin = @import("builtin");
 const Args = @import("Args.zig");
+const builtin = @import("builtin");
 const LintDocument = @import("session/LintDocument.zig");
 const LintSession = @import("session/LintSession.zig");
 const std = @import("std");
