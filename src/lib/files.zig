@@ -519,10 +519,7 @@ pub fn resolveLazyPath(
     var fba: std.heap.FixedBufferAllocator = .init(buffer);
     switch (path) {
         .source_path => |source_path| {
-            const root = if (source_path.owner.get(config)) |pkg|
-                pkg.root_path.slice(config)
-            else
-                build_root_path;
+            const root = source_path.owner.package(config).ptr(config).root_path.slice(config);
 
             return try std.Io.Dir.path.resolve(
                 fba.allocator(),
