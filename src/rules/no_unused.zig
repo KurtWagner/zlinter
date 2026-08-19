@@ -375,11 +375,11 @@ fn unusedDeclarationProblem(
     const last_token = tree.lastToken(decl);
 
     if (tree.fullVarDecl(decl)) |var_decl| {
-        if (isPublicVarDecl(tree, var_decl) or
+        if (zlinter.ast.varDeclVisibility(tree, var_decl) == .public or
             hasExternOrExport(token_tags, var_decl.extern_export_token))
             return null;
 
-        const name_token = varDeclNameToken(var_decl);
+        const name_token = var_decl.ast.mut_token + 1;
         if (!hasExternalReference(
             references,
             tree.tokenSlice(name_token),
@@ -397,11 +397,11 @@ fn unusedDeclarationProblem(
             &buffer,
             decl,
         )) |fn_proto| {
-            if (isPublicFnProto(tree, fn_proto) or
+            if (zlinter.ast.fnProtoVisibility(tree, fn_proto) == .public or
                 hasExternOrExport(token_tags, fn_proto.extern_export_inline_token))
                 return null;
 
-            const name_token = fnDeclNameToken(fn_proto) orelse return null;
+            const name_token = fn_proto.name_token orelse return null;
             if (!hasExternalReference(
                 references,
                 tree.tokenSlice(name_token),
@@ -450,28 +450,12 @@ fn namedFnDeclProto(
     return null;
 }
 
-fn varDeclNameToken(var_decl: Ast.full.VarDecl) Ast.TokenIndex {
-    return var_decl.ast.mut_token + 1;
-}
-
-fn fnDeclNameToken(fn_proto: Ast.full.FnProto) ?Ast.TokenIndex {
-    return fn_proto.name_token;
-}
-
 fn hasExternOrExport(
     token_tags: []const std.zig.Token.Tag,
     token: ?Ast.TokenIndex,
 ) bool {
     const t = token orelse return false;
     return token_tags[t] == .keyword_export or token_tags[t] == .keyword_extern;
-}
-
-fn isPublicVarDecl(tree: Ast, var_decl: Ast.full.VarDecl) bool {
-    return zlinter.ast.varDeclVisibility(tree, var_decl) == .public;
-}
-
-fn isPublicFnProto(tree: Ast, fn_proto: Ast.full.FnProto) bool {
-    return zlinter.ast.fnProtoVisibility(tree, fn_proto) == .public;
 }
 
 test "no_unused" {

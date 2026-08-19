@@ -455,22 +455,6 @@ pub fn appendCompileContext(
     return id;
 }
 
-pub fn compileContext(
-    self: *const LintSession,
-    id: CompileContext.Id,
-) CompileContext {
-    return self.compile_contexts.get(id.toIndex());
-}
-
-pub fn compileContextIdForModule(
-    self: *const LintSession,
-    module_id: ModuleStore.ModuleId,
-) ?CompileContext.Id {
-    for (self.compile_contexts.items(.root_module), 0..) |root_module, index|
-        if (root_module == module_id) return .fromIndex(index);
-    return null;
-}
-
 fn resolveBuildModule(
     self: *LintSession,
     config_id: BuildConfigStore.ConfigId,
@@ -944,11 +928,6 @@ pub const DeclCandidate = struct {
     decl_id: DeclStore.DeclId,
 };
 
-pub const TypeCandidate = struct {
-    module_id: ModuleStore.ModuleId,
-    type: ResolvedNodeType,
-};
-
 pub const EnumCandidate = struct {
     module_id: ModuleStore.ModuleId,
     decl_id: DeclStore.DeclId,
@@ -1089,30 +1068,6 @@ fn resolveDeclMemberForModule(
     return self.resolutionForModule(module_id).memberDecl(parent_decl_id, member_name);
 }
 
-/// Resolves a member declaration from a container/type declaration across all
-/// modules that can reach the declaration's file.
-pub fn resolveDeclMemberCandidates(
-    self: *LintSession,
-    arena: std.mem.Allocator,
-    parent_decl_id: DeclStore.DeclId,
-    member_name: []const u8,
-) ![]const DeclCandidate {
-    var candidates = std.ArrayList(DeclCandidate).empty;
-    const module_ids = self.moduleIdsForDecl(parent_decl_id);
-    for (module_ids) |module_id| {
-        const decl_id = self.resolveDeclMemberForModule(
-            module_id,
-            parent_decl_id,
-            member_name,
-        ) orelse continue;
-        try candidates.append(arena, .{
-            .module_id = module_id,
-            .decl_id = decl_id,
-        });
-    }
-    return candidates.items;
-}
-
 /// Resolves a member declaration from each declaration candidate, preserving
 /// the candidate module used for lookup.
 pub fn resolveDeclMemberCandidatesFromCandidates(
@@ -1165,25 +1120,6 @@ pub fn resolveDeclAliasCandidate(
         .module_id = candidate.module_id,
         .decl_id = current_decl_id,
     };
-}
-
-/// Resolves the type of `node` for every module reachable from the file.
-pub fn resolveTypeCandidatesOfNode(
-    self: *LintSession,
-    arena: std.mem.Allocator,
-    doc: *const LintDocument,
-    node: Ast.Node.Index,
-) ![]const TypeCandidate {
-    var candidates = std.ArrayList(TypeCandidate).empty;
-    const module_ids = self.moduleIdsForFile(doc.file_id);
-    for (module_ids) |module_id|
-        if (self.resolveTypeOfNodeForModule(module_id, doc, node)) |resolved| {
-            try candidates.append(arena, .{
-                .module_id = module_id,
-                .type = resolved,
-            });
-        };
-    return candidates.items;
 }
 
 /// Resolves `node` to all enum declarations it can name across reachable modules.
@@ -1349,24 +1285,6 @@ pub fn resolveDeclTypeDeclCandidatesFromCandidates(
         });
     }
     return candidates.items;
-}
-
-/// Returns the cached concrete type target for a declaration, when one was
-/// resolved while indexing the file.
-pub fn declResolvedTypeTarget(
-    self: *const LintSession,
-    decl_id: DeclStore.DeclId,
-) ?DeclStore.TypeTarget {
-    return self.decl_store.declResolvedTypeTarget(decl_id);
-}
-
-/// Returns the cached concrete type declaration for a declaration, when one
-/// was resolved while indexing the file and is represented by a declaration.
-pub fn declResolvedTypeDecl(
-    self: *const LintSession,
-    decl_id: DeclStore.DeclId,
-) ?DeclStore.DeclId {
-    return self.decl_store.declResolvedTypeDecl(decl_id);
 }
 
 pub const EnumInfo = struct {
@@ -2411,7 +2329,7 @@ fn resolveImportRootDecl(
 
     const file_id = maybe_file_id orelse return null;
     self.resolveFileTypesForModule(file_id, module_id);
-    return self.decl_store.rootDecl(file_id);
+    return self.decl_store.fileRootDecl(file_id);
 }
 
 fn typeSummaryFromResultValueNode(

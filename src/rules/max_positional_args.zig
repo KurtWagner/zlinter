@@ -97,14 +97,10 @@ fn firstParamStartToken(tree: Ast, fn_proto: Ast.full.FnProto) ?Ast.TokenIndex {
     var it = fn_proto.iterate(&tree);
     const first_param = it.next() orelse return null;
 
-    return firstParamStartTokenFromParam(tree, first_param);
-}
-
-fn firstParamStartTokenFromParam(tree: Ast, param: Ast.full.FnProto.Param) ?Ast.TokenIndex {
-    if (param.comptime_noalias) |token| return token;
-    if (param.name_token) |token| return token;
-    if (param.anytype_ellipsis3) |token| return token;
-    if (param.type_expr) |type_expr| return tree.firstToken(type_expr);
+    if (first_param.comptime_noalias) |token| return token;
+    if (first_param.name_token) |token| return token;
+    if (first_param.anytype_ellipsis3) |token| return token;
+    if (first_param.type_expr) |type_expr| return tree.firstToken(type_expr);
     return null;
 }
 

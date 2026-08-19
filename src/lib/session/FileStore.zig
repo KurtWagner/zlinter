@@ -1,10 +1,5 @@
 const FileStore = @This();
 
-pub const max_zig_file_size_bytes = bytes: {
-    const bytes_in_mb = 1024 * 1024;
-    break :bytes 32 * bytes_in_mb;
-};
-
 pub const FileId = enum(u32) {
     _,
 
@@ -98,7 +93,7 @@ pub fn resolveFrom(
         io,
         normal_path,
         session_arena,
-        .limited(max_zig_file_size_bytes),
+        .limited(common.max_zig_file_size_bytes),
         .of(u8),
         0,
     ) catch |e| switch (e) {
@@ -306,6 +301,7 @@ test "fileRange resolves start and end positions" {
 }
 
 const Args = @import("../Args.zig");
+const common = @import("common.zig");
 const LintRuntime = @import("LintRuntime.zig");
 const std = @import("std");
 const tracy = @import("tracy");

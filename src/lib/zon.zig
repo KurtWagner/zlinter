@@ -32,7 +32,7 @@ pub fn parseFileAlloc(
         try file_reader.interface.appendRemaining(
             gpa,
             &buffer,
-            .limited(session.max_zig_file_size_bytes),
+            .limited(common.max_zig_file_size_bytes),
         );
 
         break :null_terminated try buffer.toOwnedSliceSentinel(gpa, 0);
@@ -143,6 +143,7 @@ test "parseFileAlloc" {
 }
 
 const Args = @import("Args.zig");
+const common = @import("session/common.zig");
 const session = @import("session.zig");
 const std = @import("std");
 const testing = @import("testing.zig");

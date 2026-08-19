@@ -1,7 +1,5 @@
-pub const max_zig_file_size_bytes = bytes: {
-    const bytes_in_mb = 1024 * 1024;
-    break :bytes 32 * bytes_in_mb;
-};
+const bytes_in_mb = 1024 * 1024;
+pub const max_zig_file_size_bytes = 32 * bytes_in_mb;
 
 /// Returns true if the if statement appears to enforce that its block is test only
 pub fn isTestOnlyCondition(tree: Ast, if_statement: Ast.full.If) bool {

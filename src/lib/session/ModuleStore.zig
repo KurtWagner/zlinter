@@ -115,10 +115,6 @@ pub fn rootFileId(self: *const ModuleStore, module_id: ModuleId) FileId {
     return self.modules.items(.root_file)[module_id.toIndex()];
 }
 
-pub fn rootFile(self: *const ModuleStore, module_id: ModuleId) FileId {
-    return self.rootFileId(module_id);
-}
-
 pub fn moduleIdByRootFile(self: *const ModuleStore, file_id: FileId) ?ModuleId {
     return self.module_id_by_root_file.get(file_id);
 }
@@ -141,15 +137,6 @@ pub fn moduleIdByImportName(
 ) ?ModuleId {
     return self.moduleIdsByImportName(module_id).get(name);
 }
-
-pub fn namedImport(
-    self: *const ModuleStore,
-    module_id: ModuleId,
-    name: []const u8,
-) ?ModuleId {
-    return self.moduleIdByImportName(module_id, name);
-}
-
 const FileId = @import("FileStore.zig").FileId;
 const BuildConfigStore = @import("BuildConfigStore.zig");
 const LintRuntime = @import("LintRuntime.zig");

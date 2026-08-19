@@ -114,17 +114,13 @@ fn isLoopNode(tree: Ast, node: Ast.Node.Index) bool {
 
 fn hasContinueLabel(tree: Ast, node: Ast.Node.Index) bool {
     const opt_label, _ = tree.nodeData(node).opt_token_and_opt_node;
-    return optionalTokenPresent(opt_label);
-}
-
-fn optionalTokenPresent(opt_token: anytype) bool {
-    return switch (@typeInfo(@TypeOf(opt_token))) {
-        .@"enum" => if (std.meta.hasFn(@TypeOf(opt_token), "unwrap"))
-            opt_token.unwrap() != null
+    return switch (@typeInfo(@TypeOf(opt_label))) {
+        .@"enum" => if (std.meta.hasFn(@TypeOf(opt_label), "unwrap"))
+            opt_label.unwrap() != null
         else
-            @intFromEnum(opt_token) != 0,
-        .optional => opt_token != null,
-        else => opt_token != 0,
+            @intFromEnum(opt_label) != 0,
+        .optional => opt_label != null,
+        else => opt_label != 0,
     };
 }
 

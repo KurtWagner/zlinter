@@ -106,14 +106,6 @@ fn fieldAccessCalleeName(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
     };
 }
 
-fn literalKindForNumberSign(tree: Ast, node: Ast.Node.Index) ?LiteralKind {
-    const operand = unwrapLiteralWrapperExpression(tree, tree.nodeData(node).node);
-    return switch (tree.nodeTag(operand)) {
-        .number_literal => .number,
-        else => null,
-    };
-}
-
 fn literalKindForArg(tree: Ast, node: Ast.Node.Index) ?LiteralKind {
     const unwrapped = unwrapLiteralWrapperExpression(tree, node);
     return switch (tree.nodeTag(unwrapped)) {
@@ -134,6 +126,14 @@ fn literalKindForArg(tree: Ast, node: Ast.Node.Index) ?LiteralKind {
                     null;
             }),
         },
+        else => null,
+    };
+}
+
+fn literalKindForNumberSign(tree: Ast, node: Ast.Node.Index) ?LiteralKind {
+    const operand = unwrapLiteralWrapperExpression(tree, tree.nodeData(node).node);
+    return switch (tree.nodeTag(operand)) {
+        .number_literal => .number,
         else => null,
     };
 }

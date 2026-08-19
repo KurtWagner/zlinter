@@ -314,13 +314,6 @@ pub fn declResolvedTypeTarget(self: *const DeclStore, id: DeclId) ?TypeTarget {
     return self.decls.items(.resolved_type_target)[id.toIndex()];
 }
 
-pub fn declResolvedTypeDecl(self: *const DeclStore, id: DeclId) ?DeclId {
-    return switch (self.declResolvedTypeTarget(id) orelse return null) {
-        .decl => |decl_id| decl_id,
-        .container => null,
-    };
-}
-
 /// Resolves an expression node to the declaration it names.
 ///
 /// `context_decl_id` supplies the lexical scope to start lookup from. For
@@ -341,7 +334,7 @@ pub fn resolveDeclByNode(
         .unwrap_optional_unwrap = false,
     });
     if (isThisBuiltinCall(tree, unwrapped))
-        return self.rootDecl(file_id);
+        return self.fileRootDecl(file_id);
 
     const scope_id = self.declScopeId(context_decl_id) orelse return null;
     return self.resolveExprDeclFromScope(
@@ -370,7 +363,7 @@ pub fn resolveDeclByNodeFromScope(
     scope_id: ScopeId,
     node: std.zig.Ast.Node.Index,
 ) ?DeclId {
-    const zone = tracy.traceNamed(@src(), "DeclStore.resolveNodeDeclFromScope");
+    const zone = tracy.traceNamed(@src(), "DeclStore.resolveDeclByNodeFromScope");
     defer zone.end();
 
     const tree = ctx.file_store.fileTree(file_id);
@@ -378,7 +371,7 @@ pub fn resolveDeclByNodeFromScope(
         .unwrap_optional_unwrap = false,
     });
     if (isThisBuiltinCall(tree, unwrapped))
-        return self.rootDecl(file_id);
+        return self.fileRootDecl(file_id);
 
     return self.resolveExprDeclFromScope(
         ctx.withParent(file_id),
@@ -387,16 +380,6 @@ pub fn resolveDeclByNodeFromScope(
         node,
         null,
     );
-}
-
-pub fn resolveNodeDeclFromScope(
-    self: *DeclStore,
-    ctx: ResolveContext,
-    file_id: FileStore.FileId,
-    scope_id: ScopeId,
-    node: std.zig.Ast.Node.Index,
-) ?DeclId {
-    return self.resolveDeclByNodeFromScope(ctx, file_id, scope_id, node);
 }
 
 /// Returns the stored declaration represented by this AST node, if any.
@@ -411,21 +394,6 @@ pub fn declIdByNode(
     return self.declByAstNode(file_id, node);
 }
 
-pub fn declByNode(
-    self: *const DeclStore,
-    file_id: FileStore.FileId,
-    node: std.zig.Ast.Node.Index,
-) ?DeclId {
-    return self.declIdByNode(file_id, node);
-}
-
-pub fn rootDecl(
-    self: *const DeclStore,
-    file_id: FileStore.FileId,
-) ?DeclId {
-    return self.fileRootDecl(file_id);
-}
-
 /// Returns the lexical scope owned by an AST node, if one was recorded.
 pub fn scopeIdByNode(
     self: *const DeclStore,
@@ -436,14 +404,6 @@ pub fn scopeIdByNode(
     defer zone.end();
 
     return self.scope_id_by_owner_node.get(.init(file_id, node));
-}
-
-pub fn scopeByNode(
-    self: *const DeclStore,
-    file_id: FileStore.FileId,
-    node: std.zig.Ast.Node.Index,
-) ?ScopeId {
-    return self.scopeIdByNode(file_id, node);
 }
 
 /// Returns the declaration that should be treated as the container identity.
@@ -469,7 +429,7 @@ pub fn resolvedContainerDecl(
     });
 
     if (isThisBuiltinCall(tree, init_expr))
-        return self.rootDecl(file_id);
+        return self.fileRootDecl(file_id);
 
     return decl_id;
 }
@@ -1483,7 +1443,7 @@ fn declByAstNode(
     return self.decl_id_by_ast_node.get(.init(file_id, node));
 }
 
-fn fileRootDecl(
+pub fn fileRootDecl(
     self: *const DeclStore,
     file_id: FileStore.FileId,
 ) ?DeclId {
