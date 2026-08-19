@@ -60,8 +60,8 @@ pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
 /// Runs the require_errdefer_dealloc rule.
 fn run(
     rule: zlinter.rules.LintRule,
-    session: *zlinter.session.LintSession,
-    doc: *const zlinter.session.LintDocument,
+    session: *LintSession,
+    doc: *const LintDocument,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
@@ -120,8 +120,8 @@ fn run(
 }
 
 fn processBlock(
-    session: *zlinter.session.LintSession,
-    doc: *const zlinter.session.LintDocument,
+    session: *LintSession,
+    doc: *const LintDocument,
     block_node: Ast.Node.Index,
     problems: *std.ArrayList(Ast.Node.Index),
     rule_arena: std.mem.Allocator,
@@ -131,10 +131,12 @@ fn processBlock(
     // Populated with declarations that look like they should be cleaned up.
     var cleanup_symbols: std.StringHashMap(Ast.Node.Index) = .init(rule_arena);
 
-    var call_buffer: [1]Ast.Node.Index = undefined;
-
     for (doc.lineage.items(.children)[@intFromEnum(block_node)] orelse &.{}) |child_node|
-        if (try declRequiringCleanup(session, doc, rule_arena, child_node)) |decl_ref| {
+        if (try declRequiringCleanup(
+            session,
+            doc,
+            child_node,
+        )) |decl_ref| {
             try cleanup_symbols.put(
                 try rule_arena.dupe(u8, tree.tokenSlice(decl_ref.decl_name_token)),
                 child_node,
@@ -145,6 +147,8 @@ fn processBlock(
             child_node,
             rule_arena,
         )) |defer_block| {
+            var call_buffer: [1]Ast.Node.Index = undefined;
+
             // Remove any tracked declarations that are cleaned up within defer/errdefer
             for (defer_block.children) |defer_block_child|
                 if (zlinter.ast.findFnCall(
@@ -181,20 +185,19 @@ const DeclRef = struct {
 /// Returns a declaration reference if the given node is a declaration node
 /// that looks like it needs to be cleaned up (e.g., if it has a `deinit` method)
 fn declRequiringCleanup(
-    session: *zlinter.session.LintSession,
-    doc: *const zlinter.session.LintDocument,
-    rule_arena: std.mem.Allocator,
+    session: *LintSession,
+    doc: *const LintDocument,
     maybe_var_decl_node: Ast.Node.Index,
 ) !?DeclRef {
     const tree = doc.tree(session);
     const var_decl = tree.fullVarDecl(maybe_var_decl_node) orelse return null;
-    const init_node = var_decl.ast.init_node.unwrap() orelse return null;
-    var call_buffer: [1]Ast.Node.Index = undefined;
 
     // In an attempt to reduce noise we only care if initialized to `empty` or
     // `init` field or through an `init` or `initCapacity` call. I'm torn by
     // this as maybe this rule should just be pedantic with a block list
     // configuration as only those most pedantic would care about this rule?
+    const init_node = var_decl.ast.init_node.unwrap() orelse return null;
+    var call_buffer: [1]Ast.Node.Index = undefined;
     if (!switch (tree.nodeTag(init_node)) {
         // e.g., `ArrayList(u8).empty`
         .field_access => zlinter.ast.isFieldVarAccess(
@@ -223,37 +226,44 @@ fn declRequiringCleanup(
             false,
     }) return null;
 
+    // If the declaration has a public "deinit"
     const var_decl_id = session.decl_store.declIdByNode(
         doc.file_id,
         maybe_var_decl_node,
     ) orelse return null;
-    const deinit_candidates = try session.resolveDeclTypeMemberCandidates(
-        rule_arena,
-        var_decl_id,
-        "deinit",
-    );
-    for (deinit_candidates) |candidate|
-        if (declIsPublicDeinit(session, candidate.decl_id))
+
+    // We want to find all declarations of this type
+    var deinit_it =
+        session.resolveDeclTypeMemberCandidates(
+            var_decl_id,
+            "deinit",
+        );
+
+    while (deinit_it.next()) |tuple| {
+        const module, const decl_id = tuple;
+        _ = module;
+
+        if (isFnPublic(session, decl_id))
             return .{ .decl_name_token = var_decl.ast.mut_token + 1 };
+    }
 
     return null;
 }
 
-fn declIsPublicDeinit(
-    session: *zlinter.session.LintSession,
+/// Returns the visibility of the
+fn isFnPublic(
+    session: *LintSession,
     decl_id: zlinter.session.DeclStore.DeclId,
 ) bool {
     const file_id = session.decl_store.declFileId(decl_id);
     const tree = session.file_store.fileTree(file_id);
+
     const node = session.decl_store.declAstNode(decl_id) orelse return false;
 
     var fn_proto_buffer: [1]Ast.Node.Index = undefined;
-    const fn_proto = tree.fullFnProto(
-        &fn_proto_buffer,
-        node,
-    ) orelse return false;
+    const fn_proto = tree.fullFnProto(&fn_proto_buffer, node) orelse return false;
 
-    return zlinter.ast.fnProtoVisibility(tree, fn_proto) != .private;
+    return zlinter.ast.fnProtoVisibility(tree, fn_proto) == .public;
 }
 
 /// Returns true if it looks like based on parameters that the given call use
@@ -267,8 +277,8 @@ fn declIsPublicDeinit(
 /// Where as `.init(allocator)` or `.init(std.heap.c_allocator)` should be checked
 /// for stricter cleanup on error as it won't automatically clear itself.
 fn hasNonFreeingAllocatorParam(
-    doc: *const zlinter.session.LintDocument,
-    session: *const zlinter.session.LintSession,
+    doc: *const LintDocument,
+    session: *const LintSession,
     params: []const Ast.Node.Index,
 ) bool {
     const tree = doc.tree(session);
@@ -415,4 +425,7 @@ test {
 
 const std = @import("std");
 const zlinter = @import("zlinter");
+
 const Ast = std.zig.Ast;
+const LintSession = zlinter.session.LintSession;
+const LintDocument = zlinter.session.LintDocument;

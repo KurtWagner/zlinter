@@ -1226,55 +1226,55 @@ pub fn resolveEnumTagNameCandidatesOfNode(
     return candidates.items;
 }
 
-/// Resolves a member from the type represented by a declaration.
-fn resolveDeclTypeMemberForModule(
-    self: *LintSession,
-    module_id: ModuleStore.ModuleId,
-    parent_decl_id: DeclStore.DeclId,
-    member_name: []const u8,
-) ?DeclStore.DeclId {
-    const zone = tracy.traceNamed(@src(), "LintSession.resolveDeclTypeMember");
-    defer zone.end();
-
-    return self.resolutionForModule(module_id).declTypeMember(parent_decl_id, member_name);
-}
-
-/// Resolves a member from the type represented by a declaration across all
-/// modules that can reach the declaration's file.
+/// Resolves the declaration named by a declaration's type expression across
+/// all modules that can reach the declaration's file.
 pub fn resolveDeclTypeMemberCandidates(
-    self: *LintSession,
-    arena: std.mem.Allocator,
+    session: *LintSession,
     parent_decl_id: DeclStore.DeclId,
     member_name: []const u8,
-) ![]const DeclCandidate {
-    var candidates = std.ArrayList(DeclCandidate).empty;
-    const module_ids = self.moduleIdsForDecl(parent_decl_id);
-    for (module_ids) |module_id| {
-        const decl_id = self.resolveDeclTypeMemberForModule(
-            module_id,
-            parent_decl_id,
-            member_name,
-        ) orelse continue;
+) DeclTypeMemberCandidatesIterator {
+    return .init(session, parent_decl_id, member_name);
+}
 
-        try candidates.append(arena, .{
-            .module_id = module_id,
-            .decl_id = decl_id,
-        });
+/// Iterator for declarations matching a given name, use `resolveDeclTypeMemberCandidates`
+/// to construct this iterator.
+pub const DeclTypeMemberCandidatesIterator = struct {
+    session: *LintSession,
+    module_ids: []const ModuleStore.ModuleId,
+    parent_decl_id: DeclStore.DeclId,
+    member_name: []const u8,
+    i: usize,
+
+    fn init(
+        session: *LintSession,
+        parent_decl_id: DeclStore.DeclId,
+        member_name: []const u8,
+    ) DeclTypeMemberCandidatesIterator {
+        return .{
+            .session = session,
+            .module_ids = session.moduleIdsForDecl(parent_decl_id),
+            .i = 0,
+            .parent_decl_id = parent_decl_id,
+            .member_name = member_name,
+        };
     }
-    return candidates.items;
-}
 
-/// Resolves the declaration named by a declaration's type expression.
-fn resolveDeclTypeDeclForModule(
-    self: *LintSession,
-    module_id: ModuleStore.ModuleId,
-    decl_id: DeclStore.DeclId,
-) ?DeclStore.DeclId {
-    const zone = tracy.traceNamed(@src(), "LintSession.resolveDeclTypeDecl");
-    defer zone.end();
+    pub fn next(self: *DeclTypeMemberCandidatesIterator) ?struct { ModuleStore.ModuleId, DeclStore.DeclId } {
+        if (self.i >= self.module_ids.len) return null;
 
-    return self.resolutionForModule(module_id).declTypeDecl(decl_id);
-}
+        const module_id = self.module_ids[self.i];
+        self.i += 1;
+
+        const module = self.session.resolutionForModule(module_id);
+
+        const decl_id = module.declTypeMember(
+            self.parent_decl_id,
+            self.member_name,
+        ) orelse return self.next();
+
+        return .{ module_id, decl_id };
+    }
+};
 
 /// Resolves the declaration named by a declaration's type expression across
 /// all modules that can reach the declaration's file.
@@ -1286,10 +1286,9 @@ pub fn resolveDeclTypeDeclCandidates(
     var candidates = std.ArrayList(DeclCandidate).empty;
     const module_ids = self.moduleIdsForDecl(decl_id);
     for (module_ids) |module_id| {
-        const type_decl_id = self.resolveDeclTypeDeclForModule(
-            module_id,
-            decl_id,
-        ) orelse continue;
+        const module = self.resolutionForModule(module_id);
+
+        const type_decl_id = module.declTypeDecl(decl_id) orelse continue;
 
         try candidates.append(arena, .{
             .module_id = module_id,
@@ -1308,10 +1307,8 @@ pub fn resolveDeclTypeDeclCandidatesFromCandidates(
 ) ![]const DeclCandidate {
     var candidates = std.ArrayList(DeclCandidate).empty;
     for (decl_candidates) |candidate| {
-        const type_decl_id = self.resolveDeclTypeDeclForModule(
-            candidate.module_id,
-            candidate.decl_id,
-        ) orelse continue;
+        const module = self.resolutionForModule(candidate.module_id);
+        const type_decl_id = module.declTypeDecl(candidate.decl_id) orelse continue;
         try candidates.append(arena, .{
             .module_id = candidate.module_id,
             .decl_id = type_decl_id,
@@ -1487,7 +1484,8 @@ fn resolveDeclEnumType(
 ) ?DeclStore.DeclId {
     if (self.enumInfo(decl_id) != null) return decl_id;
 
-    if (self.resolveDeclTypeDeclForModule(module_id, decl_id)) |type_decl_id| {
+    const module = self.resolutionForModule(module_id);
+    if (module.declTypeDecl(decl_id)) |type_decl_id| {
         if (self.resolveEnumDeclAlias(module_id, type_decl_id)) |enum_decl_id|
             return enum_decl_id;
     }
