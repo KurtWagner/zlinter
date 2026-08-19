@@ -31,5 +31,6 @@
         .require_exhaustive_enum_switch = .{},
         .require_fmt = .{},
         .no_global_vars = .{},
+        .build_zig_zon = .{},
     },
 }

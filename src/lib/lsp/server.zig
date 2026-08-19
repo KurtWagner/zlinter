@@ -327,7 +327,10 @@ pub const LspServer = struct {
             return diagnostics.items;
         };
 
+        const file_kind = self.session.file_store.fileKind(file_id);
         rules: for (self.rules, 0..) |rule, i| {
+            if (rule.target != file_kind) continue :rules;
+
             const rule_idx: RuleIndex = @enumFromInt(i);
 
             const result = rule.run(

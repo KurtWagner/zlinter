@@ -1,0 +1,6 @@
+error build.zig.zon paths must include LICENSE [test_cases/build_zig_zon/missing_license_path/build.zig.zon:4:6] build_zig_zon
+
+ 4 |     .paths = .{
+   |      ^^^^^
+
+x 1 errors

@@ -6,6 +6,7 @@ const ansi_gray = "\x1B[90m";
 
 const max_file_size_bytes = 10 * 1024 * 1024;
 const input_zig_suffix = ".input.zig";
+const input_zon_suffix = ".zon";
 const lint_output_suffix = ".lint_expected.stdout";
 const fix_zig_output_suffix = ".fix_expected.zig";
 const fix_stdout_output_suffix = ".fix_expected.stdout";
@@ -91,7 +92,7 @@ fn runTest(
     args: []const [:0]const u8,
     environ_map: std.process.Environ.Map,
 ) !void {
-    var input_zig_file: ?[:0]const u8 = null;
+    var input_file: ?[:0]const u8 = null;
     var lint_stdout_expected_file: ?[:0]const u8 = null;
     var fix_zig_expected_file: ?[:0]const u8 = null;
     var fix_stdout_expected_file: ?[:0]const u8 = null;
@@ -102,8 +103,9 @@ fn runTest(
     // TODO: Fix require_braces false positive, this requires braces but rule thinks it doesnt
     // zlinter-disable-next-line require_braces - false positive
     for (args[4..]) |arg| {
-        if (std.mem.endsWith(u8, arg, input_zig_suffix))
-            input_zig_file = arg
+        if (std.mem.endsWith(u8, arg, input_zig_suffix) or
+            std.mem.endsWith(u8, arg, input_zon_suffix))
+            input_file = arg
         else if (std.mem.endsWith(u8, arg, lint_output_suffix))
             lint_stdout_expected_file = arg
         else if (std.mem.endsWith(u8, arg, fix_zig_output_suffix))
@@ -127,7 +129,7 @@ fn runTest(
             "--rule",
             rule_name,
             "--include",
-            input_zig_file.?,
+            input_file.?,
         });
 
         const lint_output = try runLintCommand(
@@ -167,7 +169,7 @@ fn runTest(
         );
 
         try std.Io.Dir.cwd().copyFile(
-            input_zig_file.?,
+            input_file.?,
             std.Io.Dir.cwd(),
             temp_path,
             io,
@@ -176,7 +178,7 @@ fn runTest(
         try copyFixtureZlinterZonForFix(
             io,
             arena,
-            input_zig_file.?,
+            input_file.?,
             ".zig-cache" ++ std.Io.Dir.path.sep_str ++ "tmp" ++ std.Io.Dir.path.sep_str ++ "zlinter.zon",
         );
 

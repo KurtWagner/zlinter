@@ -16,6 +16,9 @@ pub const File = struct {
     /// AST of file.
     tree: std.zig.Ast,
 
+    /// Source kind used when parsing and selecting lint rules (e.g., zig or zon)
+    kind: FileKind,
+
     /// Owned source of file contents
     source: [:0]const u8,
 
@@ -24,6 +27,35 @@ pub const File = struct {
 
     /// Owned absolute path to file
     abs_path: []const u8,
+};
+
+pub const FileKind = enum {
+    zig,
+    zon,
+
+    const zon_ext = ".zon";
+    const zig_ext = ".zig";
+
+    pub fn fromPath(abs_path: []const u8) ?FileKind {
+        const basename = std.Io.Dir.path.basename(abs_path);
+
+        if (basename.len > zig_ext.len and
+            std.mem.endsWith(u8, basename, zig_ext))
+            return .zig;
+
+        if (basename.len > zon_ext.len and
+            std.mem.endsWith(u8, basename, zon_ext))
+            return .zon;
+
+        return null;
+    }
+
+    fn parseMode(self: FileKind) std.zig.Ast.Mode {
+        return switch (self) {
+            .zig => .zig,
+            .zon => .zon,
+        };
+    }
 };
 
 pub const FilePosition = struct {
@@ -89,6 +121,11 @@ pub fn resolveFrom(
     ));
     if (self.file_id_by_path.get(normal_path)) |index| return index;
 
+    const kind = FileKind.fromPath(normal_path) orelse {
+        std.log.debug("Unsupported file type '{s}'", .{normal_path});
+        return error.ResolutionError;
+    };
+
     const source: [:0]const u8 = std.Io.Dir.cwd().readFileAllocOptions(
         io,
         normal_path,
@@ -104,13 +141,18 @@ pub fn resolveFrom(
         },
     };
 
-    const tree = oom(std.zig.Ast.parse(session_arena, source, .{ .mode = .zig }));
+    const tree = oom(std.zig.Ast.parse(
+        session_arena,
+        source,
+        .{ .mode = kind.parseMode() },
+    ));
     const line_starts = oom(allocLineStarts(session_arena, source));
     const abs_path = oom(session_arena.dupe(u8, normal_path));
     const id: FileId = .fromIndex(self.files.len);
 
     oom(self.files.append(session_arena, .{
         .tree = tree,
+        .kind = kind,
         .abs_path = abs_path,
         .source = source,
         .line_starts = line_starts,
@@ -126,6 +168,10 @@ pub fn resolveFrom(
 
 pub fn fileTree(self: *const FileStore, id: FileId) std.zig.Ast {
     return self.files.items(.tree)[id.toIndex()];
+}
+
+pub fn fileKind(self: *const FileStore, id: FileId) FileKind {
+    return self.files.items(.kind)[id.toIndex()];
 }
 
 pub fn fileSource(self: *const FileStore, id: FileId) [:0]const u8 {
@@ -251,6 +297,38 @@ test "filePosition resolves line and column via cached line starts" {
         FilePosition{ .line = 2, .column = 0 },
         file_store.filePosition(file_id, 8),
     );
+}
+
+test "resolve returns error for unsupported file types" {
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    try tmp_dir.dir.writeFile(std.testing.io, .{
+        .sub_path = "README.md",
+        .data = "# docs\n",
+    });
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    var cwd_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
+    const cwd = cwd_buffer[0..try tmp_dir.dir.realPath(std.testing.io, &cwd_buffer)];
+    const fake_args = Args.testDefault();
+
+    const runtime: LintRuntime = .{
+        .io = std.testing.io,
+        .verbose = false,
+        .args = &fake_args,
+        .session_arena = &arena,
+        .file_arena = &arena,
+        .rule_arena = &arena,
+        .zig_exe = "zig",
+        .zig_lib_directory = ".",
+        .cwd = cwd,
+    };
+
+    var file_store = FileStore.init(&runtime);
+    try std.testing.expectError(error.ResolutionError, file_store.resolve("README.md"));
 }
 
 test "fileRange resolves start and end positions" {

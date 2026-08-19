@@ -1,5 +1,17 @@
 # zlinter rules
 
+## `build_zig_zon`
+
+Enforces rules on the projects `build.zig.zon` configuration file.
+
+**Config options:**
+
+* `require_license_path`
+
+  * Whether or not a LICENSE file is required in the `paths` field. It's important because many licenses require the license to accompany redistributed copies of the source code.  License files are case insensitive "LICENSE", "LICENSE.md" or "LICENSE.txt".
+
+  * **Default:** `.@"error"`
+
 ## `declaration_naming`
 
 Enforces that variable declaration names use consistent naming. For example,

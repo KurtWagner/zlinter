@@ -13,6 +13,7 @@ pub const LintRule = struct {
         doc: *const LintDocument,
         options: RunOptions,
     ) RunError!?results.LintResult,
+    target: FileStore.FileKind = .zig,
 };
 
 pub const RunOptions = struct {
@@ -250,6 +251,7 @@ pub const LintProblemSeverity = enum(u8) {
 };
 
 const ansi = @import("ansi.zig");
+const FileStore = @import("session/FileStore.zig");
 const LintDocument = @import("session/LintDocument.zig");
 const LintSession = @import("session/LintSession.zig");
 const results = @import("results.zig");

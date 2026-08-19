@@ -26,6 +26,7 @@ A **linter** is a tool that automatically checks source code for style issues, b
 - [Custom Rules](#custom-rules)
 - [Custom Formatters](#custom-formatters)
 - [Built-in Rules](RULES.md)
+  - [build_zig_zon](RULES.md#build_zig_zon)
   - [declaration_naming](RULES.md#declaration_naming)
   - [field_ordering](RULES.md#field_ordering)
   - [field_naming](RULES.md#field_naming)

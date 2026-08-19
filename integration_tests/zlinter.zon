@@ -1,0 +1,8 @@
+// Configuration for zlinter linting itself:
+.{
+    .rules = .{
+        .build_zig_zon = .{
+            .require_license_path = .off,
+        },
+    },
+}

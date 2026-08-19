@@ -203,16 +203,20 @@ fn runLinterRules(
 
             oom(results.append(runtime.sessionArena(), result));
         }
+
         session.resolveFileTypes(file_id);
         printer.println(.verbose, "  - Rules", .{});
 
+        const file_kind = session.file_store.fileKind(file_id);
         var rule_it = enabled_rules.iterator(.{ .direction = .forward, .kind = .set });
-        while (rule_it.next()) |rule_index| {
+        rules: while (rule_it.next()) |rule_index| {
             defer runtime.resetRuleArena();
 
             const rule_idx: zlinter.rules.RuleIndex = @enumFromInt(rule_index);
 
             const rule = lint_builtin.rules[@intFromEnum(rule_idx)];
+            if (rule.target != file_kind) continue :rules;
+
             const rule_zone = tracy.traceNamed(@src(), "cli.rule");
             defer rule_zone.end();
             rule_zone.addText(rule.rule_id);

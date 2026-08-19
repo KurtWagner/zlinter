@@ -16,7 +16,7 @@ pub const LintFile = struct {
     }
 };
 
-/// Returns a list of zig source files that should be linted.
+/// Returns a list of source files that should be linted.
 ///
 /// If an explicit list of file paths was provided in the args, this will be
 /// used, otherwise it'll walk relative to working path.
@@ -37,19 +37,19 @@ pub fn allocLintFiles(
     const root_abs_path = root_abs_path_buffer[0..try dir.realPath(io, &root_abs_path_buffer)];
 
     if (maybe_files) |files| {
-        for (files) |file_or_dir| {
+        files: for (files) |file_or_dir| {
             const abs_path = try std.Io.Dir.path.resolve(gpa, &.{
                 root_abs_path,
                 file_or_dir,
             });
 
             const sub_dir = dir.openDir(io, file_or_dir, .{ .iterate = true }) catch {
-                // Assume file if we can't open as directory:
-                // No validation is done at this point on whether the file
-                // even exists and can be opened as it'll be done when
-                // opening the file for parsing so don't double up...
+                if (zlinter.session.FileStore.FileKind.fromPath(file_or_dir) == null) {
+                    gpa.free(abs_path);
+                    continue :files;
+                }
                 try putLintFilePath(gpa, &file_paths, abs_path);
-                continue;
+                continue :files;
             };
             defer sub_dir.close(io);
 
@@ -161,7 +161,7 @@ pub fn buildFilterIndex(
     return index;
 }
 
-/// Walks a directory and its sub directories adding any zig source file
+/// Walks a directory and its sub directories adding any lintable source file
 /// paths that should be linted to the given `file_paths` set.
 fn walkDirectory(
     io: std.Io,
@@ -209,11 +209,8 @@ fn putLintFilePath(
 }
 
 pub fn isLintableFilePath(file_path: []const u8) !bool {
-    const extension = ".zig";
-
     const basename = std.Io.Dir.path.basename(file_path);
-    if (basename.len <= extension.len) return false; // Can't just be ".zig"
-    if (!std.mem.endsWith(u8, basename, extension)) return false;
+    if (zlinter.session.FileStore.FileKind.fromPath(basename) == null) return false;
 
     var components = std.Io.Dir.path.componentIterator(file_path);
     while (components.next()) |component| {
@@ -229,9 +226,14 @@ test "isLintableFilePath" {
     // Good:
     inline for (&.{
         "a.zig",
+        "a.zon",
         "file.zig",
+        "file.zon",
+        "build.zig.zon",
         "some/path/file.zig",
+        "some/path/file.zon",
         "./some/path/file.zig",
+        "./some/path/file.zon",
     }) |file_path|
         try std.testing.expect(try isLintableFilePath(testing.paths.posix(file_path)));
 
@@ -242,21 +244,34 @@ test "isLintableFilePath" {
         "file.z",
         "file.",
         "zig",
+        ".zon",
+        "file.zo",
+        "zon",
         "src/.zig",
+        "src/.zon",
         "src/zig",
+        "src/zon",
     }) |file_path|
         try std.testing.expect(!try isLintableFilePath(testing.paths.posix(file_path)));
 
     // Bad parent directory
     inline for (&.{
         "zig-out/file.zig",
+        "zig-out/file.zon",
         "./zig-out/file.zig",
+        "./zig-out/file.zon",
         ".zig-cache/file.zig",
+        ".zig-cache/file.zon",
         "./parent/.zig-cache/file.zig",
+        "./parent/.zig-cache/file.zon",
         "/other/parent/.zig-cache/file.zig",
+        "/other/parent/.zig-cache/file.zon",
         "zig-pkg/file.zig",
+        "zig-pkg/file.zon",
         "./zig-pkg/file.zig",
+        "./zig-pkg/file.zon",
         "/other/parent/zig-pkg/file.zig",
+        "/other/parent/zig-pkg/file.zon",
     }) |file_path|
         try std.testing.expect(!try isLintableFilePath(testing.paths.posix(file_path)));
 }
@@ -267,14 +282,21 @@ test "allocLintFiles - with default args" {
 
     try testing.createFiles(tmp_dir.dir, @constCast(&[_][]const u8{
         testing.paths.posix("a.zig"),
+        testing.paths.posix("build.zig.zon"),
         testing.paths.posix("zig"),
         testing.paths.posix(".zig"),
+        testing.paths.posix(".zon"),
         testing.paths.posix("src/A.zig"),
+        testing.paths.posix("src/config.zon"),
         testing.paths.posix("src/zig"),
+        testing.paths.posix("src/zon"),
         testing.paths.posix("src/.zig"),
+        testing.paths.posix("src/.zon"),
         // Zig cache and Zig bin is ignored
         testing.paths.posix(".zig-cache/a.zig"),
+        testing.paths.posix(".zig-cache/a.zon"),
         testing.paths.posix("zig-out/a.zig"),
+        testing.paths.posix("zig-out/a.zon"),
     }));
 
     var cwd_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
@@ -286,19 +308,29 @@ test "allocLintFiles - with default args" {
         std.testing.allocator.free(lint_files);
     }
 
-    try std.testing.expectEqual(2, lint_files.len);
+    try std.testing.expectEqual(4, lint_files.len);
     const cwd_rel_path_0 = try std.Io.Dir.path.relative(std.testing.allocator, cwd, null, cwd, lint_files[0].abs_path);
     defer std.testing.allocator.free(cwd_rel_path_0);
 
     const cwd_rel_path_1 = try std.Io.Dir.path.relative(std.testing.allocator, cwd, null, cwd, lint_files[1].abs_path);
     defer std.testing.allocator.free(cwd_rel_path_1);
 
+    const cwd_rel_path_2 = try std.Io.Dir.path.relative(std.testing.allocator, cwd, null, cwd, lint_files[2].abs_path);
+    defer std.testing.allocator.free(cwd_rel_path_2);
+
+    const cwd_rel_path_3 = try std.Io.Dir.path.relative(std.testing.allocator, cwd, null, cwd, lint_files[3].abs_path);
+    defer std.testing.allocator.free(cwd_rel_path_3);
+
     try testing.expectContainsExactlyStrings(&.{
         testing.paths.posix("a.zig"),
+        testing.paths.posix("build.zig.zon"),
         testing.paths.posix("src/A.zig"),
-    }, &.{ cwd_rel_path_0, cwd_rel_path_1 });
+        testing.paths.posix("src/config.zon"),
+    }, &.{ cwd_rel_path_0, cwd_rel_path_1, cwd_rel_path_2, cwd_rel_path_3 });
     try std.testing.expect(std.Io.Dir.path.isAbsolute(lint_files[0].abs_path));
     try std.testing.expect(std.Io.Dir.path.isAbsolute(lint_files[1].abs_path));
+    try std.testing.expect(std.Io.Dir.path.isAbsolute(lint_files[2].abs_path));
+    try std.testing.expect(std.Io.Dir.path.isAbsolute(lint_files[3].abs_path));
 }
 
 test "allocLintFiles - with arg files" {
@@ -347,6 +379,68 @@ test "allocLintFiles - with arg files" {
     }, &.{ cwd_rel_path_0, cwd_rel_path_1 });
     try std.testing.expect(std.Io.Dir.path.isAbsolute(lint_files[0].abs_path));
     try std.testing.expect(std.Io.Dir.path.isAbsolute(lint_files[1].abs_path));
+}
+
+test "allocLintFiles - with arg files ignores unsupported file types" {
+    var tmp_dir = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp_dir.cleanup();
+
+    try testing.createFiles(tmp_dir.dir, @constCast(&[_][]const u8{
+        testing.paths.posix("a.zig"),
+        testing.paths.posix("build.zig.zon"),
+        testing.paths.posix(".zig-cache/tmp/cached.zig"),
+        testing.paths.posix("README.md"),
+        testing.paths.posix("LICENSE"),
+    }));
+
+    var cwd_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
+    const cwd = cwd_buffer[0..try tmp_dir.dir.realPath(std.testing.io, &cwd_buffer)];
+
+    const lint_files = try allocLintFiles(std.testing.io, tmp_dir.dir, &.{
+        testing.paths.posix("a.zig"),
+        testing.paths.posix("build.zig.zon"),
+        testing.paths.posix(".zig-cache/tmp/cached.zig"),
+        testing.paths.posix("README.md"),
+        testing.paths.posix("LICENSE"),
+    }, std.testing.allocator);
+    defer {
+        for (lint_files) |*file| file.deinit(std.testing.allocator);
+        std.testing.allocator.free(lint_files);
+    }
+
+    try std.testing.expectEqual(3, lint_files.len);
+    const cwd_rel_path_0 = try std.Io.Dir.path.relative(
+        std.testing.allocator,
+        cwd,
+        null,
+        cwd,
+        lint_files[0].abs_path,
+    );
+    defer std.testing.allocator.free(cwd_rel_path_0);
+
+    const cwd_rel_path_1 = try std.Io.Dir.path.relative(
+        std.testing.allocator,
+        cwd,
+        null,
+        cwd,
+        lint_files[1].abs_path,
+    );
+    defer std.testing.allocator.free(cwd_rel_path_1);
+
+    const cwd_rel_path_2 = try std.Io.Dir.path.relative(
+        std.testing.allocator,
+        cwd,
+        null,
+        cwd,
+        lint_files[2].abs_path,
+    );
+    defer std.testing.allocator.free(cwd_rel_path_2);
+
+    try testing.expectContainsExactlyStrings(&.{
+        testing.paths.posix("a.zig"),
+        testing.paths.posix("build.zig.zon"),
+        testing.paths.posix(".zig-cache/tmp/cached.zig"),
+    }, &.{ cwd_rel_path_0, cwd_rel_path_1, cwd_rel_path_2 });
 }
 
 test "buildExcludesIndex prefers user include over build excludes" {

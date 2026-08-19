@@ -30,6 +30,7 @@ pub const BuiltinLintRule = enum {
     require_errdefer_dealloc,
     require_fmt,
     no_global_vars,
+    build_zig_zon,
 };
 
 const BuildRuleSource = union(enum) {

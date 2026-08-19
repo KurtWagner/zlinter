@@ -1,4 +1,6 @@
-const input_suffix = ".input.zig";
+const input_zig_suffix = ".input.zig";
+const input_zon_suffix = ".zon";
+const config_zon_name = "zlinter.zon";
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -35,35 +37,60 @@ pub fn build(b: *std.Build) !void {
     var run_integration_test_steps: std.ArrayList(*std.Build.Step) = .empty;
     defer run_integration_test_steps.deinit(b.allocator);
 
-    while (try walker.next(io)) |item| {
-        if (item.kind != .file) continue;
-        if (!std.mem.endsWith(u8, item.path, input_suffix)) continue;
+    files: while (try walker.next(io)) |item| {
+        if (item.kind != .file) continue :files;
+
+        const is_zon_input = std.mem.endsWith(
+            u8,
+            item.path,
+            input_zon_suffix,
+        ) and !std.mem.eql(u8, item.basename, config_zon_name);
+
+        const input_suffix = if (is_zon_input)
+            input_zon_suffix
+        else if (std.mem.endsWith(
+            u8,
+            item.path,
+            input_zig_suffix,
+        ))
+            input_zig_suffix
+        else
+            continue :files;
 
         const parent_dir = std.Io.Dir.path.dirname(item.path).?;
 
         // Format: <rule_name>/<test_name>/<test_name>.input.zig
+        //     or: <rule_name>/<test_name>/<file>.zon
         const rule_name = item.path[0 .. std.mem.findScalar(u8, item.path, std.Io.Dir.path.sep) orelse {
             std.log.err("Test case file skipped as its invalid: {s}", .{item.path});
-            continue;
+            continue :files;
         }];
         if (test_focus_on_rule) |r|
             if (!std.mem.eql(u8, rule_name, r)) {
                 std.log.warn("Skipping {s}", .{rule_name});
-                continue;
+                continue :files;
             };
 
-        const test_name = item.basename[0..(item.basename.len - input_suffix.len)];
+        const test_name = if (is_zon_input)
+            std.Io.Dir.path.basename(parent_dir)
+        else
+            item.basename[0..(item.basename.len - input_suffix.len)];
 
         const run_integration_test = b.addRunArtifact(test_runner_exe);
         run_integration_test.addArg(b.graph.zig_exe);
         run_integration_test.addArg(rule_name);
         run_integration_test.addArg(test_name);
+        run_integration_test.addFileArg(b.path(
+            std.Io.Dir.path.resolve(
+                b.allocator,
+                &.{ test_cases_path, item.path },
+            ) catch unreachable,
+        ));
 
         var filename_buffer: [std.Io.Dir.max_name_bytes]u8 = undefined;
         var path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
         var path_fba: std.heap.FixedBufferAllocator = .init(&path_buffer);
         inline for (&.{
-            ".input.zig",
             ".lint_expected.stdout",
             ".fix_expected.stdout",
             ".fix_expected.zig",

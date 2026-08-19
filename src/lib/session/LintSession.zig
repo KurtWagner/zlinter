@@ -599,6 +599,9 @@ pub fn resolveFileTypes(
     self: *LintSession,
     file_id: FileStore.FileId,
 ) void {
+    // There's only types to resolve in zig sourvce files...
+    if (self.file_store.fileKind(file_id) != .zig) return;
+
     self.decl_store.resolveFileTypes(
         file_id,
         .{
