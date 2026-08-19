@@ -239,13 +239,9 @@ fn declRequiringCleanup(
             "deinit",
         );
 
-    while (deinit_it.next()) |tuple| {
-        const module, const decl_id = tuple;
-        _ = module;
-
-        if (isFnPublic(session, decl_id))
+    while (deinit_it.next()) |c|
+        if (isFnPublic(session, c.decl_id))
             return .{ .decl_name_token = var_decl.ast.mut_token + 1 };
-    }
 
     return null;
 }

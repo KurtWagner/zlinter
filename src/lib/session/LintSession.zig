@@ -1259,7 +1259,7 @@ pub const DeclTypeMemberCandidatesIterator = struct {
         };
     }
 
-    pub fn next(self: *DeclTypeMemberCandidatesIterator) ?struct { ModuleStore.ModuleId, DeclStore.DeclId } {
+    pub fn next(self: *DeclTypeMemberCandidatesIterator) ?DeclCandidate {
         if (self.i >= self.module_ids.len) return null;
 
         const module_id = self.module_ids[self.i];
@@ -1272,7 +1272,7 @@ pub const DeclTypeMemberCandidatesIterator = struct {
             self.member_name,
         ) orelse return self.next();
 
-        return .{ module_id, decl_id };
+        return .{ .module_id = module_id, .decl_id = decl_id };
     }
 };
 
@@ -1280,23 +1280,57 @@ pub const DeclTypeMemberCandidatesIterator = struct {
 /// all modules that can reach the declaration's file.
 pub fn resolveDeclTypeDeclCandidates(
     self: *LintSession,
-    arena: std.mem.Allocator,
     decl_id: DeclStore.DeclId,
-) ![]const DeclCandidate {
-    var candidates = std.ArrayList(DeclCandidate).empty;
-    const module_ids = self.moduleIdsForDecl(decl_id);
-    for (module_ids) |module_id| {
-        const module = self.resolutionForModule(module_id);
-
-        const type_decl_id = module.declTypeDecl(decl_id) orelse continue;
-
-        try candidates.append(arena, .{
-            .module_id = module_id,
-            .decl_id = type_decl_id,
-        });
-    }
-    return candidates.items;
+) DeclTypeDeclCandidatesIterator {
+    return DeclTypeDeclCandidatesIterator.init(self, decl_id);
 }
+
+/// Iterator for declarations matching a given name, use `resolveDeclTypeMemberCandidates`
+/// to construct this iterator.
+pub const DeclTypeDeclCandidatesIterator = struct {
+    session: *LintSession,
+    module_ids: []const ModuleStore.ModuleId,
+    parent_decl_id: DeclStore.DeclId,
+    i: usize,
+
+    fn init(
+        session: *LintSession,
+        parent_decl_id: DeclStore.DeclId,
+    ) DeclTypeDeclCandidatesIterator {
+        return .{
+            .session = session,
+            .module_ids = session.moduleIdsForDecl(parent_decl_id),
+            .i = 0,
+            .parent_decl_id = parent_decl_id,
+        };
+    }
+
+    pub fn next(self: *DeclTypeDeclCandidatesIterator) ?DeclCandidate {
+        if (self.i >= self.module_ids.len) return null;
+
+        const module_id = self.module_ids[self.i];
+        self.i += 1;
+
+        const module = self.session.resolutionForModule(module_id);
+
+        const decl_id = module.declTypeDecl(
+            self.parent_decl_id,
+        ) orelse return self.next();
+
+        return .{ .module_id = module_id, .decl_id = decl_id };
+    }
+
+    /// Prefer iterating with `next`, this is just added for compatibility.
+    pub fn allocList(
+        self: *DeclTypeDeclCandidatesIterator,
+        arena: std.mem.Allocator,
+    ) []const DeclCandidate {
+        var list: std.ArrayList(DeclCandidate) = .empty;
+        while (self.next()) |c|
+            list.append(arena, c) catch @panic("OOM");
+        return list.toOwnedSlice(arena) catch @panic("OOM");
+    }
+};
 
 /// Resolves the declaration named by each candidate's type expression,
 /// preserving the candidate module used for lookup.

@@ -390,7 +390,8 @@ fn resolveEnumLiteralContextTypeDeclCandidates(
             };
             if (nodeWithin(tree, init_node, current)) {
                 const decl_id = session.decl_store.declIdByNode(doc.file_id, ancestor) orelse return &.{};
-                return session.resolveDeclTypeDeclCandidates(rule_arena, decl_id);
+                var candidate_it = session.resolveDeclTypeDeclCandidates(decl_id);
+                return candidate_it.allocList(rule_arena);
             }
         }
 
@@ -401,7 +402,8 @@ fn resolveEnumLiteralContextTypeDeclCandidates(
             };
             if (nodeWithin(tree, value_node, current)) {
                 const decl_id = session.decl_store.declIdByNode(doc.file_id, ancestor) orelse return &.{};
-                return session.resolveDeclTypeDeclCandidates(rule_arena, decl_id);
+                var candidate_it = session.resolveDeclTypeDeclCandidates(decl_id);
+                return candidate_it.allocList(rule_arena);
             }
         }
 
