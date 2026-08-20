@@ -252,6 +252,12 @@ Enforce a consistent, predictable order for fields in structs, enums, and unions
 
   * **Default:** `true`
 
+* `exclude_explicit_value_enums`
+
+  * Whether to exclude enums containing explicitly assigned values.  Explicit values often have semantic ordering, such as protocol IDs, status codes, ABI constants, or other externally defined mappings.
+
+  * **Default:** `true`
+
 * `enum_field_order`
 
   * Order and severity for enum fields. If you're setting this and use tagged unions (e.g., `union(MyEnum)`) then you will also need to set the same order for unions.

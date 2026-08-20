@@ -94,4 +94,14 @@ const EnumWithInlineComments = enum {
     b, // comment after b without comma
 };
 
+const EnumWithExplicitValues = enum(u8) {
+    zebra = 10,
+    apple = 2,
+};
+
+const EnumWithMixedExplicitValues = enum(u8) {
+    zebra = 0,
+    apple,
+};
+
 const DuplicateFields = struct { a: u32 = 1, a: u32 = 2, b: u32, z: u32 };

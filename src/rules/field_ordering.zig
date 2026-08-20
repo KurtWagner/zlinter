@@ -24,6 +24,12 @@ pub const Config = struct {
     /// leave as `true` unless you're certain.
     exclude_extern_structs: bool = true,
 
+    /// Whether to exclude enums containing explicitly assigned values.
+    ///
+    /// Explicit values often have semantic ordering, such as protocol IDs,
+    /// status codes, ABI constants, or other externally defined mappings.
+    exclude_explicit_value_enums: bool = true,
+
     /// Order and severity for enum fields. If you're setting this and use
     /// tagged unions (e.g., `union(MyEnum)`) then you will also need to set
     /// the same order for unions.
@@ -46,6 +52,11 @@ fn run(
     doc: *const zlinter.session.LintDocument,
     options: zlinter.rules.RunOptions,
 ) zlinter.rules.RunError!?zlinter.results.LintResult {
+    const ContainerOrderInfo = struct {
+        order_with_severity: zlinter.rules.LintTextOrderWithSeverity,
+        container_kind_name: []const u8,
+    };
+
     const config = options.getConfig(Config);
     const session_arena = session.runtime.sessionArena();
     const rule_arena = session.runtime.ruleArena();
@@ -61,29 +72,42 @@ fn run(
     nodes: while (try it.next()) |tuple| {
         const node, const connections = tuple;
 
-        const order_with_severity: zlinter.rules.LintTextOrderWithSeverity, const container_kind_name: []const u8 = kind: {
-            if (tree.fullContainerDecl(
-                &container_decl_buffer,
-                node,
-            )) |container_decl|
-                break :kind switch (tree.tokens.items(.tag)[tree.nodeMainToken(node)]) {
-                    .keyword_union => .{ config.union_field_order, "Union" },
-                    .keyword_struct => {
-                        if (container_decl.layout_token) |layout_token| {
-                            if (config.exclude_extern_structs and tree.tokens.items(.tag)[layout_token] == .keyword_extern)
-                                break :kind null;
-                            if (config.exclude_packed_structs and tree.tokens.items(.tag)[layout_token] == .keyword_packed)
-                                break :kind null;
-                        }
-                        break :kind .{ config.struct_field_order, "Struct" };
-                    },
-                    .keyword_enum => .{ config.enum_field_order, "Enum" },
-                    else => null,
+        const maybe_order_info: ?ContainerOrderInfo = if (tree.fullContainerDecl(
+            &container_decl_buffer,
+            node,
+        )) |container_decl| switch (tree.tokens.items(.tag)[tree.nodeMainToken(node)]) {
+            .keyword_union => .{
+                .order_with_severity = config.union_field_order,
+                .container_kind_name = "Union",
+            },
+            .keyword_struct => blk: {
+                if (container_decl.layout_token) |layout_token| {
+                    if (config.exclude_extern_structs and tree.tokens.items(.tag)[layout_token] == .keyword_extern)
+                        break :blk null;
+                    if (config.exclude_packed_structs and tree.tokens.items(.tag)[layout_token] == .keyword_packed)
+                        break :blk null;
+                }
+                break :blk .{
+                    .order_with_severity = config.struct_field_order,
+                    .container_kind_name = "Struct",
                 };
-            break :kind null;
-        } orelse continue :nodes;
+            },
+            .keyword_enum => blk: {
+                if (config.exclude_explicit_value_enums and enumHasExplicitValueFields(
+                    tree,
+                    container_decl.ast.members,
+                ))
+                    break :blk null;
+                break :blk .{
+                    .order_with_severity = config.enum_field_order,
+                    .container_kind_name = "Enum",
+                };
+            },
+            else => null,
+        } else null;
+        const order_info = maybe_order_info orelse continue :nodes;
 
-        const order = order_with_severity.order() orelse continue :nodes;
+        const order = order_info.order_with_severity.order() orelse continue :nodes;
 
         var actual_order = std.ArrayList(Ast.Node.Index).empty;
         var expected_order = std.ArrayList(Ast.Node.Index).empty;
@@ -182,11 +206,11 @@ fn run(
 
             try lint_problems.append(session_arena, .{
                 .rule_id = rule.rule_id,
-                .severity = order_with_severity.severity(),
+                .severity = order_info.order_with_severity.severity(),
                 .start = actual_start,
                 .end = actual_end,
                 .message = try session_arena.print("{s} fields should be in {s} order", .{
-                    container_kind_name,
+                    order_info.container_kind_name,
                     order.name(),
                 }),
                 .fix = .{
@@ -205,6 +229,14 @@ fn run(
         )
     else
         null;
+}
+
+fn enumHasExplicitValueFields(tree: Ast, members: []const Ast.Node.Index) bool {
+    for (members) |member|
+        if (tree.fullContainerField(member)) |field|
+            if (field.ast.value_expr.unwrap() != null)
+                return true;
+    return false;
 }
 
 /// Span between two nodes (or the same node) including comments and leading
@@ -447,6 +479,70 @@ test "Field.cmp preserves source order for equal names" {
     try std.testing.expectEqual(
         std.math.Order.gt,
         Field.cmp(.{.alphabetical_descending}, second, first),
+    );
+}
+
+test "field_ordering - ignores enums with explicit values by default" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const Example = enum(u8) { zebra = 10, apple = 2 };
+    ,
+        .{},
+        Config{
+            .enum_field_order = .{ .warning = .alphabetical_ascending },
+        },
+        &.{},
+    );
+}
+
+test "field_ordering - checks enum tag types without explicit values" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const Example = enum(u8) { zebra, apple };
+    ,
+        .{},
+        Config{
+            .enum_field_order = .{ .warning = .alphabetical_ascending },
+        },
+        &.{
+            .{
+                .rule_id = "field_ordering",
+                .severity = .warning,
+                .slice = " zebra, apple",
+                .message = "Enum fields should be in alphabetical order",
+                .fix = .{
+                    .start = 26,
+                    .end = 39,
+                    .text = " apple, zebra",
+                },
+            },
+        },
+    );
+}
+
+test "field_ordering - checks enums with explicit values when exclusion is disabled" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const Example = enum(u8) { zebra = 10, apple = 2 };
+    ,
+        .{},
+        Config{
+            .exclude_explicit_value_enums = false,
+            .enum_field_order = .{ .warning = .alphabetical_ascending },
+        },
+        &.{
+            .{
+                .rule_id = "field_ordering",
+                .severity = .warning,
+                .slice = " zebra = 10, apple = 2",
+                .message = "Enum fields should be in alphabetical order",
+                .fix = .{
+                    .start = 26,
+                    .end = 48,
+                    .text = " apple = 2, zebra = 10",
+                },
+            },
+        },
     );
 }
 
