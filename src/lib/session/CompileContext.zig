@@ -5,14 +5,14 @@ const CompileContext = @This();
 root_module: ModuleId,
 step_index: std.Build.Configuration.Step.Index,
 
-pub const Id = enum(u32) {
+pub const CompileContextId = enum(u32) {
     _,
 
-    pub fn fromIndex(index: usize) Id {
+    pub fn fromIndex(index: usize) CompileContextId {
         return @enumFromInt(@as(u32, @intCast(index)));
     }
 
-    pub fn toIndex(self: Id) usize {
+    pub fn toIndex(self: CompileContextId) usize {
         return @intFromEnum(self);
     }
 };

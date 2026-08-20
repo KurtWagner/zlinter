@@ -448,8 +448,8 @@ fn consumeBuildConfigStep(
 pub fn appendCompileContext(
     self: *LintSession,
     context: CompileContext,
-) CompileContext.Id {
-    const id: CompileContext.Id = .fromIndex(self.compile_contexts.len);
+) CompileContext.CompileContextId {
+    const id: CompileContext.CompileContextId = .fromIndex(self.compile_contexts.len);
     oom(self.compile_contexts.append(self.runtime.sessionArena(), context));
     self.module_file_index_built = false;
     return id;
