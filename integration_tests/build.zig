@@ -53,6 +53,7 @@ pub fn build(b: *std.Build) !void {
         inline for (&.{
             ".input.zig",
             ".lint_expected.stdout",
+            ".lint_expected.stderr",
             ".fix_expected.stdout",
             ".fix_expected.zig",
             ".input.zon",
