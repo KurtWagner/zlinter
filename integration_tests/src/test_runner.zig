@@ -9,6 +9,7 @@ const max_file_size_bytes = 10 * 1024 * 1024;
 const input_zig_suffix = ".input.zig";
 const input_zon_suffix = ".input.zon";
 const lint_output_suffix = ".lint_expected.stdout";
+const lint_stderr_suffix = ".lint_expected.stderr";
 const fix_zig_output_suffix = ".fix_expected.zig";
 const fix_stdout_output_suffix = ".fix_expected.stdout";
 
@@ -97,6 +98,7 @@ fn runTest(
     var input_zig_file: ?[:0]const u8 = null;
     var input_zon_file: ?[:0]const u8 = null;
     var lint_stdout_expected_file: ?[:0]const u8 = null;
+    var lint_stderr_expected_file: ?[:0]const u8 = null;
     var fix_zig_expected_file: ?[:0]const u8 = null;
     var fix_stdout_expected_file: ?[:0]const u8 = null;
 
@@ -108,6 +110,8 @@ fn runTest(
             input_zig_file = arg
         else if (std.mem.endsWith(u8, arg, lint_output_suffix))
             lint_stdout_expected_file = arg
+        else if (std.mem.endsWith(u8, arg, lint_stderr_suffix))
+            lint_stderr_expected_file = arg
         else if (std.mem.endsWith(u8, arg, fix_zig_output_suffix))
             fix_zig_expected_file = arg
         else if (std.mem.endsWith(u8, arg, fix_stdout_output_suffix))
@@ -162,6 +166,16 @@ fn runTest(
             try printWithHeader(stdout, "STDERR:", lint_output.stderr);
             return e;
         };
+        if (lint_stderr_expected_file) |expected_file| {
+            try expectFileContentsEquals(
+                io,
+                stdout,
+                arena,
+                std.Io.Dir.cwd(),
+                expected_file,
+                lint_output.stderr,
+            );
+        }
     }
 
     // --------------------------------------------------------------------
