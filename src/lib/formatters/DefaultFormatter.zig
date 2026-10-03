@@ -27,7 +27,7 @@ fn format(
             input.file_store.fileSource(file_result.file_id),
         ) catch |e| return logAndReturnWriteFailure("Render", e);
 
-        const cwd_rel_path = oom(std.Io.Dir.path.relative(
+        const cwd_rel_path = oom(std.Io.Dir.path.relativeAlloc(
             file_arena.allocator(),
             input.runtime.cwd,
             null,
@@ -152,7 +152,7 @@ fn renderNoteTitle(
     ))
         note_abs_path
     else
-        oom(std.Io.Dir.path.relative(
+        oom(std.Io.Dir.path.relativeAlloc(
             allocator,
             input.runtime.cwd,
             null,

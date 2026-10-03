@@ -221,7 +221,7 @@ const LintConfig = struct {
         var fba_path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
         var fba_path: std.heap.FixedBufferAllocator = .init(&fba_path_buffer);
 
-        const lint_config_abs_path = std.Io.Dir.path.resolve(
+        const lint_config_abs_path = std.Io.Dir.path.resolveAlloc(
             fba_path.allocator(),
             &.{ dir_abs_path, "zlinter.zon" },
         ) catch unreachable;

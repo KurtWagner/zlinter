@@ -81,7 +81,7 @@ pub fn build(b: *std.Build) !void {
         run_integration_test.addArg(rule_name);
         run_integration_test.addArg(test_name);
         run_integration_test.addFileArg(b.path(
-            std.Io.Dir.path.resolve(
+            std.Io.Dir.path.resolveAlloc(
                 b.allocator,
                 &.{ test_cases_path, item.path },
             ) catch unreachable,
@@ -101,7 +101,7 @@ pub fn build(b: *std.Build) !void {
                 .{ test_name, suffix },
             ) catch unreachable;
 
-            const input_path = std.Io.Dir.path.resolve(
+            const input_path = std.Io.Dir.path.resolveAlloc(
                 path_fba.allocator(),
                 &.{ test_cases_path, parent_dir, filename },
             ) catch unreachable;

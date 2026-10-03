@@ -115,7 +115,7 @@ pub fn resolveFrom(
     var fba_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     var fba: std.heap.FixedBufferAllocator = .init(&fba_buffer);
 
-    const normal_path = oom(std.Io.Dir.path.resolve(
+    const normal_path = oom(std.Io.Dir.path.resolveAlloc(
         fba.allocator(),
         &.{ cwd, input_path },
     ));

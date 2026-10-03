@@ -38,7 +38,7 @@ pub fn allocLintFiles(
 
     if (maybe_files) |files| {
         files: for (files) |file_or_dir| {
-            const abs_path = try std.Io.Dir.path.resolve(gpa, &.{
+            const abs_path = try std.Io.Dir.path.resolveAlloc(gpa, &.{
                 root_abs_path,
                 file_or_dir,
             });
@@ -179,7 +179,7 @@ fn walkDirectory(
         if (item.kind != .file) continue;
         if (!try isLintableFilePath(item.path)) continue;
 
-        const resolved = try std.Io.Dir.path.resolve(
+        const resolved = try std.Io.Dir.path.resolveAlloc(
             allocator,
             &.{
                 parent_abs_path,
@@ -309,16 +309,16 @@ test "allocLintFiles - with default args" {
     }
 
     try std.testing.expectEqual(4, lint_files.len);
-    const cwd_rel_path_0 = try std.Io.Dir.path.relative(std.testing.allocator, cwd, null, cwd, lint_files[0].abs_path);
+    const cwd_rel_path_0 = try std.Io.Dir.path.relativeAlloc(std.testing.allocator, cwd, null, cwd, lint_files[0].abs_path);
     defer std.testing.allocator.free(cwd_rel_path_0);
 
-    const cwd_rel_path_1 = try std.Io.Dir.path.relative(std.testing.allocator, cwd, null, cwd, lint_files[1].abs_path);
+    const cwd_rel_path_1 = try std.Io.Dir.path.relativeAlloc(std.testing.allocator, cwd, null, cwd, lint_files[1].abs_path);
     defer std.testing.allocator.free(cwd_rel_path_1);
 
-    const cwd_rel_path_2 = try std.Io.Dir.path.relative(std.testing.allocator, cwd, null, cwd, lint_files[2].abs_path);
+    const cwd_rel_path_2 = try std.Io.Dir.path.relativeAlloc(std.testing.allocator, cwd, null, cwd, lint_files[2].abs_path);
     defer std.testing.allocator.free(cwd_rel_path_2);
 
-    const cwd_rel_path_3 = try std.Io.Dir.path.relative(std.testing.allocator, cwd, null, cwd, lint_files[3].abs_path);
+    const cwd_rel_path_3 = try std.Io.Dir.path.relativeAlloc(std.testing.allocator, cwd, null, cwd, lint_files[3].abs_path);
     defer std.testing.allocator.free(cwd_rel_path_3);
 
     try testing.expectContainsExactlyStrings(&.{
@@ -367,10 +367,10 @@ test "allocLintFiles - with arg files" {
     }
 
     try std.testing.expectEqual(2, lint_files.len);
-    const cwd_rel_path_0 = try std.Io.Dir.path.relative(std.testing.allocator, cwd, null, cwd, lint_files[0].abs_path);
+    const cwd_rel_path_0 = try std.Io.Dir.path.relativeAlloc(std.testing.allocator, cwd, null, cwd, lint_files[0].abs_path);
     defer std.testing.allocator.free(cwd_rel_path_0);
 
-    const cwd_rel_path_1 = try std.Io.Dir.path.relative(std.testing.allocator, cwd, null, cwd, lint_files[1].abs_path);
+    const cwd_rel_path_1 = try std.Io.Dir.path.relativeAlloc(std.testing.allocator, cwd, null, cwd, lint_files[1].abs_path);
     defer std.testing.allocator.free(cwd_rel_path_1);
 
     try testing.expectContainsExactlyStrings(&.{
@@ -409,7 +409,7 @@ test "allocLintFiles - with arg files ignores unsupported file types" {
     }
 
     try std.testing.expectEqual(3, lint_files.len);
-    const cwd_rel_path_0 = try std.Io.Dir.path.relative(
+    const cwd_rel_path_0 = try std.Io.Dir.path.relativeAlloc(
         std.testing.allocator,
         cwd,
         null,
@@ -418,7 +418,7 @@ test "allocLintFiles - with arg files ignores unsupported file types" {
     );
     defer std.testing.allocator.free(cwd_rel_path_0);
 
-    const cwd_rel_path_1 = try std.Io.Dir.path.relative(
+    const cwd_rel_path_1 = try std.Io.Dir.path.relativeAlloc(
         std.testing.allocator,
         cwd,
         null,
@@ -427,7 +427,7 @@ test "allocLintFiles - with arg files ignores unsupported file types" {
     );
     defer std.testing.allocator.free(cwd_rel_path_1);
 
-    const cwd_rel_path_2 = try std.Io.Dir.path.relative(
+    const cwd_rel_path_2 = try std.Io.Dir.path.relativeAlloc(
         std.testing.allocator,
         cwd,
         null,
@@ -463,9 +463,9 @@ test "buildExcludesIndex prefers user include over build excludes" {
     var index = (try buildExcludesIndex(std.testing.io, std.testing.allocator, tmp_dir.dir, args)).?;
     defer index.deinit();
 
-    const user_only = try std.Io.Dir.path.resolve(std.testing.allocator, &.{ cwd, testing.paths.posix("user_only.zig") });
+    const user_only = try std.Io.Dir.path.resolveAlloc(std.testing.allocator, &.{ cwd, testing.paths.posix("user_only.zig") });
     defer std.testing.allocator.free(user_only);
-    const build_only = try std.Io.Dir.path.resolve(std.testing.allocator, &.{ cwd, testing.paths.posix("build_only.zig") });
+    const build_only = try std.Io.Dir.path.resolveAlloc(std.testing.allocator, &.{ cwd, testing.paths.posix("build_only.zig") });
     defer std.testing.allocator.free(build_only);
 
     try std.testing.expect(index.contains(user_only));
@@ -501,17 +501,17 @@ test "buildFilterIndex resolves filter files into absolute path index" {
     )).?;
     defer index.deinit();
 
-    const a = try std.Io.Dir.path.resolve(
+    const a = try std.Io.Dir.path.resolveAlloc(
         std.testing.allocator,
         &.{ cwd, testing.paths.posix("src/a.zig") },
     );
     defer std.testing.allocator.free(a);
-    const c = try std.Io.Dir.path.resolve(
+    const c = try std.Io.Dir.path.resolveAlloc(
         std.testing.allocator,
         &.{ cwd, testing.paths.posix("other/c.zig") },
     );
     defer std.testing.allocator.free(c);
-    const b = try std.Io.Dir.path.resolve(
+    const b = try std.Io.Dir.path.resolveAlloc(
         std.testing.allocator,
         &.{ cwd, testing.paths.posix("src/b.zig") },
     );
@@ -618,7 +618,7 @@ pub fn resolveLazyPath(
             else
                 build_root_path;
 
-            return try std.Io.Dir.path.resolve(
+            return try std.Io.Dir.path.resolveAlloc(
                 fba.allocator(),
                 &.{ root, source_path.sub_path.slice(config) },
             );
@@ -639,7 +639,7 @@ pub fn resolveLazyPath(
                 .libc_runtimes,
                 => return null,
             };
-            return try std.Io.Dir.path.resolve(
+            return try std.Io.Dir.path.resolveAlloc(
                 fba.allocator(),
                 &.{ root, sub_path },
             );

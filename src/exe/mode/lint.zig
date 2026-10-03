@@ -353,7 +353,7 @@ fn allocCwdRelPath(
     cwd: []const u8,
     abs_path: []const u8,
 ) ![]const u8 {
-    return std.Io.Dir.path.relative(gpa, cwd, null, cwd, abs_path);
+    return std.Io.Dir.path.relativeAlloc(gpa, cwd, null, cwd, abs_path);
 }
 
 fn cmpFix(context: void, a: zlinter.results.LintProblemFix, b: zlinter.results.LintProblemFix) bool {
