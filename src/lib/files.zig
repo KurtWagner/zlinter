@@ -636,6 +636,7 @@ pub fn resolveLazyPath(
                 .install_lib,
                 .install_bin,
                 .install_include,
+                .libc_runtimes,
                 => return null,
             };
             return try std.Io.Dir.path.resolve(
