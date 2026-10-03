@@ -254,21 +254,20 @@ const LintConfig = struct {
         };
 
         @setEvalBranchQuota(5000);
-        var diagnostics: std.zon.parse.Diagnostics = .{};
+        var diagnostics: std.zon.parse.Diagnostics = undefined;
         const zon = arena.create(Zon) catch @panic("OOM");
-        zon.* = std.zon.parse.fromSliceAlloc(
-            Zon,
-            arena,
-            source,
-            &diagnostics,
-            .{},
-        ) catch |e| {
+        zon.* = std.zon.parse.fromSlice(Zon, .{
+            .gpa = arena,
+            .arena = arena,
+            .source = source,
+            .diagnostics = &diagnostics,
+        }) catch |e| {
             if (e == error.OutOfMemory) @panic("OOM");
             // TODO: There must be a better way of expecting stderr in tests
             if (!builtin.is_test)
                 std.log.err(
                     "Failed to parse lint config: '{s}' due to {t} - {f}",
-                    .{ lint_config_abs_path, e, diagnostics },
+                    .{ lint_config_abs_path, e, diagnostics.fmt(lint_config_abs_path) },
                 );
             return error.InvalidLintConfig;
         };
