@@ -118,7 +118,7 @@ fn hasContinueLabel(tree: Ast, node: Ast.Node.Index) bool {
         .@"enum" => if (std.meta.hasFn(@TypeOf(opt_label), "unwrap"))
             opt_label.unwrap() != null
         else
-            @intFromEnum(opt_label) != 0,
+            @backingInt(opt_label) != 0,
         .optional => opt_label != null,
         else => opt_label != 0,
     };

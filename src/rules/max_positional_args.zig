@@ -56,7 +56,7 @@ fn run(
 
     var index: u32 = 1;
     nodes: while (index < tree.nodes.len) : (index += 1) {
-        const node: Ast.Node.Index = @enumFromInt(index);
+        const node: Ast.Node.Index = @fromBackingInt(index);
         const fn_proto = fnProto(tree, &fn_buffer, node) orelse continue :nodes;
 
         if (shouldSkipFnProto(tree, fn_proto, config)) continue :nodes;

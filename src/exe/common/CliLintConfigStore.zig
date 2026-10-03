@@ -174,8 +174,8 @@ pub fn lookup(
 
     if (self.configByDir(normalized)) |config| {
         const lint_config = self.configs.items[config];
-        if (lint_config.rule_configs_on.isSet(@intFromEnum(rule_idx)))
-            return lint_config.rule_configs[@intFromEnum(rule_idx)];
+        if (lint_config.rule_configs_on.isSet(@backingInt(rule_idx)))
+            return lint_config.rule_configs[@backingInt(rule_idx)];
     }
 
     var rhs = normalized.len;
@@ -184,16 +184,16 @@ pub fn lookup(
             const parent_dir = normalized[0 .. rhs - 1];
             if (self.configByDir(parent_dir)) |config| {
                 const lint_config = self.configs.items[config];
-                if (lint_config.rule_configs_on.isSet(@intFromEnum(rule_idx)))
-                    return lint_config.rule_configs[@intFromEnum(rule_idx)];
+                if (lint_config.rule_configs_on.isSet(@backingInt(rule_idx)))
+                    return lint_config.rule_configs[@backingInt(rule_idx)];
             }
         };
     std.log.info("No zlinter.zon for {s}", .{dir_abs_path});
-    return self.configs.items[self.base_config_id].rule_configs[@intFromEnum(rule_idx)];
+    return self.configs.items[self.base_config_id].rule_configs[@backingInt(rule_idx)];
 }
 
 pub fn getConfig(self: *const CliLintConfigStore, config_id: LintConfigId, rule_idx: RuleIndex) *anyopaque {
-    return self.configs.items[config_id].rule_configs[@intFromEnum(rule_idx)];
+    return self.configs.items[config_id].rule_configs[@backingInt(rule_idx)];
 }
 
 fn configByDir(self: *const CliLintConfigStore, dir_abs_path: []const u8) ?LintConfigId {

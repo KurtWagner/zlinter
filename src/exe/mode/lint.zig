@@ -212,9 +212,9 @@ fn runLinterRules(
         rules: while (rule_it.next()) |rule_index| {
             defer runtime.resetRuleArena();
 
-            const rule_idx: zlinter.rules.RuleIndex = @enumFromInt(rule_index);
+            const rule_idx: zlinter.rules.RuleIndex = @fromBackingInt(@intCast(rule_index));
 
-            const rule = lint_builtin.rules[@intFromEnum(rule_idx)];
+            const rule = lint_builtin.rules[@backingInt(rule_idx)];
             if (rule.target != file_kind) continue :rules;
 
             const rule_zone = tracy.traceNamed(@src(), "cli.rule");

@@ -173,7 +173,7 @@ fn classifyUndefined(
 
         if (tree.fullVarDecl(parent)) |var_decl| {
             if (!optionalNodeEquals(var_decl.ast.init_node, node)) {
-                next_parent = doc.lineage.items(.parent)[@intFromEnum(parent)];
+                next_parent = doc.lineage.items(.parent)[@backingInt(parent)];
                 continue;
             }
 
@@ -191,7 +191,7 @@ fn classifyUndefined(
             return null;
         }
 
-        next_parent = doc.lineage.items(.parent)[@intFromEnum(parent)];
+        next_parent = doc.lineage.items(.parent)[@backingInt(parent)];
     }
 
     return null;

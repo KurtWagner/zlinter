@@ -197,9 +197,9 @@ pub const ChildIterator = union(enum) {
 
             .assign_destructure => {
                 const extra_index, const value_expr = tree.nodeData(node).extra_and_node;
-                const variable_count = tree.extra_data[@intFromEnum(extra_index)];
-                const sub_range_start: Ast.ExtraIndex = @enumFromInt(@intFromEnum(extra_index) + 1);
-                const sub_range_end: Ast.ExtraIndex = @enumFromInt(@intFromEnum(sub_range_start) + variable_count);
+                const variable_count = tree.extra_data[@backingInt(extra_index)];
+                const sub_range_start: Ast.ExtraIndex = @fromBackingInt(@backingInt(extra_index) + 1);
+                const sub_range_end: Ast.ExtraIndex = @fromBackingInt(@backingInt(sub_range_start) + variable_count);
                 return .{ .sub_range = .{
                     .items = .{ .start = sub_range_start, .end = sub_range_end },
                     .suffix = .{ value_expr.toOptional(), .none },
@@ -309,10 +309,10 @@ pub const ChildIterator = union(enum) {
             },
             .@"for" => {
                 const extra_index, const extra = tree.nodeData(node).@"for";
-                const then_expr: Ast.Node.Index = @enumFromInt(tree.extra_data[@intFromEnum(extra_index) + extra.inputs]);
-                const else_expr: Ast.Node.OptionalIndex = if (extra.has_else) @enumFromInt(tree.extra_data[@intFromEnum(extra_index) + extra.inputs + 1]) else .none;
+                const then_expr: Ast.Node.Index = @fromBackingInt(tree.extra_data[@backingInt(extra_index) + extra.inputs]);
+                const else_expr: Ast.Node.OptionalIndex = if (extra.has_else) @fromBackingInt(tree.extra_data[@backingInt(extra_index) + extra.inputs + 1]) else .none;
                 return .{ .sub_range = .{
-                    .items = .{ .start = extra_index, .end = @enumFromInt(@intFromEnum(extra_index) + extra.inputs) },
+                    .items = .{ .start = extra_index, .end = @fromBackingInt(@backingInt(extra_index) + extra.inputs) },
                     .suffix = .{ then_expr.toOptional(), else_expr },
                 } };
             },
@@ -391,7 +391,7 @@ pub const ChildIterator = union(enum) {
                 }
                 const items = tree.extraDataSlice(sub_range.items, Ast.Node.Index);
                 if (items.len > 0) {
-                    defer sub_range.items.start = @enumFromInt(@intFromEnum(sub_range.items.start) + 1);
+                    defer sub_range.items.start = @fromBackingInt(@backingInt(sub_range.items.start) + 1);
                     return items[0];
                 }
                 const first = sub_range.suffix[0].unwrap() orelse return null;
@@ -407,7 +407,7 @@ pub const ChildIterator = union(enum) {
                         const maybe_param = fn_full.ast.params[fn_proto.param_i];
                         fn_proto.param_i += 1;
 
-                        if (@intFromEnum(maybe_param) >= tree.nodes.len) continue;
+                        if (@backingInt(maybe_param) >= tree.nodes.len) continue;
                         if (maybe_param == .root) continue;
                         return maybe_param;
                     }
@@ -434,7 +434,7 @@ pub const ChildIterator = union(enum) {
                 const items = tree.extraDataSlice(asm_state.items, Ast.Node.Index);
 
                 var i: usize = 0;
-                defer asm_state.items.start = @enumFromInt(@intFromEnum(asm_state.items.start) + i);
+                defer asm_state.items.start = @fromBackingInt(@intCast(@backingInt(asm_state.items.start) + i));
                 while (i < items.len) {
                     defer i += 1;
                     switch (tree.nodeTag(items[i])) {

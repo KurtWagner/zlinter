@@ -56,11 +56,11 @@ pub const ScopeId = enum(u32) {
     _,
 
     pub fn fromIndex(index: usize) ScopeId {
-        return @enumFromInt(@as(u32, @intCast(index)));
+        return @fromBackingInt(@as(u32, @intCast(index)));
     }
 
     pub fn toIndex(self: ScopeId) usize {
-        return @intFromEnum(self);
+        return @backingInt(self);
     }
 };
 
@@ -68,11 +68,11 @@ pub const DeclId = enum(u32) {
     _,
 
     pub fn fromIndex(index: usize) DeclId {
-        return @enumFromInt(@as(u32, @intCast(index)));
+        return @fromBackingInt(@as(u32, @intCast(index)));
     }
 
     pub fn toIndex(self: DeclId) usize {
-        return @intFromEnum(self);
+        return @backingInt(self);
     }
 };
 
@@ -88,7 +88,7 @@ const DeclAstNodeKey = enum(u64) {
     _,
 
     fn init(file_id: FileStore.FileId, ast_node: std.zig.Ast.Node.Index) DeclAstNodeKey {
-        return @enumFromInt(packFileNodeKey(file_id, ast_node));
+        return @fromBackingInt(packFileNodeKey(file_id, ast_node));
     }
 };
 
@@ -96,7 +96,7 @@ const ScopeOwnerKey = enum(u64) {
     _,
 
     fn init(file_id: FileStore.FileId, owner_node: std.zig.Ast.Node.Index) ScopeOwnerKey {
-        return @enumFromInt(packFileNodeKey(file_id, owner_node));
+        return @fromBackingInt(packFileNodeKey(file_id, owner_node));
     }
 };
 
@@ -171,8 +171,8 @@ fn packFileNodeKey(
     file_id: FileStore.FileId,
     node: std.zig.Ast.Node.Index,
 ) u64 {
-    return (@as(u64, @intFromEnum(file_id)) << 32) |
-        @as(u64, @intFromEnum(node));
+    return (@as(u64, @backingInt(file_id)) << 32) |
+        @as(u64, @backingInt(node));
 }
 
 comptime {
@@ -740,7 +740,7 @@ fn summarizeTypeTargetValue(
         ),
         .container => |container| blk: {
             const tree = ctx.file_store.fileTree(container.file_id);
-            if (@intFromEnum(container.node) >= tree.nodes.len) break :blk null;
+            if (@backingInt(container.node) >= tree.nodes.len) break :blk null;
             break :blk TypeStore.summarizeValueNode(
                 tree,
                 container.node,
@@ -1264,7 +1264,7 @@ fn resolveValueAliasDecl(
 }
 
 fn nodeBelongsToTree(tree: std.zig.Ast, node: std.zig.Ast.Node.Index) bool {
-    return @intFromEnum(node) < tree.nodes.len;
+    return @backingInt(node) < tree.nodes.len;
 }
 
 fn resolveTypeExprDecl(

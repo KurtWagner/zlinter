@@ -9,16 +9,16 @@ pub const CompileContextId = enum(u32) {
     _,
 
     pub fn fromIndex(index: usize) CompileContextId {
-        return @enumFromInt(@as(u32, @intCast(index)));
+        return @fromBackingInt(@as(u32, @intCast(index)));
     }
 
     pub fn toIndex(self: CompileContextId) usize {
-        return @intFromEnum(self);
+        return @backingInt(self);
     }
 };
 
 pub fn stepKind(self: CompileContext, config: *const std.Build.Configuration) std.Build.Configuration.Step.Compile.Kind {
-    const step = config.steps[@intFromEnum(self.step_index)];
+    const step = config.steps[@backingInt(self.step_index)];
     const compile = step.extended.cast(
         config,
         std.Build.Configuration.Step.Compile,
@@ -27,7 +27,7 @@ pub fn stepKind(self: CompileContext, config: *const std.Build.Configuration) st
 }
 
 pub fn stepName(self: CompileContext, config: *const std.Build.Configuration) []const u8 {
-    return config.steps[@intFromEnum(self.step_index)].name.slice(config);
+    return config.steps[@backingInt(self.step_index)].name.slice(config);
 }
 
 const std = @import("std");

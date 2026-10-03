@@ -45,10 +45,10 @@ fn run(
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
 
     const tree = doc.tree(session);
-    var index: u32 = @intFromEnum(Ast.Node.Index.root);
+    var index: u32 = @backingInt(Ast.Node.Index.root);
     while (index < tree.nodes.len) : (index += 1) {
         var buf: [2]Ast.Node.Index = undefined;
-        const parent: Ast.Node.Index = @enumFromInt(index);
+        const parent: Ast.Node.Index = @fromBackingInt(index);
         const container = tree.fullContainerDecl(&buf, parent) orelse continue;
         members: for (container.ast.members) |node| {
             if (!isContainerMemberGlobalVar(tree, node)) continue :members;

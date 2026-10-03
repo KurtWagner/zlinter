@@ -389,7 +389,7 @@ pub fn allocParse(
             const field_names = comptime std.meta.fieldNames(@FieldType(Args, "format"));
             inline for (field_names, 0..) |field_name, i|
                 if (std.mem.eql(u8, args[index], field_name)) {
-                    format = @enumFromInt(i);
+                    format = @fromBackingInt(i);
                     continue :state State.parsing;
                 };
             rendering.process_printer.println(.err, "--format only supports: {s}", .{comptime formats: {

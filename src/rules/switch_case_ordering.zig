@@ -31,9 +31,9 @@ fn run(
 
     const tree = doc.tree(session);
 
-    var index: u32 = @intFromEnum(Ast.Node.Index.root);
+    var index: u32 = @backingInt(Ast.Node.Index.root);
     while (index < tree.nodes.len) : (index += 1) {
-        const node: Ast.Node.Index = @enumFromInt(index);
+        const node: Ast.Node.Index = @fromBackingInt(index);
         const switch_info = tree.fullSwitch(node) orelse continue;
 
         for (switch_info.ast.cases, 0..) |case_node, i|

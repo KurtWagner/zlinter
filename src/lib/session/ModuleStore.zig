@@ -61,7 +61,7 @@ pub const ModuleKey = struct {
         var wy = std.hash.Wyhash.init(0);
         std.hash.autoHash(&wy, self.root_file.toIndex());
         std.hash.autoHash(&wy, self.build_config.toIndex());
-        std.hash.autoHash(&wy, @intFromEnum(self.build_config_module));
+        std.hash.autoHash(&wy, @backingInt(self.build_config_module));
         return wy.final();
     }
 };
@@ -70,11 +70,11 @@ pub const ModuleId = enum(u32) {
     _,
 
     pub fn fromIndex(index: usize) ModuleId {
-        return @enumFromInt(@as(u32, @intCast(index)));
+        return @fromBackingInt(@as(u32, @intCast(index)));
     }
 
     pub fn toIndex(self: ModuleId) usize {
-        return @intFromEnum(self);
+        return @backingInt(self);
     }
 };
 

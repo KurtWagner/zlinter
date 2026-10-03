@@ -331,7 +331,7 @@ pub const LspServer = struct {
         rules: for (self.rules, 0..) |rule, i| {
             if (rule.target != file_kind) continue :rules;
 
-            const rule_idx: RuleIndex = @enumFromInt(i);
+            const rule_idx: RuleIndex = @fromBackingInt(@intCast(i));
 
             const result = rule.run(
                 rule,

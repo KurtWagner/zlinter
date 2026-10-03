@@ -37,10 +37,10 @@ fn run(
 
     var lint_problems = std.ArrayList(zlinter.results.LintProblem).empty;
 
-    var index: u32 = @intFromEnum(Ast.Node.Index.root);
+    var index: u32 = @backingInt(Ast.Node.Index.root);
     while (index < doc.tree(session).nodes.len) : (index += 1) {
         const tree = doc.tree(session);
-        const node: Ast.Node.Index = @enumFromInt(index);
+        const node: Ast.Node.Index = @fromBackingInt(index);
         const tag = tree.nodeTag(node);
 
         var struct_init_buffer: [2]Ast.Node.Index = undefined;

@@ -51,9 +51,9 @@ fn run(
     // Store referenced identifiers and field accesses by name. This lets
     // declaration checks ignore self-references without rescanning every
     // reference in the file for each declaration.
-    var index: u32 = @intFromEnum(Ast.Node.Index.root);
+    var index: u32 = @backingInt(Ast.Node.Index.root);
     while (index < tree.nodes.len) : (index += 1) {
-        const node: Ast.Node.Index = @enumFromInt(index);
+        const node: Ast.Node.Index = @fromBackingInt(index);
         switch (tree.nodeTag(node)) {
             .identifier => try container_references.append(
                 rule_arena,

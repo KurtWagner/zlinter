@@ -190,7 +190,7 @@ fn run(
                             "Expects braces whether on a single or across multiple lines",
                         ),
                     .multi_statement_only => if (has_braces) {
-                        const children = doc.lineage.items(.children)[@intFromEnum(expr_node)] orelse &.{};
+                        const children = doc.lineage.items(.children)[@backingInt(expr_node)] orelse &.{};
                         if (children.len == 1)
                             break :error_msg try session_arena.dupe(
                                 u8,
@@ -200,7 +200,7 @@ fn run(
                     .multi_line_only => {
                         const on_single_line = tree.tokensOnSameLine(first_token, last_token);
                         if (on_single_line and has_braces) {
-                            const children = doc.lineage.items(.children)[@intFromEnum(expr_node)] orelse
+                            const children = doc.lineage.items(.children)[@backingInt(expr_node)] orelse
                                 &.{};
                             if (children.len > 0) // We allow empy blocks / no children
                                 break :error_msg try session_arena.dupe(
@@ -253,7 +253,7 @@ fn bracesAreRequiredForSemantics(
     if (expr_node != if_info.ast.then_expr or if_info.ast.else_expr == .none)
         return false;
 
-    const children = doc.lineage.items(.children)[@intFromEnum(expr_node)] orelse
+    const children = doc.lineage.items(.children)[@backingInt(expr_node)] orelse
         return false;
     if (children.len != 1) return false;
 
@@ -343,7 +343,7 @@ fn isNodeInStatementBodyContext(
         tree,
         doc,
         node,
-        doc.lineage.get(@intFromEnum(node)),
+        doc.lineage.get(@backingInt(node)),
     );
 }
 

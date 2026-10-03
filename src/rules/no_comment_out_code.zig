@@ -154,7 +154,7 @@ fn looksLikeCode(content: []const u8, rule_arena: std.mem.Allocator) !bool {
 
         var index: u32 = 0;
         while (index < tree.nodes.len) : (index += 1) {
-            const node: Ast.Node.Index = @enumFromInt(index);
+            const node: Ast.Node.Index = @fromBackingInt(index);
             switch (tree.nodeTag(node)) {
                 .test_decl,
                 .global_var_decl,

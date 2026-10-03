@@ -109,9 +109,9 @@ fn run(
     const tree = doc.tree(session);
     var buffer: [2]Ast.Node.Index = undefined;
 
-    var index: u32 = @intFromEnum(Ast.Node.Index.root);
+    var index: u32 = @backingInt(Ast.Node.Index.root);
     while (index < tree.nodes.len) : (index += 1) {
-        const node: Ast.Node.Index = @enumFromInt(index);
+        const node: Ast.Node.Index = @fromBackingInt(index);
         const tag = tree.nodeTag(node);
         if (tag == .error_set_decl) {
             const node_data = tree.nodeData(node);

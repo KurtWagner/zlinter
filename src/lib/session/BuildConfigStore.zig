@@ -4,11 +4,11 @@ pub const ConfigId = enum(u32) {
     _,
 
     pub fn fromIndex(index: usize) ConfigId {
-        return @enumFromInt(@as(u32, @intCast(index)));
+        return @fromBackingInt(@as(u32, @intCast(index)));
     }
 
     pub fn toIndex(self: ConfigId) usize {
-        return @intFromEnum(self);
+        return @backingInt(self);
     }
 };
 
