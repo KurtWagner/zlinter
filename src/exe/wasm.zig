@@ -2,7 +2,7 @@
 /// string and then writes it back to the start of the given `buffer` returning
 /// the length.
 export fn parse(buffer: [*]u8, len: u32) u32 {
-    comptime if (!builtin.cpu.arch.isWasm()) @compileError("Wasm only");
+    comptime if (!builtin.target.cpu.arch.isWasm()) @compileError("Wasm only");
 
     var arena = std.heap.ArenaAllocator.init(std.heap.wasm_allocator);
     defer arena.deinit();
