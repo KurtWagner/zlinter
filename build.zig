@@ -313,7 +313,8 @@ pub fn build(b: *std.Build) void {
     // --------------------------------------------------------------------
     // Generate dynamic rules list and configs
     // --------------------------------------------------------------------
-    const builtin_rule_names = comptime std.meta.fieldNames(BuiltinLintRule);
+    // zlinter-disable-next-line declaration_naming - false positive: the @typeInfo field access is a value, not a type
+    const builtin_rule_names = @typeInfo(BuiltinLintRule).@"enum".field_names;
     var rules: [builtin_rule_names.len]BuiltRule = undefined;
     var rule_imports: [builtin_rule_names.len]std.Build.Module.Import = undefined;
 
@@ -740,7 +741,7 @@ fn createTracyModule(
 
 fn checkNoNameCollision(comptime name: []const u8) []const u8 {
     comptime {
-        for (std.meta.fieldNames(BuiltinLintRule)) |core_name|
+        for (@typeInfo(BuiltinLintRule).@"enum".field_names) |core_name|
             if (std.ascii.eqlIgnoreCase(core_name, name)) {
                 @compileError(name ++ " collides with a core rule. Consider prefixing your rule with a namespace. e.g., yourname.some_rule");
             };

@@ -285,7 +285,7 @@ const LintConfig = struct {
             ) catch @panic("OOM"),
         };
 
-        const field_names = comptime std.meta.fieldNames(RulesConfig);
+        const field_names = @typeInfo(RulesConfig).@"struct".field_names;
         inline for (field_names) |name|
             if (@field(zon.rules, name)) |*v| {
                 const i = std.meta.fieldIndex(RulesConfig, name).?;

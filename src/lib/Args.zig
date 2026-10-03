@@ -386,7 +386,7 @@ pub fn allocParse(
                 return error.InvalidArgs;
             }
 
-            const field_names = comptime std.meta.fieldNames(@FieldType(Args, "format"));
+            const field_names = @typeInfo(@FieldType(Args, "format")).@"enum".field_names;
             inline for (field_names, 0..) |field_name, i|
                 if (std.mem.eql(u8, args[index], field_name)) {
                     format = @fromBackingInt(i);
@@ -394,7 +394,7 @@ pub fn allocParse(
                 };
             rendering.process_printer.println(.err, "--format only supports: {s}", .{comptime formats: {
                 var formats: []u8 = "";
-                for (std.meta.fieldNames(@FieldType(Args, "format"))) |name|
+                for (@typeInfo(@FieldType(Args, "format")).@"enum".field_names) |name|
                     formats = @constCast(formats ++ name ++ " ");
                 break :formats formats;
             }});
@@ -1164,7 +1164,7 @@ const testing = struct {
         var result = Args.testDefault();
         result.zig_exe = zig_exe;
         result.zig_lib_directory = zig_lib_directory;
-        inline for (comptime std.meta.fieldNames(@TypeOf(overrides))) |field_name|
+        inline for (@typeInfo(@TypeOf(overrides)).@"struct".field_names) |field_name|
             @field(result, field_name) = @field(overrides, field_name);
         return result;
     }
