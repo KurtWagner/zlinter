@@ -502,18 +502,15 @@ test "didOpen publishes valid empty diagnostics json" {
         "did-open.zig",
         &abs_path_buffer,
     )];
-    const uri = try std.fmt.allocPrint(
-        arena.allocator(),
+    const uri = try arena.allocator().print(
         "file://{s}",
         .{abs_path},
     );
-    const body = try std.fmt.allocPrint(
-        arena.allocator(),
+    const body = try arena.allocator().print(
         "{{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{{\"textDocument\":{{\"uri\":\"{s}\",\"languageId\":\"zig\",\"version\":1,\"text\":\"const x = 1;\\n\"}}}}}}",
         .{uri},
     );
-    const input = try std.fmt.allocPrint(
-        arena.allocator(),
+    const input = try arena.allocator().print(
         "Content-Length: {d}\r\n\r\n{s}",
         .{ body.len, body },
     );
@@ -534,13 +531,11 @@ test "didOpen publishes valid empty diagnostics json" {
     );
     try server.run();
 
-    const expected_body = try std.fmt.allocPrint(
-        arena.allocator(),
+    const expected_body = try arena.allocator().print(
         "{{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/publishDiagnostics\",\"params\":{{\"uri\":\"{s}\",\"diagnostics\":[]}}}}",
         .{uri},
     );
-    const expected = try std.fmt.allocPrint(
-        arena.allocator(),
+    const expected = try arena.allocator().print(
         "Content-Length: {d}\r\n\r\n{s}",
         .{ expected_body.len, expected_body },
     );
