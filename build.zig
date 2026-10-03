@@ -377,7 +377,7 @@ pub fn build(b: *std.Build) void {
     const merge_coverage = std.Build.Step.Run.create(b, "Unit test coverage");
     merge_coverage.rename_step_with_output_arg = false;
     merge_coverage.addArgs(&.{ kcov_bin, "--merge" });
-    const merged_coverage_output = merge_coverage.addOutputDirectoryArg("merged/");
+    const merged_coverage_output = merge_coverage.addOutputDirectoryArg2("merged/", .{});
 
     const install_coverage = b.addInstallDirectory(.{
         .source_dir = merged_coverage_output,
@@ -405,15 +405,15 @@ pub fn build(b: *std.Build) void {
     if (test_coverage orelse false) {
         const cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
         cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only" });
-        cover_run.addPrefixedDirectoryArg("--include-pattern=", b.path("src"));
-        merge_coverage.addDirectoryArg(cover_run.addOutputDirectoryArg("unit_test_coverage"));
-        cover_run.addArtifactArg(unit_tests_exe);
+        cover_run.addDirectoryArg2(b.path("src"), .{ .prefix = "--include-pattern=" });
+        merge_coverage.addDirectoryArg2(cover_run.addOutputDirectoryArg2("unit_test_coverage", .{}), .{});
+        cover_run.addArtifactArg2(unit_tests_exe, .{});
 
         const cli_cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
         cli_cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only" });
-        cli_cover_run.addPrefixedDirectoryArg("--include-pattern=", b.path("src"));
-        merge_coverage.addDirectoryArg(cli_cover_run.addOutputDirectoryArg("cli_unit_test_coverage"));
-        cli_cover_run.addArtifactArg(cli_unit_tests_exe);
+        cli_cover_run.addDirectoryArg2(b.path("src"), .{ .prefix = "--include-pattern=" });
+        merge_coverage.addDirectoryArg2(cli_cover_run.addOutputDirectoryArg2("cli_unit_test_coverage", .{}), .{});
+        cli_cover_run.addArtifactArg2(cli_unit_tests_exe, .{});
 
         unit_test_step.dependOn(&install_coverage.step);
     } else {
@@ -437,9 +437,9 @@ pub fn build(b: *std.Build) void {
         if (test_coverage orelse false) {
             const cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
             cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only" });
-            cover_run.addPrefixedDirectoryArg("--include-pattern=", b.path("src"));
-            merge_coverage.addDirectoryArg(cover_run.addOutputDirectoryArg(test_rule_exe.name));
-            cover_run.addArtifactArg(test_rule_exe);
+            cover_run.addDirectoryArg2(b.path("src"), .{ .prefix = "--include-pattern=" });
+            merge_coverage.addDirectoryArg2(cover_run.addOutputDirectoryArg2(test_rule_exe.name, .{}), .{});
+            cover_run.addArtifactArg2(test_rule_exe, .{});
 
             unit_test_step.dependOn(&install_coverage.step);
         } else {
@@ -551,12 +551,12 @@ pub fn build(b: *std.Build) void {
                 .optimize = .debug,
             }),
         }));
-        doc_build_run.addDirectoryArg(b.path("src/rules"));
+        doc_build_run.addDirectoryArg2(b.path("src/rules"), .{});
 
         const step = &doc_build_run.step;
 
         var install_step = b.addInstallFileWithDir(
-            doc_build_run.addOutputFileArg("RULES.md"),
+            doc_build_run.addOutputFileArg2("RULES.md", .{}),
             .{ .custom = "../" },
             "RULES.md",
         );
@@ -649,7 +649,7 @@ fn buildStep(
         for (include) |source|
             switch (source) {
                 .file_path => |path| run.addFileArg(path),
-                .dir_path => |path| run.addDirectoryArg(path),
+                .dir_path => |path| run.addDirectoryArg2(path, .{}),
             };
     }
 
@@ -658,7 +658,7 @@ fn buildStep(
         for (exclude) |source|
             switch (source) {
                 .file_path => |path| run.addFileArg(path),
-                .dir_path => |path| run.addDirectoryArg(path),
+                .dir_path => |path| run.addDirectoryArg2(path, .{}),
             };
     }
 
@@ -844,7 +844,7 @@ fn createRulesBuiltinStep(
         }),
     }));
 
-    const output = run.addOutputFileArg("rules.zig");
+    const output = run.addOutputFileArg2("rules.zig", .{});
     for (rules) |rule|
         run.addArg(rule.import.name);
 
