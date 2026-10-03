@@ -52,7 +52,7 @@ const BuiltRule = struct {
 
 const BuildOptions = struct {
     target: std.Build.ResolvedTarget,
-    optimize: std.lang.OptimizeMode,
+    optimize: std.lang.Optimize,
     tracy: bool = false,
     tracy_callstack: bool = false,
     tracy_allocation: bool = false,
@@ -65,11 +65,11 @@ pub const BuilderOptions = struct {
 
     /// Optimisation to build zlinter at.
     ///
-    /// `.Debug` is cheaper up-front but much slower to run. Only use
-    /// `.Debug` for linter development purposes.
+    /// `.debug` is cheaper up-front but much slower to run. Only use
+    /// `.debug` for linter development purposes.
     ///
-    /// For enormous projects consider using `.ReleaseFast`.
-    optimize: std.lang.OptimizeMode = .ReleaseSafe,
+    /// For enormous projects consider using `.fast`.
+    optimize: std.lang.Optimize = .safe,
 
     /// Enable Tracy integration using the pinned Tracy 0.13.1 dependency.
     tracy: bool = false,
@@ -464,7 +464,7 @@ pub fn build(b: *std.Build) void {
                 .cpu_arch = .wasm32,
                 .os_tag = .freestanding,
             }),
-            .optimize = .ReleaseSmall,
+            .optimize = .small,
         }),
     });
     wasm_exe.entry = .disabled;
@@ -528,7 +528,7 @@ pub fn build(b: *std.Build) void {
             null,
             .{
                 .target = target,
-                .optimize = if (tracy) .ReleaseSafe else .Debug,
+                .optimize = if (tracy) .safe else .debug,
                 .tracy = tracy,
                 .tracy_callstack = tracy_callstack,
                 .tracy_allocation = tracy_allocation,
@@ -547,7 +547,7 @@ pub fn build(b: *std.Build) void {
             .root_module = b.createModule(.{
                 .root_source_file = b.path("build_docs.zig"),
                 .target = b.graph.host,
-                .optimize = .Debug,
+                .optimize = .debug,
             }),
         }));
         doc_build_run.addDirectoryArg(b.path("src/rules"));
@@ -689,7 +689,7 @@ fn createTracyModule(
     b: *std.Build,
     options: struct {
         target: std.Build.ResolvedTarget,
-        optimize: std.lang.OptimizeMode,
+        optimize: std.lang.Optimize,
         tracy: bool,
         tracy_callstack: bool,
         tracy_allocation: bool,
@@ -718,7 +718,7 @@ fn createTracyModule(
 
     const tracy_dependency = b.dependencyLazy("tracy", .{
         .target = options.target,
-        .optimize = .ReleaseFast,
+        .optimize = .fast,
     }) catch return tracy_module;
 
     tracy_module.addCMacro("TRACY_ENABLE", "1");
@@ -753,7 +753,7 @@ fn buildRule(
     comptime source: BuildRuleSource,
     options: struct {
         target: std.Build.ResolvedTarget,
-        optimize: std.lang.OptimizeMode,
+        optimize: std.lang.Optimize,
         tracy: bool,
         tracy_callstack: bool,
         tracy_allocation: bool,
@@ -804,7 +804,7 @@ fn buildBuiltinRule(
     rule: BuiltinLintRule,
     options: struct {
         target: std.Build.ResolvedTarget,
-        optimize: std.lang.OptimizeMode,
+        optimize: std.lang.Optimize,
         zlinter_dependency: ?*std.Build.Dependency = null,
         zlinter_import: std.Build.Module.Import,
     },
@@ -839,7 +839,7 @@ fn createRulesBuiltinStep(
         .root_module = b.createModule(.{
             .root_source_file = root_source_path,
             .target = b.graph.host,
-            .optimize = .Debug,
+            .optimize = .debug,
         }),
     }));
 

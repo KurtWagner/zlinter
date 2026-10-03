@@ -142,7 +142,7 @@ fn addFileArgIfExists(b: *std.Build, step: *std.Build.Step.Run, raw_path: []cons
 fn createCompiledUnits(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
-    optimize: std.lang.OptimizeMode,
+    optimize: std.lang.Optimize,
 ) void {
     const sub_module_a = b.createModule(.{
         .root_source_file = b.path("sub_module_a_src/root.zig"),
