@@ -39,14 +39,15 @@ pub fn parseFileAlloc(
     };
     defer gpa.free(null_terminated);
 
-    return try std.zon.parse.fromSliceAlloc(
+    var local_diagnostics: Diagnostics = undefined;
+    return try std.zon.parse.fromSlice(
         T,
-        gpa,
-        null_terminated,
-        diagnostics,
         .{
+            .gpa = gpa,
+            .arena = gpa,
+            .source = null_terminated,
+            .diagnostics = diagnostics orelse &local_diagnostics,
             .ignore_unknown_fields = false,
-            .free_on_error = true,
         },
     );
 }
@@ -119,7 +120,7 @@ test "parseFileAlloc" {
         ),
     );
 
-    var diagnostics = Diagnostics{};
+    var diagnostics: Diagnostics = undefined;
     try testing.writeFile(
         tmp_dir.dir,
         "b.zon",
@@ -137,9 +138,7 @@ test "parseFileAlloc" {
         error.ParseZon,
         actual,
     );
-    var it = diagnostics.iterateErrors();
-    try std.testing.expect(it.next() != null);
-    try std.testing.expect(it.next() == null);
+    try std.testing.expectEqual(@as(usize, 1), diagnostics.errors.len);
 }
 
 const Args = @import("Args.zig");

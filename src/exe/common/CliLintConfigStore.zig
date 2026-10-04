@@ -174,8 +174,8 @@ pub fn lookup(
 
     if (self.configByDir(normalized)) |config| {
         const lint_config = self.configs.items[config];
-        if (lint_config.rule_configs_on.isSet(@intFromEnum(rule_idx)))
-            return lint_config.rule_configs[@intFromEnum(rule_idx)];
+        if (lint_config.rule_configs_on.isSet(@backingInt(rule_idx)))
+            return lint_config.rule_configs[@backingInt(rule_idx)];
     }
 
     var rhs = normalized.len;
@@ -184,16 +184,16 @@ pub fn lookup(
             const parent_dir = normalized[0 .. rhs - 1];
             if (self.configByDir(parent_dir)) |config| {
                 const lint_config = self.configs.items[config];
-                if (lint_config.rule_configs_on.isSet(@intFromEnum(rule_idx)))
-                    return lint_config.rule_configs[@intFromEnum(rule_idx)];
+                if (lint_config.rule_configs_on.isSet(@backingInt(rule_idx)))
+                    return lint_config.rule_configs[@backingInt(rule_idx)];
             }
         };
     std.log.info("No zlinter.zon for {s}", .{dir_abs_path});
-    return self.configs.items[self.base_config_id].rule_configs[@intFromEnum(rule_idx)];
+    return self.configs.items[self.base_config_id].rule_configs[@backingInt(rule_idx)];
 }
 
 pub fn getConfig(self: *const CliLintConfigStore, config_id: LintConfigId, rule_idx: RuleIndex) *anyopaque {
-    return self.configs.items[config_id].rule_configs[@intFromEnum(rule_idx)];
+    return self.configs.items[config_id].rule_configs[@backingInt(rule_idx)];
 }
 
 fn configByDir(self: *const CliLintConfigStore, dir_abs_path: []const u8) ?LintConfigId {
@@ -254,22 +254,26 @@ const LintConfig = struct {
         };
 
         @setEvalBranchQuota(5000);
-        var diagnostics: std.zon.parse.Diagnostics = .{};
+        var diagnostics: std.zon.parse.Diagnostics = undefined;
         const zon = arena.create(Zon) catch @panic("OOM");
-        zon.* = std.zon.parse.fromSliceAlloc(
+        zon.* = std.zon.parse.fromSlice(
             Zon,
-            arena,
-            source,
-            &diagnostics,
-            .{},
+            .{
+                .gpa = arena,
+                .arena = arena,
+                .source = source,
+                .diagnostics = &diagnostics,
+            },
         ) catch |e| {
             if (e == error.OutOfMemory) @panic("OOM");
             // TODO: There must be a better way of expecting stderr in tests
-            if (!builtin.is_test)
+            if (!builtin.is_test) {
                 std.log.err(
-                    "Failed to parse lint config: '{s}' due to {t} - {f}",
-                    .{ lint_config_abs_path, e, diagnostics },
+                    "Failed to parse lint config: '{s}' due to {t}",
+                    .{ lint_config_abs_path, e },
                 );
+                diagnostics.log(lint_config_abs_path);
+            }
             return error.InvalidLintConfig;
         };
 
