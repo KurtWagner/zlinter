@@ -595,6 +595,7 @@ fn summarizeValueExpr(
         .merge_error_sets,
         => return .{ .type = .{ .kind = .error_set } },
         .error_value => return .{ .instance = .{ .kind = .error_set } },
+        .error_union => return .{ .type = .unknown },
         .builtin_call_two,
         .builtin_call_two_comma,
         .builtin_call,
@@ -602,9 +603,18 @@ fn summarizeValueExpr(
         => {
             const builtin_name = tree.tokenSlice(tree.nodeMainToken(node));
             if (std.mem.eql(u8, builtin_name, "@import")) return .{ .type = .{ .kind = .namespace } };
-            if (std.mem.eql(u8, builtin_name, "@Type") or
-                std.mem.eql(u8, builtin_name, "@TypeOf") or
-                std.mem.eql(u8, builtin_name, "@Vector"))
+            // '@Type' was split into these per-kind builtins, all returning a 'type'
+            if (std.mem.eql(u8, builtin_name, "@TypeOf") or
+                std.mem.eql(u8, builtin_name, "@FieldType") or
+                std.mem.eql(u8, builtin_name, "@Vector") or
+                std.mem.eql(u8, builtin_name, "@Int") or
+                std.mem.eql(u8, builtin_name, "@Tuple") or
+                std.mem.eql(u8, builtin_name, "@Pointer") or
+                std.mem.eql(u8, builtin_name, "@Fn") or
+                std.mem.eql(u8, builtin_name, "@Struct") or
+                std.mem.eql(u8, builtin_name, "@Union") or
+                std.mem.eql(u8, builtin_name, "@Enum") or
+                std.mem.eql(u8, builtin_name, "@SpirvType"))
                 return .{ .type = .unknown };
         },
         else => {},
