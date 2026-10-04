@@ -2484,7 +2484,8 @@ fn valueExprIsTypeInfoProjection(
     switch (tree.nodeTag(node)) {
         .unwrap_optional => return valueExprIsTypeInfoProjection(tree, tree.nodeData(node).node_and_token[0]),
         .field_access => {},
-        else => return ast.isBuiltinCallNamed(tree, node, "@typeInfo"),
+        // Bare @typeInfo(X) is a value not a type only fields in isTypeValuedTypeInfoField yield type.
+        else => return false,
     }
 
     const last_token = tree.lastToken(node);

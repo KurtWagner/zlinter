@@ -710,13 +710,15 @@ pub fn primitiveFromName(name: []const u8) ?Primitive {
                 .bits = bits,
             } };
 
+    // Unlike u/i, floats only come in these 5 widths; f9 is a ordinary identifiers not a type.
     if (name.len > 1 and name[0] == 'f')
         if (parsePrimitiveIntBits(name[1..])) |bits|
-            return .{ .number = .{
-                .name = name,
-                .kind = .float,
-                .bits = bits,
-            } };
+            if (bits == 16 or bits == 32 or bits == 64 or bits == 80 or bits == 128)
+                return .{ .number = .{
+                    .name = name,
+                    .kind = .float,
+                    .bits = bits,
+                } };
 
     inline for (&.{ "void", "noreturn" }) |primitive_name|
         if (std.mem.eql(u8, name, primitive_name)) return .{ .named = name };
