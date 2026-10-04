@@ -1,4 +1,5 @@
 pub const zig: enum {
+    @"0.18",
     @"0.17",
     @"0.16",
     @"0.15",
@@ -6,7 +7,9 @@ pub const zig: enum {
 } = version: {
     const major = builtin.zig_version.major;
     const minor = builtin.zig_version.minor;
-    break :version if (major == 0 and minor == 17)
+    break :version if (major == 0 and minor == 18)
+        .@"0.18"
+    else if (major == 0 and minor == 17)
         .@"0.17"
     else if (major == 0 and minor == 16)
         .@"0.16"
