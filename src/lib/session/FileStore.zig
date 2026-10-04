@@ -136,7 +136,8 @@ pub fn resolveFrom(
     ) catch |e| switch (e) {
         error.OutOfMemory => @panic("OOM"),
         else => {
-            std.log.err("Could not read file '{s}' due to {t}", .{ normal_path, e });
+            // Bad import (moved file, whate4ver) is recoverable, same as above.
+            std.log.debug("Could not read file '{s}' due to {t}", .{ normal_path, e });
             return error.ResolutionError;
         },
     };

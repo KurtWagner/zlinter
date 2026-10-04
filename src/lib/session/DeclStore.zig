@@ -1326,7 +1326,8 @@ fn resolveImportMember(
         ctx.withParent(parent_file_id),
         import_path,
     ) catch |e| {
-        std.log.err("Failed to resolve import '{s}': {t}", .{ import_path, e });
+        // Same as a missing member above: caller just treats it as unresolved.
+        std.log.debug("Failed to resolve import '{s}': {t}", .{ import_path, e });
         return null;
     };
 
