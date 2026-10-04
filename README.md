@@ -93,7 +93,13 @@ hook it up to a build step, like `zig build lint`:
    zig fetch --save git+https://github.com/kurtwagner/zlinter#0.16.x
    ```
 
-   For master (0.17.x-dev):
+   For 0.17.x:
+
+   ```shell
+   zig fetch --save git+https://github.com/kurtwagner/zlinter#0.17.x
+   ```
+
+   For master (0.18.x-dev):
 
    ```shell
    zig fetch --save git+https://github.com/kurtwagner/zlinter#master
