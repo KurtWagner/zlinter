@@ -563,6 +563,9 @@ fn resolveBuildModuleShallow(
         &root_path_buffer,
     ) orelse return null;
 
+    // return early if not checking zig
+    if (FileStore.FileKind.fromPath(root_path) == null) return null;
+
     return self.module_store.resolve(.{
         .root_file = try self.file_store.resolve(root_path),
         .build_config = config_id,
