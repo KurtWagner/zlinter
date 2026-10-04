@@ -4,9 +4,6 @@ const default_formatter = zlinter.formatters.DefaultFormatter{};
 pub const std_options: std.Options = .{ .log_level = .err };
 
 pub fn main(init: std.process.Init.Minimal) !u8 {
-    var threaded: std.Io.Threaded = .init_single_threaded;
-    const io = threaded.io();
-
     // TODO: Work out whether this should swap to the "juicy" main allocators
     const gpa, const is_debug = switch (builtin.mode) {
         // Debug allocator has become significantly slower (since 0.16) so
@@ -23,6 +20,15 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     defer if (is_debug) {
         if (debug_allocator.deinit() == .leak) @panic("Memory leak");
     };
+
+    var threaded: std.Io.Threaded = .init(gpa, .{
+        .async_limit = .nothing,
+        .concurrent_limit = .nothing,
+        .environ = init.environ,
+        .argv0 = .init(init.args),
+    });
+    defer threaded.deinit();
+    const io = threaded.io();
 
     var environ_map = try init.environ.createMap(gpa);
     defer environ_map.deinit();
