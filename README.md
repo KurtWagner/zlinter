@@ -89,7 +89,13 @@ hook it up to a build step, like `zig build lint`:
    zig fetch --save git+https://github.com/kurtwagner/zlinter#0.16.x
    ```
 
-   For master (0.17.x-dev):
+   For 0.17.x:
+
+   ```shell
+   zig fetch --save git+https://github.com/kurtwagner/zlinter#0.17.x
+   ```
+
+   For master (0.18.x-dev):
 
    ```shell
    zig fetch --save git+https://github.com/kurtwagner/zlinter#master
@@ -150,7 +156,7 @@ so this is not recommended outside of testing zlinters rules for your project:
   });
   ```
 
-2. Selectively run rules:
+1. Selectively run rules:
 
   ```shell
   zig build lint -- --rule no_unused no_deprecated
