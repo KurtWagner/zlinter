@@ -20,11 +20,11 @@ pub const TypeId = enum(u32) {
     _,
 
     pub fn fromIndex(index: usize) TypeId {
-        return @enumFromInt(@as(u32, @intCast(index)));
+        return @fromBackingInt(@intCast(@as(u32, @intCast(index))));
     }
 
     pub fn toIndex(self: TypeId) usize {
-        return @intFromEnum(self);
+        return @backingInt(self);
     }
 };
 

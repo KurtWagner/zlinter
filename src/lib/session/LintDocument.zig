@@ -100,7 +100,7 @@ pub fn isEnclosedInTestBlock(
 
     const document_tree = self.tree(session);
     var next = node;
-    while (self.lineage.items(.parent)[@intFromEnum(next)]) |parent| {
+    while (self.lineage.items(.parent)[@backingInt(next)]) |parent| {
         switch (document_tree.nodeTag(parent)) {
             .test_decl => return true,
             .@"if", .if_simple => if (common.isTestOnlyCondition(

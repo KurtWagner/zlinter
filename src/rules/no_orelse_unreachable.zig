@@ -41,9 +41,9 @@ fn run(
 
     const tree = doc.tree(session);
 
-    var index: u32 = @intFromEnum(Ast.Node.Index.root);
+    var index: u32 = @backingInt(Ast.Node.Index.root);
     while (index < tree.nodes.len) : (index += 1) {
-        const node: Ast.Node.Index = @enumFromInt(index);
+        const node: Ast.Node.Index = @fromBackingInt(@intCast(index));
         if (tree.nodeTag(node) != .@"orelse") continue;
 
         const data = tree.nodeData(node);

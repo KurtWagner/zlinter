@@ -77,7 +77,7 @@ fn run(
 
     var index: u32 = 1;
     while (index < tree.nodes.len) : (index += 1) {
-        const node: Ast.Node.Index = @enumFromInt(index);
+        const node: Ast.Node.Index = @fromBackingInt(@intCast(index));
 
         const fn_proto = switch (tree.nodeTag(node)) {
             .fn_proto => tree.fnProto(node),

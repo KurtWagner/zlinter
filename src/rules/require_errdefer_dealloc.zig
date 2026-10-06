@@ -131,7 +131,7 @@ fn processBlock(
     // Populated with declarations that look like they should be cleaned up.
     var cleanup_symbols: std.StringHashMap(Ast.Node.Index) = .init(rule_arena);
 
-    for (doc.lineage.items(.children)[@intFromEnum(block_node)] orelse &.{}) |child_node|
+    for (doc.lineage.items(.children)[@backingInt(block_node)] orelse &.{}) |child_node|
         if (try declRequiringCleanup(
             session,
             doc,

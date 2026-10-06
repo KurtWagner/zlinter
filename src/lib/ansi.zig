@@ -39,7 +39,7 @@ const AnsiCode = enum(u32) {
     fn toString(comptime self: AnsiCode) []const u8 {
         return std.fmt.comptimePrint(
             "{d}",
-            .{@intFromEnum(self)},
+            .{@backingInt(self)},
         );
     }
 };

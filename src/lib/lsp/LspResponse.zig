@@ -193,7 +193,7 @@ pub fn jsonStringify(self: @This(), jws: anytype) !void {
             try jws.beginObject();
 
             try jws.objectField("code");
-            try jws.write(@intFromEnum(error_payload.code));
+            try jws.write(@backingInt(error_payload.code));
 
             try jws.objectField("message");
             try jws.write(error_payload.message);

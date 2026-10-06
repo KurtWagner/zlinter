@@ -25,7 +25,7 @@ pub const NodeAncestorIterator = struct {
     pub fn next(self: *Self) ?Ast.Node.Index {
         if (self.done or self.current == .root) return null;
 
-        const parent = self.lineage.items(.parent)[@intFromEnum(self.current)];
+        const parent = self.lineage.items(.parent)[@backingInt(self.current)];
         if (parent) |p| {
             self.current = p;
             return p;
@@ -50,7 +50,7 @@ pub const NodeLineageIterator = struct {
 
     pub fn next(self: *Self) error{OutOfMemory}!?struct { Ast.Node.Index, NodeConnections } {
         if (self.queue.pop()) |node| {
-            const connections = self.lineage.get(@intFromEnum(node));
+            const connections = self.lineage.get(@backingInt(node));
             for (connections.children orelse &.{}) |child|
                 try self.queue.append(self.gpa, child);
             return .{ node, connections };
@@ -83,7 +83,7 @@ pub fn deferBlock(doc: *const session.LintDocument, file_store: *const FileStore
         };
 
     if (isBlock(tree, exp_node)) {
-        return .{ .children = try allocator.dupe(Ast.Node.Index, doc.lineage.items(.children)[@intFromEnum(exp_node)] orelse &.{}) };
+        return .{ .children = try allocator.dupe(Ast.Node.Index, doc.lineage.items(.children)[@backingInt(exp_node)] orelse &.{}) };
     } else {
         return .{ .children = try allocator.dupe(Ast.Node.Index, &.{exp_node}) };
     }
@@ -530,9 +530,9 @@ test "isSwitchElseProng - identifies else and rejects value prongs" {
     defer tree.deinit(std.testing.allocator);
 
     var switch_node: ?Ast.Node.Index = null;
-    var i: u32 = @intFromEnum(Ast.Node.Index.root);
+    var i: u32 = @backingInt(Ast.Node.Index.root);
     while (i < tree.nodes.len) : (i += 1) {
-        const node: Ast.Node.Index = @enumFromInt(i);
+        const node: Ast.Node.Index = @fromBackingInt(@intCast(i));
         if (tree.fullSwitch(node) != null) {
             switch_node = node;
             break;
@@ -762,7 +762,7 @@ pub fn findFnCall(
         return call;
     }
 
-    for (doc.lineage.items(.children)[@intFromEnum(node)] orelse &.{}) |child|
+    for (doc.lineage.items(.children)[@backingInt(node)] orelse &.{}) |child|
         if (findFnCall(
             doc,
             file_store,

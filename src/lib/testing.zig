@@ -32,7 +32,7 @@ pub fn loadFakeDocument(
     const module_id = session.module_store.resolve(.{
         .root_file = file_id,
         .build_config = .fromIndex(0),
-        .build_config_module = @enumFromInt(0),
+        .build_config_module = @fromBackingInt(@intCast(0)),
         .module_id_by_import_name = .empty,
     });
 
@@ -45,7 +45,7 @@ pub fn loadFakeDocument(
     if (!has_compile_context) {
         _ = session.appendCompileContext(.{
             .root_module = module_id,
-            .step_index = @enumFromInt(0),
+            .step_index = @fromBackingInt(@intCast(0)),
         });
     }
 
@@ -218,9 +218,9 @@ pub fn expectVarDecl(tree: Ast, name: []const u8) !Ast.Node.Index {
     assertTestOnly();
 
     var found: ?Ast.Node.Index = null;
-    var i: u32 = @intFromEnum(Ast.Node.Index.root);
+    var i: u32 = @backingInt(Ast.Node.Index.root);
     while (i < tree.nodes.len) : (i += 1) {
-        const node: Ast.Node.Index = @enumFromInt(i);
+        const node: Ast.Node.Index = @fromBackingInt(@intCast(i));
         if (tree.fullVarDecl(node)) |var_decl| {
             const name_token = var_decl.ast.mut_token + 1;
             if (std.mem.eql(u8, tree.tokenSlice(name_token), name)) {
@@ -241,9 +241,9 @@ pub fn expectSingleNodeOfTag(tree: Ast, comptime tags: []const Ast.Node.Tag) !As
     assertTestOnly();
 
     var found: ?Ast.Node.Index = null;
-    var i: u32 = @intFromEnum(Ast.Node.Index.root);
+    var i: u32 = @backingInt(Ast.Node.Index.root);
     while (i < tree.nodes.len) : (i += 1) {
-        const node: Ast.Node.Index = @enumFromInt(i);
+        const node: Ast.Node.Index = @fromBackingInt(@intCast(i));
         inline for (tags) |tag|
             if (tree.nodeTag(node) == tag) {
                 if (found != null) return error.TestExpectedSingleNodeTag;
