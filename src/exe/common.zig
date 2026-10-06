@@ -12,6 +12,6 @@ pub const ExitCode = enum(u8) {
     usage_error = 3,
 
     pub inline fn int(self: ExitCode) u8 {
-        return @intFromEnum(self);
+        return @backingInt(self);
     }
 };

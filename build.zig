@@ -514,7 +514,7 @@ pub fn build(b: *std.Build) void {
         inline for (builtin_rule_values, 0..) |field_value, i|
             build_lint_builtin[i] = buildBuiltinRule(
                 b,
-                @enumFromInt(field_value),
+                @fromBackingInt(@intCast(field_value)),
                 .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import },
                 .{},
             );

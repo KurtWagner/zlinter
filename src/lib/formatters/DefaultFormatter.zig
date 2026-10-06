@@ -36,7 +36,7 @@ fn format(
         ));
 
         problems: for (file_result.problems) |problem| {
-            if (@intFromEnum(problem.severity) < @intFromEnum(input.min_severity))
+            if (@backingInt(problem.severity) < @backingInt(input.min_severity))
                 continue :problems;
 
             if (problem.disabled_by_comment) {

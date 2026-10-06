@@ -40,11 +40,11 @@ const ResolvedNodeDeclKey = enum(u128) {
         file_id: FileStore.FileId,
         node: std.zig.Ast.Node.Index,
     ) ResolvedNodeDeclKey {
-        return @enumFromInt(
-            (@as(u128, @intFromEnum(module_id)) << 64) |
-                (@as(u128, @intFromEnum(file_id)) << 32) |
-                @as(u128, @intFromEnum(node)),
-        );
+        return @fromBackingInt(@intCast(
+            (@as(u128, @backingInt(module_id)) << 64) |
+                (@as(u128, @backingInt(file_id)) << 32) |
+                @as(u128, @backingInt(node)),
+        ));
     }
 };
 
@@ -228,7 +228,7 @@ fn initBuildConfig(self: *LintSession) !BuildConfigStore.ConfigId {
         std.log.info("Using compile unit \"{s}\" ({s})", .{ step_name, @tagName(kind) });
         try self.consumeBuildConfigStep(
             config_id,
-            @enumFromInt(step_index),
+            @fromBackingInt(@intCast(step_index)),
         );
     }
 
@@ -421,7 +421,7 @@ fn consumeBuildConfigStep(
     defer zone.end();
 
     const build_config = self.build_config_store.buildConfig(config_id);
-    const step = build_config.steps[@intFromEnum(step_index)];
+    const step = build_config.steps[@backingInt(step_index)];
 
     const compile = step.extended.cast(
         build_config,
@@ -697,7 +697,7 @@ pub fn moduleIdsForFile(
         const module_id = self.module_store.resolve(.{
             .root_file = file_id,
             .build_config = .fromIndex(0),
-            .build_config_module = @enumFromInt(file_id.toIndex()),
+            .build_config_module = @fromBackingInt(@intCast(file_id.toIndex())),
             .module_id_by_import_name = .empty,
         });
         self.indexModuleFiles(module_id, self.runtime.sessionArena());
@@ -749,8 +749,8 @@ const ReachKey = enum(u64) {
     _,
 
     fn init(file_id: FileStore.FileId, module_id: ModuleStore.ModuleId) ReachKey {
-        return @enumFromInt((@as(u64, @intFromEnum(file_id)) << 32) |
-            @as(u64, @intFromEnum(module_id)));
+        return @fromBackingInt(@intCast((@as(u64, @backingInt(file_id)) << 32) |
+            @as(u64, @backingInt(module_id))));
     }
 };
 
@@ -789,9 +789,9 @@ fn indexModuleFiles(
         self.appendModuleForFile(item.file_id, root_module_id);
 
         const tree = self.file_store.fileTree(item.file_id);
-        var node_index: u32 = @intFromEnum(Ast.Node.Index.root);
+        var node_index: u32 = @backingInt(Ast.Node.Index.root);
         nodes: while (node_index < tree.nodes.len) : (node_index += 1) {
-            const node: Ast.Node.Index = @enumFromInt(node_index);
+            const node: Ast.Node.Index = @fromBackingInt(@intCast(node_index));
 
             var import_path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
             const import_path = import_utils.writeImportPath(
@@ -908,8 +908,8 @@ pub fn initDocument(
             // each node once while walking the tree and if we're not there's
             // another bug but for now to be safe memory wise we'll ensure
             // the previous is cleaned up if needed (no-op if not needed)
-            doc.lineage.get(@intFromEnum(item.node)).deinit(gpa);
-            doc.lineage.set(@intFromEnum(item.node), .{
+            doc.lineage.get(@backingInt(item.node)).deinit(gpa);
+            doc.lineage.set(@backingInt(item.node), .{
                 .parent = if (item.parent) |p|
                     p
                 else
@@ -1696,7 +1696,7 @@ fn contextScopeForNode(
     const zone = tracy.traceNamed(@src(), "LintSession.contextScopeForNode");
     defer zone.end();
 
-    const node_index = @intFromEnum(node);
+    const node_index = @backingInt(node);
     if (node_index < doc.context_scope_by_node.len)
         if (doc.context_scope_by_node[node_index]) |scope_id|
             return scope_id;
@@ -1709,7 +1709,7 @@ fn contextScopeForNode(
             return scope_id;
         }
 
-        current = doc.lineage.items(.parent)[@intFromEnum(current_node)];
+        current = doc.lineage.items(.parent)[@backingInt(current_node)];
     }
     const root_scope_id = self.decl_store.scopeIdByNode(doc.file_id, .root);
     // zlinter-disable-next-line require_braces
@@ -2056,7 +2056,7 @@ fn typeSummaryFromTarget(
         ),
         .container => |container| blk: {
             const tree = self.file_store.fileTree(container.file_id);
-            if (@intFromEnum(container.node) >= tree.nodes.len) break :blk null;
+            if (@backingInt(container.node) >= tree.nodes.len) break :blk null;
 
             var buffer: [2]Ast.Node.Index = undefined;
             const container_decl = tree.fullContainerDecl(
@@ -2996,7 +2996,7 @@ test "LintSession.resolveTypeKind" {
         const module_id = session.module_store.resolve(.{
             .root_file = doc.file_id,
             .build_config = .fromIndex(0),
-            .build_config_module = @enumFromInt(0),
+            .build_config_module = @fromBackingInt(@intCast(0)),
             .module_id_by_import_name = .empty,
         });
 
@@ -3083,9 +3083,9 @@ test "moduleIdsForFile includes shared dependency children" {
     const dep_child_file_id = try session.file_store.resolve(dep_child_path);
 
     const build_config_id: BuildConfigStore.ConfigId = .fromIndex(0);
-    const root1_build_module: std.Build.Configuration.Module.Index = @enumFromInt(0);
-    const root2_build_module: std.Build.Configuration.Module.Index = @enumFromInt(1);
-    const dep_build_module: std.Build.Configuration.Module.Index = @enumFromInt(2);
+    const root1_build_module: std.Build.Configuration.Module.Index = @fromBackingInt(@intCast(0));
+    const root2_build_module: std.Build.Configuration.Module.Index = @fromBackingInt(@intCast(1));
+    const dep_build_module: std.Build.Configuration.Module.Index = @fromBackingInt(@intCast(2));
 
     const dep_module_id = session.module_store.resolve(.{
         .root_file = dep_root_file_id,
@@ -3121,11 +3121,11 @@ test "moduleIdsForFile includes shared dependency children" {
     });
 
     _ = session.appendCompileContext(.{
-        .step_index = @enumFromInt(0),
+        .step_index = @fromBackingInt(@intCast(0)),
         .root_module = root1_module_id,
     });
     _ = session.appendCompileContext(.{
-        .step_index = @enumFromInt(1),
+        .step_index = @fromBackingInt(@intCast(1)),
         .root_module = root2_module_id,
     });
 

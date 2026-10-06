@@ -2,7 +2,7 @@
     .name = .zlinter,
     .fingerprint = 0x10e04548f134343a,
     .version = "0.0.1",
-    .minimum_zig_version = "0.15.1",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .tracy = .{
             .url = "https://github.com/wolfpld/tracy/archive/refs/tags/v0.13.1.tar.gz",

@@ -84,7 +84,7 @@ fn run(
 
     var index: u32 = 1; // Skip root node at 0
     nodes: while (index < tree.nodes.len) : (index += 1) {
-        const node: Ast.Node.Index = @enumFromInt(index);
+        const node: Ast.Node.Index = @fromBackingInt(@intCast(index));
         const var_decl = tree.fullVarDecl(node) orelse continue :nodes;
 
         // Check whether name should be excluded from checks:
