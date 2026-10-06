@@ -564,7 +564,7 @@ fn resolveBuildModuleShallow(
     ) orelse return null;
 
     if (FileStore.FileKind.fromPath(root_path) == null) {
-        std.log.debug("Unsupported file type: {s}, skipping linting it.", .{root_path});
+        std.log.debug("Skipping unsupported module root file: {s}", .{root_path});
         return null;
     }
 
