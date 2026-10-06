@@ -1,0 +1,11 @@
+error Slice declaration should be TitleCase [test_cases/declaration_naming/collection_type_aliases/collection_type_aliases.input.zig:2:7] declaration_naming
+
+ 2 | const bad_slice = []const u8;
+   |       ^^^^^^^^^
+
+error Array declaration should be TitleCase [test_cases/declaration_naming/collection_type_aliases/collection_type_aliases.input.zig:5:7] declaration_naming
+
+ 5 | const bad_array = [4]u8;
+   |       ^^^^^^^^^
+
+x 2 errors
