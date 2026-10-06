@@ -403,14 +403,20 @@ pub fn build(b: *std.Build) void {
     const unit_test_step = b.step("unit-test", "Run unit tests");
     if (test_coverage orelse false) {
         const cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
-        cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only" });
-        cover_run.addPrefixedDirectoryArg("--include-pattern=", b.path("src"));
+        cover_run.addArgs(&.{ kcov_bin, "--clean" });
+        cover_run.addDirectoryArg2(b.path("src"), .{
+            .prefix = "--include-pattern=",
+            .make_absolute = true,
+        });
         merge_coverage.addDirectoryArg(cover_run.addOutputDirectoryArg("unit_test_coverage"));
         cover_run.addArtifactArg(unit_tests_exe);
 
         const cli_cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
-        cli_cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only" });
-        cli_cover_run.addPrefixedDirectoryArg("--include-pattern=", b.path("src"));
+        cli_cover_run.addArgs(&.{ kcov_bin, "--clean" });
+        cli_cover_run.addDirectoryArg2(b.path("src"), .{
+            .prefix = "--include-pattern=",
+            .make_absolute = true,
+        });
         merge_coverage.addDirectoryArg(cli_cover_run.addOutputDirectoryArg("cli_unit_test_coverage"));
         cli_cover_run.addArtifactArg(cli_unit_tests_exe);
 
@@ -435,8 +441,11 @@ pub fn build(b: *std.Build) void {
 
         if (test_coverage orelse false) {
             const cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
-            cover_run.addArgs(&.{ kcov_bin, "--clean", "--collect-only" });
-            cover_run.addPrefixedDirectoryArg("--include-pattern=", b.path("src"));
+            cover_run.addArgs(&.{ kcov_bin, "--clean" });
+            cover_run.addDirectoryArg2(b.path("src"), .{
+                .prefix = "--include-pattern=",
+                .make_absolute = true,
+            });
             merge_coverage.addDirectoryArg(cover_run.addOutputDirectoryArg(test_rule_exe.name));
             cover_run.addArtifactArg(test_rule_exe);
 
