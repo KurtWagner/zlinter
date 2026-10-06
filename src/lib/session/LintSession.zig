@@ -563,6 +563,11 @@ fn resolveBuildModuleShallow(
         &root_path_buffer,
     ) orelse return null;
 
+    if (FileStore.FileKind.fromPath(root_path) == null) {
+        std.log.debug("Unsupported file type: {s}, skipping linting it.", .{root_path});
+        return null;
+    }
+
     return self.module_store.resolve(.{
         .root_file = try self.file_store.resolve(root_path),
         .build_config = config_id,
