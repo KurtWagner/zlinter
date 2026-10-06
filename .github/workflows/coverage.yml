@@ -45,3 +45,7 @@ jobs:
 
       - name: "Upload coverage"
         uses: coverallsapp/github-action@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          file: zig-out/coverage/kcov-merged/cobertura.xml
+          format: cobertura
