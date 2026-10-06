@@ -505,14 +505,7 @@ fn summarizeTypeExpr(
         return summarizeTypeExpr(tree, ptr_type.ast.child_type);
     }
 
-    if (tree.fullSlice(node)) |slice_type|
-        return .{
-            .slice = .{
-                .child_type = ChildType.fromSummary(
-                    summarizeTypeExpr(tree, slice_type.ast.sliced) orelse .unknown,
-                ),
-            },
-        };
+    // No fullSlice case here: expr[a..b] is a slicing operation, not a type.
 
     if (tree.nodeTag(node) == .identifier) {
         const name = tree.getNodeSource(node);
@@ -573,14 +566,9 @@ fn summarizeValueExpr(
         return summarizeValueExpr(tree, ptr_type.ast.child_type);
     }
 
-    if (tree.fullSlice(node)) |slice_type|
-        return .{
-            .slice = .{
-                .child_type = ChildType.fromSummary(
-                    summarizeTypeExpr(tree, slice_type.ast.sliced) orelse .unknown,
-                ),
-            },
-        };
+    // No fullSlice case here either: expr[a..b] is a slicing operation,
+    // not a type. Treating it as .slice made it look like a type alias to
+    // callers that key off coarseType().
 
     switch (tree.nodeTag(node)) {
         .identifier => {
@@ -607,6 +595,7 @@ fn summarizeValueExpr(
         .merge_error_sets,
         => return .{ .type = .{ .kind = .error_set } },
         .error_value => return .{ .instance = .{ .kind = .error_set } },
+        .error_union => return .{ .type = .unknown },
         .builtin_call_two,
         .builtin_call_two_comma,
         .builtin_call,
@@ -614,7 +603,18 @@ fn summarizeValueExpr(
         => {
             const builtin_name = tree.tokenSlice(tree.nodeMainToken(node));
             if (std.mem.eql(u8, builtin_name, "@import")) return .{ .type = .{ .kind = .namespace } };
-            if (std.mem.eql(u8, builtin_name, "@Type") or std.mem.eql(u8, builtin_name, "@TypeOf"))
+            // '@Type' was split into these per-kind builtins, all returning a 'type'
+            if (std.mem.eql(u8, builtin_name, "@TypeOf") or
+                std.mem.eql(u8, builtin_name, "@FieldType") or
+                std.mem.eql(u8, builtin_name, "@Vector") or
+                std.mem.eql(u8, builtin_name, "@Int") or
+                std.mem.eql(u8, builtin_name, "@Tuple") or
+                std.mem.eql(u8, builtin_name, "@Pointer") or
+                std.mem.eql(u8, builtin_name, "@Fn") or
+                std.mem.eql(u8, builtin_name, "@Struct") or
+                std.mem.eql(u8, builtin_name, "@Union") or
+                std.mem.eql(u8, builtin_name, "@Enum") or
+                std.mem.eql(u8, builtin_name, "@SpirvType"))
                 return .{ .type = .unknown };
         },
         else => {},
@@ -710,13 +710,15 @@ pub fn primitiveFromName(name: []const u8) ?Primitive {
                 .bits = bits,
             } };
 
+    // Unlike u/i, floats only come in these 5 widths; f9 is a ordinary identifiers not a type.
     if (name.len > 1 and name[0] == 'f')
         if (parsePrimitiveIntBits(name[1..])) |bits|
-            return .{ .number = .{
-                .name = name,
-                .kind = .float,
-                .bits = bits,
-            } };
+            if (bits == 16 or bits == 32 or bits == 64 or bits == 80 or bits == 128)
+                return .{ .number = .{
+                    .name = name,
+                    .kind = .float,
+                    .bits = bits,
+                } };
 
     inline for (&.{ "void", "noreturn" }) |primitive_name|
         if (std.mem.eql(u8, name, primitive_name)) return .{ .named = name };

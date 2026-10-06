@@ -2463,13 +2463,41 @@ fn typeSummaryFromTypeValueExpr(
     };
 }
 
+fn isTypeValuedTypeInfoField(name: []const u8) bool {
+    return std.mem.eql(u8, name, "child") or
+        std.mem.eql(u8, name, "error_set") or
+        std.mem.eql(u8, name, "payload") or
+        std.mem.eql(u8, name, "tag_type") or
+        std.mem.eql(u8, name, "backing_integer") or
+        std.mem.eql(u8, name, "return_type") or
+        std.mem.eql(u8, name, "sampled_image") or
+        std.mem.eql(u8, name, "runtime_array") or
+        std.mem.eql(u8, name, "unknown") or
+        std.mem.eql(u8, name, "sampled") or
+        std.mem.eql(u8, name, "storage");
+}
+
 fn valueExprIsTypeInfoProjection(
     tree: Ast,
     node: Ast.Node.Index,
 ) bool {
+    switch (tree.nodeTag(node)) {
+        .unwrap_optional => return valueExprIsTypeInfoProjection(tree, tree.nodeData(node).node_and_token[0]),
+        .field_access => {},
+        // Bare @typeInfo(X) is a value not a type only fields in isTypeValuedTypeInfoField yield type.
+        else => return false,
+    }
+
+    const last_token = tree.lastToken(node);
+    if (tree.tokenTag(last_token) != .identifier or
+        !isTypeValuedTypeInfoField(tree.tokenSlice(last_token))) return false;
+
+    return typeInfoProjectionRootsAtTypeInfo(tree, tree.nodeData(node).node_and_token[0]);
+}
+
+fn typeInfoProjectionRootsAtTypeInfo(tree: Ast, node: Ast.Node.Index) bool {
     return switch (tree.nodeTag(node)) {
-        .unwrap_optional => valueExprIsTypeInfoProjection(tree, tree.nodeData(node).node_and_token[0]),
-        .field_access => valueExprIsTypeInfoProjection(tree, tree.nodeData(node).node_and_token[0]),
+        .unwrap_optional, .field_access => typeInfoProjectionRootsAtTypeInfo(tree, tree.nodeData(node).node_and_token[0]),
         else => ast.isBuiltinCallNamed(tree, node, "@typeInfo"),
     };
 }
