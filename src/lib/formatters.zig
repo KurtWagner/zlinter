@@ -2,6 +2,7 @@
 
 pub const DefaultFormatter = @import("./formatters/DefaultFormatter.zig");
 pub const Formatter = @import("./formatters/Formatter.zig");
+pub const JsonFormatter = @import("./formatters/JsonFormatter.zig");
 
 const std = @import("std");
 

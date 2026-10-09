@@ -1,4 +1,5 @@
 const default_formatter = zlinter.formatters.DefaultFormatter{};
+const json_formatter = zlinter.formatters.JsonFormatter{};
 
 pub fn run(
     runtime: *const LintRuntime,
@@ -118,6 +119,7 @@ fn runLint(
             printer.tty,
             switch (args.format) {
                 .default => &default_formatter.formatter,
+                .json => &json_formatter.formatter,
             },
             args.quiet,
             args.max_warnings,
