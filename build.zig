@@ -138,6 +138,30 @@ const StepBuilder = struct {
         ) catch @panic("OOM");
     }
 
+    /// add a custom rule whose source is resolved at build time
+    pub fn addCustomRule(
+        self: *StepBuilder,
+        comptime name: []const u8,
+        path: std.Build.LazyPath,
+        config: anytype,
+    ) void {
+        const arena = self.b.allocator;
+
+        self.rules.append(
+            arena,
+            buildCustomRule(
+                self.b,
+                checkNoNameCollision(name),
+                path,
+                .{
+                    .optimize = self.options.optimize,
+                    .target = self.options.target,
+                },
+                config,
+            ),
+        ) catch @panic("OOM");
+    }
+
     /// Adds a source to be linted (e.g., library, executable or path). Only
     /// inputs resolved to this source within the projects path will be linted.
     ///
@@ -668,18 +692,45 @@ fn buildRule(
             },
             config,
         ),
-        .custom => |custom| .{
-            .import = .{
-                .name = checkNoNameCollision(custom.name),
-                .module = b.createModule(.{
-                    .root_source_file = b.path(custom.path),
-                    .target = options.target,
-                    .optimize = options.optimize,
-                    .imports = &.{zlinter_import},
-                }),
+        .custom => |custom| buildCustomRule(
+            b,
+            checkNoNameCollision(custom.name),
+            b.path(custom.path),
+            .{
+                .target = options.target,
+                .optimize = options.optimize,
             },
-            .zon_config_str = toZonString(config, b.allocator),
+            config,
+        ),
+    };
+}
+
+fn buildCustomRule(
+    b: *std.Build,
+    name: []const u8,
+    path: std.Build.LazyPath,
+    options: struct {
+        target: std.Build.ResolvedTarget,
+        optimize: std.builtin.OptimizeMode,
+    },
+    config: anytype,
+) BuiltRule {
+    const zlinter_import = std.Build.Module.Import{
+        .name = "zlinter",
+        .module = b.dependencyFromBuildZig(@This(), .{}).module("zlinter"),
+    };
+
+    return .{
+        .import = .{
+            .name = name,
+            .module = b.createModule(.{
+                .root_source_file = path,
+                .target = options.target,
+                .optimize = options.optimize,
+                .imports = &.{zlinter_import},
+            }),
         },
+        .zon_config_str = toZonString(config, b.allocator),
     };
 }
 
