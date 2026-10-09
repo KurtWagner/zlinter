@@ -1,0 +1,6 @@
+warning I'm scared of dogs [test_cases/no_dogs/no_dogs/no_dogs.input.zig:1:11] no_dogs
+
+ 1 | pub const allow_dogs = false;
+   |           ^^^^^^^^^^
+
+x 1 warnings

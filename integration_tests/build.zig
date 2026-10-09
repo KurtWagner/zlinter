@@ -122,10 +122,12 @@ pub fn build(b: *std.Build) !void {
     const lint_cmd = b.step("lint", "Lint source code.");
     lint_cmd.dependOn(step: {
         var builder = zlinter.builder(b, .{ .target = target });
+        const no_dogs_custom_rule = b.dependency("no_dogs_custom_rule", .{});
         inline for (@typeInfo(zlinter.BuiltinLintRule).@"enum".field_values) |field_value|
             builder.addRule(.{ .builtin = @fromBackingInt(@intCast(field_value)) }, .{});
         builder.setCompileUnits(&.{.all});
         builder.addCustomRule("no_cats", b.path("src/no_cats.zig"), .{});
+        builder.addCustomRule("no_dogs", no_dogs_custom_rule.path("rules/no_dogs.zig"), .{});
         break :step builder.build();
     });
 }
