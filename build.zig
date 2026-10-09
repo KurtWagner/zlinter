@@ -158,7 +158,41 @@ const StepBuilder = struct {
         ) catch @panic("OOM");
     }
 
-    /// Adds a source path to be linted.
+    /// add a custom rule whose source is resolved at build time
+    pub fn addCustomRule(
+        self: *StepBuilder,
+        comptime name: []const u8,
+        path: std.Build.LazyPath,
+        config: anytype,
+    ) void {
+        const arena = self.b.allocator;
+
+        self.rules.append(
+            arena,
+            buildCustomRule(
+                self.b,
+                checkNoNameCollision(name),
+                path,
+                .{
+                    .optimize = self.options.optimize,
+                    .target = self.options.target,
+                    .zlinter_import = .{
+                        .name = "zlinter",
+                        .module = self.b.dependencyFromBuildZig(Self, .{
+                            .tracy = self.options.tracy,
+                            .@"tracy-callstack" = self.options.tracy_callstack,
+                            .@"tracy-allocation" = self.options.tracy_allocation,
+                            .@"tracy-callstack-depth" = self.options.tracy_callstack_depth,
+                        }).module("zlinter"),
+                    },
+                },
+                config,
+            ),
+        ) catch @panic("OOM");
+    }
+
+    /// Adds a source to be linted (e.g., library, executable or path). Only
+    /// inputs resolved to this source within the projects path will be linted.
     ///
     /// If no paths are given or resolved then it falls back to linting all
     /// zig source files under the current working directory.
@@ -793,18 +827,42 @@ fn buildRule(
             },
             config,
         ),
-        .custom => |custom| .{
-            .import = .{
-                .name = checkNoNameCollision(custom.name),
-                .module = b.createModule(.{
-                    .root_source_file = b.path(custom.path),
-                    .target = options.target,
-                    .optimize = options.optimize,
-                    .imports = &.{zlinter_import},
-                }),
+        .custom => |custom| buildCustomRule(
+            b,
+            checkNoNameCollision(custom.name),
+            b.path(custom.path),
+            .{
+                .target = options.target,
+                .optimize = options.optimize,
+                .zlinter_import = zlinter_import,
             },
-            .zon_config_str = toZonString(config, b.allocator),
+            config,
+        ),
+    };
+}
+
+fn buildCustomRule(
+    b: *std.Build,
+    name: []const u8,
+    path: std.Build.LazyPath,
+    options: struct {
+        target: std.Build.ResolvedTarget,
+        optimize: std.lang.OptimizeMode,
+        zlinter_import: std.Build.Module.Import,
+    },
+    config: anytype,
+) BuiltRule {
+    return .{
+        .import = .{
+            .name = name,
+            .module = b.createModule(.{
+                .root_source_file = path,
+                .target = options.target,
+                .optimize = options.optimize,
+                .imports = &.{options.zlinter_import},
+            }),
         },
+        .zon_config_str = toZonString(config, b.allocator),
     };
 }
 
