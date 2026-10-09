@@ -83,11 +83,9 @@ pub fn build(b: *std.Build) !void {
         const lint_integration_cmd = b.step("check-compiled-source", "");
         lint_integration_cmd.dependOn(step: {
             var builder = zlinter.builder(b, .{ .target = target });
-            builder.addRule(
-                .{ .custom = .{
-                    .name = "no_cats",
-                    .path = "src/no_cats.zig",
-                } },
+            builder.addCustomRule(
+                "no_cats",
+                b.path("src/no_cats.zig"),
                 .{
                     .severity = .@"error",
                 },

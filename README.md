@@ -198,6 +198,14 @@ builder.addRule(b, .{
 }, .{});
 ```
 
+Rules whose source lives outside your project, such as a rule shipped in a
+dependency, can be added with `addCustomRule`, which accepts a
+`std.Build.LazyPath`:
+
+```zig
+builder.addCustomRule("no_cats", dep.path("rules/no_cats.zig"), .{});
+```
+
 Alternatively, take a look at <https://github.com/KurtWagner/zlinter-custom-rule-example>, which is a minimal custom rule example with accompanying zig project.
 
 ## Configuration
