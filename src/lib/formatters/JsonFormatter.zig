@@ -294,9 +294,14 @@ test "formats linter JSON" {
         .runtime = session.runtime,
     }, &output.writer);
 
+    const expected_file_path = try std.json.Stringify.valueAlloc(
+        arena.allocator(),
+        abs_path,
+        .{},
+    );
     const expected = try arena.allocator().print(
-        "[{{\"filePath\":\"{s}\",\"messages\":[{{\"ruleId\":\"sample_rule\",\"severity\":1,\"message\":\"Sample warning\",\"line\":1,\"column\":7,\"endLine\":1,\"endColumn\":10,\"fix\":{{\"range\":[6,9],\"text\":\"good\"}}}}],\"suppressedMessages\":[{{\"ruleId\":\"sample_rule\",\"severity\":2,\"message\":\"Suppressed error\",\"line\":1,\"column\":1,\"endLine\":1,\"endColumn\":6}}],\"errorCount\":0,\"fatalErrorCount\":0,\"warningCount\":1,\"fixableErrorCount\":0,\"fixableWarningCount\":1}}]\n",
-        .{abs_path},
+        "[{{\"filePath\":{s},\"messages\":[{{\"ruleId\":\"sample_rule\",\"severity\":1,\"message\":\"Sample warning\",\"line\":1,\"column\":7,\"endLine\":1,\"endColumn\":10,\"fix\":{{\"range\":[6,9],\"text\":\"good\"}}}}],\"suppressedMessages\":[{{\"ruleId\":\"sample_rule\",\"severity\":2,\"message\":\"Suppressed error\",\"line\":1,\"column\":1,\"endLine\":1,\"endColumn\":6}}],\"errorCount\":0,\"fatalErrorCount\":0,\"warningCount\":1,\"fixableErrorCount\":0,\"fixableWarningCount\":1}}]\n",
+        .{expected_file_path},
     );
     try std.testing.expectEqualStrings(expected, output.written());
 }
