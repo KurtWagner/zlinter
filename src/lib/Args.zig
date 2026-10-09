@@ -55,7 +55,7 @@ build_exclude_paths: ?[][]const u8,
 build_compile_units: ?[]CompileUnitSelector,
 
 /// The format to print the lint result output in.
-format: enum { default },
+format: enum { default, json },
 
 /// Contains any arguments that were found that unknown. When this happens
 /// an error with the help does should be presented to the user as this
@@ -510,6 +510,7 @@ pub fn printHelp(printer: *rendering.Printer) void {
         .{ "--include", "Only lint these paths, ignoring build.zig includes/excludes" },
         .{ "--exclude", "Skip linting for these paths" },
         .{ "--filter", "Limit linting to the specified resolved paths" },
+        .{ "--format", "Set output format: default or json" },
         .{ "--quiet", "Only report errors (not warnings)" },
         .{ "--max-warnings", "Fail if there are more than this number of warnings" },
         .{ "--fix", "Automatically fix some issues (only use with source control)" },
@@ -520,7 +521,7 @@ pub fn printHelp(printer: *rendering.Printer) void {
     inline for (0..flags.len) |i| width = @max(flags[i][0].len, width);
 
     printer.print(.out, "{s}Usage:{s} ", .{ printer.tty.ansiOrEmpty(&.{ .underline, .bold }), printer.tty.ansiOrEmpty(&.{.reset}) });
-    printer.print(.out, "zig build <lint step> -- [--include <path>...] [--exclude <path>...] [--filter <path>...] [--rule <name>...] [--fix] [--quiet] [--max-warnings <u32>]\n\n", .{});
+    printer.print(.out, "zig build <lint step> -- [--include <path>...] [--exclude <path>...] [--filter <path>...] [--rule <name>...] [--format <default|json>] [--fix] [--quiet] [--max-warnings <u32>]\n\n", .{});
     printer.print(.out, "{s}Options:{s}\n", .{ printer.tty.ansiOrEmpty(&.{ .underline, .bold }), printer.tty.ansiOrEmpty(&.{.reset}) });
     for (flags) |tuple|
         printer.print(
@@ -840,6 +841,19 @@ test "allocParse with format arg" {
     defer args.deinit(std.testing.allocator);
 
     try std.testing.expectEqualDeep(testing.expected(.{}), args);
+}
+
+test "allocParse with json format arg" {
+    const args = try allocParse(
+        testing.cliArgs(&.{ "--format", "json" }),
+        &.{},
+        std.testing.allocator,
+    );
+    defer args.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualDeep(testing.expected(.{
+        .format = .json,
+    }), args);
 }
 
 test "allocParse with min fix passes arg" {
