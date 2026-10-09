@@ -6,10 +6,14 @@
         .zlinter = .{
             .path = "../",
         },
+        .no_dogs_custom_rule = .{
+            .path = "deps/no_dogs_custom_rule",
+        },
     },
     .paths = .{
         "build.zig",
         "build.zig.zon",
+        "deps",
         "src",
     },
 }

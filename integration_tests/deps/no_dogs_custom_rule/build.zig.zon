@@ -1,0 +1,10 @@
+.{
+    .name = .no_dogs_custom_rule,
+    .fingerprint = 0xcff684dc4fa5eed8,
+    .version = "0.0.0",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "rules",
+    },
+}
