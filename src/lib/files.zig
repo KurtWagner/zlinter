@@ -636,6 +636,10 @@ pub fn resolveLazyPath(
                 .install_lib,
                 .install_bin,
                 .install_include,
+                .deployed_prefix,
+                .deployed_lib,
+                .deployed_bin,
+                .deployed_include,
                 .libc_runtimes,
                 => return null,
             };
