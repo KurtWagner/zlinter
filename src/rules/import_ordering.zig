@@ -427,18 +427,34 @@ fn resolveScopedImports(
     defer node_it.deinit();
 
     var scoped_imports: std.array_hash_map.Auto(Ast.Node.Index, ImportsQueueLinesAscending) = .empty;
-    while (try node_it.next()) |tuple| {
+    nodes: while (try node_it.next()) |tuple| {
         const node, const connections = tuple;
 
-        const var_decl = tree.fullVarDecl(node) orelse continue;
+        const var_decl = tree.fullVarDecl(node) orelse continue :nodes;
+        var import_node = var_decl.ast.init_node.unwrap() orelse continue :nodes;
 
-        const init_node = var_decl.ast.init_node.unwrap() orelse continue;
+        field_access: while (true)
+            switch (tree.nodeTag(import_node)) {
+                .field_access, .unwrap_optional => import_node = tree
+                    .nodeData(import_node)
+                    .node_and_token[0],
+                else => {
+                    var call_buffer: [1]Ast.Node.Index = undefined;
+                    const call = tree.fullCall(&call_buffer, import_node) orelse
+                        break :field_access;
+                    // Local calls can depend on earlier locals or have side effects.
+                    if (!zlinter.ast.isContainerMember(tree, connections))
+                        continue :nodes;
+                    import_node = call.ast.fn_expr;
+                },
+            };
+
         _ = import_utils.writeImportPath(
             tree,
-            init_node,
+            import_node,
             &import_path_buffer,
-        ) orelse continue;
-        const parent = connections.parent orelse continue;
+        ) orelse continue :nodes;
+        const parent = connections.parent orelse continue :nodes;
 
         const decl_name = tree.tokenSlice(var_decl.ast.mut_token + 1);
 
@@ -761,6 +777,223 @@ test "order" {
                 .fix = null,
             },
         },
+    );
+}
+
+test "order includes imports accessed through a member" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const AStruct = @import("AStruct.zig");
+        \\const CEnum = @import("c_enum.zig").CEnum;
+        \\const BStruct = @import("BStruct.zig");
+        \\
+    ,
+        .{},
+        Config{},
+        &.{.{
+            .rule_id = "import_ordering",
+            .severity = .warning,
+            .slice =
+            \\const BStruct = @import("BStruct.zig")
+            ,
+            .message = "Import 'BStruct' is not in alphabetical order",
+            .disabled_by_comment = false,
+            .fix = .{
+                .start = 40,
+                .end = 123,
+                .text =
+                \\const BStruct = @import("BStruct.zig");
+                \\const CEnum = @import("c_enum.zig").CEnum;
+                \\
+                ,
+            },
+        }},
+    );
+}
+
+test "order includes imports accessed through deeply nested members" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const AStruct = @import("AStruct.zig");
+        \\const CEnum = @import("c_enum.zig").parent.child.CEnum;
+        \\const BStruct = @import("BStruct.zig");
+        \\
+    ,
+        .{},
+        Config{},
+        &.{.{
+            .rule_id = "import_ordering",
+            .severity = .warning,
+            .slice =
+            \\const BStruct = @import("BStruct.zig")
+            ,
+            .message = "Import 'BStruct' is not in alphabetical order",
+            .disabled_by_comment = false,
+            .fix = .{
+                .start = 40,
+                .end = 136,
+                .text =
+                \\const BStruct = @import("BStruct.zig");
+                \\const CEnum = @import("c_enum.zig").parent.child.CEnum;
+                \\
+                ,
+            },
+        }},
+    );
+}
+
+test "order includes imports accessed through an optional unwrap" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const AStruct = @import("AStruct.zig");
+        \\const CEnum = @import("c_enum.zig").value.?;
+        \\const BStruct = @import("BStruct.zig");
+        \\
+    ,
+        .{},
+        Config{},
+        &.{.{
+            .rule_id = "import_ordering",
+            .severity = .warning,
+            .slice =
+            \\const BStruct = @import("BStruct.zig")
+            ,
+            .message = "Import 'BStruct' is not in alphabetical order",
+            .disabled_by_comment = false,
+            .fix = .{
+                .start = 40,
+                .end = 125,
+                .text =
+                \\const BStruct = @import("BStruct.zig");
+                \\const CEnum = @import("c_enum.zig").value.?;
+                \\
+                ,
+            },
+        }},
+    );
+}
+
+test "order includes imports accessed through an optional unwrap between members" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const AStruct = @import("AStruct.zig");
+        \\const CEnum = @import("c_enum.zig").parent.?.child.CEnum;
+        \\const BStruct = @import("BStruct.zig");
+        \\
+    ,
+        .{},
+        Config{},
+        &.{.{
+            .rule_id = "import_ordering",
+            .severity = .warning,
+            .slice =
+            \\const BStruct = @import("BStruct.zig")
+            ,
+            .message = "Import 'BStruct' is not in alphabetical order",
+            .disabled_by_comment = false,
+            .fix = .{
+                .start = 40,
+                .end = 138,
+                .text =
+                \\const BStruct = @import("BStruct.zig");
+                \\const CEnum = @import("c_enum.zig").parent.?.child.CEnum;
+                \\
+                ,
+            },
+        }},
+    );
+}
+
+test "order includes imports accessed through a function call" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const AStruct = @import("AStruct.zig");
+        \\const CEnum = @import("c_enum.zig").make();
+        \\const BStruct = @import("BStruct.zig");
+        \\
+    ,
+        .{},
+        Config{},
+        &.{.{
+            .rule_id = "import_ordering",
+            .severity = .warning,
+            .slice =
+            \\const BStruct = @import("BStruct.zig")
+            ,
+            .message = "Import 'BStruct' is not in alphabetical order",
+            .disabled_by_comment = false,
+            .fix = .{
+                .start = 40,
+                .end = 124,
+                .text =
+                \\const BStruct = @import("BStruct.zig");
+                \\const CEnum = @import("c_enum.zig").make();
+                \\
+                ,
+            },
+        }},
+    );
+}
+
+test "order includes imports accessed through a function call between members" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const AStruct = @import("AStruct.zig");
+        \\const CEnum = @import("c_enum.zig").parent.make().child;
+        \\const BStruct = @import("BStruct.zig");
+        \\
+    ,
+        .{},
+        Config{},
+        &.{.{
+            .rule_id = "import_ordering",
+            .severity = .warning,
+            .slice =
+            \\const BStruct = @import("BStruct.zig")
+            ,
+            .message = "Import 'BStruct' is not in alphabetical order",
+            .disabled_by_comment = false,
+            .fix = .{
+                .start = 40,
+                .end = 137,
+                .text =
+                \\const BStruct = @import("BStruct.zig");
+                \\const CEnum = @import("c_enum.zig").parent.make().child;
+                \\
+                ,
+            },
+        }},
+    );
+}
+
+test "order includes imports accessed through a function call and optional unwrap" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const AStruct = @import("AStruct.zig");
+        \\const CEnum = @import("c_enum.zig").parent.make().?.child;
+        \\const BStruct = @import("BStruct.zig");
+        \\
+    ,
+        .{},
+        Config{},
+        &.{.{
+            .rule_id = "import_ordering",
+            .severity = .warning,
+            .slice =
+            \\const BStruct = @import("BStruct.zig")
+            ,
+            .message = "Import 'BStruct' is not in alphabetical order",
+            .disabled_by_comment = false,
+            .fix = .{
+                .start = 40,
+                .end = 139,
+                .text =
+                \\const BStruct = @import("BStruct.zig");
+                \\const CEnum = @import("c_enum.zig").parent.make().?.child;
+                \\
+                ,
+            },
+        }},
     );
 }
 
