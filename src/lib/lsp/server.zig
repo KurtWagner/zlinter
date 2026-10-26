@@ -50,7 +50,7 @@ pub const LspServer = struct {
         reading: while (state == .running) {
             defer _ = self.handle_arena.reset(.retain_capacity);
 
-            const body = self.readBody(
+            const body = (self.readBody(
                 self.handle_arena.allocator(),
                 &err,
             ) catch |e| {
@@ -59,7 +59,7 @@ pub const LspServer = struct {
                     error.OutOfMemory => return error.OutOfMemory,
                     error.LspError => continue :reading,
                 }
-            } orelse {
+            }) orelse {
                 state = .stopping;
                 continue :reading;
             };
@@ -333,7 +333,7 @@ pub const LspServer = struct {
 
             const rule_idx: RuleIndex = @fromBackingInt(@intCast(i));
 
-            const result = rule.run(
+            const result = (rule.run(
                 rule,
                 self.session,
                 &doc,
@@ -349,7 +349,7 @@ pub const LspServer = struct {
                     std.log.err("Failed to lint '{s}' with '{s}': {t}", .{ abs_path, rule.rule_id, e });
                     continue :rules;
                 },
-            } orelse continue :rules;
+            }) orelse continue :rules;
 
             for (result.problems) |problem|
                 diagnostics.append(

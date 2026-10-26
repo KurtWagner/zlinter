@@ -66,7 +66,7 @@ pub fn jsonTree(
             // Add more meta data for nodes here...
             // e.g., the "data" union structures
 
-            var node_children = std.json.Array.init(self.arena);
+            var node_children: std.json.Array = .empty;
             try iterateChildren(
                 context_tree,
                 child_node,
@@ -81,7 +81,7 @@ pub fn jsonTree(
 
             try node_object.put(self.arena, "body", .{ .array = node_children });
 
-            try self.node_children.append(.{
+            try self.node_children.append(self.arena, .{
                 .object = node_object,
             });
         }
@@ -95,7 +95,7 @@ pub fn jsonTree(
         .{ .string = "root" },
     );
 
-    var root_node_children = std.json.Array.init(arena);
+    var root_node_children: std.json.Array = .empty;
 
     if (tree.errors.len == 0) {
         try iterateChildren(
@@ -129,7 +129,7 @@ fn iterateChildren(
 }
 
 fn errorsToJson(tree: Ast, arena: std.mem.Allocator) !std.json.Array {
-    var json_errors = std.json.Array.init(arena);
+    var json_errors: std.json.Array = .empty;
 
     for (tree.errors) |e| {
         var json_error = std.json.ObjectMap.empty;
@@ -143,14 +143,14 @@ fn errorsToJson(tree: Ast, arena: std.mem.Allocator) !std.json.Array {
         try tree.renderError(e, &aw.writer);
         try json_error.put(arena, "message", .{ .string = try aw.toOwnedSlice() });
 
-        try json_errors.append(.{ .object = json_error });
+        try json_errors.append(arena, .{ .object = json_error });
     }
 
     return json_errors;
 }
 
 fn tokensToJson(tree: Ast, arena: std.mem.Allocator) !std.json.Array {
-    var json_tokens = std.json.Array.init(arena);
+    var json_tokens: std.json.Array = .empty;
 
     var token_index: Ast.TokenIndex = 0;
     while (token_index < tree.tokens.len) : (token_index += 1) {
@@ -172,7 +172,7 @@ fn tokensToJson(tree: Ast, arena: std.mem.Allocator) !std.json.Array {
         });
         // Add more meta data for tokens here..
 
-        try json_tokens.append(.{ .object = token_object });
+        try json_tokens.append(arena, .{ .object = token_object });
     }
 
     return json_tokens;
