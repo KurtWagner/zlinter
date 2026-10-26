@@ -4,6 +4,8 @@ pub const FormatInput = struct {
     results: []zlinter.results.LintResult,
     file_store: *const zlinter.session.FileStore,
     runtime: *const zlinter.session.LintRuntime,
+    /// Overall lint outcome, before severity filtering or exit-code overrides.
+    status: zlinter.results.LintStatus = .success,
     tty: zlinter.ansi.Tty = .no_color,
 
     /// Only print this severity and above. e.g., set to error to only format errors

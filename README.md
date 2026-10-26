@@ -224,12 +224,23 @@ That said, there are plenty of reasons someone may want to add another
 formatter, for example ZON or XML output for other tools to consume.
 If that is something you need, contributions in this area are very welcome.
 
-Use `--format json` to emit structured JSON. The output is a top-level array
-of file result objects with `filePath`, `messages`, `suppressedMessages`,
+Use `--format json` to emit structured JSON. The output is a top-level object with `status`
+and a `results` array of file result objects with `filePath`, `messages`, `suppressedMessages`,
 `errorCount`, `fatalErrorCount`, `warningCount`, `fixableErrorCount`, and
 `fixableWarningCount`. Diagnostic messages include 1-based
 `line`, `column`, `endLine`, and `endColumn` fields. End positions are
 exclusive. Fixes include zero-based, end-exclusive byte `range` values and replacement `text`.
+
+The `status` is `success` when there are no active warnings or errors,
+`warning` when warnings are present but the run passes, and `failure` when
+errors are present or `--max-warnings` is exceeded. Suppressed diagnostics
+do not affect the status. `--quiet` hides warnings without changing the status.
+
+Use `zig build lint -- --format json --exit-zero` to return process exit code `0`
+even when linting fails, while keeping the actual status in the JSON. This
+prevents `zig build` failure output from interfering with JSON consumers.
+
+Tool errors, argument parsing errors, and build failures still return nonzero exit codes.
 
 Formatter related code lives under [`zlinter.formatters`](./src/lib/formatters.zig).
 The core interface is [`Formatter`](./src/lib/formatters/Formatter.zig), which
@@ -368,7 +379,7 @@ If you omit `zlinter-enable`, all lines until EOF will be disabled.
 ### Command-Line Arguments
 
 ```shell
-zig build lint -- [--include <path> ...] [--exclude <path> ...] [--filter <path> ...] [--rule <name> ...] [--format <default|json>] [--fix] [--quiet] [--max-warnings <u32>]
+zig build lint -- [--include <path> ...] [--exclude <path> ...] [--filter <path> ...] [--rule <name> ...] [--format <default|json>] [--fix] [--quiet] [--max-warnings <u32>] [--exit-zero]
 ```
 
 - `--include` run the linter on these paths ignoring the includes and excludes defined in the `build.zig`, forcing these paths to be resolved and linted (if they exist).
@@ -377,6 +388,7 @@ zig build lint -- [--include <path> ...] [--exclude <path> ...] [--filter <path>
 - `--format` set output format. Supported values are `default` and `json`.
 - `--quiet` only report errors (not warnings).
 - `--max-warnings` fail if there are more than this number of warnings.
+- `--exit-zero` return process exit code `0` even when linting fails; JSON retains the actual lint status.
 - `--fix` used to automatically fix some issues (e.g., removal of unused container declarations) - **Only use this feature if you use source control as it can result in loss of code!**
 
 For example

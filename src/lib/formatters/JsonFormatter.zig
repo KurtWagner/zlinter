@@ -17,6 +17,10 @@ fn format(
         .options = .{},
     };
 
+    jws.beginObject() catch |e| return logAndReturnWriteFailure("Begin output", e);
+    jws.objectField("status") catch |e| return logAndReturnWriteFailure("Status field", e);
+    jws.write(@tagName(input.status)) catch |e| return logAndReturnWriteFailure("Status", e);
+    jws.objectField("results") catch |e| return logAndReturnWriteFailure("Results field", e);
     jws.beginArray() catch |e| return logAndReturnWriteFailure("Begin results", e);
 
     for (input.results, 0..) |result, i| {
@@ -27,6 +31,7 @@ fn format(
     }
 
     jws.endArray() catch |e| return logAndReturnWriteFailure("End results", e);
+    jws.endObject() catch |e| return logAndReturnWriteFailure("End output", e);
     writer.writeByte('\n') catch |e| return logAndReturnWriteFailure("Newline", e);
     writer.flush() catch |e| return logAndReturnWriteFailure("Flush", e);
 }
@@ -233,6 +238,24 @@ fn logAndReturnWriteFailure(comptime suffix: []const u8, err: anyerror) error{Wr
     return error.WriteFailure;
 }
 
+test "formats successful empty JSON result" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var session = testing.initFakeContext(arena.allocator(), std.testing.io);
+
+    const formatter_instance = JsonFormatter{};
+    var output: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer output.deinit();
+
+    try formatter_instance.formatter.format(.{
+        .results = &.{},
+        .file_store = &session.file_store,
+        .runtime = session.runtime,
+    }, &output.writer);
+
+    try std.testing.expectEqualStrings("{\"status\":\"success\",\"results\":[]}\n", output.written());
+}
+
 test "formats linter JSON" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -292,6 +315,7 @@ test "formats linter JSON" {
         .results = results,
         .file_store = &session.file_store,
         .runtime = session.runtime,
+        .status = .failure,
     }, &output.writer);
 
     const expected_file_path = try std.json.Stringify.valueAlloc(
@@ -300,7 +324,7 @@ test "formats linter JSON" {
         .{},
     );
     const expected = try arena.allocator().print(
-        "[{{\"filePath\":{s},\"messages\":[{{\"ruleId\":\"sample_rule\",\"severity\":1,\"message\":\"Sample warning\",\"line\":1,\"column\":7,\"endLine\":1,\"endColumn\":10,\"fix\":{{\"range\":[6,9],\"text\":\"good\"}}}}],\"suppressedMessages\":[{{\"ruleId\":\"sample_rule\",\"severity\":2,\"message\":\"Suppressed error\",\"line\":1,\"column\":1,\"endLine\":1,\"endColumn\":6}}],\"errorCount\":0,\"fatalErrorCount\":0,\"warningCount\":1,\"fixableErrorCount\":0,\"fixableWarningCount\":1}}]\n",
+        "{{\"status\":\"failure\",\"results\":[{{\"filePath\":{s},\"messages\":[{{\"ruleId\":\"sample_rule\",\"severity\":1,\"message\":\"Sample warning\",\"line\":1,\"column\":7,\"endLine\":1,\"endColumn\":10,\"fix\":{{\"range\":[6,9],\"text\":\"good\"}}}}],\"suppressedMessages\":[{{\"ruleId\":\"sample_rule\",\"severity\":2,\"message\":\"Suppressed error\",\"line\":1,\"column\":1,\"endLine\":1,\"endColumn\":6}}],\"errorCount\":0,\"fatalErrorCount\":0,\"warningCount\":1,\"fixableErrorCount\":0,\"fixableWarningCount\":1}}]}}\n",
         .{expected_file_path},
     );
     try std.testing.expectEqualStrings(expected, output.written());
