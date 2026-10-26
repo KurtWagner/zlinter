@@ -1064,6 +1064,10 @@ Requiring every tag to be listed forces the author to decide how each value shou
 This keeps control flow intentional, improves readability, and prevents silently mis-handling
 newly added enum values.
 
+A switch whose only prong is `inline else` is allowed. Zig generates a separate version of the
+same code for each tag, with that tag known at compile time. New tags intentionally
+use that same body. Switches with explicit cases followed by `inline else` are still reported.
+
 **Good:**
 
 ```zig

@@ -9,6 +9,10 @@
 //! This keeps control flow intentional, improves readability, and prevents silently mis-handling
 //! newly added enum values.
 //!
+//! A switch whose only prong is `inline else` is allowed. Zig generates a separate version of the
+//! same code for each tag, with that tag known at compile time. New tags intentionally
+//! use that same body. Switches with explicit cases followed by `inline else` are still reported.
+//!
 //! **Good:**
 //!
 //! ```zig
@@ -87,6 +91,12 @@ fn run(
         _ = connections;
 
         const switch_info = tree.fullSwitch(node) orelse continue :nodes;
+
+        if (switch_info.ast.cases.len == 1) {
+            const switch_case = tree.fullSwitchCase(switch_info.ast.cases[0]).?;
+            if (switch_case.ast.values.len == 0 and switch_case.inline_token != null)
+                continue :nodes;
+        }
 
         const switch_expr_type = try context.resolveTypeOfNode(
             doc,
@@ -366,6 +376,54 @@ test "require_exhaustive_enum_switch" {
                 .message = "Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .d)",
             },
         },
+    );
+}
+
+test "require_exhaustive_enum_switch reports sole ordinary else" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const State = enum { idle, running, stopped };
+        \\pub fn handle(state: State) void {
+        \\    switch (state) {
+        \\        else => {},
+        \\    }
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{.{
+            .rule_id = "require_exhaustive_enum_switch",
+            .severity = .warning,
+            .slice = "switch",
+            .message = "Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .idle, .running, .stopped)",
+        }},
+    );
+}
+
+test "require_exhaustive_enum_switch checks switches nested in sole inline else" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const State = enum { idle, running, stopped };
+        \\pub fn handle(state: State, other: State) void {
+        \\    switch (state) {
+        \\        inline else => |tag| {
+        \\            _ = tag;
+        \\            switch (other) {
+        \\                .idle => {},
+        \\                else => {},
+        \\            }
+        \\        },
+        \\    }
+        \\}
+    ,
+        .{},
+        Config{},
+        &.{.{
+            .rule_id = "require_exhaustive_enum_switch",
+            .severity = .warning,
+            .slice = "switch",
+            .message = "Enum switch over exhaustive enum must list every tag explicitly; else is not allowed (missing: .running, .stopped)",
+        }},
     );
 }
 
