@@ -1,5 +1,6 @@
 const default_formatter = zlinter.formatters.DefaultFormatter{};
 const json_formatter = zlinter.formatters.JsonFormatter{};
+const zon_formatter = zlinter.formatters.ZonFormatter{};
 
 pub fn run(
     runtime: *const LintRuntime,
@@ -120,6 +121,7 @@ fn runLint(
             switch (args.format) {
                 .default => &default_formatter.formatter,
                 .json => &json_formatter.formatter,
+                .zon => &zon_formatter.formatter,
             },
             args.quiet,
             args.max_warnings,
