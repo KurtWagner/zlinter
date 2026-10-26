@@ -61,3 +61,13 @@ pub fn references() void {
         else => {},
     }
 }
+
+pub fn generic_dispatch(state: State) []const u8 {
+    return switch (state) {
+        inline else => |tag| stateName(tag),
+    };
+}
+
+fn stateName(comptime state: State) []const u8 {
+    return @tagName(state);
+}
