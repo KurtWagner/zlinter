@@ -1,5 +1,15 @@
 //! Linter results
 
+/// Overall outcome of a lint run, independent of process exit-code overrides.
+pub const LintStatus = enum {
+    /// No active warnings or errors.
+    success,
+    /// Active warnings, without errors or an exceeded warning limit.
+    warning,
+    /// Active errors or an exceeded warning limit.
+    failure,
+};
+
 /// Result from running a lint rule.
 pub const LintResult = struct {
     const Self = @This();

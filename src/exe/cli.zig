@@ -81,7 +81,7 @@ pub fn main(init: std.process.Init) !u8 {
             lint_files,
         ),
     };
-    return exit_code.int();
+    return if (args.exit_zero and exit_code == .lint_error) ExitCode.success.int() else exit_code.int();
 }
 
 fn resolveFilesToLint(

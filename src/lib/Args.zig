@@ -24,6 +24,10 @@ quiet: bool,
 /// of warnings are reported.
 max_warnings: ?u32,
 
+/// Return exit code zero even when linting fails. Useful if used in conjunction
+/// with JSON formatting.
+exit_zero: bool,
+
 /// Only lint or fix (if using the fix argument) the given files. These
 /// are owned by the struct and should be freed by calling deinit. This will
 /// replace any file resolution provided by the build file.
@@ -153,6 +157,7 @@ pub fn allocParse(
 
     var fix: bool = false;
     var quiet: bool = false;
+    var exit_zero: bool = false;
     var max_warnings: ?u32 = null;
     var format: @FieldType(Args, "format") = .default;
     var verbose: bool = false;
@@ -200,6 +205,7 @@ pub fn allocParse(
         parsing,
         fix_arg,
         quiet_arg,
+        exit_zero_arg,
         verbose_arg,
         help_arg,
         zig_exe_arg,
@@ -227,6 +233,7 @@ pub fn allocParse(
         .{ "", .parsing },
         .{ "--fix", .fix_arg },
         .{ "--quiet", .quiet_arg },
+        .{ "--exit-zero", .exit_zero_arg },
         .{ "--verbose", .verbose_arg },
         .{ "--rule", .rule_arg },
         .{ "--include", .include_path_arg },
@@ -443,6 +450,10 @@ pub fn allocParse(
             quiet = true;
             continue :state State.parsing;
         },
+        .exit_zero_arg => {
+            exit_zero = true;
+            continue :state State.parsing;
+        },
         .verbose_arg => {
             verbose = true;
             continue :state State.parsing;
@@ -486,6 +497,7 @@ pub fn allocParse(
         .fix = fix,
         .quiet = quiet,
         .max_warnings = max_warnings,
+        .exit_zero = exit_zero,
         .include_paths = if (include_paths.items.len > 0) try include_paths.toOwnedSlice(gpa) else null,
         .build_include_paths = if (build_include_paths.items.len > 0) try build_include_paths.toOwnedSlice(gpa) else null,
         .filter_paths = if (filter_paths.items.len > 0) try filter_paths.toOwnedSlice(gpa) else null,
@@ -512,6 +524,7 @@ pub fn printHelp(printer: *rendering.Printer) void {
         .{ "--filter", "Limit linting to the specified resolved paths" },
         .{ "--format", "Set output format: default or json" },
         .{ "--quiet", "Only report errors (not warnings)" },
+        .{ "--exit-zero", "Return exit code zero even when linting fails" },
         .{ "--max-warnings", "Fail if there are more than this number of warnings" },
         .{ "--fix", "Automatically fix some issues (only use with source control)" },
         .{ "--fix-passes", std.fmt.comptimePrint("Repeat fix this many times or until no more fixes are applied (Default {d})", .{default_fix_passes}) },
@@ -521,7 +534,7 @@ pub fn printHelp(printer: *rendering.Printer) void {
     inline for (0..flags.len) |i| width = @max(flags[i][0].len, width);
 
     printer.print(.out, "{s}Usage:{s} ", .{ printer.tty.ansiOrEmpty(&.{ .underline, .bold }), printer.tty.ansiOrEmpty(&.{.reset}) });
-    printer.print(.out, "zig build <lint step> -- [--include <path>...] [--exclude <path>...] [--filter <path>...] [--rule <name>...] [--format <default|json>] [--fix] [--quiet] [--max-warnings <u32>]\n\n", .{});
+    printer.print(.out, "zig build <lint step> -- [--include <path>...] [--exclude <path>...] [--filter <path>...] [--rule <name>...] [--format <default|json>] [--fix] [--quiet] [--max-warnings <u32>] [--exit-zero]\n\n", .{});
     printer.print(.out, "{s}Options:{s}\n", .{ printer.tty.ansiOrEmpty(&.{ .underline, .bold }), printer.tty.ansiOrEmpty(&.{.reset}) });
     for (flags) |tuple|
         printer.print(
@@ -577,6 +590,20 @@ test "allocParse with quiet arg" {
 
     try std.testing.expectEqualDeep(testing.expected(.{
         .quiet = true,
+    }), args);
+}
+
+test "allocParse with exit-zero arg" {
+    const args = try allocParse(
+        testing.cliArgs(&.{ "--format", "json", "--exit-zero" }),
+        &.{},
+        std.testing.allocator,
+    );
+    defer args.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualDeep(testing.expected(.{
+        .format = .json,
+        .exit_zero = true,
     }), args);
 }
 
@@ -1197,6 +1224,7 @@ pub inline fn testDefault() Args {
         .fix = false,
         .quiet = false,
         .max_warnings = null,
+        .exit_zero = false,
         .include_paths = null,
         .build_include_paths = null,
         .filter_paths = null,

@@ -343,6 +343,12 @@ fn runFormatter(
         .file_store = &session.file_store,
         .runtime = runtime,
         .tty = output_tty,
+        .status = if (run_result.exit_code != .success)
+            .failure
+        else if (warning_count > 0)
+            .warning
+        else
+            .success,
         .min_severity = if (quiet) .@"error" else .warning,
     }, output_writer);
 
