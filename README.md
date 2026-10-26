@@ -214,30 +214,20 @@ Alternatively, take a look at <https://github.com/KurtWagner/zlinter-custom-rule
 
 Formatters control how lint results are printed out.
 
-zlinter ships with the built in
-[`DefaultFormatter`](./src/lib/formatters/DefaultFormatter.zig) for human
-readable terminal output and
-[`JsonFormatter`](./src/lib/formatters/JsonFormatter.zig) for tooling
+zlinter has a built in:
+
+1. [`DefaultFormatter`](./src/lib/formatters/DefaultFormatter.zig) for human
+readable terminal output, and
+2. [`JsonFormatter`](./src/lib/formatters/JsonFormatter.zig) (`--format json`) + [`ZonFormatter`](./src/lib/formatters/ZonFormatter.zig) (`--format zon`) for tooling
 integrations.
 
-That said, there are plenty of reasons someone may want to add another
-formatter, for example ZON or XML output for other tools to consume.
-If that is something you need, contributions in this area are very welcome.
-
-Use `--format json` to emit structured JSON. The output is a top-level object with `status`
-and a `results` array of file result objects with `filePath`, `messages`, `suppressedMessages`,
-`errorCount`, `fatalErrorCount`, `warningCount`, `fixableErrorCount`, and
-`fixableWarningCount`. Diagnostic messages include 1-based
-`line`, `column`, `endLine`, and `endColumn` fields. End positions are
-exclusive. Fixes include zero-based, end-exclusive byte `range` values and replacement `text`.
-
-The `status` is `success` when there are no active warnings or errors,
+In ZON and JSON outputs, the `status` is `success` when there are no active warnings or errors,
 `warning` when warnings are present but the run passes, and `failure` when
 errors are present or `--max-warnings` is exceeded. Suppressed diagnostics
 do not affect the status. `--quiet` hides warnings without changing the status.
 
-Use `zig build lint -- --format json --exit-zero` to return process exit code `0`
-even when linting fails, while keeping the actual status in the JSON. This
+Use `--exit-zero` (e.g., `zig build lint -- --format json --exit-zero`) to return process exit code `0`
+even when linting fails, while keeping the actual status in the JSON or ZON. This
 prevents `zig build` failure output from interfering with JSON consumers.
 
 Tool errors, argument parsing errors, and build failures still return nonzero exit codes.
@@ -249,7 +239,8 @@ the supplied writer.
 
 If you are interested in contributing a formatter, the existing
 [`DefaultFormatter`](./src/lib/formatters/DefaultFormatter.zig) is the best
-place to start.
+place to start for terminal output. For structured output, see `JsonFormatter`
+and `ZonFormatter`, which use Zig's JSON and ZON writers directly.
 
 ## Configuration
 
@@ -379,16 +370,16 @@ If you omit `zlinter-enable`, all lines until EOF will be disabled.
 ### Command-Line Arguments
 
 ```shell
-zig build lint -- [--include <path> ...] [--exclude <path> ...] [--filter <path> ...] [--rule <name> ...] [--format <default|json>] [--fix] [--quiet] [--max-warnings <u32>] [--exit-zero]
+zig build lint -- [--include <path> ...] [--exclude <path> ...] [--filter <path> ...] [--rule <name> ...] [--format <default|json|zon>] [--fix] [--quiet] [--max-warnings <u32>] [--exit-zero]
 ```
 
 - `--include` run the linter on these paths ignoring the includes and excludes defined in the `build.zig`, forcing these paths to be resolved and linted (if they exist).
 - `--exclude` exclude these paths from linting. This argument will be used in conjunction with the excludes defined in the `build.zig` unless used with `--include`.
 - `--filter` used to filter the run to a specific set of already resolved paths. Unlike `--include`, this leaves the includes and excludes defined in the `build.zig` as is.
-- `--format` set output format. Supported values are `default` and `json`.
+- `--format` set output format. Supported values are `default`, `json`, and `zon`.
 - `--quiet` only report errors (not warnings).
 - `--max-warnings` fail if there are more than this number of warnings.
-- `--exit-zero` return process exit code `0` even when linting fails; JSON retains the actual lint status.
+- `--exit-zero` return process exit code `0` even when linting fails; JSON and ZON retain the actual lint status.
 - `--fix` used to automatically fix some issues (e.g., removal of unused container declarations) - **Only use this feature if you use source control as it can result in loss of code!**
 
 For example

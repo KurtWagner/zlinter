@@ -24,7 +24,7 @@ fn format(
     jws.beginArray() catch |e| return logAndReturnWriteFailure("Begin results", e);
 
     for (input.results, 0..) |result, i| {
-        if (hasEarlierFileResult(input.results[0..i], result.file_id)) continue;
+        if (common.hasEarlierFileResult(input.results[0..i], result.file_id)) continue;
 
         writeFileResult(input, result.file_id, &jws) catch |e|
             return logAndReturnWriteFailure("File result", e);
@@ -34,12 +34,6 @@ fn format(
     jws.endObject() catch |e| return logAndReturnWriteFailure("End output", e);
     writer.writeByte('\n') catch |e| return logAndReturnWriteFailure("Newline", e);
     writer.flush() catch |e| return logAndReturnWriteFailure("Flush", e);
-}
-
-fn hasEarlierFileResult(results: []const zlinter.results.LintResult, file_id: FileId) bool {
-    for (results) |result|
-        if (result.file_id == file_id) return true;
-    return false;
 }
 
 fn writeFileResult(
@@ -60,7 +54,7 @@ fn writeFileResult(
         if (result.file_id != file_id) continue;
         problems: for (result.problems) |problem| {
             if (problem.disabled_by_comment) continue :problems;
-            if (@backingInt(problem.severity) < @backingInt(input.min_severity)) continue :problems;
+            if (!common.isVisible(input, problem)) continue :problems;
             try writeProblem(input, file_id, problem, jws);
         }
     }
@@ -72,7 +66,7 @@ fn writeFileResult(
         if (result.file_id != file_id) continue :suppressed_messages;
         suppressed_problems: for (result.problems) |problem| {
             if (!problem.disabled_by_comment) continue :suppressed_problems;
-            if (@backingInt(problem.severity) < @backingInt(input.min_severity)) continue :suppressed_problems;
+            if (!common.isVisible(input, problem)) continue :suppressed_problems;
             try writeProblem(input, file_id, problem, jws);
         }
     }
@@ -115,7 +109,7 @@ fn writeProblem(
     try jws.write(problem.rule_id);
 
     try jws.objectField("severity");
-    try jws.write(numericSeverity(problem.severity));
+    try jws.write(common.numericSeverity(problem.severity));
 
     try jws.objectField("message");
     try jws.write(problem.message);
@@ -132,7 +126,7 @@ fn writeProblem(
     try jws.objectField("endColumn");
     try jws.write(problem_range.end.column + 1);
 
-    if (isFatal(problem)) {
+    if (common.isFatal(problem)) {
         try jws.objectField("fatal");
         try jws.write(true);
     }
@@ -185,52 +179,21 @@ fn writeProblem(
     try jws.endObject();
 }
 
-const Counts = struct {
-    error_count: u32 = 0,
-    fatal_error_count: u32 = 0,
-    warning_count: u32 = 0,
-    fixable_error_count: u32 = 0,
-    fixable_warning_count: u32 = 0,
-};
-
-fn countFileProblems(input: Formatter.FormatInput, file_id: FileId) Counts {
-    var counts: Counts = .{};
+fn countFileProblems(input: Formatter.FormatInput, file_id: FileId) common.Counts {
+    var counts: common.Counts = .{};
 
     results: for (input.results) |result| {
         if (result.file_id != file_id) continue :results;
 
         problems: for (result.problems) |problem| {
             if (problem.disabled_by_comment) continue :problems;
-            if (@backingInt(problem.severity) < @backingInt(input.min_severity)) continue :problems;
+            if (!common.isVisible(input, problem)) continue :problems;
 
-            switch (problem.severity) {
-                .off => {},
-                .@"error" => {
-                    counts.error_count += 1;
-                    if (isFatal(problem)) counts.fatal_error_count += 1;
-                    if (problem.fix != null) counts.fixable_error_count += 1;
-                },
-                .warning => {
-                    counts.warning_count += 1;
-                    if (problem.fix != null) counts.fixable_warning_count += 1;
-                },
-            }
+            counts.add(problem);
         }
     }
 
     return counts;
-}
-
-fn numericSeverity(severity: zlinter.rules.LintProblemSeverity) u8 {
-    return switch (severity) {
-        .off => 0,
-        .warning => 1,
-        .@"error" => 2,
-    };
-}
-
-fn isFatal(problem: zlinter.results.LintProblem) bool {
-    return std.mem.eql(u8, problem.rule_id, "syntax_error");
 }
 
 fn logAndReturnWriteFailure(comptime suffix: []const u8, err: anyerror) error{WriteFailure} {
@@ -330,6 +293,7 @@ test "formats linter JSON" {
     try std.testing.expectEqualStrings(expected, output.written());
 }
 
+const common = @import("common.zig");
 const std = @import("std");
 const testing = @import("../testing.zig");
 const zlinter = @import("../zlinter.zig");

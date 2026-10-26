@@ -3,6 +3,7 @@
 pub const DefaultFormatter = @import("./formatters/DefaultFormatter.zig");
 pub const Formatter = @import("./formatters/Formatter.zig");
 pub const JsonFormatter = @import("./formatters/JsonFormatter.zig");
+pub const ZonFormatter = @import("./formatters/ZonFormatter.zig");
 
 const std = @import("std");
 
