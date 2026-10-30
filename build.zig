@@ -424,15 +424,17 @@ pub fn build(b: *std.Build) void {
     // parent build cannot observe the nested build graph, so use
     // `cd integration_tests && zig build test --watch` when watching
     // integration test inputs.
-    const run_integration_tests = b.addSystemCommand(&.{ b.graph.zig_exe, "build", "test" });
+    const run_cli_integration_tests = b.addSystemCommand(&.{ b.graph.zig_exe, "build", "cli-test" });
     if (test_focus_on_rule) |r| {
-        run_integration_tests.addArg(b.fmt("-Dtest_focus_on_rule={s}", .{r}));
+        run_cli_integration_tests.addArg(b.fmt("-Dtest_focus_on_rule={s}", .{r}));
     }
-    run_integration_tests.setCwd(b.path("./integration_tests"));
-    run_integration_tests.has_side_effects = true;
+    run_cli_integration_tests.setCwd(b.path("./integration_tests"));
+    run_cli_integration_tests.has_side_effects = true;
 
     const integration_test_step = b.step("integration-test", "Run integration tests");
-    integration_test_step.dependOn(&run_integration_tests.step);
+    const cli_integration_test_step = b.step("cli-integration-test", "Run CLI integration tests");
+    cli_integration_test_step.dependOn(&run_cli_integration_tests.step);
+    integration_test_step.dependOn(cli_integration_test_step);
 
     const unit_test_step = b.step("unit-test", "Run unit tests");
     if (test_coverage orelse false) {
@@ -545,10 +547,10 @@ pub fn build(b: *std.Build) void {
         var exclude = std.ArrayList(LintExcludeSource).empty;
 
         include.append(b.allocator, .{ .dir_path = b.path("./") }) catch @panic("OOM");
-        exclude.append(b.allocator, .{ .dir_path = b.path("integration_tests/test_cases") }) catch @panic("OOM");
-        exclude.append(b.allocator, .{ .file_path = b.path("integration_tests/src/test_case_references.zig") }) catch @panic("OOM");
-        exclude.append(b.allocator, .{ .dir_path = b.path("integration_tests/sub_module_a_src") }) catch @panic("OOM");
-        exclude.append(b.allocator, .{ .dir_path = b.path("integration_tests/sub_module_b_src") }) catch @panic("OOM");
+        exclude.append(b.allocator, .{ .dir_path = b.path("integration_tests/cli/test_cases") }) catch @panic("OOM");
+        exclude.append(b.allocator, .{ .file_path = b.path("integration_tests/cli/src/test_case_references.zig") }) catch @panic("OOM");
+        exclude.append(b.allocator, .{ .dir_path = b.path("integration_tests/cli/sub_module_a_src") }) catch @panic("OOM");
+        exclude.append(b.allocator, .{ .dir_path = b.path("integration_tests/cli/sub_module_b_src") }) catch @panic("OOM");
 
         // TODO: Fix this false positive in declaration naming rule.
         // zlinter-disable-next-line declaration_naming - this looks like a false positive based on use of @typeInfo it things its a type?

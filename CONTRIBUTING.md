@@ -30,6 +30,15 @@ Integration tests:
 zig build integration-test
 ```
 
+CLI integration tests only:
+
+```shell
+zig build cli-integration-test
+```
+
+The CLI runner and fixtures live in `integration_tests/cli/`, with shared build
+files and fixture dependencies in `integration_tests/`.
+
 All tests:
 
 ```shell

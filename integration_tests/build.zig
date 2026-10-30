@@ -8,9 +8,11 @@ pub fn build(b: *std.Build) !void {
     const io = b.graph.io;
 
     const test_focus_on_rule = b.option([]const u8, "test_focus_on_rule", "Only run tests for this rule");
-    const test_step = b.step("test", "Run tests");
+    const test_step = b.step("test", "Run integration tests");
+    const cli_test_step = b.step("cli-test", "Run CLI integration tests");
+    test_step.dependOn(cli_test_step);
 
-    const test_cases_path = "test_cases/";
+    const test_cases_path = "cli/test_cases/";
     var test_cases_dir = try std.Io.Dir.cwd().openDir(
         io,
         test_cases_path,
@@ -24,24 +26,24 @@ pub fn build(b: *std.Build) !void {
     createCompiledUnits(b, target, optimize);
 
     const test_runner_module = b.createModule(.{
-        .root_source_file = b.path("src/test_runner.zig"),
+        .root_source_file = b.path("cli/src/test_runner.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     const test_runner_exe = b.addExecutable(.{
-        .name = "integration_tests",
+        .name = "cli_integration_tests",
         .root_module = test_runner_module,
     });
 
     const common_tests = b.addTest(.{
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/common.zig"),
+            .root_source_file = b.path("cli/src/common.zig"),
             .target = target,
             .optimize = optimize,
         }),
     });
-    test_step.dependOn(&b.addRunArtifact(common_tests).step);
+    cli_test_step.dependOn(&b.addRunArtifact(common_tests).step);
 
     var run_integration_test_steps: std.ArrayList(*std.Build.Step) = .empty;
     defer run_integration_test_steps.deinit(b.allocator);
@@ -128,7 +130,7 @@ pub fn build(b: *std.Build) !void {
     }
 
     for (run_integration_test_steps.items) |run_integration_test_step|
-        test_step.dependOn(run_integration_test_step);
+        cli_test_step.dependOn(run_integration_test_step);
 
     // zig build lint -
     const lint_cmd = b.step("lint", "Lint source code.");
@@ -138,7 +140,7 @@ pub fn build(b: *std.Build) !void {
         inline for (@typeInfo(zlinter.BuiltinLintRule).@"enum".field_values) |field_value|
             builder.addRule(.{ .builtin = @fromBackingInt(@intCast(field_value)) }, .{});
         builder.setCompileUnits(&.{.all});
-        builder.addCustomRule("no_cats", b.path("src/no_cats.zig"), .{});
+        builder.addCustomRule("no_cats", b.path("cli/src/no_cats.zig"), .{});
         builder.addCustomRule("no_dogs", no_dogs_custom_rule.path("rules/no_dogs.zig"), .{});
         break :step builder.build();
     });
@@ -159,11 +161,11 @@ fn createCompiledUnits(
     optimize: std.lang.OptimizeMode,
 ) void {
     const sub_module_a = b.createModule(.{
-        .root_source_file = b.path("sub_module_a_src/root.zig"),
+        .root_source_file = b.path("cli/sub_module_a_src/root.zig"),
     });
 
     const sub_module_b = b.createModule(.{
-        .root_source_file = b.path("sub_module_b_src/root.zig"),
+        .root_source_file = b.path("cli/sub_module_b_src/root.zig"),
     });
 
     const fake_install_cmd = b.step(
@@ -176,11 +178,11 @@ fn createCompiledUnits(
     // for "sub_module", allowing tests to cover multiple implementations and
     // dependency graphs of compiled units.
     for ([_][]const u8{
-        "test_cases/declaration_naming/sub_module_resolution/sub_module_resolution.input.zig",
-        "test_cases/field_naming/sub_module_resolution/sub_module_resolution.input.zig",
-        "test_cases/function_naming/sub_module_resolution/sub_module_resolution.input.zig",
-        "test_cases/no_deprecated/sub_module_resolution/sub_module_resolution.input.zig",
-        "test_cases/require_exhaustive_enum_switch/ambiguous_enum_candidates/ambiguous_enum_candidates.input.zig",
+        "cli/test_cases/declaration_naming/sub_module_resolution/sub_module_resolution.input.zig",
+        "cli/test_cases/field_naming/sub_module_resolution/sub_module_resolution.input.zig",
+        "cli/test_cases/function_naming/sub_module_resolution/sub_module_resolution.input.zig",
+        "cli/test_cases/no_deprecated/sub_module_resolution/sub_module_resolution.input.zig",
+        "cli/test_cases/require_exhaustive_enum_switch/ambiguous_enum_candidates/ambiguous_enum_candidates.input.zig",
     }) |rel_path| {
         const path = b.path(rel_path);
 
