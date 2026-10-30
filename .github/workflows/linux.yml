@@ -7,13 +7,13 @@ on:
     paths:
       - '**.zig'
       - '**.zon'
-      - 'integration_tests/test_cases/**'
+      - 'integration_tests/cli/test_cases/**'
       - '.github/workflows/linux.yml'
   pull_request:
     paths:
       - '**.zig'
       - '**.zon'
-      - 'integration_tests/test_cases/**'
+      - 'integration_tests/cli/test_cases/**'
       - '.github/workflows/linux.yml'
 jobs:
   test:

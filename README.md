@@ -189,7 +189,7 @@ It can sometimes require a multiple runs to completely resolve all fixable issue
 
 ## Custom rules
 
-Bespoke rules can be added to your project. For example, maybe you really don't like cats, and refuse to let any `cats` exist in any identifier. See example rule [`no_cats`](./integration_tests/src/no_cats.zig), which is then integrated like builtin rules in your `build.zig`:
+Bespoke rules can be added to your project. For example, maybe you really don't like cats, and refuse to let any `cats` exist in any identifier. See example rule [`no_cats`](./integration_tests/cli/src/no_cats.zig), which is then integrated like builtin rules in your `build.zig`:
 
 ```zig
 builder.addRule(.{
