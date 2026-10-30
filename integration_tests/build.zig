@@ -34,6 +34,15 @@ pub fn build(b: *std.Build) !void {
         .root_module = test_runner_module,
     });
 
+    const common_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/common.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    test_step.dependOn(&b.addRunArtifact(common_tests).step);
+
     var run_integration_test_steps: std.ArrayList(*std.Build.Step) = .empty;
     defer run_integration_test_steps.deinit(b.allocator);
 
@@ -44,7 +53,8 @@ pub fn build(b: *std.Build) !void {
             u8,
             item.path,
             input_zon_suffix,
-        ) and !std.mem.eql(u8, item.basename, config_zon_name);
+        ) and !std.mem.eql(u8, item.basename, config_zon_name) and
+            !std.mem.endsWith(u8, item.path, ".lint_expected.stdout.zon");
 
         const input_suffix = if (is_zon_input)
             input_zon_suffix
@@ -94,6 +104,8 @@ pub fn build(b: *std.Build) !void {
             ".lint_expected.stdout",
             ".fix_expected.stdout",
             ".fix_expected.zig",
+            ".lint_expected.stdout.json",
+            ".lint_expected.stdout.zon",
         }) |suffix| {
             const filename = std.mem.print(
                 &filename_buffer,

@@ -1,0 +1,106 @@
+{
+  "status": "failure",
+  "results": [
+    {
+      "filePath": "test_cases/field_naming/field_naming/field_naming.input.zig",
+      "messages": [
+        {
+          "ruleId": "field_naming",
+          "severity": 2,
+          "message": "Struct fields should be snake_case",
+          "line": 7,
+          "column": 1,
+          "endLine": 7,
+          "endColumn": 12
+        },
+        {
+          "ruleId": "field_naming",
+          "severity": 2,
+          "message": "Struct fields should be snake_case",
+          "line": 8,
+          "column": 1,
+          "endLine": 8,
+          "endColumn": 16
+        },
+        {
+          "ruleId": "field_naming",
+          "severity": 2,
+          "message": "Enum fields should be snake_case",
+          "line": 4,
+          "column": 5,
+          "endLine": 4,
+          "endColumn": 10
+        },
+        {
+          "ruleId": "field_naming",
+          "severity": 2,
+          "message": "Enum fields should be snake_case",
+          "line": 5,
+          "column": 5,
+          "endLine": 5,
+          "endColumn": 10
+        },
+        {
+          "ruleId": "field_naming",
+          "severity": 2,
+          "message": "Union fields should be snake_case",
+          "line": 10,
+          "column": 5,
+          "endLine": 10,
+          "endColumn": 10
+        },
+        {
+          "ruleId": "field_naming",
+          "severity": 2,
+          "message": "Union fields should be snake_case",
+          "line": 11,
+          "column": 5,
+          "endLine": 11,
+          "endColumn": 14
+        },
+        {
+          "ruleId": "field_naming",
+          "severity": 2,
+          "message": "Error fields should be TitleCase",
+          "line": 18,
+          "column": 5,
+          "endLine": 18,
+          "endColumn": 17
+        },
+        {
+          "ruleId": "field_naming",
+          "severity": 2,
+          "message": "Error fields should be TitleCase",
+          "line": 17,
+          "column": 5,
+          "endLine": 17,
+          "endColumn": 15
+        },
+        {
+          "ruleId": "field_naming",
+          "severity": 2,
+          "message": "Struct fields should be snake_case",
+          "line": 23,
+          "column": 5,
+          "endLine": 23,
+          "endColumn": 16
+        },
+        {
+          "ruleId": "field_naming",
+          "severity": 2,
+          "message": "Struct fields should be snake_case",
+          "line": 24,
+          "column": 5,
+          "endLine": 24,
+          "endColumn": 16
+        }
+      ],
+      "suppressedMessages": [],
+      "errorCount": 10,
+      "fatalErrorCount": 0,
+      "warningCount": 0,
+      "fixableErrorCount": 0,
+      "fixableWarningCount": 0
+    }
+  ]
+}

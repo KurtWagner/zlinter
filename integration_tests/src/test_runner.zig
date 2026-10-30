@@ -10,6 +10,8 @@ const input_zon_suffix = ".zon";
 const lint_output_suffix = ".lint_expected.stdout";
 const fix_zig_output_suffix = ".fix_expected.zig";
 const fix_stdout_output_suffix = ".fix_expected.stdout";
+const json_stdout_output_suffix = ".lint_expected.stdout.json";
+const zon_stdout_output_suffix = ".lint_expected.stdout.zon";
 
 pub fn main(init: std.process.Init) !void {
     const arena = init.arena.allocator();
@@ -94,8 +96,18 @@ fn runTest(
 ) !void {
     var input_file: ?[:0]const u8 = null;
     var lint_stdout_expected_file: ?[:0]const u8 = null;
+
+    // If set then we run auto fix and check that it results in the contents of this file
     var fix_zig_expected_file: ?[:0]const u8 = null;
+
+    // If set then we run auto fix and check that its stdout equals contents of this file
     var fix_stdout_expected_file: ?[:0]const u8 = null;
+
+    // If set then we compare JSON formatter output with the parsed contents of this file
+    var json_stdout_expected_file: ?[:0]const u8 = null;
+
+    // If set then we compare ZON formatter output with the parsed contents of this file
+    var zon_stdout_expected_file: ?[:0]const u8 = null;
 
     const zig_bin = args[1];
     const rule_name = args[2];
@@ -103,24 +115,30 @@ fn runTest(
     // TODO: Fix require_braces false positive, this requires braces but rule thinks it doesnt
     // zlinter-disable-next-line require_braces - false positive
     for (args[4..]) |arg| {
-        if (std.mem.endsWith(u8, arg, input_zig_suffix) or
-            std.mem.endsWith(u8, arg, input_zon_suffix))
-            input_file = arg
-        else if (std.mem.endsWith(u8, arg, lint_output_suffix))
+        if (std.mem.endsWith(u8, arg, lint_output_suffix))
             lint_stdout_expected_file = arg
         else if (std.mem.endsWith(u8, arg, fix_zig_output_suffix))
             fix_zig_expected_file = arg
         else if (std.mem.endsWith(u8, arg, fix_stdout_output_suffix))
             fix_stdout_expected_file = arg
+        else if (std.mem.endsWith(u8, arg, json_stdout_output_suffix))
+            json_stdout_expected_file = arg
+        else if (std.mem.endsWith(u8, arg, zon_stdout_output_suffix))
+            zon_stdout_expected_file = arg
+        else if (std.mem.endsWith(u8, arg, input_zig_suffix) or
+            std.mem.endsWith(u8, arg, input_zon_suffix))
+            input_file = arg
         else
             std.debug.panic("Unable to handle input file: {s}", .{arg});
     }
+
+    var lint_args: std.ArrayList([]const u8) = try .initCapacity(arena, 32);
 
     // --------------------------------------------------------------------
     // Lint command "zig build lint -- <file>.zig"
     // --------------------------------------------------------------------
     {
-        var lint_args: std.ArrayList([]const u8) = try .initCapacity(arena, 32);
+        lint_args.clearRetainingCapacity();
         lint_args.appendSliceAssumeCapacity(&.{
             zig_bin,
             "build",
@@ -182,7 +200,7 @@ fn runTest(
             ".zig-cache" ++ std.Io.Dir.path.sep_str ++ "tmp" ++ std.Io.Dir.path.sep_str ++ "zlinter.zon",
         );
 
-        var lint_args: std.ArrayList([]const u8) = try .initCapacity(arena, 32);
+        lint_args.clearRetainingCapacity();
         lint_args.appendSliceAssumeCapacity(&.{
             zig_bin,
             "build",
@@ -241,6 +259,132 @@ fn runTest(
             return e;
         };
     }
+
+    // --------------------------------------------------------------------
+    // Lint command "zig build lint -- --format json --exit-zero ..."
+    // --------------------------------------------------------------------
+    if (json_stdout_expected_file) |expected_json_file| {
+        lint_args.clearRetainingCapacity();
+        lint_args.appendSliceAssumeCapacity(&.{
+            zig_bin,
+            "build",
+            "lint",
+            "--",
+            "--format",
+            "json",
+            "--exit-zero",
+            "--rule",
+            rule_name,
+            "--include",
+            input_file.?,
+        });
+
+        const lint_output = try runLintCommand(
+            lint_args.items,
+            &environ_map,
+            io,
+            arena,
+        );
+
+        try std.testing.expect(lint_output.term.exited == 0);
+        try expectEqualStringsNormalized(arena, "", lint_output.stderr);
+
+        expectFileContentsEquals(
+            io,
+            stdout,
+            arena,
+            std.Io.Dir.cwd(),
+            expected_json_file,
+            try makePathsRelativeAlloc(io, arena, input_file.?, lint_output.stdout),
+        ) catch |e| {
+            try printWithHeader(stdout, "STDERR:", lint_output.stderr);
+            return e;
+        };
+    }
+
+    // --------------------------------------------------------------------
+    // Lint command "zig build lint -- --format zon --exit-zero ..."
+    // --------------------------------------------------------------------
+    if (zon_stdout_expected_file) |expected_zon_file| {
+        lint_args.clearRetainingCapacity();
+        lint_args.appendSliceAssumeCapacity(&.{
+            zig_bin,
+            "build",
+            "lint",
+            "--",
+            "--format",
+            "zon",
+            "--exit-zero",
+            "--rule",
+            rule_name,
+            "--include",
+            input_file.?,
+        });
+
+        const lint_output = try runLintCommand(
+            lint_args.items,
+            &environ_map,
+            io,
+            arena,
+        );
+
+        try std.testing.expect(lint_output.term.exited == 0);
+        try expectEqualStringsNormalized(arena, "", lint_output.stderr);
+
+        expectFileContentsEquals(
+            io,
+            stdout,
+            arena,
+            std.Io.Dir.cwd(),
+            expected_zon_file,
+            try makePathsRelativeAlloc(io, arena, input_file.?, lint_output.stdout),
+        ) catch |e| {
+            try printWithHeader(stdout, "STDERR:", lint_output.stderr);
+            return e;
+        };
+    }
+}
+
+/// JSON and ZON formatters emit absolute paths, while the default formatter emits
+/// relative paths. Make the serialized input path relative to the working directory
+/// so expected output fixtures work regardless of where the repository is checked out.
+fn makePathsRelativeAlloc(
+    io: std.Io,
+    arena: std.mem.Allocator,
+    input_file: []const u8,
+    output: []const u8,
+) ![]const u8 {
+    const cwd = std.Io.Dir.cwd();
+    const absolute_path = try cwd.realPathFileAlloc(
+        io,
+        input_file,
+        arena,
+    );
+
+    var cwd_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
+    const cwd_path = cwd_buffer[0..try cwd.realPath(io, &cwd_buffer)];
+
+    const relative_path = try std.Io.Dir.path.relative(
+        arena,
+        cwd_path,
+        null,
+        cwd_path,
+        absolute_path,
+    );
+    // Handle windows separators... hopefully.
+    std.mem.replaceScalar(u8, relative_path, std.Io.Dir.path.sep, '/');
+
+    // Replace serialized paths so Windows escaped backslashes are handled too.
+    const serialized_absolute = try std.json.Stringify.valueAlloc(arena, absolute_path, .{});
+    const serialized_relative = try std.json.Stringify.valueAlloc(arena, relative_path, .{});
+
+    return std.mem.replaceOwned(
+        u8,
+        arena,
+        output,
+        serialized_absolute,
+        serialized_relative,
+    );
 }
 
 fn copyFixtureZlinterZonForFix(
@@ -295,6 +439,30 @@ fn expectFileContentsEquals(
             else => return err,
         }
     };
+
+    const format: ?common.Format = if (std.mem.endsWith(u8, file_path, json_stdout_output_suffix))
+        .json
+    else if (std.mem.endsWith(u8, file_path, zon_stdout_output_suffix))
+        .zon
+    else
+        null;
+
+    if (format) |output_format| {
+        // Parse before any text normalization so string escapes retain their meaning.
+        const equal = common.equal(arena, output_format, contents, actual) catch |err| {
+            try printWithHeader(stdout, "Could not compare structured output from:", file_path);
+            try printWithHeader(stdout, "Expected:", contents);
+            try printWithHeader(stdout, "Actual:", actual);
+            return err;
+        };
+        if (!equal) {
+            try printWithHeader(stdout, "Expected contents from:", file_path);
+            try printWithHeader(stdout, "Expected:", contents);
+            try printWithHeader(stdout, "Actual:", actual);
+            return error.TestExpectedEqual;
+        }
+        return;
+    }
 
     const normalized_expected = try normalizeOutputAlloc(contents, arena);
     const normalized_actual = try normalizeOutputAlloc(actual, arena);
@@ -389,4 +557,5 @@ fn runLintCommand(
     );
 }
 
+const common = @import("common.zig");
 const std = @import("std");
