@@ -35,7 +35,6 @@ A **linter** is a tool that automatically checks source code for style issues, b
   - [no_comment_out_code](RULES.md#no_comment_out_code)
   - [no_deprecated](RULES.md#no_deprecated)
   - [no_empty_block](RULES.md#no_empty_block)
-  - [no_hidden_allocations](RULES.md#no_hidden_allocations) (0.14+ only)
   - [no_inferred_error_unions](RULES.md#no_inferred_error_unions)
   - [no_literal_args](RULES.md#no_literal_args)
   - [no_literal_only_bool_expression](RULES.md#no_literal_only_bool_expression)
@@ -47,10 +46,7 @@ A **linter** is a tool that automatically checks source code for style issues, b
   - [no_unused](RULES.md#no_unused)
   - [require_braces](RULES.md#require_braces)
   - [require_doc_comment](RULES.md#require_doc_comment)
-  - [require_errdefer_dealloc](RULES.md#require_errdefer_dealloc) (0.14+ only)
   - [switch_case_ordering](RULES.md#switch_case_ordering)
-
-  > **Note:** `no_hidden_allocations` and `require_errdefer_dealloc` require Zig 0.14+ (ZLS 0.13 type resolution limitations).
 
 - [Configuration](#configuration)
   - [Paths](#configure-paths)

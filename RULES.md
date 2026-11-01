@@ -518,35 +518,6 @@ if (something) {
 
   * **Default:** `.@"error"`
 
-## `no_hidden_allocations`
-
-> Requires Zig 0.14+
-
-Avoid encapsulating hidden heap allocations inside functions without
-requiring the caller to pass an allocator.
-
-The caller should decide where and when to allocate not the callee.
-
-**Config options:**
-
-* `severity`
-
-  * The severity of hidden allocations (off, warning, error).
-
-  * **Default:** `.warning`
-
-* `detect_allocators`
-
-  * What kinds of allocators to detect.
-
-  * **Default:** `&.{ AllocatorKind.page_allocator, AllocatorKind.c_allocator, AllocatorKind.general_purpose_allocator, AllocatorKind.debug_allocator, }`
-
-* `exclude_tests`
-
-  * Skip if found within `test { ... }` block.
-
-  * **Default:** `true`
-
 ## `no_inferred_error_unions`
 
 Disallow using inferred error sets in function return types — always declare them explicitly.
@@ -968,61 +939,6 @@ otherwise simple APIs.
   * The severity when missing doc comments on top of the file (off, warning, error).
 
   * **Default:** `.off`
-
-## `require_errdefer_dealloc`
-
-> Requires Zig 0.14+
-
-> [!WARNING]
-> The `require_errdefer_dealloc` rule is still under testing and development.
-> It may not work as expected and may change without notice.
-
-Ensure that any allocation made within a function that can return an error
-is paired with `errdefer`, unless the resource is already being released in
-a `defer` block.
-
-**Why?**
-
-If a function returns an error, it's signaling a recoverable condition
-within the application's normal control flow. Failing to perform cleanup
-in these cases can lead to memory leaks.
-
-**Caveats:**
-
-* This rule is not exhaustive. It makes a best-effort attempt to detect known
-  object declarations that require cleanup.
-
-* This rule cannot always reliably detect usage of fixed buffer allocators or
-  arenas; however, using `errdefer array.deinit(arena);` in these cases is
-  generally harmless. It will do its best to ignore the most obvious cases.
-
-**Example:**
-
-```zig
-// Bad: On success, returns an owned slice the caller must free; on error, memory is leaked.
-pub fn message(age: u8, allocator: std.mem.Allocator) error{ OutOfMemory, InvalidAge }![]const u8 {
-    var parts = std.ArrayList(u8).init(allocator);
-
-    try parts.appendSlice("You are ");
-    if (age > 18)
-        try parts.appendSlice("an adult")
-    else if (age > 0)
-        try parts.appendSlice("not an adult")
-    else
-        return error.InvalidAge;
-
-    return parts.toOwnedSlice();
-}
-```
-
-
-**Config options:**
-
-* `severity`
-
-  * The severity (off, warning, error).
-
-  * **Default:** `.warning`
 
 ## `switch_case_ordering`
 
