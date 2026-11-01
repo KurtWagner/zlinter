@@ -165,7 +165,7 @@ fn isTestOnlyCondition(tree: Ast, if_statement: Ast.full.If) bool {
 /// The context of all document and rule executions.
 pub const LintContext = struct {
     thread_pool: if (builtin.single_threaded) void else std.Thread.Pool,
-    diagnostics_collection: if (version.zig == .@"0.13") void else zls.DiagnosticsCollection,
+    diagnostics_collection: void,
     intern_pool: zls.analyser.InternPool,
     document_store: zls.DocumentStore,
     gpa: std.mem.Allocator,
@@ -179,9 +179,7 @@ pub const LintContext = struct {
     ) !void {
         self.* = .{
             .gpa = gpa,
-            .diagnostics_collection = if (version.zig == .@"0.13") {
-                // ZLS 0.13 has no diagnostics_collection
-            } else .{ .allocator = gpa },
+            .diagnostics_collection = {},
             .intern_pool = try zls.analyser.InternPool.init(gpa),
             .thread_pool = undefined, // zlinter-disable-current-line no_undefined - set below
             .document_store = undefined, // zlinter-disable-current-line no_undefined - set below
@@ -268,7 +266,6 @@ pub const LintContext = struct {
     }
 
     pub fn deinit(self: *LintContext) void {
-        if (version.zig != .@"0.13") self.diagnostics_collection.deinit();
         self.intern_pool.deinit(self.gpa);
         self.document_store.deinit();
         self.analyser.deinit();
@@ -598,9 +595,9 @@ pub const LintContext = struct {
                     .@"0.13" => switch (decl.data) {
                         .other => |node_handle| !NodeIndexShim.init(node_handle.node).isRoot() and
                             switch (shims.nodeTag(node_handle.handle.tree, node_handle.node)) {
-                                .error_set_decl, .merge_error_sets => true,
-                                else => false,
-                            },
+                            .error_set_decl, .merge_error_sets => true,
+                            else => false,
+                        },
                         else => false,
                     },
                     .@"0.14", .@"0.15", .@"0.16" => if (std.meta.hasMethod(@TypeOf(decl), "isErrorSetType"))

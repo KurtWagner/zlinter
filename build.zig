@@ -1,7 +1,6 @@
 const @"build.zig" = @This();
 
-// zlinter-disable-next-line declaration_naming - version-gated enum, type resolution cannot see through if expression
-pub const BuiltinLintRule = if (version.zig == .@"0.13") enum {
+pub const BuiltinLintRule = enum {
     field_naming,
     field_ordering,
     declaration_naming,
@@ -24,31 +23,6 @@ pub const BuiltinLintRule = if (version.zig == .@"0.13") enum {
     no_panic,
     require_braces,
     require_doc_comment,
-} else enum {
-    field_naming,
-    field_ordering,
-    declaration_naming,
-    function_naming,
-    file_naming,
-    import_ordering,
-    no_unused,
-    no_deprecated,
-    no_empty_block,
-    no_inferred_error_unions,
-    no_orelse_unreachable,
-    no_undefined,
-    no_literal_only_bool_expression,
-    no_hidden_allocations,
-    switch_case_ordering,
-    max_positional_args,
-    no_comment_out_code,
-    no_todo,
-    no_literal_args,
-    no_swallow_error,
-    no_panic,
-    require_braces,
-    require_doc_comment,
-    require_errdefer_dealloc,
 };
 
 const BuildRuleSource = union(enum) {
@@ -275,11 +249,9 @@ pub fn build(b: *std.Build) void {
     // --------------------------------------------------------------------
     // Generate dynamic rules list and configs
     // --------------------------------------------------------------------
+    // zlinter-disable-next-line declaration_naming
+    const builtin_rule_fields = @typeInfo(BuiltinLintRule).Enum.fields;
     // zlinter-disable-next-line no_undefined - immediately set in inline loop
-    const builtin_rule_fields = switch (version.zig) {
-        .@"0.13" => @typeInfo(BuiltinLintRule).Enum.fields,
-        else => @typeInfo(BuiltinLintRule).@"enum".fields,
-    };
     var rules: [builtin_rule_fields.len]BuiltRule = undefined;
     // zlinter-disable-next-line no_undefined - immediately set in inline loop
     var rule_imports: [builtin_rule_fields.len]std.Build.Module.Import = undefined;
@@ -461,102 +433,53 @@ pub fn build(b: *std.Build) void {
         exclude.append(b.allocator, .{ .path = b.path("integration_tests/test_cases") }) catch @panic("OOM");
         exclude.append(b.allocator, .{ .path = b.path("integration_tests/src/test_case_references.zig") }) catch @panic("OOM");
 
-        const lint_rules = if (version.zig == .@"0.13") [_]BuiltRule{
-                buildBuiltinRule(b, .field_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .field_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .declaration_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .function_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .import_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .file_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_unused, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .switch_case_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_deprecated, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_empty_block, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_inferred_error_unions, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_orelse_unreachable, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_undefined, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_literal_only_bool_expression, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .require_braces, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .require_doc_comment, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_swallow_error, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_comment_out_code, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_todo, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_panic, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .max_positional_args, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(
-                    b,
-                    .no_literal_args,
-                    .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import },
-                    .{
-                        .exclude_fn_names = &[_][]const u8{
-                            "print",
-                            "alloc",
-                            "allocWithOptions",
-                            "allocWithOptionsRetAddr",
-                            "allocSentinel",
-                            "alignedAlloc",
-                            "allocAdvancedWithRetAddr",
-                            "resize",
-                            "realloc",
-                            "reallocAdvanced",
-                            "parseInt",
-                            "debugPrintWithIndent",
-                            "tokenLocation",
-                            "expectEqual",
-                            "renderLine",
-                            "init",
-                        },
+        const lint_rules = [_]BuiltRule{
+            buildBuiltinRule(b, .field_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .field_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .declaration_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .function_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .import_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .file_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_unused, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .switch_case_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_deprecated, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_empty_block, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_inferred_error_unions, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_orelse_unreachable, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_undefined, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_literal_only_bool_expression, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .require_braces, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .require_doc_comment, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_swallow_error, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_comment_out_code, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_todo, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_panic, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .max_positional_args, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(
+                b,
+                .no_literal_args,
+                .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import },
+                .{
+                    .exclude_fn_names = &[_][]const u8{
+                        "print",
+                        "alloc",
+                        "allocWithOptions",
+                        "allocWithOptionsRetAddr",
+                        "allocSentinel",
+                        "alignedAlloc",
+                        "allocAdvancedWithRetAddr",
+                        "resize",
+                        "realloc",
+                        "reallocAdvanced",
+                        "parseInt",
+                        "debugPrintWithIndent",
+                        "tokenLocation",
+                        "expectEqual",
+                        "renderLine",
+                        "init",
                     },
-                ),
-        } else [_]BuiltRule{
-                buildBuiltinRule(b, .field_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .field_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .declaration_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .function_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .import_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .file_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_unused, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .switch_case_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_deprecated, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_empty_block, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_inferred_error_unions, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_orelse_unreachable, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_undefined, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_literal_only_bool_expression, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .require_braces, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .require_doc_comment, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .require_errdefer_dealloc, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_hidden_allocations, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_swallow_error, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_comment_out_code, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_todo, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_panic, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .max_positional_args, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(
-                    b,
-                    .no_literal_args,
-                    .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import },
-                    .{
-                        .exclude_fn_names = &[_][]const u8{
-                            "print",
-                            "alloc",
-                            "allocWithOptions",
-                            "allocWithOptionsRetAddr",
-                            "allocSentinel",
-                            "alignedAlloc",
-                            "allocAdvancedWithRetAddr",
-                            "resize",
-                            "realloc",
-                            "reallocAdvanced",
-                            "parseInt",
-                            "debugPrintWithIndent",
-                            "tokenLocation",
-                            "expectEqual",
-                            "renderLine",
-                            "init",
-                        },
-                    },
-                ),
+                },
+            ),
         };
         break :step buildStep(
             b,
@@ -583,7 +506,7 @@ pub fn build(b: *std.Build) void {
             .optimize = .Debug,
         });
         const doc_build_run = b.addRunArtifact(doc_build_exe);
-        var step = &doc_build_run.step;
+        const step = &doc_build_run.step;
 
         var install_step = b.addInstallFileWithDir(
             doc_build_run.addOutputFileArg("RULES.md"),
@@ -593,9 +516,6 @@ pub fn build(b: *std.Build) void {
         install_step.step.dependOn(step);
 
         const rules_lazy_path = b.path("src/rules");
-        if (version.zig != .@"0.13") {
-            _ = step.addDirectoryWatchInput(rules_lazy_path) catch @panic("OOM");
-        }
         const rules_path_str = rules_lazy_path.getPath2(b, step);
         var rules_dir = std.fs.cwd().openDir(rules_path_str, .{ .iterate = true }) catch @panic("unable to open rules/ directory");
         defer rules_dir.close();
@@ -612,18 +532,9 @@ pub fn build(b: *std.Build) void {
 }
 
 fn toZonString(val: anytype, allocator: std.mem.Allocator) []const u8 {
-    if (version.zig == .@"0.13") {
-        var list = std.ArrayList(u8).init(allocator);
-        zon_lib.stringify.serializeZig(val, list.writer()) catch @panic("Invalid rule config");
-        return list.toOwnedSlice() catch @panic("OOM");
-    }
-    var zon_buf = std.ArrayListUnmanaged(u8){};
-    defer zon_buf.deinit(allocator);
-
-    std.zon.stringify.serialize(val, .{}, zon_buf.writer(allocator)) catch
-        @panic("Invalid rule config");
-
-    return zon_buf.toOwnedSlice(allocator) catch @panic("OOM");
+    var list = std.ArrayList(u8).init(allocator);
+    zon_lib.stringify.serializeZig(val, list.writer()) catch @panic("Invalid rule config");
+    return list.toOwnedSlice() catch @panic("OOM");
 }
 
 fn buildStep(
@@ -891,22 +802,13 @@ fn createRulesModule(
 
     for (rules) |rule| {
         const wf = b.addWriteFiles();
-        if (version.zig == .@"0.13") {
-            const import_name = b.fmt("{s}_config.zig", .{rule.import.name});
-            const content = b.fmt("pub const config = {s};\n", .{rule.zon_config_str});
-            const path = wf.add(import_name, content);
-            module.addImport(
-                import_name,
-                b.createModule(.{ .root_source_file = path }),
-            );
-        } else {
-            const import_name = b.fmt("{s}.zon", .{rule.import.name});
-            const path = wf.add(import_name, rule.zon_config_str);
-            module.addImport(
-                import_name,
-                b.createModule(.{ .root_source_file = path }),
-            );
-        }
+        const import_name = b.fmt("{s}_config.zig", .{rule.import.name});
+        const content = b.fmt("pub const config = {s};\n", .{rule.zon_config_str});
+        const path = wf.add(import_name, content);
+        module.addImport(
+            import_name,
+            b.createModule(.{ .root_source_file = path }),
+        );
     }
 
     return module;
@@ -943,10 +845,7 @@ const ZlinterRun = struct {
                 .id = .custom,
                 .name = "Run zlinter",
                 .owner = owner,
-                .makeFn = switch (version.zig) {
-                    .@"0.13" => make013,
-                    else => make,
-                },
+                .makeFn = make,
             }),
             .argv = .{},
             .exclude = exclude,
@@ -962,17 +861,9 @@ const ZlinterRun = struct {
         if (owner.graph.global_cache_root.path) |p|
             self.addArgs(&.{ "--global_cache_root", p });
 
-        switch (version.zig) {
-            .@"0.13" => {
-                if (owner.zig_lib_dir) |lib_dir| {
-                    const p = lib_dir.getPath2(owner, &self.step);
-                    self.addArgs(&.{ "--zig_lib_directory", p });
-                }
-            },
-            else => {
-                if (owner.graph.zig_lib_directory.path) |p|
-                    self.addArgs(&.{ "--zig_lib_directory", p });
-            },
+        if (owner.zig_lib_dir) |lib_dir| {
+            const p = lib_dir.getPath2(owner, &self.step);
+            self.addArgs(&.{ "--zig_lib_directory", p });
         }
 
         const bin_file = exe.getEmittedBin();
@@ -1016,30 +907,16 @@ const ZlinterRun = struct {
         defer list.deinit(b.allocator);
 
         for (paths) |path| {
-            if (version.zig == .@"0.13") {
-                switch (path) {
-                    .src_path => |sp| list.appendAssumeCapacity(if (sp.sub_path.len == 0) "." else sp.sub_path),
-                    else => list.appendAssumeCapacity(path.getPath2(b, step)),
-                }
-            } else {
-                list.appendAssumeCapacity(
-                    path.getPath3(b, step).subPathOrDot(),
-                );
+            switch (path) {
+                .src_path => |sp| list.appendAssumeCapacity(if (sp.sub_path.len == 0) "." else sp.sub_path),
+                else => list.appendAssumeCapacity(path.getPath2(b, step)),
             }
         }
 
         return try list.toOwnedSlice(b.allocator);
     }
 
-    fn make013(step: *std.Build.Step, _: std.Progress.Node) !void {
-        return makeImpl(step);
-    }
-
-    fn make(step: *std.Build.Step, _: std.Build.Step.MakeOptions) !void {
-        return makeImpl(step);
-    }
-
-    fn makeImpl(step: *std.Build.Step) !void {
+    fn make(step: *std.Build.Step, _: std.Progress.Node) !void {
         const run: *ZlinterRun = @alignCast(@fieldParentPtr("step", step));
         const b = run.step.owner;
         const arena = b.allocator;
@@ -1058,103 +935,69 @@ const ZlinterRun = struct {
                 .compiled_unit => |info| {
                     const exe = info.compile_step;
 
-                    if (version.zig == .@"0.13") {
-                        if (exe.root_module.root_source_file) |root_file| {
-                            const path_str = root_file.getPath2(b, step);
-                            if (cwd.relativePath(b, path_str)) |path| {
-                                try includes.append(b.allocator, path);
+                    if (exe.root_module.root_source_file) |root_file| {
+                        const path_str = root_file.getPath2(b, step);
+                        if (cwd.relativePath(b, path_str)) |path| {
+                            try includes.append(b.allocator, path);
+                        }
+                        // Recursively resolve @import statements to find all source files (0.13 has no step.inputs)
+                        {
+                            var visited = std.StringHashMap(void).init(b.allocator);
+                            defer {
+                                var it = visited.keyIterator();
+                                while (it.next()) |k| b.allocator.free(k.*);
+                                visited.deinit();
                             }
-                            // Recursively resolve @import statements to find all source files (0.13 has no step.inputs)
-                            {
-                                var visited = std.StringHashMap(void).init(b.allocator);
-                                defer {
-                                    var it = visited.keyIterator();
-                                    while (it.next()) |k| b.allocator.free(k.*);
-                                    visited.deinit();
-                                }
-                                var import_stack = std.ArrayList([]const u8).init(b.allocator);
-                                defer import_stack.deinit();
-                                try import_stack.append(path_str);
-                                var safety_counter: u32 = 0;
-                                while (import_stack.popOrNull()) |current_path| {
-                                    safety_counter += 1;
-                                    if (safety_counter > 10000) break;
-                                    const abs_path = if (std.fs.path.isAbsolute(current_path))
-                                        current_path
-                                    else
-                                        try std.fs.path.join(b.allocator, &.{ cwd.path, current_path });
-                                    if (visited.contains(abs_path)) {
-                                        if (!std.fs.path.isAbsolute(current_path)) b.allocator.free(abs_path);
-                                        continue;
-                                    }
-                                    if (abs_path.len > 500) {
-                                        if (!std.fs.path.isAbsolute(current_path)) b.allocator.free(abs_path);
-                                        continue;
-                                    }
-                                    const duped_path = try b.allocator.dupe(u8, abs_path);
-                                    try visited.put(duped_path, {});
+                            var import_stack = std.ArrayList([]const u8).init(b.allocator);
+                            defer import_stack.deinit();
+                            try import_stack.append(path_str);
+                            var safety_counter: u32 = 0;
+                            while (import_stack.popOrNull()) |current_path| {
+                                safety_counter += 1;
+                                if (safety_counter > 10000) break;
+                                const abs_path = if (std.fs.path.isAbsolute(current_path))
+                                    current_path
+                                else
+                                    try std.fs.path.join(b.allocator, &.{ cwd.path, current_path });
+                                if (visited.contains(abs_path)) {
                                     if (!std.fs.path.isAbsolute(current_path)) b.allocator.free(abs_path);
-                                    const import_file = std.fs.cwd().openFile(abs_path, .{}) catch continue;
-                                    defer import_file.close();
-                                    const import_source = import_file.readToEndAlloc(b.allocator, 1024 * 1024) catch continue;
-                                    defer b.allocator.free(import_source);
-                                    var line_it = std.mem.splitScalar(u8, import_source, '\n');
-                                    while (line_it.next()) |line| {
-                                        const trimmed = std.mem.trim(u8, line, " \t\r");
-                                        if (std.mem.indexOf(u8, trimmed, "@import(")) |import_idx| {
-                                            const after = trimmed[import_idx + 8..];
-                                            if (std.mem.indexOfScalar(u8, after, '"')) |q1| {
-                                                const rest = after[q1 + 1..];
-                                                if (std.mem.indexOfScalar(u8, rest, '"')) |q2| {
-                                                    const import_path = rest[0..q2];
-                                                    if (std.mem.endsWith(u8, import_path, ".zig")) {
-                                                        const resolved = if (std.fs.path.isAbsolute(import_path))
-                                                            import_path
-                                                        else blk: {
-                                                            const dir = std.fs.path.dirname(abs_path) orelse ".";
-                                                            break :blk try std.fs.path.join(b.allocator, &.{ dir, import_path });
-                                                        };
-                                                        if (cwd.relativePath(b, resolved)) |lazy| {
-                                                            try includes.append(b.allocator, lazy);
-                                                        }
-                                                        try import_stack.append(resolved);
+                                    continue;
+                                }
+                                if (abs_path.len > 500) {
+                                    if (!std.fs.path.isAbsolute(current_path)) b.allocator.free(abs_path);
+                                    continue;
+                                }
+                                const duped_path = try b.allocator.dupe(u8, abs_path);
+                                try visited.put(duped_path, {});
+                                if (!std.fs.path.isAbsolute(current_path)) b.allocator.free(abs_path);
+                                const import_file = std.fs.cwd().openFile(abs_path, .{}) catch continue;
+                                defer import_file.close();
+                                const import_source = import_file.readToEndAlloc(b.allocator, 1024 * 1024) catch continue;
+                                defer b.allocator.free(import_source);
+                                var line_it = std.mem.splitScalar(u8, import_source, '\n');
+                                while (line_it.next()) |line| {
+                                    const trimmed = std.mem.trim(u8, line, " \t\r");
+                                    if (std.mem.indexOf(u8, trimmed, "@import(")) |import_idx| {
+                                        const after = trimmed[import_idx + 8 ..];
+                                        if (std.mem.indexOfScalar(u8, after, '"')) |q1| {
+                                            const rest = after[q1 + 1 ..];
+                                            if (std.mem.indexOfScalar(u8, rest, '"')) |q2| {
+                                                const import_path = rest[0..q2];
+                                                if (std.mem.endsWith(u8, import_path, ".zig")) {
+                                                    const resolved = if (std.fs.path.isAbsolute(import_path))
+                                                        import_path
+                                                    else blk: {
+                                                        const dir = std.fs.path.dirname(abs_path) orelse ".";
+                                                        break :blk try std.fs.path.join(b.allocator, &.{ dir, import_path });
+                                                    };
+                                                    if (cwd.relativePath(b, resolved)) |lazy| {
+                                                        try includes.append(b.allocator, lazy);
                                                     }
+                                                    try import_stack.append(resolved);
                                                 }
                                             }
                                         }
                                     }
-                                }
-                            }
-                        }
-                    } else {
-                        var inputs = exe.step.inputs;
-                        std.debug.assert(inputs.populated());
-
-                        var it = inputs.table.iterator();
-                        while (it.next()) |entry| {
-                            const p = entry.key_ptr.*;
-                            sub_paths: for (entry.value_ptr.items) |sub_path| {
-                                var buf: [std.fs.max_path_bytes]u8 = undefined;
-                                const joined_path = if (p.sub_path.len == 0) sub_path else p: {
-                                    const fmt = "{s}" ++ std.fs.path.sep_str ++ "{s}";
-                                    break :p std.fmt.bufPrint(
-                                        &buf,
-                                        fmt,
-                                        .{ p.sub_path, sub_path },
-                                    ) catch {
-                                        std.debug.print(
-                                            "Warning: Name too long - " ++ fmt,
-                                            .{ p.sub_path, sub_path },
-                                        );
-                                        continue :sub_paths;
-                                    };
-                                };
-                                std.debug.assert(joined_path.len > 0);
-
-                                if (!try isLintableFilePath(joined_path)) continue :sub_paths;
-
-                                if (cwd.relativePath(b, joined_path)) |path| {
-                                    try includes.append(b.allocator, path);
                                 }
                             }
                         }
@@ -1197,31 +1040,7 @@ const ZlinterRun = struct {
                     try argv_list.append(arena, bytes);
                 },
                 .artifact => |artifact| {
-                    if (version.zig != .@"0.13" and artifact.rootModuleTarget().os.tag == .windows) {
-                        // Windows doesn't have rpaths so add .dll search paths to PATH environment variable
-                        const chase_dynamics = true;
-                        const compiles = artifact.getCompileDependencies(chase_dynamics);
-                        for (compiles) |compile| {
-                            if (compile.root_module.resolved_target.?.result.os.tag == .windows) continue;
-                            if (compile.isDynamicLibrary()) continue;
-
-                            const search_path = std.fs.path.dirname(compile.getEmittedBin().getPath2(b, &run.step)).?;
-                            const key = "PATH";
-                            if (env_map.get(key)) |prev_path| {
-                                env_map.put(key, b.fmt("{s}{c}{s}", .{
-                                    prev_path,
-                                    std.fs.path.delimiter,
-                                    search_path,
-                                })) catch @panic("OOM");
-                            } else {
-                                env_map.put(key, b.dupePath(search_path)) catch @panic("OOM");
-                            }
-                        }
-                    }
-                    const file_path = switch (version.zig) {
-                        .@"0.13" => artifact.getEmittedBin().getPath2(b, &run.step),
-                        else => artifact.installed_path orelse artifact.generated_bin.?.path.?,
-                    };
+                    const file_path = artifact.getEmittedBin().getPath2(b, &run.step);
                     try argv_list.append(arena, b.dupe(file_path));
                 },
             }
@@ -1333,44 +1152,14 @@ const ZlinterRun = struct {
 };
 
 fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
-    if (version.zig == .@"0.13") {
-        const abs_path = path.getPath2(b, null);
-        var file = try std.fs.openFileAbsolute(abs_path, .{});
-        defer file.close();
-        const max_bytes = 128 * 1024;
-        const bytes = try file.readToEndAlloc(b.allocator, max_bytes);
-        defer b.allocator.free(bytes);
-        const replacement = b.fmt("{d}", .{std.time.milliTimestamp()});
-        const needle = "{{build_timestamp}}";
-        const buffer = try b.allocator.alloc(u8, std.mem.replacementSize(
-            u8,
-            bytes,
-            needle,
-            replacement,
-        ));
-        errdefer b.allocator.free(buffer);
-        const replacements = std.mem.replace(
-            u8,
-            bytes,
-            needle,
-            replacement,
-            buffer,
-        );
-        if (replacements == 0) @panic("Failed to replace template timestamps");
-        return buffer;
-    }
-    const rules_path = path.getPath3(b, null);
-
-    var file = try rules_path.root_dir.handle.openFile(rules_path.subPathOrDot(), .{});
+    const abs_path = path.getPath2(b, null);
+    var file = try std.fs.openFileAbsolute(abs_path, .{});
     defer file.close();
-
     const max_bytes = 128 * 1024;
     const bytes = try file.readToEndAlloc(b.allocator, max_bytes);
     defer b.allocator.free(bytes);
-
     const replacement = b.fmt("{d}", .{std.time.milliTimestamp()});
     const needle = "{{build_timestamp}}";
-
     const buffer = try b.allocator.alloc(u8, std.mem.replacementSize(
         u8,
         bytes,
@@ -1378,7 +1167,6 @@ fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
         replacement,
     ));
     errdefer b.allocator.free(buffer);
-
     const replacements = std.mem.replace(
         u8,
         bytes,
@@ -1422,11 +1210,11 @@ const BuildCwd = struct {
                 to,
             ) catch |e|
                 switch (e) {
-                    error.OutOfMemory => @panic("OOM"),
-                    error.Unexpected,
-                    error.CurrentWorkingDirectoryUnlinked,
-                    => return null,
-                };
+                error.OutOfMemory => @panic("OOM"),
+                error.Unexpected,
+                error.CurrentWorkingDirectoryUnlinked,
+                => return null,
+            };
             errdefer b.allocator.free(relative);
 
             if (relative.len != 0 and isReadable(&self.dir, relative)) {

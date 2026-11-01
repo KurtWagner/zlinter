@@ -7,10 +7,7 @@ pub fn build(b: *std.Build) !void {
     const test_focus_on_rule = b.option([]const u8, "test_focus_on_rule", "Only run tests for this rule");
     const test_step = b.step("test", "Run tests");
 
-    const test_cases_path = switch (zlinter.version.zig) {
-        .@"0.13" => "test_cases",
-        else => b.path("test_cases/").getPath3(b, null).sub_path,
-    };
+    const test_cases_path = "test_cases";
     var test_cases_dir = try std.fs.cwd().openDir(test_cases_path, .{ .iterate = true });
     defer test_cases_dir.close();
 
@@ -21,31 +18,12 @@ pub fn build(b: *std.Build) !void {
         if (item.kind != .file) continue;
         if (!std.mem.endsWith(u8, item.path, input_suffix)) continue;
 
-        const run_integration_test = switch (zlinter.version.zig) {
-            .@"0.13" => b.addRunArtifact(b.addTest(.{
-                .root_source_file = b.path("src/integration_test.zig"),
-                .target = target,
-                .optimize = optimize,
-                .test_runner = b.path("src/test_runner.zig"),
-            })),
-            else => blk: {
-                const integration_test_module = b.createModule(.{
-                    .root_source_file = b.path("src/integration_test.zig"),
-                    .target = target,
-                    .optimize = optimize,
-                });
-                if (zlinter.version.zig == .@"0.15" and target.result.os.tag == .windows) {
-                    integration_test_module.linkSystemLibrary("advapi32", .{});
-                }
-                break :blk b.addRunArtifact(b.addTest(.{
-                    .root_module = integration_test_module,
-                    .test_runner = .{
-                        .path = b.path("src/test_runner.zig"),
-                        .mode = .simple,
-                    },
-                }));
-            },
-        };
+        const run_integration_test = b.addRunArtifact(b.addTest(.{
+            .root_source_file = b.path("src/integration_test.zig"),
+            .target = target,
+            .optimize = optimize,
+            .test_runner = b.path("src/test_runner.zig"),
+        }));
         run_integration_test.addArg(b.graph.zig_exe);
 
         // Format: <rule_name>/<test_name>.input.zig
@@ -89,10 +67,8 @@ pub fn build(b: *std.Build) !void {
     const lint_cmd = b.step("lint", "Lint source code.");
     lint_cmd.dependOn(step: {
         var builder = zlinter.builder(b, .{ .target = target, .optimize = optimize });
-        const builtin_rule_fields = switch (zlinter.version.zig) {
-            .@"0.13" => @typeInfo(zlinter.BuiltinLintRule).Enum.fields,
-            else => @typeInfo(zlinter.BuiltinLintRule).@"enum".fields,
-        };
+        // zlinter-disable-next-line declaration_naming
+        const builtin_rule_fields = @typeInfo(zlinter.BuiltinLintRule).Enum.fields;
         inline for (builtin_rule_fields) |field| {
             builder.addRule(.{ .builtin = @enumFromInt(field.value) }, .{});
         }
@@ -116,23 +92,12 @@ pub fn build(b: *std.Build) !void {
                 .{ .builtin = .no_panic },
                 .{ .severity = .warning },
             );
-            if (zlinter.version.zig == .@"0.13") {
-                builder.addSource(.{ .compiled_unit = .{ .compile_step = b.addStaticLibrary(.{
-                    .name = "main",
-                    .root_source_file = b.path("src/check_compiled_source/main.zig"),
-                    .target = target,
-                    .optimize = optimize,
-                }) } });
-            } else {
-                builder.addSource(.{ .compiled_unit = .{ .compile_step = b.addLibrary(.{
-                    .name = "main",
-                    .root_module = b.addModule("main", .{
-                        .root_source_file = b.path("src/check_compiled_source/main.zig"),
-                        .target = target,
-                        .optimize = optimize,
-                    }),
-                }) } });
-            }
+            builder.addSource(.{ .compiled_unit = .{ .compile_step = b.addStaticLibrary(.{
+                .name = "main",
+                .root_source_file = b.path("src/check_compiled_source/main.zig"),
+                .target = target,
+                .optimize = optimize,
+            }) } });
             builder.addPaths(.{ .exclude = &.{b.path("src/check_compiled_source/excluded.zig")} });
             break :step builder.build();
         });
@@ -140,11 +105,8 @@ pub fn build(b: *std.Build) !void {
 }
 
 fn addFileArgIfExists(b: *std.Build, step: *std.Build.Step.Run, raw_path: []const u8) void {
-    var path = b.path(raw_path);
-    const relative_path = switch (zlinter.version.zig) {
-        .@"0.13" => path.src_path.sub_path,
-        else => path.getPath3(b, &step.step).sub_path,
-    };
+    const path = b.path(raw_path);
+    const relative_path = path.src_path.sub_path;
     const exists = if (std.fs.cwd().access(relative_path, .{})) true else |e| e != error.FileNotFound;
     if (exists) {
         step.addFileArg(path);
