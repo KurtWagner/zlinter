@@ -698,7 +698,6 @@ pub fn divide(x: i32, y: i32) !i32 {
 }
 ```
 
-
 **Config options:**
 
 * `severity`
@@ -951,4 +950,3 @@ Enforces an order of values in `switch` statements.
   * The severity for when `else` is not last in a `switch` (off, warning, error).
 
   * **Default:** `.warning`
-
