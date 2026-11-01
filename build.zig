@@ -249,12 +249,11 @@ pub fn build(b: *std.Build) void {
     // --------------------------------------------------------------------
     // Generate dynamic rules list and configs
     // --------------------------------------------------------------------
-    // zlinter-disable-next-line declaration_naming
-    const builtin_rule_fields = @typeInfo(BuiltinLintRule).Enum.fields;
+    const BuiltinRuleFields = @typeInfo(BuiltinLintRule).Enum.fields;
     // zlinter-disable-next-line no_undefined - immediately set in inline loop
-    var rules: [builtin_rule_fields.len]BuiltRule = undefined;
+    var rules: [BuiltinRuleFields.len]BuiltRule = undefined;
     // zlinter-disable-next-line no_undefined - immediately set in inline loop
-    var rule_imports: [builtin_rule_fields.len]std.Build.Module.Import = undefined;
+    var rule_imports: [BuiltinRuleFields.len]std.Build.Module.Import = undefined;
 
     inline for (std.meta.fields(BuiltinLintRule), 0..) |enum_type, i| {
         const rule_module = b.createModule(.{

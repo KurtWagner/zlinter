@@ -31,10 +31,6 @@ pub fn build(b: *std.Build) !void {
             std.log.err("Test case file skipped as its invalid: {s}", .{item.path});
             continue;
         }];
-        if (!isRuleAvailable(rule_name)) {
-            std.log.warn("Skipping {s} - rule not available for Zig {s}", .{ rule_name, @tagName(zlinter.version.zig) });
-            continue;
-        }
         if (test_focus_on_rule) |r| {
             if (!std.mem.eql(u8, rule_name, r)) {
                 std.log.warn("Skipping {s}", .{rule_name});
@@ -67,9 +63,8 @@ pub fn build(b: *std.Build) !void {
     const lint_cmd = b.step("lint", "Lint source code.");
     lint_cmd.dependOn(step: {
         var builder = zlinter.builder(b, .{ .target = target, .optimize = optimize });
-        // zlinter-disable-next-line declaration_naming
-        const builtin_rule_fields = @typeInfo(zlinter.BuiltinLintRule).Enum.fields;
-        inline for (builtin_rule_fields) |field| {
+        const BuiltinRuleFields = @typeInfo(zlinter.BuiltinLintRule).Enum.fields;
+        inline for (BuiltinRuleFields) |field| {
             builder.addRule(.{ .builtin = @enumFromInt(field.value) }, .{});
         }
         builder.addRule(.{ .custom = .{ .name = "no_cats", .path = "src/no_cats.zig" } }, .{});
@@ -111,15 +106,6 @@ fn addFileArgIfExists(b: *std.Build, step: *std.Build.Step.Run, raw_path: []cons
     if (exists) {
         step.addFileArg(path);
     }
-}
-
-fn isRuleAvailable(rule_name: []const u8) bool {
-    if (std.mem.eql(u8, rule_name, "no_cats")) return true;
-    const fields = std.meta.fieldNames(zlinter.BuiltinLintRule);
-    for (fields) |field_name| {
-        if (std.mem.eql(u8, rule_name, field_name)) return true;
-    }
-    return false;
 }
 
 const std = @import("std");
