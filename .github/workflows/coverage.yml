@@ -17,7 +17,7 @@ on:
       - '.github/workflows/coverage.yml'
 jobs:
   coverage:
-    if: github.repository_owner == 'codecop'
+    if: github.repository_owner == 'KurtWagner'
     # Can't use 24 - see https://github.com/SimonKagstrom/kcov/issues/473
     runs-on: ubuntu-22.04
     name: Test coverage
