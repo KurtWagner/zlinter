@@ -268,10 +268,22 @@ fn runLinterRules(
         item_timers.unloadAndPrint("Rules", printer);
     };
 
+    // ZLS needs the standard library path to resolve @typeInfo metadata.
+    var zig_lib_directory = args.zig_lib_directory;
+    if (zig_lib_directory == null) {
+        if (args.zig_exe) |zig_exe| {
+            if (zlinter.zls.configuration.getZigEnv(gpa, zig_exe)) |env| {
+                defer env.deinit();
+                if (env.value.lib_dir) |lib_dir|
+                    zig_lib_directory = try arena.allocator().dupe(u8, lib_dir);
+            }
+        }
+    }
+
     var context: zlinter.session.LintContext = undefined;
     try context.init(.{
         .zig_exe_path = args.zig_exe,
-        .zig_lib_path = args.zig_lib_directory,
+        .zig_lib_path = zig_lib_directory,
         .global_cache_path = args.global_cache_root,
     }, gpa, arena.allocator());
     defer context.deinit();

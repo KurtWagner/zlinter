@@ -529,7 +529,7 @@ pub const LintContext = struct {
             // std.debug.print("InitNode - Before: {s}\n", .{tree.getNodeSource(value_node.toNodeIndex())});
             // std.debug.print("InitNode - Tag Before: {}\n", .{shims.nodeTag(tree, value_node.toNodeIndex())});
 
-            const node = shims.unwrapNode(tree, value_node.toNodeIndex(), .{});
+            const node = shims.unwrapNode(tree, value_node.toNodeIndex(), .{ .unwrap_optional_unwrap = false });
             // std.debug.print("InitNode - After: {s}\n", .{tree.getNodeSource(node)});
             // std.debug.print("InitNode - Tag After: {}\n", .{shims.nodeTag(tree, node)});
 
@@ -541,28 +541,10 @@ pub const LintContext = struct {
                 .builtin_call,
                 .builtin_call_comma,
                 => {
-                    inline for (&.{ "@Type", "@TypeOf", "@typeInfo" }) |builtin_name| {
+                    inline for (&.{ "@Type", "@TypeOf" }) |builtin_name| {
                         if (std.mem.eql(u8, builtin_name, tree.tokenSlice(shims.nodeMainToken(tree, node)))) {
                             return .type;
                         }
-                    }
-                },
-                .field_access => {
-                    var lhs = shims.nodeData(tree, node).lhs;
-                    while (shims.nodeTag(tree, lhs) == .field_access) {
-                        lhs = shims.nodeData(tree, lhs).lhs;
-                    }
-                    switch (shims.nodeTag(tree, lhs)) {
-                        .builtin_call_two,
-                        .builtin_call_two_comma,
-                        .builtin_call,
-                        .builtin_call_comma,
-                        => {
-                            if (std.mem.eql(u8, "@typeInfo", tree.tokenSlice(shims.nodeMainToken(tree, lhs)))) {
-                                return .type;
-                            }
-                        },
-                        else => {},
                     }
                 },
                 .error_set_decl,

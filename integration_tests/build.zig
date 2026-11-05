@@ -63,8 +63,8 @@ pub fn build(b: *std.Build) !void {
     const lint_cmd = b.step("lint", "Lint source code.");
     lint_cmd.dependOn(step: {
         var builder = zlinter.builder(b, .{ .target = target, .optimize = optimize });
-        const BuiltinRuleFields = @typeInfo(zlinter.BuiltinLintRule).Enum.fields;
-        inline for (BuiltinRuleFields) |field| {
+        const builtin_rule_fields = @typeInfo(zlinter.BuiltinLintRule).Enum.fields;
+        inline for (builtin_rule_fields) |field| {
             builder.addRule(.{ .builtin = @enumFromInt(field.value) }, .{});
         }
         builder.addRule(.{ .custom = .{ .name = "no_cats", .path = "src/no_cats.zig" } }, .{});

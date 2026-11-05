@@ -1,0 +1,6 @@
+error Constant declaration should be snake_case [test_cases/declaration_naming/type_info_values.input.zig:5:7] declaration_naming
+
+ 5 | const FieldCount = @typeInfo(Example).Struct.fields.len;
+   |       ^^^^^^^^^^
+
+x 1 errors
