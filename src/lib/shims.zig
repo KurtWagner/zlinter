@@ -21,7 +21,7 @@ pub const NodeIndexShim = struct {
     /// Supports init from Index, u32, see initOptional for optionals in 0.15
     pub inline fn init(node: anytype) NodeIndexShim {
         return switch (@typeInfo(@TypeOf(node))) {
-            .@"enum" => .{
+            .Enum => .{
                 .index = @intFromEnum(
                     if (std.meta.hasFn(@TypeOf(node), "unwrap"))
                         @compileError("OptionalIndex should use initOptional as zero does not mean root but emptiness in 0.14")
@@ -35,7 +35,7 @@ pub const NodeIndexShim = struct {
 
     pub inline fn initOptional(node: anytype) ?NodeIndexShim {
         return switch (@typeInfo(@TypeOf(node))) {
-            .@"enum" => .{
+            .Enum => .{
                 .index = if (std.meta.hasFn(@TypeOf(node), "unwrap"))
                     if (node.unwrap()) |n| @intFromEnum(n) else return null
                 else
@@ -47,8 +47,8 @@ pub const NodeIndexShim = struct {
 
     pub inline fn toNodeIndex(self: NodeIndexShim) Ast.Node.Index {
         return switch (@typeInfo(Ast.Node.Index)) {
-            .@"enum" => @enumFromInt(self.index), // >= 0.15.x
-            else => self.index, // == 0.14.x
+            .Enum => @enumFromInt(self.index), // >= 0.15.x
+            else => self.index, // == 0.13.x and 0.14.x
         };
     }
 
@@ -92,22 +92,22 @@ pub fn unwrapNode(
     while (true) {
         switch (nodeTag(tree, current)) {
             .unwrap_optional => if (options.unwrap_optional_unwrap) switch (version.zig) {
-                .@"0.14" => current = nodeData(tree, current).lhs,
+                .@"0.13", .@"0.14" => current = nodeData(tree, current).lhs,
                 .@"0.15", .@"0.16" => current = nodeData(tree, current).node_and_token.@"0",
             } else break,
             .optional_type => if (options.unwrap_optional) switch (version.zig) {
-                .@"0.14" => current = nodeData(tree, current).lhs,
+                .@"0.13", .@"0.14" => current = nodeData(tree, current).lhs,
                 .@"0.15", .@"0.16" => current = nodeData(tree, current).node,
             } else break,
             .ptr_type_aligned,
             .ptr_type_sentinel,
             => if (options.unwrap_pointer) switch (version.zig) {
-                .@"0.14" => current = nodeData(tree, current).rhs,
+                .@"0.13", .@"0.14" => current = nodeData(tree, current).rhs,
                 .@"0.15", .@"0.16" => current = nodeData(tree, current).opt_node_and_node.@"1",
             } else break,
             .ptr_type,
             => if (options.unwrap_pointer) switch (version.zig) {
-                .@"0.14" => current = nodeData(tree, current).rhs,
+                .@"0.13", .@"0.14" => current = nodeData(tree, current).rhs,
                 .@"0.15", .@"0.16" => current = nodeData(tree, current).extra_and_node.@"1",
             } else break,
             else => break,
@@ -120,28 +120,28 @@ pub fn tokenTag(tree: Ast, token: Ast.TokenIndex) std.zig.Token.Tag {
     return if (std.meta.hasMethod(@TypeOf(tree), "tokenTag"))
         tree.tokenTag(token)
     else
-        tree.tokens.items(.tag)[token]; // 0.14.x
+        tree.tokens.items(.tag)[token]; // 0.13.x and 0.14.x
 }
 
 pub fn nodeTag(tree: Ast, node: Ast.Node.Index) Ast.Node.Tag {
     return if (std.meta.hasMethod(@TypeOf(tree), "nodeTag"))
         tree.nodeTag(node)
     else
-        tree.nodes.items(.tag)[node]; // 0.14.x
+        tree.nodes.items(.tag)[node]; // 0.13.x and 0.14.x
 }
 
 pub fn nodeMainToken(tree: Ast, node: Ast.Node.Index) Ast.TokenIndex {
     return if (std.meta.hasMethod(@TypeOf(tree), "nodeMainToken"))
         tree.nodeMainToken(node)
     else
-        tree.nodes.items(.main_token)[node]; // 0.14.x
+        tree.nodes.items(.main_token)[node]; // 0.13.x and 0.14.x
 }
 
 pub fn nodeData(tree: Ast, node: Ast.Node.Index) Ast.Node.Data {
     return if (std.meta.hasMethod(@TypeOf(tree), "nodeData"))
         tree.nodeData(node)
     else
-        tree.nodes.items(.data)[node]; // 0.14.x
+        tree.nodes.items(.data)[node]; // 0.13.x and 0.14.x
 }
 
 // TODO: Write unit tests for this
@@ -185,8 +185,7 @@ pub fn isContainerNamespace(tree: Ast, container_decl: Ast.full.ContainerDecl) b
 /// out this can be used to consistently return an unmanaged version.
 pub fn ArrayList(T: type) type {
     return comptime switch (version.zig) {
-        .@"0.14" => std.ArrayListUnmanaged(T),
-        .@"0.15", .@"0.16" => std.ArrayList(T),
+        .@"0.13", .@"0.14", .@"0.15", .@"0.16" => std.ArrayListUnmanaged(T),
     };
 }
 

@@ -37,7 +37,7 @@ pub const LintProblemLocation = struct {
     };
 
     pub fn startOfNode(tree: Ast, index: Ast.Node.Index) LintProblemLocation {
-        return .startOfToken(tree, tree.firstToken(index));
+        return LintProblemLocation.startOfToken(tree, tree.firstToken(index));
     }
 
     test startOfNode {
@@ -60,7 +60,7 @@ pub const LintProblemLocation = struct {
     }
 
     pub fn endOfNode(tree: Ast, index: Ast.Node.Index) LintProblemLocation {
-        return .endOfToken(tree, tree.lastToken(index));
+        return LintProblemLocation.endOfToken(tree, tree.lastToken(index));
     }
 
     test endOfNode {
@@ -238,7 +238,7 @@ pub const LintProblemLocation = struct {
     }
 
     fn debugPrintWithIndent(self: @This(), writer: anytype, indent: usize) void {
-        var spaces: [80]u8 = @splat(' ');
+        var spaces: [80]u8 = [_]u8{' '} ** 80;
         const indent_str = spaces[0..indent];
 
         writer.print("{s}.{{\n", .{indent_str});
@@ -315,7 +315,7 @@ pub const LintProblemFix = struct {
     }
 
     pub fn debugPrintWithIndent(self: @This(), writer: anytype, indent: usize) void {
-        var spaces: [80]u8 = @splat(' ');
+        var spaces: [80]u8 = [_]u8{' '} ** 80;
         const indent_str = spaces[0..indent];
 
         writer.print("{s}.{{\n", .{indent_str});

@@ -36,7 +36,7 @@ pub const NodeAncestorIterator = struct {
 pub const NodeLineageIterator = struct {
     const Self = @This();
 
-    queue: shims.ArrayList(NodeIndexShim) = .empty,
+    queue: shims.ArrayList(NodeIndexShim) = .{},
     lineage: *const NodeLineage,
     gpa: std.mem.Allocator,
 
@@ -46,10 +46,10 @@ pub const NodeLineageIterator = struct {
     }
 
     pub fn next(self: *Self) error{OutOfMemory}!?struct { NodeIndexShim, NodeConnections } {
-        if (self.queue.pop()) |node_shim| {
+        if (self.queue.popOrNull()) |node_shim| {
             const connections = self.lineage.get(node_shim.index);
             for (connections.children orelse &.{}) |child| {
-                try self.queue.append(self.gpa, .init(child));
+                try self.queue.append(self.gpa, NodeIndexShim.init(child));
             }
             return .{ node_shim, connections };
         }
@@ -72,7 +72,7 @@ pub fn nodeChildrenAlloc(
         }
     };
 
-    var children: shims.ArrayList(Ast.Node.Index) = .empty;
+    var children: shims.ArrayList(Ast.Node.Index) = .{};
     defer children.deinit(gpa);
 
     try iterateChildren(
@@ -108,7 +108,7 @@ pub fn iterateChildren(
                 try zls.ast.iterateChildren(tree, node, context, Error, callback);
             }
         },
-        .@"0.15", .@"0.16" => try zls.ast.iterateChildren(tree, node, context, Error, callback),
+        .@"0.13", .@"0.15", .@"0.16" => try zls.ast.iterateChildren(tree, node, context, Error, callback),
     }
 }
 
@@ -128,11 +128,11 @@ pub fn deferBlock(doc: *const session.LintDocument, node: Ast.Node.Index, alloca
     const exp_node =
         switch (shims.nodeTag(tree, node)) {
             .@"errdefer" => switch (version.zig) {
-                .@"0.14" => data.rhs,
+                .@"0.13", .@"0.14" => data.rhs,
                 .@"0.15", .@"0.16" => data.opt_token_and_node[1],
             },
             .@"defer" => switch (version.zig) {
-                .@"0.14" => data.rhs,
+                .@"0.13", .@"0.14" => data.rhs,
                 .@"0.15", .@"0.16" => data.node,
             },
             else => return null,
@@ -335,7 +335,7 @@ pub fn fnDecl(tree: Ast, node: Ast.Node.Index, fn_proto_buffer: *[1]Ast.Node.Ind
         .fn_decl => {
             const data = shims.nodeData(tree, node);
             const lhs, const rhs = switch (version.zig) {
-                .@"0.14" => .{ data.lhs, data.rhs },
+                .@"0.13", .@"0.14" => .{ data.lhs, data.rhs },
                 .@"0.15", .@"0.16" => .{ data.node_and_node[0], data.node_and_node[1] },
             };
             return .{ .proto = tree.fullFnProto(fn_proto_buffer, lhs).?, .block = rhs };
@@ -416,19 +416,19 @@ pub fn fullStatement(tree: Ast, node: Ast.Node.Index) ?Statement {
     else switch (shims.nodeTag(tree, node)) {
         .@"catch" => .{
             .@"catch" = switch (version.zig) {
-                .@"0.14" => shims.nodeData(tree, node).rhs,
+                .@"0.13", .@"0.14" => shims.nodeData(tree, node).rhs,
                 .@"0.15", .@"0.16" => shims.nodeData(tree, node).node_and_node[1],
             },
         },
         .@"defer" => .{
             .@"defer" = switch (version.zig) {
-                .@"0.14" => shims.nodeData(tree, node).rhs,
+                .@"0.13", .@"0.14" => shims.nodeData(tree, node).rhs,
                 .@"0.15", .@"0.16" => shims.nodeData(tree, node).node,
             },
         },
         .@"errdefer" => .{
             .@"errdefer" = switch (version.zig) {
-                .@"0.14" => shims.nodeData(tree, node).rhs,
+                .@"0.13", .@"0.14" => shims.nodeData(tree, node).rhs,
                 .@"0.15", .@"0.16" => shims.nodeData(tree, node).opt_token_and_node[1],
             },
         },
@@ -687,7 +687,7 @@ pub fn fnCall(
             // e.g., `parent.*`
             .field_access => {
                 const field_node, const fn_name = switch (version.zig) {
-                    .@"0.14" => .{ fn_expr_node_data.lhs, fn_expr_node_data.rhs },
+                    .@"0.13", .@"0.14" => .{ fn_expr_node_data.lhs, fn_expr_node_data.rhs },
                     .@"0.15", .@"0.16" => .{ fn_expr_node_data.node_and_token[0], fn_expr_node_data.node_and_token[1] },
                 };
                 std.debug.assert(shims.tokenTag(tree, fn_name) == .identifier);
@@ -788,7 +788,7 @@ test "fnCall - direct call without params" {
         &.{},
     ).?;
 
-    try std.testing.expectEqualDeep(&.{}, call.params);
+    try std.testing.expectEqual(@as(usize, 0), call.params.len);
     try std.testing.expectEqualStrings(
         "call",
         doc.handle.tree.tokenSlice(call.call_identifier_token),

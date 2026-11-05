@@ -7,7 +7,7 @@ pub fn build(b: *std.Build) !void {
     const test_focus_on_rule = b.option([]const u8, "test_focus_on_rule", "Only run tests for this rule");
     const test_step = b.step("test", "Run tests");
 
-    const test_cases_path = b.path("test_cases/").getPath3(b, null).sub_path;
+    const test_cases_path = "test_cases";
     var test_cases_dir = try std.fs.cwd().openDir(test_cases_path, .{ .iterate = true });
     defer test_cases_dir.close();
 
@@ -18,20 +18,11 @@ pub fn build(b: *std.Build) !void {
         if (item.kind != .file) continue;
         if (!std.mem.endsWith(u8, item.path, input_suffix)) continue;
 
-        const integration_test_module = b.createModule(.{
+        const run_integration_test = b.addRunArtifact(b.addTest(.{
             .root_source_file = b.path("src/integration_test.zig"),
             .target = target,
             .optimize = optimize,
-        });
-        if (zlinter.version.zig == .@"0.15" and target.result.os.tag == .windows) {
-            integration_test_module.linkSystemLibrary("advapi32", .{});
-        }
-        const run_integration_test = b.addRunArtifact(b.addTest(.{
-            .root_module = integration_test_module,
-            .test_runner = .{
-                .path = b.path("src/test_runner.zig"),
-                .mode = .simple,
-            },
+            .test_runner = b.path("src/test_runner.zig"),
         }));
         run_integration_test.addArg(b.graph.zig_exe);
 
@@ -72,7 +63,8 @@ pub fn build(b: *std.Build) !void {
     const lint_cmd = b.step("lint", "Lint source code.");
     lint_cmd.dependOn(step: {
         var builder = zlinter.builder(b, .{ .target = target, .optimize = optimize });
-        inline for (@typeInfo(zlinter.BuiltinLintRule).@"enum".fields) |field| {
+        const BuiltinRuleFields = @typeInfo(zlinter.BuiltinLintRule).Enum.fields;
+        inline for (BuiltinRuleFields) |field| {
             builder.addRule(.{ .builtin = @enumFromInt(field.value) }, .{});
         }
         builder.addRule(.{ .custom = .{ .name = "no_cats", .path = "src/no_cats.zig" } }, .{});
@@ -95,14 +87,12 @@ pub fn build(b: *std.Build) !void {
                 .{ .builtin = .no_panic },
                 .{ .severity = .warning },
             );
-            builder.addSource(.compiled(b.addLibrary(.{
+            builder.addSource(.{ .compiled_unit = .{ .compile_step = b.addStaticLibrary(.{
                 .name = "main",
-                .root_module = b.addModule("main", .{
-                    .root_source_file = b.path("src/check_compiled_source/main.zig"),
-                    .target = target,
-                    .optimize = optimize,
-                }),
-            })));
+                .root_source_file = b.path("src/check_compiled_source/main.zig"),
+                .target = target,
+                .optimize = optimize,
+            }) } });
             builder.addPaths(.{ .exclude = &.{b.path("src/check_compiled_source/excluded.zig")} });
             break :step builder.build();
         });
@@ -110,8 +100,8 @@ pub fn build(b: *std.Build) !void {
 }
 
 fn addFileArgIfExists(b: *std.Build, step: *std.Build.Step.Run, raw_path: []const u8) void {
-    var path = b.path(raw_path);
-    const relative_path = path.getPath3(b, &step.step).sub_path;
+    const path = b.path(raw_path);
+    const relative_path = path.src_path.sub_path;
     const exists = if (std.fs.cwd().access(relative_path, .{})) true else |e| e != error.FileNotFound;
     if (exists) {
         step.addFileArg(path);

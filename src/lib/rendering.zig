@@ -144,7 +144,7 @@ pub const LintFileRenderer = struct {
         try writer.writeByte('\n');
 
         // LHS of arrows to impacted area
-        lhs_buffer = @splat(' ');
+        @memset(&lhs_buffer, ' ');
         try writer.writeAll(tty.ansiOrEmpty(&.{.gray}));
         try writer.writeAll(lhs_buffer[0..lhs.len]);
         try writer.writeAll("| ");
@@ -190,7 +190,7 @@ test "LintFileRenderer" {
         try std.testing.expectEqualStrings("", renderer.getLine(2));
 
         {
-            var output = shims.ArrayList(u8).empty;
+            var output = shims.ArrayList(u8){};
             defer output.deinit(std.testing.allocator);
 
             try renderer.render(
@@ -209,7 +209,7 @@ test "LintFileRenderer" {
         }
 
         {
-            var output = shims.ArrayList(u8).empty;
+            var output = shims.ArrayList(u8){};
             defer output.deinit(std.testing.allocator);
 
             try renderer.render(
@@ -231,7 +231,7 @@ test "LintFileRenderer" {
     }
 }
 
-var printer_singleton: Printer = .empty;
+var printer_singleton: Printer = Printer.empty;
 /// Singleton printer for use for the lifetime of the process
 pub var process_printer = &printer_singleton;
 
@@ -245,16 +245,16 @@ pub const Printer = struct {
 
     pub fn initAuto(self: *Printer, verbose: bool) void {
         switch (version.zig) {
-            .@"0.14" => self.init(
+            .@"0.13", .@"0.14" => self.init(
                 .{ .context = .{ .file = std.io.getStdOut() } },
                 .{ .context = .{ .file = std.io.getStdErr() } },
-                .init(std.io.getStdOut()),
+                ansi.Tty.init(std.io.getStdOut()),
                 verbose,
             ),
             .@"0.15", .@"0.16" => self.init(
                 .{ .context = .{ .file = std.fs.File.stdout() } },
                 .{ .context = .{ .file = std.fs.File.stderr() } },
-                .init(std.fs.File.stdout()),
+                ansi.Tty.init(std.fs.File.stdout()),
                 verbose,
             ),
         }
@@ -276,7 +276,7 @@ pub const Printer = struct {
         err,
     };
 
-    const banner: [60]u8 = @splat('-');
+    const banner: [60]u8 = [_]u8{'-'} ** 60;
 
     pub inline fn printBanner(self: Printer, kind: Kind) void {
         return self.println(kind, &banner, .{});
@@ -349,7 +349,7 @@ const FakeSink = struct {
         assertTestOnly();
 
         const array_sink = try allocator.create(shims.ArrayList(u8));
-        array_sink.* = .empty;
+        array_sink.* = .{};
 
         return .{
             .array_sink = array_sink,

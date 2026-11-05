@@ -97,12 +97,12 @@ fn run(
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
-    var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
+    var lint_problems = shims.ArrayList(zlinter.results.LintProblem){};
     defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
 
-    var node: NodeIndexShim = .init(1); // Skip root node at 0
+    var node: NodeIndexShim = NodeIndexShim.init(1); // Skip root node at 0
     nodes: while (node.index < tree.nodes.len) : (node.index += 1) {
         const var_decl = tree.fullVarDecl(node.toNodeIndex()) orelse continue :nodes;
 
@@ -140,8 +140,8 @@ fn run(
             try lint_problems.append(gpa, .{
                 .rule_id = rule.rule_id,
                 .severity = config.decl_name_min_len.severity,
-                .start = .startOfToken(tree, name_token),
-                .end = .endOfToken(tree, name_token),
+                .start = zlinter.results.LintProblemLocation.startOfToken(tree, name_token),
+                .end = zlinter.results.LintProblemLocation.endOfToken(tree, name_token),
                 .message = try std.fmt.allocPrint(gpa, "Declaration names should have a length greater or equal to {d}", .{config.decl_name_min_len.len}),
             });
         } else if (config.decl_name_max_len.severity != .off and name.len > config.decl_name_max_len.len) {
@@ -152,8 +152,8 @@ fn run(
             try lint_problems.append(gpa, .{
                 .rule_id = rule.rule_id,
                 .severity = config.decl_name_max_len.severity,
-                .start = .startOfToken(tree, name_token),
-                .end = .endOfToken(tree, name_token),
+                .start = zlinter.results.LintProblemLocation.startOfToken(tree, name_token),
+                .end = zlinter.results.LintProblemLocation.endOfToken(tree, name_token),
                 .message = try std.fmt.allocPrint(gpa, "Declaration names should have a length less or equal to {d}", .{config.decl_name_max_len.len}),
             });
         }
@@ -182,8 +182,8 @@ fn run(
             try lint_problems.append(gpa, .{
                 .rule_id = rule.rule_id,
                 .severity = style_with_severity.severity,
-                .start = .startOfToken(tree, name_token),
-                .end = .endOfToken(tree, name_token),
+                .start = zlinter.results.LintProblemLocation.startOfToken(tree, name_token),
+                .end = zlinter.results.LintProblemLocation.endOfToken(tree, name_token),
                 .message = try std.fmt.allocPrint(gpa, "{s} declaration should be {s}", .{ var_desc, style_with_severity.style.name() }),
             });
         }

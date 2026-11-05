@@ -51,7 +51,7 @@ verbose: bool = false,
 /// a rule. This is typically just useful for internal testing.
 rule_config_overrides: ?*std.BufMap = null,
 
-build_info: BuildInfo = .default,
+build_info: BuildInfo = BuildInfo.default,
 
 /// Whether user has passed in the `--help` flag.
 help: bool = false,
@@ -104,22 +104,22 @@ pub fn allocParse(
     var lint_args = Args{};
     errdefer lint_args.deinit(allocator);
 
-    var unknown_args = shims.ArrayList([]const u8).empty;
+    var unknown_args = shims.ArrayList([]const u8){};
     defer unknown_args.deinit(allocator);
 
-    var include_paths = shims.ArrayList([]const u8).empty;
+    var include_paths = shims.ArrayList([]const u8){};
     defer include_paths.deinit(allocator);
     errdefer for (include_paths.items) |p| allocator.free(p);
 
-    var exclude_paths = shims.ArrayList([]const u8).empty;
+    var exclude_paths = shims.ArrayList([]const u8){};
     defer exclude_paths.deinit(allocator);
     errdefer for (exclude_paths.items) |p| allocator.free(p);
 
-    var filter_paths = shims.ArrayList([]const u8).empty;
+    var filter_paths = shims.ArrayList([]const u8){};
     defer filter_paths.deinit(allocator);
     errdefer for (filter_paths.items) |p| allocator.free(p);
 
-    var rules = shims.ArrayList([]const u8).empty;
+    var rules = shims.ArrayList([]const u8){};
     defer rules.deinit(allocator);
     errdefer for (rules.items) |r| allocator.free(r);
 
@@ -151,7 +151,7 @@ pub fn allocParse(
         fix_passes_arg,
     };
 
-    const flags: std.StaticStringMap(State) = .initComptime(.{
+    const flags: std.StaticStringMap(State) = std.StaticStringMap(State).initComptime(.{
         .{ "", .parsing },
         .{ "--fix", .fix_arg },
         .{ "--verbose", .verbose_arg },
@@ -170,189 +170,195 @@ pub fn allocParse(
         .{ "--fix-passes", .fix_passes_arg },
     });
 
-    state: switch (State.parsing) {
-        .parsing => {
-            index += 1; // ignore first arg as this is the binary.
-            if (index < args.len)
-                continue :state flags.get(args[index]) orelse .unknown_arg;
-        },
-        .zig_exe_arg => {
-            index += 1;
-            if (index == args.len) {
-                rendering.process_printer.println(.err, "--zig_exe missing path", .{});
-                return error.InvalidArgs;
-            }
-            lint_args.zig_exe = try allocator.dupe(u8, args[index]);
-            continue :state State.parsing;
-        },
-        .zig_lib_directory_arg => {
-            index += 1;
-            if (index == args.len) {
-                rendering.process_printer.println(.err, "--zig_lib_directory missing path", .{});
-                return error.InvalidArgs;
-            }
-            lint_args.zig_lib_directory = try allocator.dupe(u8, args[index]);
-            continue :state State.parsing;
-        },
-        .global_cache_root_arg => {
-            index += 1;
-            if (index == args.len) {
-                rendering.process_printer.println(.err, "--global_cache_root missing path", .{});
-                return error.InvalidArgs;
-            }
-            lint_args.global_cache_root = try allocator.dupe(u8, args[index]);
-            continue :state State.parsing;
-        },
-        .rule_arg => {
-            index += 1;
-            if (index == args.len) {
-                rendering.process_printer.println(.err, "--rule missing rule name", .{});
-                return error.InvalidArgs;
-            }
-
-            const rule_exists: bool = exists: {
-                for (available_rules) |available_rule| {
-                    if (std.mem.eql(u8, available_rule.rule_id, args[index])) break :exists true;
+    var current_state: State = .parsing;
+    state: while (true) {
+        switch (current_state) {
+            .parsing => {
+                index += 1; // ignore first arg as this is the binary.
+                if (index < args.len)
+                    current_state = flags.get(args[index]) orelse .unknown_arg
+                else
+                    break :state;
+            },
+            .zig_exe_arg => {
+                index += 1;
+                if (index == args.len) {
+                    rendering.process_printer.println(.err, "--zig_exe missing path", .{});
+                    return error.InvalidArgs;
                 }
-                break :exists false;
-            };
-            if (!rule_exists) {
-                rendering.process_printer.println(.err, "rule '{s}' not found", .{args[index]});
-                return error.InvalidArgs;
-            }
-
-            try rules.append(allocator, try allocator.dupe(u8, args[index]));
-            continue :state if (index + 1 < args.len and notArgKey(args[index + 1])) State.rule_arg else State.parsing;
-        },
-        .include_path_arg => {
-            index += 1;
-            if (index == args.len) {
-                rendering.process_printer.println(.err, "--include arg missing paths", .{});
-                return error.InvalidArgs;
-            }
-            try include_paths.append(allocator, try allocator.dupe(u8, args[index]));
-            continue :state if (index + 1 < args.len and notArgKey(args[index + 1])) State.include_path_arg else State.parsing;
-        },
-        .exclude_path_arg => {
-            index += 1;
-            if (index == args.len) {
-                rendering.process_printer.println(.err, "--exclude arg missing paths", .{});
-                return error.InvalidArgs;
-            }
-            try exclude_paths.append(allocator, try allocator.dupe(u8, args[index]));
-            continue :state if (index + 1 < args.len and notArgKey(args[index + 1])) State.exclude_path_arg else State.parsing;
-        },
-        .filter_path_arg => {
-            index += 1;
-            if (index == args.len) {
-                rendering.process_printer.println(.err, "--filter arg missing paths", .{});
-                return error.InvalidArgs;
-            }
-            try filter_paths.append(allocator, try allocator.dupe(u8, args[index]));
-            continue :state if (index + 1 < args.len and notArgKey(args[index + 1])) State.filter_path_arg else State.parsing;
-        },
-        .format_arg => {
-            index += 1;
-            if (index == args.len) {
-                rendering.process_printer.println(.err, "--format missing value", .{});
-                return error.InvalidArgs;
-            }
-            inline for (std.meta.fields(@FieldType(Args, "format"))) |field| {
-                if (std.mem.eql(u8, args[index], field.name)) {
-                    lint_args.format = @enumFromInt(field.value);
-                    continue :state State.parsing;
+                lint_args.zig_exe = try allocator.dupe(u8, args[index]);
+                current_state = .parsing;
+            },
+            .zig_lib_directory_arg => {
+                index += 1;
+                if (index == args.len) {
+                    rendering.process_printer.println(.err, "--zig_lib_directory missing path", .{});
+                    return error.InvalidArgs;
                 }
-            }
-            rendering.process_printer.println(.err, "--format only supports: {s}", .{comptime formats: {
-                var formats: []u8 = "";
-                for (std.meta.fieldNames(@FieldType(Args, "format"))) |name| {
-                    formats = @constCast(formats ++ name ++ " ");
+                lint_args.zig_lib_directory = try allocator.dupe(u8, args[index]);
+                current_state = .parsing;
+            },
+            .global_cache_root_arg => {
+                index += 1;
+                if (index == args.len) {
+                    rendering.process_printer.println(.err, "--global_cache_root missing path", .{});
+                    return error.InvalidArgs;
                 }
-                break :formats formats;
-            }});
-            return error.InvalidArgs;
-        },
-        .fix_passes_arg => {
-            index += 1;
-            if (index == args.len) {
-                rendering.process_printer.println(.err, "--fix-passes missing value", .{});
-                return error.InvalidArgs;
-            }
-
-            const error_message = "--fix-passes expects an int between 1 and 255";
-            lint_args.fix_passes = std.fmt.parseInt(u8, args[index], 10) catch {
-                rendering.process_printer.println(.err, error_message, .{});
-                return error.InvalidArgs;
-            };
-            if (lint_args.fix_passes == 0) {
-                rendering.process_printer.println(.err, error_message, .{});
-                return error.InvalidArgs;
-            }
-
-            continue :state State.parsing;
-        },
-        .fix_arg => {
-            lint_args.fix = true;
-            continue :state State.parsing;
-        },
-        .verbose_arg => {
-            lint_args.verbose = true;
-            continue :state State.parsing;
-        },
-        .help_arg => {
-            lint_args.help = true;
-            continue :state State.parsing;
-        },
-        .stdin_arg => {
-            build_info = try BuildInfo.consumeStdinAlloc(
-                stdin_reader,
-                allocator,
-                rendering.process_printer,
-            ) orelse {
-                rendering.process_printer.println(.err, "--stdin but no stdin found", .{});
-                return error.InvalidArgs;
-            };
-            continue :state State.parsing;
-        },
-        .unknown_arg => {
-            try unknown_args.append(allocator, try allocator.dupe(u8, args[index]));
-            continue :state State.parsing;
-        },
-        .rule_config_arg => {
-            index += 1;
-            if (index == args.len) {
-                rendering.process_printer.println(.err, "--rule-config arg missing rule id", .{});
-                return error.InvalidArgs;
-            }
-            const rule_id = args[index];
-
-            const rule_exists: bool = exists: {
-                for (available_rules) |available_rule| {
-                    if (std.mem.eql(u8, available_rule.rule_id, args[index])) break :exists true;
+                lint_args.global_cache_root = try allocator.dupe(u8, args[index]);
+                current_state = .parsing;
+            },
+            .rule_arg => {
+                index += 1;
+                if (index == args.len) {
+                    rendering.process_printer.println(.err, "--rule missing rule name", .{});
+                    return error.InvalidArgs;
                 }
-                break :exists false;
-            };
-            if (!rule_exists) {
-                rendering.process_printer.println(.err, "rule '{s}' not found", .{args[index]});
-                return error.InvalidArgs;
-            }
 
-            index += 1;
-            if (index == args.len) {
-                rendering.process_printer.println(.err, "--rule-config arg missing zon file path", .{});
-                return error.InvalidArgs;
-            }
-            const zon_file_path = args[index];
+                const rule_exists: bool = exists: {
+                    for (available_rules) |available_rule| {
+                        if (std.mem.eql(u8, available_rule.rule_id, args[index])) break :exists true;
+                    }
+                    break :exists false;
+                };
+                if (!rule_exists) {
+                    rendering.process_printer.println(.err, "rule '{s}' not found", .{args[index]});
+                    return error.InvalidArgs;
+                }
 
-            if (rule_config_overrides.get(rule_id) != null) {
-                rendering.process_printer.println(.err, "--rule-config rule id '{s}' already set", .{rule_id});
-                return error.InvalidArgs;
-            }
-            try rule_config_overrides.put(rule_id, zon_file_path);
-            continue :state State.parsing;
-        },
+                try rules.append(allocator, try allocator.dupe(u8, args[index]));
+                current_state = if (index + 1 < args.len and notArgKey(args[index + 1])) State.rule_arg else State.parsing;
+            },
+            .include_path_arg => {
+                index += 1;
+                if (index == args.len) {
+                    rendering.process_printer.println(.err, "--include arg missing paths", .{});
+                    return error.InvalidArgs;
+                }
+                try include_paths.append(allocator, try allocator.dupe(u8, args[index]));
+                current_state = if (index + 1 < args.len and notArgKey(args[index + 1])) State.include_path_arg else State.parsing;
+            },
+            .exclude_path_arg => {
+                index += 1;
+                if (index == args.len) {
+                    rendering.process_printer.println(.err, "--exclude arg missing paths", .{});
+                    return error.InvalidArgs;
+                }
+                try exclude_paths.append(allocator, try allocator.dupe(u8, args[index]));
+                current_state = if (index + 1 < args.len and notArgKey(args[index + 1])) State.exclude_path_arg else State.parsing;
+            },
+            .filter_path_arg => {
+                index += 1;
+                if (index == args.len) {
+                    rendering.process_printer.println(.err, "--filter arg missing paths", .{});
+                    return error.InvalidArgs;
+                }
+                try filter_paths.append(allocator, try allocator.dupe(u8, args[index]));
+                current_state = if (index + 1 < args.len and notArgKey(args[index + 1])) State.filter_path_arg else State.parsing;
+            },
+            .format_arg => {
+                index += 1;
+                if (index == args.len) {
+                    rendering.process_printer.println(.err, "--format missing value", .{});
+                    return error.InvalidArgs;
+                }
+                inline for (std.meta.fields(@TypeOf(lint_args.format))) |field| {
+                    if (std.mem.eql(u8, args[index], field.name)) {
+                        lint_args.format = @enumFromInt(field.value);
+                        current_state = .parsing;
+                        break;
+                    }
+                } else {
+                    rendering.process_printer.println(.err, "--format only supports: {s}", .{comptime formats: {
+                        var formats: []u8 = "";
+                        for (std.meta.fieldNames(@TypeOf(lint_args.format))) |name| {
+                            formats = @constCast(formats ++ name ++ " ");
+                        }
+                        break :formats formats;
+                    }});
+                    return error.InvalidArgs;
+                }
+            },
+            .fix_passes_arg => {
+                index += 1;
+                if (index == args.len) {
+                    rendering.process_printer.println(.err, "--fix-passes missing value", .{});
+                    return error.InvalidArgs;
+                }
+
+                const error_message = "--fix-passes expects an int between 1 and 255";
+                lint_args.fix_passes = std.fmt.parseInt(u8, args[index], 10) catch {
+                    rendering.process_printer.println(.err, error_message, .{});
+                    return error.InvalidArgs;
+                };
+                if (lint_args.fix_passes == 0) {
+                    rendering.process_printer.println(.err, error_message, .{});
+                    return error.InvalidArgs;
+                }
+
+                current_state = .parsing;
+            },
+            .fix_arg => {
+                lint_args.fix = true;
+                current_state = .parsing;
+            },
+            .verbose_arg => {
+                lint_args.verbose = true;
+                current_state = .parsing;
+            },
+            .help_arg => {
+                lint_args.help = true;
+                current_state = .parsing;
+            },
+            .stdin_arg => {
+                build_info = try BuildInfo.consumeStdinAlloc(
+                    stdin_reader,
+                    allocator,
+                    rendering.process_printer,
+                ) orelse {
+                    rendering.process_printer.println(.err, "--stdin but no stdin found", .{});
+                    return error.InvalidArgs;
+                };
+                current_state = .parsing;
+            },
+            .unknown_arg => {
+                try unknown_args.append(allocator, try allocator.dupe(u8, args[index]));
+                current_state = .parsing;
+            },
+            .rule_config_arg => {
+                index += 1;
+                if (index == args.len) {
+                    rendering.process_printer.println(.err, "--rule-config arg missing rule id", .{});
+                    return error.InvalidArgs;
+                }
+                const rule_id = args[index];
+
+                const rule_exists: bool = exists: {
+                    for (available_rules) |available_rule| {
+                        if (std.mem.eql(u8, available_rule.rule_id, args[index])) break :exists true;
+                    }
+                    break :exists false;
+                };
+                if (!rule_exists) {
+                    rendering.process_printer.println(.err, "rule '{s}' not found", .{args[index]});
+                    return error.InvalidArgs;
+                }
+
+                index += 1;
+                if (index == args.len) {
+                    rendering.process_printer.println(.err, "--rule-config arg missing zon file path", .{});
+                    return error.InvalidArgs;
+                }
+                const zon_file_path = args[index];
+
+                if (rule_config_overrides.get(rule_id) != null) {
+                    rendering.process_printer.println(.err, "--rule-config rule id '{s}' already set", .{rule_id});
+                    return error.InvalidArgs;
+                }
+                try rule_config_overrides.put(rule_id, zon_file_path);
+                current_state = .parsing;
+            },
+        }
     }
-
     if (unknown_args.items.len > 0) {
         lint_args.unknown_args = try unknown_args.toOwnedSlice(allocator);
     }
@@ -596,7 +602,7 @@ test "allocParse with only exclude_paths" {
         \\}
     ;
 
-    var backing: shims.ArrayList(u8) = .empty;
+    var backing: shims.ArrayList(u8) = .{};
     defer backing.deinit(std.testing.allocator);
 
     try backing.writer(std.testing.allocator).writeInt(usize, bytes.len, .little);
@@ -626,7 +632,7 @@ test "allocParse with only include_paths" {
         \\}
     ;
 
-    var backing: shims.ArrayList(u8) = .empty;
+    var backing: shims.ArrayList(u8) = .{};
     defer backing.deinit(std.testing.allocator);
 
     try backing.writer(std.testing.allocator).writeInt(usize, bytes.len, .little);
@@ -657,7 +663,7 @@ test "allocParse with include_paths and exclude_paths" {
         \\}
     ;
 
-    var backing: shims.ArrayList(u8) = .empty;
+    var backing: shims.ArrayList(u8) = .{};
     defer backing.deinit(std.testing.allocator);
 
     try backing.writer(std.testing.allocator).writeInt(usize, bytes.len, .little);

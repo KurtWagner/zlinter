@@ -15,7 +15,7 @@ pub const Config = struct {
     },
 
     /// Order and severity for struct fields
-    struct_field_order: zlinter.rules.LintTextOrderWithSeverity = .off,
+    struct_field_order: zlinter.rules.LintTextOrderWithSeverity = zlinter.rules.LintTextOrderWithSeverity.off,
 
     /// Whether to check order of packed structs (e.g., `packed struct(u32) { .. }`).
     /// You probably never want to enforce order of packed structs, so best to
@@ -55,12 +55,12 @@ fn run(
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
-    var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
+    var lint_problems = shims.ArrayList(zlinter.results.LintProblem){};
     defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
 
-    const root: NodeIndexShim = .root;
+    const root: NodeIndexShim = NodeIndexShim.root;
     var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
@@ -98,10 +98,10 @@ fn run(
             continue :nodes;
         }
 
-        var actual_order = shims.ArrayList(Ast.Node.Index).empty;
+        var actual_order = shims.ArrayList(Ast.Node.Index){};
         defer actual_order.deinit(gpa);
 
-        var expected_order = shims.ArrayList(Ast.Node.Index).empty;
+        var expected_order = shims.ArrayList(Ast.Node.Index){};
         defer expected_order.deinit(gpa);
 
         var sorted_queue = std.PriorityQueue(
@@ -116,15 +116,17 @@ fn run(
             // Declarations cannot appear between fields so once we see a field
             // simply read until we see something else to identify the chunk of
             // fields in source:
-            const name_token = token: switch (shims.nodeTag(tree, container_child)) {
-                .container_field_init,
-                .container_field_align,
-                .container_field,
-                => {
-                    seen_field = true;
-                    break :token shims.nodeMainToken(tree, container_child);
-                },
-                else => if (seen_field) break :children else continue :children,
+            const name_token = token: {
+                switch (shims.nodeTag(tree, container_child)) {
+                    .container_field_init,
+                    .container_field_align,
+                    .container_field,
+                    => {
+                        seen_field = true;
+                        break :token shims.nodeMainToken(tree, container_child);
+                    },
+                    else => if (seen_field) break :children else continue :children,
+                }
             };
 
             try actual_order.append(gpa, container_child);
@@ -159,7 +161,7 @@ fn run(
                     },
                 );
 
-            var expected_source = shims.ArrayList(u8).empty;
+            var expected_source = shims.ArrayList(u8){};
             defer expected_source.deinit(gpa);
 
             const last_node = expected_order.items[expected_order.items.len - 1];
@@ -226,14 +228,14 @@ fn nodeSpanIncludingComments(
     zlinter.results.LintProblemLocation,
 } {
     const first_token = firstTokenIncludingComments(tree, first_node);
-    const prev_end: zlinter.results.LintProblemLocation = .endOfToken(tree, first_token - 1);
+    const prev_end: zlinter.results.LintProblemLocation = zlinter.results.LintProblemLocation.endOfToken(tree, first_token - 1);
     const start: zlinter.results.LintProblemLocation = .{
         .byte_offset = prev_end.byte_offset + 1,
     };
 
     var last_token = tree.lastToken(last_node);
     if (options.consume_trailing_comma and tree.tokens.items(.tag)[last_token + 1] == .comma) last_token += 1;
-    const end: zlinter.results.LintProblemLocation = .endOfToken(tree, last_token);
+    const end: zlinter.results.LintProblemLocation = zlinter.results.LintProblemLocation.endOfToken(tree, last_token);
 
     return .{ start, end };
 }
@@ -256,6 +258,424 @@ const Field = struct {
 
 test {
     std.testing.refAllDecls(@This());
+}
+
+test "struct ascending with fix" {
+    const rule = buildRule(.{});
+    const source = "const S = struct { b: u32, a: u32 };";
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .struct_field_order = .{ .order = .alphabetical_ascending, .severity = .warning } },
+        &.{
+            .{
+                .rule_id = "field_ordering",
+                .severity = .warning,
+                .slice = " b: u32, a: u32",
+                .message = "Struct fields should be in alphabetical order",
+                .fix = .{
+                    .start = 18,
+                    .end = 33,
+                    .text = " a: u32, b: u32",
+                },
+            },
+        },
+    );
+}
+
+
+test "struct descending" {
+    const rule = buildRule(.{});
+    const source = "const S = struct { a: u32, b: u32 };";
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .struct_field_order = .{ .order = .alphabetical_descending, .severity = .@"error" } },
+        &.{
+            .{
+                .rule_id = "field_ordering",
+                .severity = .@"error",
+                .slice = " a: u32, b: u32",
+                .message = "Struct fields should be in reverse alphabetical order",
+                .fix = .{
+                    .start = 18,
+                    .end = 33,
+                    .text = " b: u32, a: u32",
+                },
+            },
+        },
+    );
+}
+
+test "enum ordering" {
+    const rule = buildRule(.{});
+    const source = "const E = enum { b, a };";
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .enum_field_order = .{ .order = .alphabetical_ascending, .severity = .warning } },
+        &.{
+            .{
+                .rule_id = "field_ordering",
+                .severity = .warning,
+                .slice = " b, a",
+                .message = "Enum fields should be in alphabetical order",
+                .fix = .{
+                    .start = 16,
+                    .end = 21,
+                    .text = " a, b",
+                },
+            },
+        },
+    );
+}
+
+test "union ordering" {
+    const rule = buildRule(.{});
+    const source = "const U = union { b: u32, a: u32 };";
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .union_field_order = .{ .order = .alphabetical_ascending, .severity = .warning } },
+        &.{
+            .{
+                .rule_id = "field_ordering",
+                .severity = .warning,
+                .slice = " b: u32, a: u32",
+                .message = "Union fields should be in alphabetical order",
+                .fix = .{
+                    .start = 17,
+                    .end = 32,
+                    .text = " a: u32, b: u32",
+                },
+            },
+        },
+    );
+}
+
+test "packed struct excluded by default" {
+    const rule = buildRule(.{});
+    const source = "const P = packed struct(u32) { b: u32, a: u32 };";
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .struct_field_order = .{ .order = .alphabetical_ascending, .severity = .warning } },
+        &.{},
+    );
+}
+
+test "packed struct included" {
+    const rule = buildRule(.{});
+    const source = "const P = packed struct(u32) { b: u32, a: u32 };";
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .struct_field_order = .{ .order = .alphabetical_ascending, .severity = .warning }, .exclude_packed_structs = false },
+        &.{
+            .{
+                .rule_id = "field_ordering",
+                .severity = .warning,
+                .slice = " b: u32, a: u32",
+                .message = "Struct fields should be in alphabetical order",
+                .fix = .{
+                    .start = 30,
+                    .end = 45,
+                    .text = " a: u32, b: u32",
+                },
+            },
+        },
+    );
+}
+
+test "extern struct excluded by default" {
+    const rule = buildRule(.{});
+    const source = "const E = extern struct { b: u32, a: u32 };";
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .struct_field_order = .{ .order = .alphabetical_ascending, .severity = .warning } },
+        &.{},
+    );
+}
+
+test "extern struct included" {
+    const rule = buildRule(.{});
+    const source = "const E = extern struct { b: u32, a: u32 };";
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .struct_field_order = .{ .order = .alphabetical_ascending, .severity = .warning }, .exclude_extern_structs = false },
+        &.{
+            .{
+                .rule_id = "field_ordering",
+                .severity = .warning,
+                .slice = " b: u32, a: u32",
+                .message = "Struct fields should be in alphabetical order",
+                .fix = .{
+                    .start = 25,
+                    .end = 40,
+                    .text = " a: u32, b: u32",
+                },
+            },
+        },
+    );
+}
+
+test "all orders off" {
+    const rule = buildRule(.{});
+    const source = "const S = struct { b: u32, a: u32 };";
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{},
+        &.{},
+    );
+}
+
+test "already sorted" {
+    const rule = buildRule(.{});
+    const source = "const S = struct { a: u32, b: u32 }; const E = enum { a, b }; const U = union { a: u32, b: u32 };";
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .struct_field_order = .{ .order = .alphabetical_ascending, .severity = .warning } },
+        &.{},
+    );
+}
+
+test "doc comments preserved in fix" {
+    const rule = buildRule(.{});
+    const source =
+        \\const S = struct {
+        \\    /// doc for b
+        \\    b: u32,
+        \\    /// doc for a
+        \\    a: u32,
+        \\};
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .struct_field_order = .{ .order = .alphabetical_ascending, .severity = .warning } },
+        &.{
+            .{
+                .rule_id = "field_ordering",
+                .severity = .warning,
+                .slice =
+                \\
+                \\    /// doc for b
+                \\    b: u32,
+                \\    /// doc for a
+                \\    a: u32,
+                ,
+                .message = "Struct fields should be in alphabetical order",
+                .fix = .{
+                    .start = 18,
+                    .end = 78,
+                    .text =
+                    \\
+                    \\    /// doc for a
+                    \\    a: u32,
+                    \\    /// doc for b
+                    \\    b: u32,
+                    ,
+                },
+            },
+        },
+    );
+}
+
+test "single line container" {
+    const rule = buildRule(.{});
+    const source =
+        \\const S = struct {
+        \\    b: u32, a: u32
+        \\};
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .struct_field_order = .{ .order = .alphabetical_ascending, .severity = .warning } },
+        &.{
+            .{
+                .rule_id = "field_ordering",
+                .severity = .warning,
+                .slice =
+                \\
+                \\    b: u32, a: u32
+                ,
+                .message = "Struct fields should be in alphabetical order",
+                .fix = .{
+                    .start = 18,
+                    .end = 37,
+                    .text =
+                    \\ a: u32,
+                    \\    b: u32,
+                    ,
+                },
+            },
+        },
+    );
+}
+
+test "nested struct" {
+    const rule = buildRule(.{});
+    const source =
+        \\const Outer = struct {
+        \\    a: u32,
+        \\    inner: struct { y: u32, x: u32 },
+        \\};
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .struct_field_order = .{ .order = .alphabetical_ascending, .severity = .warning } },
+        &.{
+            .{
+                .rule_id = "field_ordering",
+                .severity = .warning,
+                .slice = " y: u32, x: u32",
+                .message = "Struct fields should be in alphabetical order",
+                .fix = .{
+                    .start = 54,
+                    .end = 69,
+                    .text = " x: u32, y: u32",
+                },
+            },
+        },
+    );
+}
+
+test "fields with default values" {
+    const rule = buildRule(.{});
+    const source = "const S = struct { b: u32 = 0, a: u32 };";
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .struct_field_order = .{ .order = .alphabetical_ascending, .severity = .warning } },
+        &.{
+            .{
+                .rule_id = "field_ordering",
+                .severity = .warning,
+                .slice = " b: u32 = 0, a: u32",
+                .message = "Struct fields should be in alphabetical order",
+                .fix = .{
+                    .start = 18,
+                    .end = 37,
+                    .text = " a: u32, b: u32 = 0",
+                },
+            },
+        },
+    );
+}
+
+test "declarations between fields" {
+    const rule = buildRule(.{});
+    const source =
+        \\const S = struct {
+        \\    const decl = 1;
+        \\    b: u32,
+        \\    a: u32,
+        \\    fn helper() void {}
+        \\};
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .struct_field_order = .{ .order = .alphabetical_ascending, .severity = .warning } },
+        &.{
+            .{
+                .rule_id = "field_ordering",
+                .severity = .warning,
+                .slice =
+                \\
+                \\    b: u32,
+                \\    a: u32,
+                ,
+                .message = "Struct fields should be in alphabetical order",
+                .fix = .{
+                    .start = 38,
+                    .end = 62,
+                    .text =
+                    \\
+                    \\    a: u32,
+                    \\    b: u32,
+                    ,
+                },
+            },
+        },
+    );
+}
+
+test "fix text multi-line struct" {
+    const rule = buildRule(.{});
+    const source =
+        \\const S = struct {
+        \\    c: u32,
+        \\    a: u32,
+        \\    b: u32,
+        \\};
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .struct_field_order = .{ .order = .alphabetical_ascending, .severity = .warning } },
+        &.{
+            .{
+                .rule_id = "field_ordering",
+                .severity = .warning,
+                .slice =
+                \\
+                \\    c: u32,
+                \\    a: u32,
+                \\    b: u32,
+                ,
+                .message = "Struct fields should be in alphabetical order",
+                .fix = .{
+                    .start = 18,
+                    .end = 54,
+                    .text =
+                    \\
+                    \\    a: u32,
+                    \\    b: u32,
+                    \\    c: u32,
+                    ,
+                },
+            },
+        },
+    );
 }
 
 const std = @import("std");

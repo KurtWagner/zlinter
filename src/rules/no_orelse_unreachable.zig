@@ -38,18 +38,18 @@ fn run(
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
-    var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
+    var lint_problems = shims.ArrayList(zlinter.results.LintProblem){};
     defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
 
-    var node: NodeIndexShim = .root;
+    var node: NodeIndexShim = NodeIndexShim.root;
     while (node.index < tree.nodes.len) : (node.index += 1) {
         if (shims.nodeTag(tree, node.toNodeIndex()) != .@"orelse") continue;
 
         const data = shims.nodeData(tree, node.toNodeIndex());
         const rhs = switch (zlinter.version.zig) {
-            .@"0.14" => data.rhs,
+            .@"0.13", .@"0.14" => data.rhs,
             .@"0.15", .@"0.16" => data.node_and_node.@"1",
         };
 
@@ -58,8 +58,8 @@ fn run(
         try lint_problems.append(gpa, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
-            .start = .startOfNode(tree, node.toNodeIndex()),
-            .end = .endOfNode(tree, rhs),
+            .start = zlinter.results.LintProblemLocation.startOfNode(tree, node.toNodeIndex()),
+            .end = zlinter.results.LintProblemLocation.endOfNode(tree, rhs),
             .message = try gpa.dupe(u8, "Prefer `.?` over `orelse unreachable`"),
         });
     }

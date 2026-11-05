@@ -50,10 +50,10 @@ fn run(
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
-    var lint_problems: shims.ArrayList(zlinter.results.LintProblem) = .empty;
+    var lint_problems: shims.ArrayList(zlinter.results.LintProblem) = .{};
     defer lint_problems.deinit(gpa);
 
-    var content_accumulator: shims.ArrayList(u8) = .empty;
+    var content_accumulator: shims.ArrayList(u8) = .{};
     defer content_accumulator.deinit(gpa);
 
     var first_comment: ?zlinter.comments.Comment = null;
@@ -68,9 +68,6 @@ fn run(
         defer prev_line = line;
 
         if (content_accumulator.items.len == 0 or prev_line == line - 1) {
-            if (content_accumulator.items.len == 0) {
-                try content_accumulator.appendSlice(gpa, "fn container() void {");
-            }
             try content_accumulator.appendSlice(gpa, contents);
             try content_accumulator.append(gpa, '\n');
         } else {
@@ -79,8 +76,8 @@ fn run(
                     try lint_problems.append(gpa, .{
                         .rule_id = rule.rule_id,
                         .severity = config.severity,
-                        .start = .startOfComment(doc.comments, first_comment.?),
-                        .end = .endOfComment(doc.comments, last_comment.?),
+                        .start = zlinter.results.LintProblemLocation.startOfComment(doc.comments, first_comment.?),
+                        .end = zlinter.results.LintProblemLocation.endOfComment(doc.comments, last_comment.?),
                         .message = try gpa.dupe(u8, "Avoid code in comments"),
                     });
                 }
@@ -102,8 +99,8 @@ fn run(
             try lint_problems.append(gpa, .{
                 .rule_id = rule.rule_id,
                 .severity = config.severity,
-                .start = .startOfComment(doc.comments, first_comment.?),
-                .end = .endOfComment(doc.comments, last_comment.?),
+                .start = zlinter.results.LintProblemLocation.startOfComment(doc.comments, first_comment.?),
+                .end = zlinter.results.LintProblemLocation.endOfComment(doc.comments, last_comment.?),
                 .message = try gpa.dupe(u8, "Avoid code in comments"),
             });
         }
@@ -125,7 +122,7 @@ fn run(
 
 fn looksLikeCode(content: []const u8, gpa: std.mem.Allocator) !bool {
     if (content.len == 0) return false;
-    if (std.mem.containsAtLeastScalar(u8, content, 1, '`')) return false;
+    if (std.mem.indexOfScalar(u8, content, '`') != null) return false;
 
     const statement_container_fmt = "fn wrap() void {{\n{s}\n}}\n";
     const declaration_container_fmt = "{s}";
@@ -229,8 +226,218 @@ test "looksLikeCode when false" {
     }
 }
 
+test "looksLikeCode empty" {
+    try std.testing.expect(!try looksLikeCode("", std.testing.allocator));
+}
+
+test "looksLikeCode test decl" {
+    try std.testing.expect(try looksLikeCode("test \"foo\" {}", std.testing.allocator));
+}
+
 test {
     std.testing.refAllDecls(@This());
+}
+
+test "run detects commented var" {
+    const rule = buildRule(.{});
+    const source =
+        \\// This is a regular comment
+        \\
+        \\// var a = 1;
+        \\
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_comment_out_code",
+                .severity = .warning,
+                .slice = "// var a = 1;\n",
+                .message = "Avoid code in comments",
+            },
+        },
+    );
+}
+
+test "run detects commented call" {
+    const rule = buildRule(.{});
+    const source =
+        \\// This is a regular comment
+        \\
+        \\// std.debug.print("hi", .{});
+        \\
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_comment_out_code",
+                .severity = .warning,
+                .slice = "// std.debug.print(\"hi\", .{});\n",
+                .message = "Avoid code in comments",
+            },
+        },
+    );
+}
+
+test "run detects commented fn decl" {
+    const rule = buildRule(.{});
+    const source =
+        \\// This is a regular comment
+        \\
+        \\// fn foo() u32 {
+        \\//     return 10;
+        \\// }
+        \\
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_comment_out_code",
+                .severity = .warning,
+                .slice = "// fn foo() u32 {\n//     return 10;\n// }\n",
+                .message = "Avoid code in comments",
+            },
+        },
+    );
+}
+
+test "run ignores plain comment" {
+    const rule = buildRule(.{});
+    const source =
+        \\// this is a regular comment
+        \\
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{},
+        &.{},
+    );
+}
+
+test "run ignores backtick code" {
+    const rule = buildRule(.{});
+    const source =
+        \\// e.g., `var a = 1;`
+        \\
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{},
+        &.{},
+    );
+}
+
+test "run multi-line block" {
+    const rule = buildRule(.{});
+    const source =
+        \\// var a = 1;
+        \\// var b = 2;
+        \\// var c = 3;
+        \\
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_comment_out_code",
+                .severity = .warning,
+                .slice = "// var a = 1;\n// var b = 2;\n// var c = 3;\n",
+                .message = "Avoid code in comments",
+            },
+        },
+    );
+}
+
+test "run separate blocks" {
+    const rule = buildRule(.{});
+    const source =
+        \\// var a = 1;
+        \\
+        \\const x = 1;
+        \\// var b = 2;
+        \\
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_comment_out_code",
+                .severity = .warning,
+                .slice = "// var a = 1;\n",
+                .message = "Avoid code in comments",
+            },
+            .{
+                .rule_id = "no_comment_out_code",
+                .severity = .warning,
+                .slice = "// var b = 2;\n",
+                .message = "Avoid code in comments",
+            },
+        },
+    );
+}
+
+test "run off" {
+    const rule = buildRule(.{});
+    const source =
+        \\// var a = 1;
+        \\
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .severity = .off },
+        &.{},
+    );
+}
+
+test "run end of file flush" {
+    const rule = buildRule(.{});
+    const source = "// var a = 1;";
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_comment_out_code",
+                .severity = .warning,
+                .slice = "// var a = 1;\x00",
+                .message = "Avoid code in comments",
+            },
+        },
+    );
 }
 
 const std = @import("std");

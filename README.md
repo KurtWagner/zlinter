@@ -4,10 +4,10 @@
 
 # Zlinter - Linter for Zig
 
-[![Zig support](https://img.shields.io/badge/Zig-0.14.x%20%7C%200.15.x%20%7C%20master-%23f3ab20?logo=zig&style=flat)](http://github.com/kurtwagner/what-the-zig)
-[![linux](https://img.shields.io/github/actions/workflow/status/KurtWagner/zlinter/linux.yml?branch=0.14.x&label=linux&style=flat)](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml)
-[![windows](https://img.shields.io/github/actions/workflow/status/KurtWagner/zlinter/windows.yml?branch=0.14.x&label=windows&style=flat)](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml)
-[![Coverage Status](https://img.shields.io/coveralls/github/KurtWagner/zlinter/0.14.x?style=flat)](https://coveralls.io/github/KurtWagner/zlinter?branch=0.14.x)
+[![Zig support](https://img.shields.io/badge/Zig-0.13.x%20%7C%200.14.x%20%7C%200.15.x%20%7C%20master-%23f3ab20?logo=zig&style=flat)](http://github.com/kurtwagner/what-the-zig)
+[![linux](https://img.shields.io/github/actions/workflow/status/KurtWagner/zlinter/linux.yml?branch=0.13.x&label=linux&style=flat)](https://github.com/KurtWagner/zlinter/actions/workflows/linux.yml)
+[![windows](https://img.shields.io/github/actions/workflow/status/KurtWagner/zlinter/windows.yml?branch=0.13.x&label=windows&style=flat)](https://github.com/KurtWagner/zlinter/actions/workflows/windows.yml)
+[![Coverage Status](https://img.shields.io/coveralls/github/KurtWagner/zlinter/0.13.x?style=flat)](https://coveralls.io/github/KurtWagner/zlinter?branch=0.13.x)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat)](https://opensource.org/licenses/MIT)
 
 An extendable and customizable **Zig linter** (with [AST explorer](https://kurtwagner.github.io/zlinter/explorer/)) that is integrated from source into your`build.zig`.
@@ -35,7 +35,6 @@ A **linter** is a tool that automatically checks source code for style issues, b
   - [no_comment_out_code](RULES.md#no_comment_out_code)
   - [no_deprecated](RULES.md#no_deprecated)
   - [no_empty_block](RULES.md#no_empty_block)
-  - [no_hidden_allocations](RULES.md#no_hidden_allocations)
   - [no_inferred_error_unions](RULES.md#no_inferred_error_unions)
   - [no_literal_args](RULES.md#no_literal_args)
   - [no_literal_only_bool_expression](RULES.md#no_literal_only_bool_expression)
@@ -47,8 +46,8 @@ A **linter** is a tool that automatically checks source code for style issues, b
   - [no_unused](RULES.md#no_unused)
   - [require_braces](RULES.md#require_braces)
   - [require_doc_comment](RULES.md#require_doc_comment)
-  - [require_errdefer_dealloc](RULES.md#require_errdefer_dealloc)
   - [switch_case_ordering](RULES.md#switch_case_ordering)
+
 - [Configuration](#configuration)
   - [Paths](#configure-paths)
   - [Rules](#configure-rules)
@@ -70,6 +69,12 @@ This makes it flexible to each projects needs. Simply add the dependency and
 hook it up to a build step, like `zig build lint`:
 
 **1. Save dependency to your zig project:**
+
+   For 0.13.x:
+
+   ```shell
+   zig fetch --save git+https://github.com/kurtwagner/zlinter#0.13.x
+   ```
 
    For 0.14.x:
 
@@ -338,7 +343,7 @@ If your project is large it may be worth setting optimize to `.ReleaseFast` - ke
 
 The plan is to support `master` (mostly because its an important exercise in keeping up to date with whats changing in zig) and the latest previous version.
 
-Currently, [`0.14.x`](https://github.com/KurtWagner/zlinter/tree/0.14.x), [`0.15.x`](https://github.com/KurtWagner/zlinter/tree/0.15.x), [`0.16.x`](https://github.com/KurtWagner/zlinter/tree/0.16.x) and [`master`](https://github.com/KurtWagner/zlinter/tree/master).
+Currently, [`0.13.x`](https://github.com/KurtWagner/zlinter/tree/0.13.x), [`0.14.x`](https://github.com/KurtWagner/zlinter/tree/0.14.x), [`0.15.x`](https://github.com/KurtWagner/zlinter/tree/0.15.x), [`0.16.x`](https://github.com/KurtWagner/zlinter/tree/0.16.x) and [`master`](https://github.com/KurtWagner/zlinter/tree/master).
 
 Fixes and improvements to rules may be cherry-picked to older versions if there's no API compatibility issues.
 
@@ -378,7 +383,7 @@ See [limitations](./LIMITATIONS.md) for more information.
 
 - follow the same semantic versioning as `zig`;
 - use branch `master` for `zig` `master` releases; and
-- use branch `0.14.x` for `zig` `0.14.x` releases.
+- use branch `0.13.x` for `zig` `0.13.x` releases.
 
 This may change, especially when `zig` is "stable" at `1.x`. If you have opinions on this, feel free to comment on [#20](https://github.com/KurtWagner/zlinter/issues/20).
 

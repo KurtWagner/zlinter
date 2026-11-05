@@ -1,7 +1,7 @@
 //! Generates a rules zig file at build time that can be built into the linter.
 
 pub fn main() !void {
-    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+    var debug_allocator: std.heap.GeneralPurposeAllocator(.{}) = .{};
     defer if (debug_allocator.deinit() == .leak) @panic("Memory leak");
 
     const gpa = debug_allocator.allocator();
@@ -12,6 +12,7 @@ pub fn main() !void {
     if (args.len < 2) fatal("Wrong number of arguments", .{});
 
     const output_file_path = args[1];
+
     var output_file = std.fs.cwd().createFile(output_file_path, .{}) catch |err| {
         fatal("Unable to open '{s}': {s}", .{ output_file_path, @errorName(err) });
     };
@@ -44,7 +45,7 @@ pub fn main() !void {
     {
         for (rule_names) |rule_name| {
             try output_file.writeAll(
-                try std.fmt.bufPrint(&buffer, "pub const @\"{s}\": @import(\"{s}\").Config = @import(\"{s}.zon\");\n", .{ rule_name, rule_name, rule_name }),
+                try std.fmt.bufPrint(&buffer, "pub const @\"{s}\": @import(\"{s}\").Config = @import(\"{s}_config.zig\").config;\n", .{ rule_name, rule_name, rule_name }),
             );
         }
     }

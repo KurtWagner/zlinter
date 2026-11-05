@@ -72,10 +72,10 @@ const Tokenizer = struct {
 
 /// Returns tokens and line starts (line starts inclusive zero index)
 fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory}!struct { []const Token, []const usize } {
-    var tokens = shims.ArrayList(Token).empty;
+    var tokens = shims.ArrayList(Token){};
     defer tokens.deinit(gpa);
 
-    var line_starts = shims.ArrayList(usize).empty;
+    var line_starts = shims.ArrayList(usize){};
     defer line_starts.deinit(gpa);
     try line_starts.append(gpa, 0); // First line starts on byte zero
 
@@ -87,89 +87,99 @@ fn allocTokenize(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory
     };
 
     var t = Tokenizer{};
-    state: switch (State.parsing) {
-        .parsing => switch (source[t.i]) {
-            0 => {},
-            '\n' => continue :state .consume_newline,
-            '/' => continue :state .consume_forward_slash,
-            else => {
-                t.i += 1;
-                continue :state .parsing;
+    var current_state: State = .parsing;
+    state: while (true) {
+        switch (current_state) {
+            .parsing => {
+                switch (source[t.i]) {
+                    0 => break :state,
+                    '\n' => current_state = .consume_newline,
+                    '/' => current_state = .consume_forward_slash,
+                    else => {
+                        t.i += 1;
+                        current_state = .parsing;
+                    },
+                }
             },
-        },
-        .consume_forward_slash => switch (source[t.i + 1]) {
-            '/' => continue :state .consume_comment,
-            else => {
-                t.i += 1;
-                continue :state .parsing;
+            .consume_forward_slash => {
+                switch (source[t.i + 1]) {
+                    '/' => current_state = .consume_comment,
+                    else => {
+                        t.i += 1;
+                        current_state = .parsing;
+                    },
+                }
             },
-        },
-        .consume_newline => {
-            t.i += 1;
-            t.line += 1;
-            try line_starts.append(gpa, t.i);
-            continue :state .parsing;
-        },
-        .consume_comment => {
-            std.debug.assert(source[t.i] == '/' and source[t.i + 1] == '/');
+            .consume_newline => {
+                t.i += 1;
+                t.line += 1;
+                try line_starts.append(gpa, t.i);
+                current_state = .parsing;
+            },
+            .consume_comment => {
+                std.debug.assert(source[t.i] == '/' and source[t.i + 1] == '/');
 
-            var start = t.i;
-            const tag: Token.Tag, const len: usize = switch (source[t.i + 2]) {
-                '/' => .{ .doc_comment, "///".len },
-                '!' => .{ .file_comment, "//!".len },
-                else => .{ .source_comment, "//".len },
-            };
-            t.i += len;
-            try tokens.append(gpa, .{
-                .tag = tag,
-                .first_byte = start,
-                .len = len,
-                .line = t.line,
-            });
+                var start = t.i;
+                const tag: Token.Tag, const len: usize = switch (source[t.i + 2]) {
+                    '/' => .{ .doc_comment, "///".len },
+                    '!' => .{ .file_comment, "//!".len },
+                    else => .{ .source_comment, "//".len },
+                };
+                t.i += len;
+                try tokens.append(gpa, .{
+                    .tag = tag,
+                    .first_byte = start,
+                    .len = len,
+                    .line = t.line,
+                });
 
-            start = t.i;
-            while (true) switch (source[t.i]) {
-                ':', '(', ')', '\t', ' ', '\n', '\r', 0 => |c| {
-                    if (start < t.i) {
-                        const token_slice = source[start..t.i];
-                        try tokens.append(gpa, .{
-                            .tag = Token.keywords.get(token_slice) orelse .word,
-                            .first_byte = start,
-                            .len = t.i - start,
-                            .line = t.line,
-                        });
-                    }
+                start = t.i;
+                while (true) switch (source[t.i]) {
+                    ':', '(', ')', '\t', ' ', '\n', '\r', 0 => |c| {
+                        if (start < t.i) {
+                            const token_slice = source[start..t.i];
+                            try tokens.append(gpa, .{
+                                .tag = Token.keywords.get(token_slice) orelse .word,
+                                .first_byte = start,
+                                .len = t.i - start,
+                                .line = t.line,
+                            });
+                        }
 
-                    switch (c) {
-                        0 => break,
-                        '\n' => continue :state .consume_newline,
-                        ':' => try tokens.append(gpa, .{
-                            .tag = .colon,
-                            .first_byte = t.i,
-                            .len = 1,
-                            .line = t.line,
-                        }),
-                        ')' => try tokens.append(gpa, .{
-                            .tag = .close_parenthesis,
-                            .first_byte = t.i,
-                            .len = 1,
-                            .line = t.line,
-                        }),
-                        '(' => try tokens.append(gpa, .{
-                            .tag = .open_parenthesis,
-                            .first_byte = t.i,
-                            .len = 1,
-                            .line = t.line,
-                        }),
-                        ' ', '\t', '\r' => {},
-                        else => unreachable,
-                    }
-                    t.i += 1;
-                    start = t.i;
-                },
-                else => t.i += 1,
-            };
-        },
+                        switch (c) {
+                            0 => break :state,
+                            '\n' => {
+                                current_state = .consume_newline;
+                                break;
+                            },
+                            ':' => try tokens.append(gpa, .{
+                                .tag = .colon,
+                                .first_byte = t.i,
+                                .len = 1,
+                                .line = t.line,
+                            }),
+                            ')' => try tokens.append(gpa, .{
+                                .tag = .close_parenthesis,
+                                .first_byte = t.i,
+                                .len = 1,
+                                .line = t.line,
+                            }),
+                            '(' => try tokens.append(gpa, .{
+                                .tag = .open_parenthesis,
+                                .first_byte = t.i,
+                                .len = 1,
+                                .line = t.line,
+                            }),
+                            ' ', '\t', '\r' => {},
+                            else => unreachable,
+                        }
+                        t.i += 1;
+                        start = t.i;
+                    },
+                    else => t.i += 1,
+                };
+            },
+        }
     }
     return .{ try tokens.toOwnedSlice(gpa), try line_starts.toOwnedSlice(gpa) };
 }
@@ -435,7 +445,7 @@ fn testTokenize(
         defer std.testing.allocator.free(line_starts);
         defer std.testing.allocator.free(tokens);
 
-        var actual = shims.ArrayList(struct { u32, Token.Tag, []const u8 }).empty;
+        var actual = shims.ArrayList(struct { u32, Token.Tag, []const u8 }){};
         defer actual.deinit(std.testing.allocator);
         for (tokens) |token| try actual.append(std.testing.allocator, .{
             token.line,
@@ -703,13 +713,13 @@ const Parser = struct {
 pub fn allocParse(source: [:0]const u8, gpa: std.mem.Allocator) error{OutOfMemory}!CommentsDocument {
     const tokens, const line_starts = try allocTokenize(source, gpa);
 
-    var comments = shims.ArrayList(Comment).empty;
+    var comments = shims.ArrayList(Comment){};
     defer comments.deinit(gpa);
 
-    var enables = shims.ArrayList(struct { u32, []const u8 }).empty;
+    var enables = shims.ArrayList(struct { u32, []const u8 }){};
     defer enables.deinit(gpa);
 
-    var disables = shims.ArrayList(struct { u32, []const u8 }).empty;
+    var disables = shims.ArrayList(struct { u32, []const u8 }){};
     defer disables.deinit(gpa);
 
     var p = Parser{ .tokens = tokens };
@@ -1375,8 +1385,8 @@ pub const LazyRuleSkipper = struct {
 
         const line_count = self.doc.line_starts.len;
         var index: Index = .{
-            .rules = .init(self.gpa),
-            .all = try .initFull(self.gpa, line_count + 1),
+            .rules = std.StringHashMap(std.bit_set.DynamicBitSet).init(self.gpa),
+            .all = try std.bit_set.DynamicBitSet.initFull(self.gpa, line_count + 1),
         };
         errdefer index.deinit();
 
@@ -1408,7 +1418,7 @@ pub const LazyRuleSkipper = struct {
 
                     const result = try index.rules.getOrPut(rule_id);
                     if (!result.found_existing) {
-                        result.value_ptr.* = try .initFull(self.gpa, line_count + 1);
+                        result.value_ptr.* = try std.bit_set.DynamicBitSet.initFull(self.gpa, line_count + 1);
                     }
                     result.value_ptr.setRangeValue(set.range, set.value);
                 }

@@ -1,7 +1,7 @@
 //! Generates a rules zig file at build time that can be built into the linter.
 
 pub fn main() !void {
-    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+    var debug_allocator: std.heap.GeneralPurposeAllocator(.{}) = .{};
     defer if (debug_allocator.deinit() == .leak) @panic("Memory leak");
 
     const gpa = debug_allocator.allocator();
@@ -95,7 +95,7 @@ fn writeFileRuleConfig(content: []const u8, gpa: std.mem.Allocator, writer: anyt
             if (!std.mem.eql(u8, name, "Config")) continue;
 
             const struct_init = tree.fullContainerDecl(&struct_buffer, switch (zig_version) {
-                .@"0.14" => var_decl.ast.init_node,
+                .@"0.13", .@"0.14" => var_decl.ast.init_node,
                 .@"0.15", .@"0.16" => var_decl.ast.init_node.unwrap().?,
             }).?;
 
@@ -121,7 +121,7 @@ fn writeFileRuleConfig(content: []const u8, gpa: std.mem.Allocator, writer: anyt
                 }
 
                 const maybe_default: ?[]const u8 = switch (zig_version) {
-                    .@"0.14" => if (container_field.ast.value_expr != 0) tree.getNodeSource(container_field.ast.value_expr) else null,
+                    .@"0.13", .@"0.14" => if (container_field.ast.value_expr != 0) tree.getNodeSource(container_field.ast.value_expr) else null,
                     .@"0.15", .@"0.16" => if (container_field.ast.value_expr.unwrap()) |default_node| tree.getNodeSource(default_node) else null,
                 };
 

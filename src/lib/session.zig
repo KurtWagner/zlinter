@@ -15,7 +15,7 @@ pub const LintDocument = struct {
     skipper: comments.LazyRuleSkipper,
 
     pub fn deinit(self: *LintDocument, gpa: std.mem.Allocator) void {
-        while (self.lineage.pop()) |connections| {
+        while (self.lineage.popOrNull()) |connections| {
             connections.deinit(gpa);
         }
 
@@ -58,7 +58,7 @@ pub const LintDocument = struct {
     ) error{OutOfMemory}!ast.NodeLineageIterator {
         var it = ast.NodeLineageIterator{
             .gpa = gpa,
-            .queue = .empty,
+            .queue = .{},
             .lineage = &self.lineage,
         };
         try it.queue.append(gpa, node);
@@ -91,14 +91,20 @@ pub const LintDocument = struct {
     }
 
     /// For debugging purposes only, should never be left in
-    pub fn dumpType(self: *const LintDocument, t: zls.Analyser.Type, indent_size: u32) !void {
-        var buffer: [128]u8 = @splat(' ');
+    pub fn dumpType(self: *const LintDocument, analyser: *zls.Analyser, t: zls.Analyser.Type, indent_size: u32) !void {
+        var buffer: [128]u8 = [_]u8{' '} ** 128;
         const indent = buffer[0..indent_size];
 
         std.debug.print("{s}------------------------------------\n", .{indent});
         std.debug.print("{s}is_type_val: {}\n", .{ indent, t.is_type_val });
-        std.debug.print("{s}isContainerType: {}\n", .{ indent, t.isContainerType() });
-        std.debug.print("{s}isEnumLiteral: {}\n", .{ indent, t.isEnumLiteral() });
+        switch (version.zig) {
+            .@"0.13" => {},
+            .@"0.14", .@"0.15", .@"0.16" => std.debug.print("{s}isContainerType: {}\n", .{ indent, t.isContainerType() }),
+        }
+        std.debug.print("{s}isEnumLiteral: {}\n", .{ indent, switch (version.zig) {
+            .@"0.13" => t.isEnumLiteral(analyser),
+            .@"0.14", .@"0.15", .@"0.16" => t.isEnumLiteral(),
+        } });
         std.debug.print("{s}isEnumType: {}\n", .{ indent, t.isEnumType() });
         std.debug.print("{s}isFunc: {}\n", .{ indent, t.isFunc() });
         std.debug.print("{s}isGenericFunc: {}\n", .{ indent, t.isGenericFunc() });
@@ -111,22 +117,36 @@ pub const LintDocument = struct {
         std.debug.print("{s}isUnionType: {}\n", .{ indent, t.isUnionType() });
 
         if (t.data == .ip_index) {
-            std.debug.print("{s}Primitive: {}\n", .{ indent, t.data.ip_index.type });
-            if (t.data.ip_index.index) |tt| {
-                std.debug.print("{s}Value: {}\n", .{ indent, tt });
+            switch (version.zig) {
+                .@"0.13" => std.debug.print("{s}Primitive index: {}\n", .{ indent, t.data.ip_index.index }),
+                .@"0.14", .@"0.15", .@"0.16" => {
+                    std.debug.print("{s}Primitive: {}\n", .{ indent, t.data.ip_index.type });
+                    if (t.data.ip_index.index) |tt| {
+                        std.debug.print("{s}Value: {}\n", .{ indent, tt });
+                    }
+                },
             }
         }
 
-        const decl_literal = t.resolveDeclLiteralResultType();
-        if (!decl_literal.eql(t)) {
-            std.debug.print("{s}Decl literal result type:\n", .{indent});
-            try self.dumpType(decl_literal, indent_size + 4);
+        switch (version.zig) {
+            .@"0.13" => {},
+            .@"0.14", .@"0.15", .@"0.16" => {
+                const decl_literal = t.resolveDeclLiteralResultType();
+                if (!decl_literal.eql(t)) {
+                    std.debug.print("{s}Decl literal result type:\n", .{indent});
+                    try self.dumpType(analyser, decl_literal, indent_size + 4);
+                }
+            },
         }
 
-        if (t.instanceTypeVal(self.analyser)) |instance| {
+        const maybe_instance = switch (version.zig) {
+            .@"0.13", .@"0.15", .@"0.16" => try t.instanceTypeVal(analyser),
+            .@"0.14" => t.instanceTypeVal(analyser),
+        };
+        if (maybe_instance) |instance| {
             if (!instance.eql(t)) {
                 std.debug.print("{s}Instance result type:\n", .{indent});
-                try self.dumpType(instance, indent_size + 4);
+                try self.dumpType(analyser, instance, indent_size + 4);
             }
         }
     }
@@ -145,7 +165,7 @@ fn isTestOnlyCondition(tree: Ast, if_statement: Ast.full.If) bool {
 /// The context of all document and rule executions.
 pub const LintContext = struct {
     thread_pool: if (builtin.single_threaded) void else std.Thread.Pool,
-    diagnostics_collection: zls.DiagnosticsCollection,
+    diagnostics_collection: void,
     intern_pool: zls.analyser.InternPool,
     document_store: zls.DocumentStore,
     gpa: std.mem.Allocator,
@@ -159,8 +179,8 @@ pub const LintContext = struct {
     ) !void {
         self.* = .{
             .gpa = gpa,
-            .diagnostics_collection = .{ .allocator = gpa },
-            .intern_pool = try .init(gpa),
+            .diagnostics_collection = {},
+            .intern_pool = try zls.analyser.InternPool.init(gpa),
             .thread_pool = undefined, // zlinter-disable-current-line no_undefined - set below
             .document_store = undefined, // zlinter-disable-current-line no_undefined - set below
             .analyser = undefined, // zlinter-disable-current-line no_undefined - set below
@@ -173,47 +193,62 @@ pub const LintContext = struct {
                 .n_jobs = @min(4, std.Thread.getCpuCount() catch 1),
             }) catch @panic("Failed to init thread pool");
         }
-        self.document_store = zls.DocumentStore{
-            .allocator = gpa,
-            .diagnostics_collection = &self.diagnostics_collection,
-            .config = switch (version.zig) {
-                .@"0.15", .@"0.16" => .{
-                    .zig_exe_path = config.zig_exe_path,
-                    .zig_lib_dir = dir: {
-                        if (config.zig_lib_path) |zig_lib_path| {
-                            if (std.fs.openDirAbsolute(zig_lib_path, .{})) |zig_lib_dir| {
-                                break :dir .{
-                                    .handle = zig_lib_dir,
-                                    .path = zig_lib_path,
-                                };
-                            } else |err| {
-                                std.log.err("failed to open zig library directory '{s}': {s}", .{ zig_lib_path, @errorName(err) });
-                            }
-                        }
-                        break :dir null;
-                    },
-                    .build_runner_path = config.build_runner_path,
-                    .builtin_path = config.builtin_path,
-                    .global_cache_dir = dir: {
-                        if (config.global_cache_path) |global_cache_path| {
-                            if (std.fs.openDirAbsolute(global_cache_path, .{})) |global_cache_dir| {
-                                break :dir .{
-                                    .handle = global_cache_dir,
-                                    .path = global_cache_path,
-                                };
-                            } else |err| {
-                                std.log.err("failed to open zig library directory '{s}': {s}", .{ global_cache_path, @errorName(err) });
-                            }
-                        }
-                        break :dir null;
-                    },
-                },
-                .@"0.14" => .fromMainConfig(config),
+        self.document_store = switch (version.zig) {
+            .@"0.13" => zls.DocumentStore{
+                .allocator = gpa,
+                .config = zls.DocumentStore.Config.fromMainConfig(config),
+                .thread_pool = &self.thread_pool,
             },
-            .thread_pool = &self.thread_pool,
+            .@"0.14", .@"0.15", .@"0.16" => zls.DocumentStore{
+                .allocator = gpa,
+                .diagnostics_collection = &self.diagnostics_collection,
+                .config = switch (version.zig) {
+                    .@"0.15", .@"0.16" => .{
+                        .zig_exe_path = config.zig_exe_path,
+                        .zig_lib_dir = dir: {
+                            if (config.zig_lib_path) |zig_lib_path| {
+                                if (std.fs.openDirAbsolute(zig_lib_path, .{})) |zig_lib_dir| {
+                                    break :dir .{
+                                        .handle = zig_lib_dir,
+                                        .path = zig_lib_path,
+                                    };
+                                } else |err| {
+                                    std.log.err("failed to open zig library directory '{s}': {s}", .{ zig_lib_path, @errorName(err) });
+                                }
+                            }
+                            break :dir null;
+                        },
+                        .build_runner_path = config.build_runner_path,
+                        .builtin_path = config.builtin_path,
+                        .global_cache_dir = dir: {
+                            if (config.global_cache_path) |global_cache_path| {
+                                if (std.fs.openDirAbsolute(global_cache_path, .{})) |global_cache_dir| {
+                                    break :dir .{
+                                        .handle = global_cache_dir,
+                                        .path = global_cache_path,
+                                    };
+                                } else |err| {
+                                    std.log.err("failed to open zig library directory '{s}': {s}", .{ global_cache_path, @errorName(err) });
+                                }
+                            }
+                            break :dir null;
+                        },
+                    },
+                    .@"0.14" => zls.DocumentStore.Config.fromMainConfig(config),
+                    .@"0.13" => unreachable,
+                },
+                .thread_pool = &self.thread_pool,
+            },
         };
 
         self.analyser = switch (version.zig) {
+            .@"0.13" => zls.Analyser.init(
+                gpa,
+                &self.document_store,
+                &self.intern_pool,
+                null,
+                false,
+            ),
             .@"0.14" => zls.Analyser.init(
                 gpa,
                 &self.document_store,
@@ -231,7 +266,6 @@ pub const LintContext = struct {
     }
 
     pub fn deinit(self: *LintContext) void {
-        self.diagnostics_collection.deinit();
         self.intern_pool.deinit(self.gpa);
         self.document_store.deinit();
         self.analyser.deinit();
@@ -266,14 +300,14 @@ pub const LintContext = struct {
         doc.* = .{
             .path = try gpa.dupe(u8, path),
             .handle = handle,
-            .lineage = .empty,
+            .lineage = .{},
             .comments = src_comments,
             .skipper = undefined, // zlinter-disable-current-line no_undefined - set below
         };
         errdefer gpa.free(doc.path);
         errdefer doc.lineage.deinit(gpa);
 
-        doc.skipper = .init(doc.comments, doc.handle.tree.source, gpa);
+        doc.skipper = comments.LazyRuleSkipper.init(doc.comments, doc.handle.tree.source, gpa);
         errdefer doc.skipper.deinit();
 
         {
@@ -287,12 +321,12 @@ pub const LintContext = struct {
                 node: NodeIndexShim,
             };
 
-            var queue = shims.ArrayList(QueueItem).empty;
+            var queue = shims.ArrayList(QueueItem){};
             defer queue.deinit(gpa);
 
             try queue.append(gpa, .{ .node = NodeIndexShim.root });
 
-            while (queue.pop()) |item| {
+            while (queue.popOrNull()) |item| {
                 const children = try ast.nodeChildrenAlloc(
                     gpa,
                     doc.handle.tree,
@@ -326,7 +360,7 @@ pub const LintContext = struct {
     pub inline fn resolveTypeOfNode(self: *LintContext, doc: *const LintDocument, node: Ast.Node.Index) !?zls.Analyser.Type {
         return switch (version.zig) {
             .@"0.15", .@"0.16" => self.analyser.resolveTypeOfNode(.of(node, doc.handle)),
-            .@"0.14" => self.analyser.resolveTypeOfNode(.{ .handle = doc.handle, .node = node }),
+            .@"0.13", .@"0.14" => self.analyser.resolveTypeOfNode(.{ .handle = doc.handle, .node = node }),
         };
     }
 
@@ -336,10 +370,13 @@ pub const LintContext = struct {
         const resolved_type = try self.resolveTypeOfNode(doc, node) orelse return null;
         const instance_type = if (resolved_type.isMetaType()) resolved_type else switch (version.zig) {
             .@"0.14" => resolved_type.instanceTypeVal(&self.analyser) orelse resolved_type,
-            .@"0.15", .@"0.16" => try resolved_type.instanceTypeVal(&self.analyser) orelse resolved_type,
+            .@"0.13", .@"0.15", .@"0.16" => try resolved_type.instanceTypeVal(&self.analyser) orelse resolved_type,
         };
 
-        return instance_type.resolveDeclLiteralResultType();
+        return switch (version.zig) {
+            .@"0.13" => instance_type,
+            .@"0.14", .@"0.15", .@"0.16" => instance_type.resolveDeclLiteralResultType(),
+        };
     }
 
     // TODO: Write tests and clean this up as they're not really all needed
@@ -468,7 +505,10 @@ pub const LintContext = struct {
             } else if (shims.isIdentiferKind(tree, node, .type)) {
                 return .type;
             } else if (try self.resolveTypeOfNode(doc, node)) |type_node_type| {
-                const decl = type_node_type.resolveDeclLiteralResultType();
+                const decl = switch (version.zig) {
+                    .@"0.13" => type_node_type,
+                    .@"0.14", .@"0.15", .@"0.16" => type_node_type.resolveDeclLiteralResultType(),
+                };
                 if (decl.isUnionType()) {
                     return .union_instance;
                 } else if (decl.isEnumType()) {
@@ -501,10 +541,28 @@ pub const LintContext = struct {
                 .builtin_call,
                 .builtin_call_comma,
                 => {
-                    inline for (&.{ "@Type", "@TypeOf" }) |builtin_name| {
+                    inline for (&.{ "@Type", "@TypeOf", "@typeInfo" }) |builtin_name| {
                         if (std.mem.eql(u8, builtin_name, tree.tokenSlice(shims.nodeMainToken(tree, node)))) {
                             return .type;
                         }
+                    }
+                },
+                .field_access => {
+                    var lhs = shims.nodeData(tree, node).lhs;
+                    while (shims.nodeTag(tree, lhs) == .field_access) {
+                        lhs = shims.nodeData(tree, lhs).lhs;
+                    }
+                    switch (shims.nodeTag(tree, lhs)) {
+                        .builtin_call_two,
+                        .builtin_call_two_comma,
+                        .builtin_call,
+                        .builtin_call_comma,
+                        => {
+                            if (std.mem.eql(u8, "@typeInfo", tree.tokenSlice(shims.nodeMainToken(tree, lhs)))) {
+                                return .type;
+                            }
+                        },
+                        else => {},
                     }
                 },
                 .error_set_decl,
@@ -523,21 +581,32 @@ pub const LintContext = struct {
                 }
             } else if (try self.resolveTypeOfNode(doc, node)) |init_node_type| {
                 // std.debug.print("InitNode - ResolvedNode type: {}\n", .{init_node_type});
-                // try self.dumpType(init_node_type, 0);
+                // try doc.dumpType(&self.analyser, init_node_type, 0);
 
-                const decl = init_node_type.resolveDeclLiteralResultType();
+                const decl = switch (version.zig) {
+                    .@"0.13" => init_node_type,
+                    .@"0.14", .@"0.15", .@"0.16" => init_node_type.resolveDeclLiteralResultType(),
+                };
 
                 // std.debug.print("InitNode - Resolved type: {}\n", .{decl});
-                // try self.dumpType(decl, 0);
+                // try doc.dumpType(&self.analyser, decl, 0);
 
-                const is_error_container =
-                    if (std.meta.hasMethod(@TypeOf(decl), "isErrorSetType"))
+                const is_error_container = switch (version.zig) {
+                    .@"0.13" => switch (decl.data) {
+                        .other => |node_handle| !NodeIndexShim.init(node_handle.node).isRoot() and
+                            switch (shims.nodeTag(node_handle.handle.tree, node_handle.node)) {
+                            .error_set_decl, .merge_error_sets => true,
+                            else => false,
+                        },
+                        else => false,
+                    },
+                    .@"0.14", .@"0.15", .@"0.16" => if (std.meta.hasMethod(@TypeOf(decl), "isErrorSetType"))
                         decl.isErrorSetType(&self.analyser)
                     else switch (decl.data) {
                         .container => |container| result: {
                             const container_node, const container_tree = switch (version.zig) {
-                                .@"0.14" => .{ container.toNode(), container.handle.tree },
-                                .@"0.15", .@"0.16" => .{ container.scope_handle.toNode(), container.scope_handle.handle.tree },
+                                .@"0.14" => .{ container.node, container.handle.tree },
+                                .@"0.15", .@"0.16" => .{ container.scope_handle.node, container.scope_handle.handle.tree },
                             };
 
                             if (!NodeIndexShim.init(container_node).isRoot()) {
@@ -549,7 +618,8 @@ pub const LintContext = struct {
                             break :result false;
                         },
                         else => false,
-                    };
+                    },
+                };
 
                 if (is_error_container) {
                     return .error_type;
@@ -569,6 +639,14 @@ pub const LintContext = struct {
                     return if (init_node_type.is_type_val) .fn_type else .@"fn";
                 } else if (decl.isMetaType()) {
                     return .type;
+                } else if (decl.data == .pointer) {
+                    const elem_ty = decl.data.pointer.elem_ty.*;
+                    if (elem_ty.isTypeFunc()) {
+                        return if (init_node_type.is_type_val) .fn_type_returns_type else .fn_returns_type;
+                    } else if (elem_ty.isFunc()) {
+                        return if (init_node_type.is_type_val) .fn_type else .@"fn";
+                    }
+                    return .other;
                 } else {
                     if (init_node_type.is_type_val) {
                         switch (init_node_type.data) {
@@ -649,70 +727,70 @@ test "LintDocument.isEnclosedInTestBlock" {
     );
 
     try std.testing.expect(
-        !doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+        !doc.isEnclosedInTestBlock(NodeIndexShim.init(try testing.expectVarDecl(
             doc.handle.tree,
             "is_not_in_test",
         ))),
     );
 
     try std.testing.expect(
-        doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+        doc.isEnclosedInTestBlock(NodeIndexShim.init(try testing.expectVarDecl(
             doc.handle.tree,
             "is_in_test_without_name",
         ))),
     );
 
     try std.testing.expect(
-        doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+        doc.isEnclosedInTestBlock(NodeIndexShim.init(try testing.expectVarDecl(
             doc.handle.tree,
             "is_in_test_if_condition_a",
         ))),
     );
 
     try std.testing.expect(
-        doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+        doc.isEnclosedInTestBlock(NodeIndexShim.init(try testing.expectVarDecl(
             doc.handle.tree,
             "is_in_test_if_condition_b",
         ))),
     );
 
     try std.testing.expect(
-        doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+        doc.isEnclosedInTestBlock(NodeIndexShim.init(try testing.expectVarDecl(
             doc.handle.tree,
             "is_in_test_if_condition_c",
         ))),
     );
 
     try std.testing.expect(
-        !doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+        !doc.isEnclosedInTestBlock(NodeIndexShim.init(try testing.expectVarDecl(
             doc.handle.tree,
             "is_not_in_test_if_condition",
         ))),
     );
 
     try std.testing.expect(
-        doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+        doc.isEnclosedInTestBlock(NodeIndexShim.init(try testing.expectVarDecl(
             doc.handle.tree,
             "is_in_test_nested_if_condition_a",
         ))),
     );
 
     try std.testing.expect(
-        doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+        doc.isEnclosedInTestBlock(NodeIndexShim.init(try testing.expectVarDecl(
             doc.handle.tree,
             "is_in_test_nested_if_condition_b",
         ))),
     );
 
     try std.testing.expect(
-        doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+        doc.isEnclosedInTestBlock(NodeIndexShim.init(try testing.expectVarDecl(
             doc.handle.tree,
             "is_in_test_nested_if_condition_c",
         ))),
     );
 
     try std.testing.expect(
-        !doc.isEnclosedInTestBlock(.init(try testing.expectVarDecl(
+        !doc.isEnclosedInTestBlock(NodeIndexShim.init(try testing.expectVarDecl(
             doc.handle.tree,
             "is_not_in_test_nested_if_condition_a",
         ))),
@@ -1024,7 +1102,7 @@ test "LintContext.resolveTypeKind" {
             @panic("Fail");
 
         std.testing.expectEqual(test_case.kind, actual_kind) catch |e| {
-            const border: [50]u8 = @splat('-');
+            const border: [50]u8 = [_]u8{'-'} ** 50;
             std.debug.print("Node:\n{s}\n{s}\n{s}\n", .{ border, doc.handle.tree.getNodeSource(node), border });
             std.debug.print("Expected: {any}\n", .{test_case.kind});
             std.debug.print("Actual: {any}\n", .{actual_kind});

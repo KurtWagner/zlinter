@@ -1,6 +1,5 @@
 .{
-    .name = .tests,
-    .fingerprint = 0x1260fc5e0cc85019,
+    .name = "tests",
     .version = "0.0.0",
     .dependencies = .{
         .zlinter = .{

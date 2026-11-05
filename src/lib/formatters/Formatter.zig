@@ -15,10 +15,10 @@ pub const Error = error{
     WriteFailure,
 };
 
-formatFn: *const fn (*const Formatter, FormatInput, writer: anytype) Error!void,
+formatFn: *const fn (FormatInput, writer: anytype) Error!void,
 
 pub inline fn format(self: *const Formatter, input: FormatInput, writer: anytype) Error!void {
-    return self.formatFn(self, input, writer);
+    return self.formatFn(input, writer);
 }
 
 const std = @import("std");

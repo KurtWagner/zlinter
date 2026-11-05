@@ -4,10 +4,7 @@ formatter: Formatter = .{
     .formatFn = &format,
 },
 
-fn format(formatter: *const Formatter, input: Formatter.FormatInput, writer: anytype) Formatter.Error!void {
-    const self: *const DefaultFormatter = @alignCast(@fieldParentPtr("formatter", formatter));
-    _ = self;
-
+fn format(input: Formatter.FormatInput, writer: anytype) Formatter.Error!void {
     var error_count: u32 = 0;
     var warning_count: u32 = 0;
     var total_disabled_by_comment: usize = 0;

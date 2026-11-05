@@ -62,7 +62,7 @@ fn run(
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
-    var lint_problems: shims.ArrayList(zlinter.results.LintProblem) = .empty;
+    var lint_problems: shims.ArrayList(zlinter.results.LintProblem) = .{};
     defer lint_problems.deinit(gpa);
 
     var scoped_imports = try resolveScopedImports(doc, gpa);
@@ -82,8 +82,8 @@ fn run(
                     try lint_problems.append(gpa, .{
                         .rule_id = rule.rule_id,
                         .severity = config.severity,
-                        .start = .startOfNode(tree, import.decl_node),
-                        .end = .endOfNode(tree, import.decl_node),
+                        .start = zlinter.results.LintProblemLocation.startOfNode(tree, import.decl_node),
+                        .end = zlinter.results.LintProblemLocation.endOfNode(tree, import.decl_node),
                         .message = try std.fmt.allocPrint(gpa, "Import '{s}' should grouped with other imports", .{import.decl_name}),
                         .fix = try swapNodesFix(doc, p.decl_node, import.decl_node, gpa),
                     });
@@ -96,8 +96,8 @@ fn run(
                         try lint_problems.append(gpa, .{
                             .rule_id = rule.rule_id,
                             .severity = config.severity,
-                            .start = .startOfNode(tree, import.decl_node),
-                            .end = .endOfNode(tree, import.decl_node),
+                            .start = zlinter.results.LintProblemLocation.startOfNode(tree, import.decl_node),
+                            .end = zlinter.results.LintProblemLocation.endOfNode(tree, import.decl_node),
                             .message = try std.fmt.allocPrint(gpa, "Import '{s}' is not in {s} order", .{ import.decl_name, config.order.name() }),
                             .fix = try swapNodesFix(doc, p.decl_node, import.decl_node, gpa),
                         });
@@ -185,11 +185,11 @@ fn resolveScopedImports(
 ) !std.AutoArrayHashMap(Ast.Node.Index, ImportsQueueLinesAscending) {
     const tree = doc.handle.tree;
 
-    const root: NodeIndexShim = .root;
+    const root: NodeIndexShim = NodeIndexShim.root;
     var node_it = try doc.nodeLineageIterator(root, gpa);
     defer node_it.deinit();
 
-    var scoped_imports: std.AutoArrayHashMap(Ast.Node.Index, ImportsQueueLinesAscending) = .init(gpa);
+    var scoped_imports: std.AutoArrayHashMap(Ast.Node.Index, ImportsQueueLinesAscending) = std.AutoArrayHashMap(Ast.Node.Index, ImportsQueueLinesAscending).init(gpa);
     while (try node_it.next()) |tuple| {
         const node, const connections = tuple;
 
@@ -238,7 +238,7 @@ fn isImportCall(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
 
             const data = shims.nodeData(tree, node);
             const lhs_node = NodeIndexShim.initOptional(switch (zlinter.version.zig) {
-                .@"0.14" => data.lhs,
+                .@"0.13", .@"0.14" => data.lhs,
                 .@"0.15", .@"0.16" => data.opt_node_and_opt_node[0],
             }) orelse return null;
 

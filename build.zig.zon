@@ -1,13 +1,10 @@
 .{
-    .name = .zlinter,
-    .fingerprint = 0x10e04548f134343a,
+    .name = "zlinter",
     .version = "0.0.1",
-    .minimum_zig_version = "0.14.0",
     .dependencies = .{
         .zls = .{
-            // Update with `zig fetch --save git+https://github.com/zigtools/zls#0.14.0`
-            .url = "git+https://github.com/zigtools/zls?ref=0.14.0#7485feeeda45d1ad09422ae83af73307ab9e6c9e",
-            .hash = "zls-0.14.0-rmm5fjKFIADiTeGEPxU79BXPmOqepsgJPJrghXzTStc5",
+            .url = "git+https://github.com/zigtools/zls?ref=0.13.0#a26718049a8657d4da04c331aeced1697bc7652b",
+            .hash = "122073c0f68582ef6af32b438f7061ce954bf31c17af734d2427834c50a256613b98",
         },
     },
     .paths = .{

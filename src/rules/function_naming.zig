@@ -72,12 +72,12 @@ fn run(
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
-    var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
+    var lint_problems = shims.ArrayList(zlinter.results.LintProblem){};
     defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
 
-    var node: NodeIndexShim = .init(1); // Skip root node at 0
+    var node: NodeIndexShim = NodeIndexShim.init(1); // Skip root node at 0
     nodes: while (node.index < tree.nodes.len) : (node.index += 1) {
         var buffer: [1]Ast.Node.Index = undefined;
         if (namedFnProto(tree, &buffer, node.toNodeIndex())) |fn_proto| {
@@ -96,7 +96,7 @@ fn run(
             const return_type = (try context.resolveTypeOfTypeNode(
                 doc,
                 switch (zlinter.version.zig) {
-                    .@"0.14" => fn_proto.ast.return_type,
+                    .@"0.13", .@"0.14" => fn_proto.ast.return_type,
                     .@"0.15", .@"0.16" => fn_proto.ast.return_type.unwrap().?,
                 },
             )) orelse continue :nodes;
@@ -126,8 +126,8 @@ fn run(
                     .{
                         .severity = severity.?,
                         .rule_id = rule.rule_id,
-                        .start = .startOfToken(tree, fn_name_token),
-                        .end = .endOfToken(tree, fn_name_token),
+                        .start = zlinter.results.LintProblemLocation.startOfToken(tree, fn_name_token),
+                        .end = zlinter.results.LintProblemLocation.endOfToken(tree, fn_name_token),
                         .message = message,
                     },
                 );
@@ -157,9 +157,9 @@ fn run(
 
                 if (try context.resolveTypeOfTypeNode(doc, param)) |param_type| {
                     const style_with_severity: zlinter.rules.LintTextStyleWithSeverity, const desc: []const u8 =
-                        if (param_type.isTypeFunc())
+                        if (isTypeFuncType(param_type))
                             .{ config.function_arg_that_is_type_fn, "Function argument of type function" }
-                        else if (param_type.isFunc())
+                        else if (isFuncType(param_type))
                             .{ config.function_arg_that_is_fn, "Function argument of function" }
                         else if (param_type.isMetaType())
                             .{ config.function_arg_that_is_type, "Function argument of type" }
@@ -170,8 +170,8 @@ fn run(
                         try lint_problems.append(gpa, .{
                             .rule_id = rule.rule_id,
                             .severity = style_with_severity.severity,
-                            .start = .startOfToken(tree, identifer_token),
-                            .end = .endOfToken(tree, identifer_token),
+                            .start = zlinter.results.LintProblemLocation.startOfToken(tree, identifer_token),
+                            .end = zlinter.results.LintProblemLocation.endOfToken(tree, identifer_token),
                             .message = try std.fmt.allocPrint(gpa, "{s} should be {s}", .{ desc, style_with_severity.style.name() }),
                         });
                     }
@@ -357,8 +357,27 @@ test "general" {
     );
 }
 
+fn isFuncType(t: zls.Analyser.Type) bool {
+    if (t.isFunc() or t.isTypeFunc()) return true;
+    if (t.data == .pointer) {
+        const elem = t.data.pointer.elem_ty.*;
+        return elem.isFunc() or elem.isTypeFunc();
+    }
+    return false;
+}
+
+fn isTypeFuncType(t: zls.Analyser.Type) bool {
+    if (t.isTypeFunc()) return true;
+    if (t.data == .pointer) {
+        const elem = t.data.pointer.elem_ty.*;
+        return elem.isTypeFunc();
+    }
+    return false;
+}
+
 const std = @import("std");
 const zlinter = @import("zlinter");
+const zls = zlinter.zls;
 const shims = zlinter.shims;
 const NodeIndexShim = zlinter.shims.NodeIndexShim;
 const Ast = std.zig.Ast;

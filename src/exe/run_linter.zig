@@ -1,4 +1,4 @@
-var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+var debug_allocator: std.heap.GeneralPurposeAllocator(.{}) = .{};
 const default_formatter = zlinter.formatters.DefaultFormatter{};
 
 const ExitCode = enum(u8) {
@@ -41,7 +41,7 @@ pub fn main() !u8 {
         if (builtin.os.tag == .wasi) break :gpa .{ std.heap.wasm_allocator, false };
         break :gpa switch (builtin.mode) {
             .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
-            .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, false },
+            .ReleaseFast, .ReleaseSmall => .{ std.heap.page_allocator, false },
         };
     };
     defer if (is_debug) {
@@ -57,7 +57,7 @@ pub fn main() !u8 {
             &rules,
             gpa,
             switch (zlinter.version.zig) {
-                .@"0.14" => std.io.getStdIn().reader(),
+                .@"0.13", .@"0.14" => std.io.getStdIn().reader(),
                 .@"0.15", .@"0.16" => std.fs.File.stdin().deprecatedReader(),
             },
         ) catch |e| switch (e) {
@@ -122,14 +122,14 @@ fn run(gpa: std.mem.Allocator, args: zlinter.Args, printer: *zlinter.rendering.P
 
     if (args.help) {
         zlinter.Args.printHelp(printer);
-        return .success;
+        return RunResult.success;
     }
 
     if (args.unknown_args) |unknown_args| {
         for (unknown_args) |arg|
             printer.println(.err, "Unknown argument: {s}", .{arg});
         zlinter.Args.printHelp(printer);
-        return .usage_error;
+        return RunResult.usage_error;
     }
 
     // Key is file path and value are errors for the file.
@@ -306,7 +306,7 @@ fn runLinterRules(
                                     switch (e) {
                                         error.ParseZon => {
                                             std.log.err("Failed to parse rule config: " ++ switch (zlinter.version.zig) {
-                                                .@"0.14" => "{}",
+                                                .@"0.14", .@"0.13" => "{}",
                                                 .@"0.15", .@"0.16" => "{f}",
                                             }, .{diagnostics});
                                         },
@@ -364,7 +364,7 @@ fn runLinterRules(
         printer.println(.verbose, "    - {d} nodes", .{doc.handle.tree.nodes.len});
         printer.println(.verbose, "    - {d} tokens", .{doc.handle.tree.tokens.len});
 
-        var results = shims.ArrayList(zlinter.results.LintResult).empty;
+        var results = shims.ArrayList(zlinter.results.LintResult){};
         defer results.deinit(gpa);
 
         const tree = doc.handle.tree;
@@ -445,7 +445,7 @@ fn runFormatter(
     defer arena.deinit();
     const arena_allocator = arena.allocator();
 
-    var flattened = shims.ArrayList(zlinter.results.LintResult).empty;
+    var flattened = shims.ArrayList(zlinter.results.LintResult){};
     for (file_lint_problems.values()) |results| {
         try flattened.appendSlice(arena_allocator, results);
     }
@@ -454,11 +454,11 @@ fn runFormatter(
         for (flattened.items) |result| {
             for (result.problems) |problem| {
                 if (problem.severity == .@"error" and !problem.disabled_by_comment) {
-                    break :run_result .lint_error;
+                    break :run_result RunResult.lint_error;
                 }
             }
         }
-        break :run_result .success;
+        break :run_result RunResult.success;
     };
 
     try formatter.format(.{
@@ -486,7 +486,7 @@ fn runFixes(
 
     var it = file_lint_problems.iterator();
     while (it.next()) |entry| {
-        var lint_fixes = shims.ArrayList(zlinter.results.LintProblemFix).empty;
+        var lint_fixes = shims.ArrayList(zlinter.results.LintProblemFix){};
         defer lint_fixes.deinit(gpa);
 
         const results = entry.value_ptr.*;
@@ -519,7 +519,7 @@ fn runFixes(
         defer file.close();
 
         const file_content = switch (zlinter.version.zig) {
-            .@"0.14" => try file.reader().readAllAlloc(gpa, zlinter.session.max_zig_file_size_bytes),
+            .@"0.13", .@"0.14" => try file.reader().readAllAlloc(gpa, zlinter.session.max_zig_file_size_bytes),
             .@"0.15", .@"0.16" => file_content: {
                 var file_reader_buffer: [1024]u8 = undefined;
                 var file_reader = file.reader(&file_reader_buffer);
@@ -538,7 +538,7 @@ fn runFixes(
         };
         defer gpa.free(file_content);
 
-        var output_slices = shims.ArrayList([]const u8).empty;
+        var output_slices = shims.ArrayList([]const u8){};
         defer output_slices.deinit(gpa);
 
         var file_fixes: usize = 0;
@@ -580,7 +580,7 @@ fn runFixes(
             defer new_file.close();
 
             switch (zlinter.version.zig) {
-                .@"0.14" => {
+                .@"0.13", .@"0.14" => {
                     var writer = new_file.writer();
                     for (output_slices.items) |output_slice| {
                         try writer.writeAll(output_slice);
@@ -624,8 +624,15 @@ fn allocAstErrorMsg(
     allocator: std.mem.Allocator,
 ) ![]const u8 {
     switch (zlinter.version.zig) {
+        .@"0.13" => {
+            var error_message = shims.ArrayList(u8){};
+            defer error_message.deinit(allocator);
+
+            try tree.renderError(err, error_message.writer(allocator));
+            return error_message.toOwnedSlice(allocator);
+        },
         .@"0.14" => {
-            var error_message = shims.ArrayList(u8).empty;
+            var error_message = shims.ArrayList(u8){};
             defer error_message.deinit(allocator);
 
             try tree.renderError(err, error_message.writer(allocator));
@@ -712,7 +719,7 @@ fn buildFilterIndex(cwd: []const u8, gpa: std.mem.Allocator, dir: std.fs.Dir, ar
 /// indices in the rules array. This is what allows people to filter runs with
 /// the `--rule` CLI argument.
 fn enabledRules(filter_rule_ids: ?[]const []const u8) std.StaticBitSet(rules.len) {
-    var bitset: std.StaticBitSet(rules.len) = .initFull();
+    var bitset: std.StaticBitSet(rules.len) = std.StaticBitSet(rules.len).initFull();
     if (filter_rule_ids == null) return bitset;
 
     bitset.toggleAll();
@@ -763,7 +770,7 @@ const SlowestItemQueue = struct {
     };
 
     fn init(gpa: std.mem.Allocator) SlowestItemQueue {
-        return .{ .queue = .init(gpa, {}) };
+        return .{ .queue = std.PriorityDequeue(Item, void, Item.compare).init(gpa, {}) };
     }
 
     fn deinit(self: *SlowestItemQueue) void {

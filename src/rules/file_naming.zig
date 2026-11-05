@@ -58,8 +58,8 @@ fn run(
     lint_problems[0] = .{
         .severity = severity,
         .rule_id = rule.rule_id,
-        .start = .zero,
-        .end = .zero,
+        .start = zlinter.results.LintProblemLocation.zero,
+        .end = zlinter.results.LintProblemLocation.zero,
         .message = message,
     };
     return try zlinter.results.LintResult.init(

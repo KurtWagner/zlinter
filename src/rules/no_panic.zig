@@ -65,12 +65,12 @@ fn run(
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
-    var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
+    var lint_problems = shims.ArrayList(zlinter.results.LintProblem){};
     defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
 
-    const root: NodeIndexShim = .root;
+    const root: NodeIndexShim = NodeIndexShim.root;
     var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
@@ -99,8 +99,8 @@ fn run(
         try lint_problems.append(gpa, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
-            .start = .startOfNode(tree, node.toNodeIndex()),
-            .end = .endOfNode(tree, node.toNodeIndex()),
+            .start = zlinter.results.LintProblemLocation.startOfNode(tree, node.toNodeIndex()),
+            .end = zlinter.results.LintProblemLocation.endOfNode(tree, node.toNodeIndex()),
             .message = try gpa.dupe(u8, "`@panic` forcibly stops the program at runtime and should be avoided"),
         });
     }

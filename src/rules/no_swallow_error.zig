@@ -40,12 +40,12 @@ fn run(
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
-    var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
+    var lint_problems = shims.ArrayList(zlinter.results.LintProblem){};
     defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
 
-    const root: NodeIndexShim = .root;
+    const root: NodeIndexShim = NodeIndexShim.root;
     var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
@@ -61,7 +61,7 @@ fn run(
                 .@"catch" => {
                     const data = shims.nodeData(tree, node.toNodeIndex());
                     const rhs = switch (zlinter.version.zig) {
-                        .@"0.14" => data.rhs,
+                        .@"0.13", .@"0.14" => data.rhs,
                         .@"0.15", .@"0.16" => data.node_and_node.@"1",
                     };
 
@@ -125,8 +125,8 @@ fn run(
             try lint_problems.append(gpa, .{
                 .rule_id = rule.rule_id,
                 .severity = problem.severity,
-                .start = .startOfNode(tree, node.toNodeIndex()),
-                .end = .endOfNode(tree, node.toNodeIndex()),
+                .start = zlinter.results.LintProblemLocation.startOfNode(tree, node.toNodeIndex()),
+                .end = zlinter.results.LintProblemLocation.endOfNode(tree, node.toNodeIndex()),
                 .message = try gpa.dupe(u8, problem.message),
             });
         }
@@ -148,7 +148,7 @@ fn isEmptyOrUnreachableBlock(tree: Ast, node: Ast.Node.Index) enum { none, empty
 
     const data = shims.nodeData(tree, node);
     const lhs, const rhs = switch (zlinter.version.zig) {
-        .@"0.14" => .{
+        .@"0.13", .@"0.14" => .{
             NodeIndexShim.initOptional(data.lhs),
             NodeIndexShim.initOptional(data.rhs),
         },

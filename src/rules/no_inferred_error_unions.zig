@@ -45,12 +45,12 @@ fn run(
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
-    var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
+    var lint_problems = shims.ArrayList(zlinter.results.LintProblem){};
     defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
 
-    const root: NodeIndexShim = .root;
+    const root: NodeIndexShim = NodeIndexShim.root;
     var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
@@ -82,8 +82,8 @@ fn run(
         try lint_problems.append(gpa, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
-            .start = .startOfToken(tree, tree.firstToken(node.toNodeIndex())),
-            .end = .endOfNode(tree, return_type.toNodeIndex()),
+            .start = zlinter.results.LintProblemLocation.startOfToken(tree, tree.firstToken(node.toNodeIndex())),
+            .end = zlinter.results.LintProblemLocation.endOfNode(tree, return_type.toNodeIndex()),
             .message = try gpa.dupe(u8, "Function returns an inferred error union. Prefer an explicit error set"),
         });
     }

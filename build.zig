@@ -1,11 +1,5 @@
 const @"build.zig" = @This();
 
-const zls_version: []const u8 = switch (version.zig) {
-    .@"0.16" => "0.16.0-dev",
-    .@"0.15" => "0.15.0",
-    .@"0.14" => "0.14.0",
-};
-
 pub const BuiltinLintRule = enum {
     field_naming,
     field_ordering,
@@ -20,7 +14,6 @@ pub const BuiltinLintRule = enum {
     no_orelse_unreachable,
     no_undefined,
     no_literal_only_bool_expression,
-    no_hidden_allocations,
     switch_case_ordering,
     max_positional_args,
     no_comment_out_code,
@@ -30,7 +23,6 @@ pub const BuiltinLintRule = enum {
     no_panic,
     require_braces,
     require_doc_comment,
-    require_errdefer_dealloc,
 };
 
 const BuildRuleSource = union(enum) {
@@ -77,9 +69,9 @@ pub const BuilderOptions = struct {
 /// Create a step builder for zlinter
 pub fn builder(b: *std.Build, options: BuilderOptions) StepBuilder {
     return .{
-        .rules = .empty,
-        .exclude = .empty,
-        .include = .empty,
+        .rules = .{},
+        .exclude = .{},
+        .include = .{},
         .options = .{
             .optimize = options.optimize,
             .target = options.target orelse b.graph.host,
@@ -223,17 +215,18 @@ pub fn build(b: *std.Build) void {
     const test_coverage = b.option(bool, "coverage", "Generate a coverage report with kcov");
     const test_focus_on_rule = b.option([]const u8, "test_focus_on_rule", "Only run integration tests for this rule");
 
+    const zls_module = b.dependency("zls", .{
+        .target = target,
+        .optimize = optimize,
+    }).module("zls");
+
     const zlinter_lib_module = b.addModule("zlinter", .{
         .root_source_file = b.path("src/lib/zlinter.zig"),
         .target = target,
         .optimize = optimize,
         .imports = &.{.{
             .name = "zls",
-            .module = b.dependency("zls", .{
-                .target = target,
-                .optimize = optimize,
-                .@"version-string" = zls_version,
-            }).module("zls"),
+            .module = zls_module,
         }},
     });
     if (version.zig == .@"0.15" and target.result.os.tag == .windows) {
@@ -246,17 +239,21 @@ pub fn build(b: *std.Build) void {
     };
 
     const unit_tests_exe = b.addTest(.{
-        .root_module = zlinter_lib_module,
+        .root_source_file = b.path("src/lib/zlinter.zig"),
+        .target = target,
+        .optimize = optimize,
         .use_llvm = test_coverage,
     });
+    unit_tests_exe.root_module.addImport("zls", zls_module);
 
     // --------------------------------------------------------------------
     // Generate dynamic rules list and configs
     // --------------------------------------------------------------------
+    const BuiltinRuleFields = @typeInfo(BuiltinLintRule).Enum.fields;
     // zlinter-disable-next-line no_undefined - immediately set in inline loop
-    var rules: [@typeInfo(BuiltinLintRule).@"enum".fields.len]BuiltRule = undefined;
+    var rules: [BuiltinRuleFields.len]BuiltRule = undefined;
     // zlinter-disable-next-line no_undefined - immediately set in inline loop
-    var rule_imports: [@typeInfo(BuiltinLintRule).@"enum".fields.len]std.Build.Module.Import = undefined;
+    var rule_imports: [BuiltinRuleFields.len]std.Build.Module.Import = undefined;
 
     inline for (std.meta.fields(BuiltinLintRule), 0..) |enum_type, i| {
         const rule_module = b.createModule(.{
@@ -347,9 +344,12 @@ pub fn build(b: *std.Build) void {
     for (rule_imports) |rule_import| {
         const test_rule_exe = b.addTest(.{
             .name = b.fmt("{s}_unit_test_coverage", .{rule_import.name}),
-            .root_module = rule_import.module,
+            .root_source_file = rule_import.module.root_source_file.?,
+            .target = target,
+            .optimize = optimize,
             .use_llvm = test_coverage,
         });
+        test_rule_exe.root_module.addImport("zlinter", zlinter_lib_module);
 
         if (test_coverage orelse false) {
             const cover_run = std.Build.Step.Run.create(b, "Unit test coverage");
@@ -376,16 +376,14 @@ pub fn build(b: *std.Build) void {
     const build_website = b.step("website", "Build website.");
     const wasm_exe = b.addExecutable(.{
         .name = "wasm",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/exe/wasm.zig"),
-            .imports = &.{zlinter_import},
-            .target = b.resolveTargetQuery(.{
-                .cpu_arch = .wasm32,
-                .os_tag = .freestanding,
-            }),
-            .optimize = .ReleaseSmall,
+        .root_source_file = b.path("src/exe/wasm.zig"),
+        .target = b.resolveTargetQuery(.{
+            .cpu_arch = .wasm32,
+            .os_tag = .freestanding,
         }),
+        .optimize = .ReleaseSmall,
     });
+    wasm_exe.root_module.addImport(zlinter_import.name, zlinter_import.module);
     wasm_exe.entry = .disabled;
     wasm_exe.rdynamic = true;
     const install_wasm_step = b.addInstallArtifact(wasm_exe, .{ .dest_dir = .{
@@ -417,71 +415,74 @@ pub fn build(b: *std.Build) void {
 
     const lint_cmd = b.step("lint", "Lint the linters own source code.");
     lint_cmd.dependOn(step: {
-        var include = shims.ArrayList(LintIncludeSource).empty;
-        include.append(b.allocator, .compiled(b.addLibrary(.{
+        var include = shims.ArrayList(LintIncludeSource){};
+        const zlinter_lib = b.addStaticLibrary(.{
             .name = "zlinter",
-            .root_module = zlinter_lib_module,
-        }))) catch @panic("OOM");
+            .root_source_file = b.path("src/lib/zlinter.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        zlinter_lib.root_module.addImport("zls", zls_module);
+        include.append(b.allocator, LintIncludeSource.compiled(zlinter_lib)) catch @panic("OOM");
 
-        var exclude = shims.ArrayList(LintExcludeSource).empty;
+        var exclude = shims.ArrayList(LintExcludeSource){};
 
         // Also lint all files within project, not just those resolved to our compiled source.
         include.append(b.allocator, .{ .path = b.path("./") }) catch @panic("OOM");
         exclude.append(b.allocator, .{ .path = b.path("integration_tests/test_cases") }) catch @panic("OOM");
         exclude.append(b.allocator, .{ .path = b.path("integration_tests/src/test_case_references.zig") }) catch @panic("OOM");
 
+        const lint_rules = [_]BuiltRule{
+            buildBuiltinRule(b, .field_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .field_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .declaration_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .function_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .import_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .file_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_unused, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .switch_case_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_deprecated, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_empty_block, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_inferred_error_unions, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_orelse_unreachable, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_undefined, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_literal_only_bool_expression, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .require_braces, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .require_doc_comment, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_swallow_error, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_comment_out_code, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_todo, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .no_panic, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(b, .max_positional_args, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
+            buildBuiltinRule(
+                b,
+                .no_literal_args,
+                .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import },
+                .{
+                    .exclude_fn_names = &[_][]const u8{
+                        "print",
+                        "alloc",
+                        "allocWithOptions",
+                        "allocWithOptionsRetAddr",
+                        "allocSentinel",
+                        "alignedAlloc",
+                        "allocAdvancedWithRetAddr",
+                        "resize",
+                        "realloc",
+                        "reallocAdvanced",
+                        "parseInt",
+                        "debugPrintWithIndent",
+                        "tokenLocation",
+                        "expectEqual",
+                        "renderLine",
+                        "init",
+                    },
+                },
+            ),
+        };
         break :step buildStep(
             b,
-            &.{
-                buildBuiltinRule(b, .field_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .field_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .declaration_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .function_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .import_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .file_naming, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_unused, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .switch_case_ordering, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_deprecated, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_empty_block, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_inferred_error_unions, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_orelse_unreachable, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_undefined, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_literal_only_bool_expression, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .require_braces, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .require_doc_comment, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .require_errdefer_dealloc, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_hidden_allocations, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_swallow_error, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_comment_out_code, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_todo, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .no_panic, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(b, .max_positional_args, .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import }, .{}),
-                buildBuiltinRule(
-                    b,
-                    .no_literal_args,
-                    .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import },
-                    .{
-                        .exclude_fn_names = &.{
-                            "print",
-                            "alloc",
-                            "allocWithOptions",
-                            "allocWithOptionsRetAddr",
-                            "allocSentinel",
-                            "alignedAlloc",
-                            "allocAdvancedWithRetAddr",
-                            "resize",
-                            "realloc",
-                            "reallocAdvanced",
-                            "parseInt",
-                            "debugPrintWithIndent",
-                            "tokenLocation",
-                            "expectEqual",
-                            "renderLine",
-                            "init",
-                        },
-                    },
-                ),
-            },
+            &lint_rules,
             .{ .module = zlinter_lib_module },
             include.items,
             exclude.items,
@@ -497,15 +498,14 @@ pub fn build(b: *std.Build) void {
     // ------------------------------------------------------------------------
     const docs_cmd = b.step("docs", "Regenerate docs (should be run before every commit)");
     docs_cmd.dependOn(step: {
-        const doc_build_run = b.addRunArtifact(b.addExecutable(.{
+        const doc_build_exe = b.addExecutable(.{
             .name = "build_docs",
-            .root_module = b.createModule(.{
-                .root_source_file = b.path("build_docs.zig"),
-                .target = b.graph.host,
-                .optimize = .Debug,
-            }),
-        }));
-        var step = &doc_build_run.step;
+            .root_source_file = b.path("build_docs.zig"),
+            .target = b.graph.host,
+            .optimize = .Debug,
+        });
+        const doc_build_run = b.addRunArtifact(doc_build_exe);
+        const step = &doc_build_run.step;
 
         var install_step = b.addInstallFileWithDir(
             doc_build_run.addOutputFileArg("RULES.md"),
@@ -515,10 +515,8 @@ pub fn build(b: *std.Build) void {
         install_step.step.dependOn(step);
 
         const rules_lazy_path = b.path("src/rules");
-        const rules_path = rules_lazy_path.getPath3(b, step);
-        _ = step.addDirectoryWatchInput(rules_lazy_path) catch @panic("OOM");
-
-        var rules_dir = rules_path.root_dir.handle.openDir(rules_path.subPathOrDot(), .{ .iterate = true }) catch @panic("unable to open rules/ directory");
+        const rules_path_str = rules_lazy_path.getPath2(b, step);
+        var rules_dir = std.fs.cwd().openDir(rules_path_str, .{ .iterate = true }) catch @panic("unable to open rules/ directory");
         defer rules_dir.close();
         {
             var it = rules_dir.walk(b.allocator) catch @panic("OOM");
@@ -533,13 +531,9 @@ pub fn build(b: *std.Build) void {
 }
 
 fn toZonString(val: anytype, allocator: std.mem.Allocator) []const u8 {
-    var zon = std.ArrayListUnmanaged(u8).empty;
-    defer zon.deinit(allocator);
-
-    std.zon.stringify.serialize(val, .{}, zon.writer(allocator)) catch
-        @panic("Invalid rule config");
-
-    return zon.toOwnedSlice(allocator) catch @panic("OOM");
+    var list = std.ArrayList(u8).init(allocator);
+    zon_lib.stringify.serializeZig(val, list.writer()) catch @panic("Invalid rule config");
+    return list.toOwnedSlice() catch @panic("OOM");
 }
 
 fn buildStep(
@@ -563,15 +557,18 @@ fn buildStep(
     // --------------------------------------------------------------------
     // Generate linter exe
     // --------------------------------------------------------------------
-    const exe_module = b.createModule(.{
+    const zlinter_exe = b.addExecutable(.{
+        .name = "zlinter",
         .root_source_file = exe_file,
         .target = options.target,
         .optimize = options.optimize,
-        .imports = &.{zlinter_import},
+        // TODO: Look into why 0.15 is segfaulting on linux without this:
+        .use_llvm = true,
     });
     if (version.zig == .@"0.15" and options.target.result.os.tag == .windows) {
-        exe_module.linkSystemLibrary("advapi32", .{});
+        zlinter_exe.root_module.linkSystemLibrary("advapi32", .{});
     }
+    zlinter_exe.root_module.addImport(zlinter_import.name, zlinter_import.module);
 
     // --------------------------------------------------------------------
     // Generate dynamic rules and rules config
@@ -586,17 +583,7 @@ fn buildStep(
             rules,
         ),
     );
-    exe_module.addImport("rules", rules_module);
-
-    // --------------------------------------------------------------------
-    // Generate linter exe
-    // --------------------------------------------------------------------
-    const zlinter_exe = b.addExecutable(.{
-        .name = "zlinter",
-        .root_module = exe_module,
-        // TODO: Look into why 0.15 is segfaulting on linux without this:
-        .use_llvm = true,
-    });
+    zlinter_exe.root_module.addImport("rules", rules_module);
 
     const zlinter_run = ZlinterRun.create(
         b,
@@ -625,6 +612,8 @@ fn addWatchInput(
     file_or_dir: std.Build.LazyPath,
     kind: enum { none, lintable_file },
 ) !void {
+    if (version.zig == .@"0.13") return;
+
     const src_dir_path = file_or_dir.getPath3(b, step);
 
     var src_dir = src_dir_path.root_dir.handle.openDir(
@@ -636,6 +625,7 @@ fn addWatchInput(
             return;
         },
         else => switch (version.zig) {
+            .@"0.13" => unreachable,
             .@"0.14" => @panic(b.fmt("Unable to open directory '{}': {s}", .{ src_dir_path, @errorName(e) })),
             .@"0.15", .@"0.16" => @panic(b.fmt("Unable to open directory '{f}': {t}", .{ src_dir_path, e })),
         },
@@ -769,14 +759,13 @@ fn addBuildRulesStep(
     root_source_path: std.Build.LazyPath,
     rules: []const BuiltRule,
 ) std.Build.LazyPath {
-    var run = b.addRunArtifact(b.addExecutable(.{
+    const build_rules_exe = b.addExecutable(.{
         .name = "build_rules",
-        .root_module = b.createModule(.{
-            .root_source_file = root_source_path,
-            .target = b.graph.host,
-            .optimize = .Debug,
-        }),
-    }));
+        .root_source_file = root_source_path,
+        .target = b.graph.host,
+        .optimize = .Debug,
+    });
+    var run = b.addRunArtifact(build_rules_exe);
 
     const output = run.addOutputFileArg("rules.zig");
     for (rules) |rule|
@@ -791,16 +780,16 @@ fn createRulesModule(
     rules: []const BuiltRule,
     build_rules_output: std.Build.LazyPath,
 ) *std.Build.Module {
-    var rule_imports = std.ArrayListUnmanaged(std.Build.Module.Import).empty;
-    for (rules) |r| rule_imports.append(b.allocator, r.import) catch @panic("OOM");
-    defer rule_imports.deinit(b.allocator);
+    var rule_imports = std.ArrayList(std.Build.Module.Import).init(b.allocator);
+    for (rules) |r| rule_imports.append(r.import) catch @panic("OOM");
+    defer rule_imports.deinit();
 
     const rules_imports = std.mem.concat(
         b.allocator,
         std.Build.Module.Import,
         &.{
             &[1]std.Build.Module.Import{zlinter_import},
-            rule_imports.toOwnedSlice(b.allocator) catch @panic("OOM"),
+            rule_imports.toOwnedSlice() catch @panic("OOM"),
         },
     ) catch @panic("OOM");
     defer b.allocator.free(rules_imports);
@@ -812,9 +801,9 @@ fn createRulesModule(
 
     for (rules) |rule| {
         const wf = b.addWriteFiles();
-        const import_name = b.fmt("{s}.zon", .{rule.import.name});
-        const path = wf.add(import_name, rule.zon_config_str);
-
+        const import_name = b.fmt("{s}_config.zig", .{rule.import.name});
+        const content = b.fmt("pub const config = {s};\n", .{rule.zon_config_str});
+        const path = wf.add(import_name, content);
         module.addImport(
             import_name,
             b.createModule(.{ .root_source_file = path }),
@@ -857,7 +846,7 @@ const ZlinterRun = struct {
                 .owner = owner,
                 .makeFn = make,
             }),
-            .argv = .empty,
+            .argv = .{},
             .exclude = exclude,
             .include = include,
         };
@@ -871,8 +860,10 @@ const ZlinterRun = struct {
         if (owner.graph.global_cache_root.path) |p|
             self.addArgs(&.{ "--global_cache_root", p });
 
-        if (owner.graph.zig_lib_directory.path) |p|
+        if (owner.zig_lib_dir) |lib_dir| {
+            const p = lib_dir.getPath2(owner, &self.step);
             self.addArgs(&.{ "--zig_lib_directory", p });
+        }
 
         const bin_file = exe.getEmittedBin();
         bin_file.addStepDependencies(&self.step);
@@ -908,30 +899,31 @@ const ZlinterRun = struct {
 
         const b = step.owner;
 
-        var list: shims.ArrayList([]const u8) = try .initCapacity(
+        var list: shims.ArrayList([]const u8) = try shims.ArrayList([]const u8).initCapacity(
             b.allocator,
             paths.len,
         );
         defer list.deinit(b.allocator);
 
         for (paths) |path| {
-            list.appendAssumeCapacity(
-                path.getPath3(b, step).subPathOrDot(),
-            );
+            switch (path) {
+                .src_path => |sp| list.appendAssumeCapacity(if (sp.sub_path.len == 0) "." else sp.sub_path),
+                else => list.appendAssumeCapacity(path.getPath2(b, step)),
+            }
         }
 
         return try list.toOwnedSlice(b.allocator);
     }
 
-    fn make(step: *std.Build.Step, _: std.Build.Step.MakeOptions) !void {
+    fn make(step: *std.Build.Step, _: std.Progress.Node) !void {
         const run: *ZlinterRun = @alignCast(@fieldParentPtr("step", step));
         const b = run.step.owner;
         const arena = b.allocator;
 
         var cwd_buff: [std.fs.max_path_bytes]u8 = undefined;
-        const cwd: BuildCwd = .init(&cwd_buff);
+        const cwd: BuildCwd = BuildCwd.init(&cwd_buff);
 
-        var includes: shims.ArrayList(std.Build.LazyPath) = try .initCapacity(
+        var includes: shims.ArrayList(std.Build.LazyPath) = try shims.ArrayList(std.Build.LazyPath).initCapacity(
             b.allocator,
             @max(1, run.include.len),
         );
@@ -940,40 +932,72 @@ const ZlinterRun = struct {
         for (run.include) |source| {
             switch (source) {
                 .compiled_unit => |info| {
-                    var exe = info.compile_step;
+                    const exe = info.compile_step;
 
-                    // TODO: Use graph for import map.
-                    const graph = exe.root_module.getGraph();
-                    _ = graph;
-
-                    var inputs = exe.step.inputs;
-                    std.debug.assert(inputs.populated());
-
-                    var it = inputs.table.iterator();
-                    while (it.next()) |entry| {
-                        const p = entry.key_ptr.*;
-                        sub_paths: for (entry.value_ptr.items) |sub_path| {
-                            var buf: [std.fs.max_path_bytes]u8 = undefined;
-                            const joined_path = if (p.sub_path.len == 0) sub_path else p: {
-                                const fmt = "{s}" ++ std.fs.path.sep_str ++ "{s}";
-                                break :p std.fmt.bufPrint(
-                                    &buf,
-                                    fmt,
-                                    .{ p.sub_path, sub_path },
-                                ) catch {
-                                    std.debug.print(
-                                        "Warning: Name too long - " ++ fmt,
-                                        .{ p.sub_path, sub_path },
-                                    );
-                                    continue :sub_paths;
-                                };
-                            };
-                            std.debug.assert(joined_path.len > 0);
-
-                            if (!try isLintableFilePath(joined_path)) continue :sub_paths;
-
-                            if (cwd.relativePath(b, joined_path)) |path| {
-                                try includes.append(b.allocator, path);
+                    if (exe.root_module.root_source_file) |root_file| {
+                        const path_str = root_file.getPath2(b, step);
+                        if (cwd.relativePath(b, path_str)) |path| {
+                            try includes.append(b.allocator, path);
+                        }
+                        // Recursively resolve @import statements to find all source files (0.13 has no step.inputs)
+                        {
+                            var visited = std.StringHashMap(void).init(b.allocator);
+                            defer {
+                                var it = visited.keyIterator();
+                                while (it.next()) |k| b.allocator.free(k.*);
+                                visited.deinit();
+                            }
+                            var import_stack = std.ArrayList([]const u8).init(b.allocator);
+                            defer import_stack.deinit();
+                            try import_stack.append(path_str);
+                            var safety_counter: u32 = 0;
+                            while (import_stack.popOrNull()) |current_path| {
+                                safety_counter += 1;
+                                if (safety_counter > 10000) break;
+                                const abs_path = if (std.fs.path.isAbsolute(current_path))
+                                    current_path
+                                else
+                                    try std.fs.path.join(b.allocator, &.{ cwd.path, current_path });
+                                if (visited.contains(abs_path)) {
+                                    if (!std.fs.path.isAbsolute(current_path)) b.allocator.free(abs_path);
+                                    continue;
+                                }
+                                if (abs_path.len > 500) {
+                                    if (!std.fs.path.isAbsolute(current_path)) b.allocator.free(abs_path);
+                                    continue;
+                                }
+                                const duped_path = try b.allocator.dupe(u8, abs_path);
+                                try visited.put(duped_path, {});
+                                if (!std.fs.path.isAbsolute(current_path)) b.allocator.free(abs_path);
+                                const import_file = std.fs.cwd().openFile(abs_path, .{}) catch continue;
+                                defer import_file.close();
+                                const import_source = import_file.readToEndAlloc(b.allocator, 1024 * 1024) catch continue;
+                                defer b.allocator.free(import_source);
+                                var line_it = std.mem.splitScalar(u8, import_source, '\n');
+                                while (line_it.next()) |line| {
+                                    const trimmed = std.mem.trim(u8, line, " \t\r");
+                                    if (std.mem.indexOf(u8, trimmed, "@import(")) |import_idx| {
+                                        const after = trimmed[import_idx + 8 ..];
+                                        if (std.mem.indexOfScalar(u8, after, '"')) |q1| {
+                                            const rest = after[q1 + 1 ..];
+                                            if (std.mem.indexOfScalar(u8, rest, '"')) |q2| {
+                                                const import_path = rest[0..q2];
+                                                if (std.mem.endsWith(u8, import_path, ".zig")) {
+                                                    const resolved = if (std.fs.path.isAbsolute(import_path))
+                                                        import_path
+                                                    else blk: {
+                                                        const dir = std.fs.path.dirname(abs_path) orelse ".";
+                                                        break :blk try std.fs.path.join(b.allocator, &.{ dir, import_path });
+                                                    };
+                                                    if (cwd.relativePath(b, resolved)) |lazy| {
+                                                        try includes.append(b.allocator, lazy);
+                                                    }
+                                                    try import_stack.append(resolved);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -988,7 +1012,7 @@ const ZlinterRun = struct {
             includes.appendAssumeCapacity(b.path("./"));
         }
 
-        var excludes: shims.ArrayList(std.Build.LazyPath) = try .initCapacity(b.allocator, run.exclude.len);
+        var excludes: shims.ArrayList(std.Build.LazyPath) = try shims.ArrayList(std.Build.LazyPath).initCapacity(b.allocator, run.exclude.len);
         defer excludes.deinit(b.allocator);
         for (run.exclude) |exclude| {
             switch (exclude) {
@@ -1015,28 +1039,7 @@ const ZlinterRun = struct {
                     try argv_list.append(arena, bytes);
                 },
                 .artifact => |artifact| {
-                    if (artifact.rootModuleTarget().os.tag == .windows) {
-                        // Windows doesn't have rpaths so add .dll search paths to PATH environment variable
-                        const chase_dynamics = true;
-                        const compiles = artifact.getCompileDependencies(chase_dynamics);
-                        for (compiles) |compile| {
-                            if (compile.root_module.resolved_target.?.result.os.tag == .windows) continue;
-                            if (compile.isDynamicLibrary()) continue;
-
-                            const search_path = std.fs.path.dirname(compile.getEmittedBin().getPath2(b, &run.step)).?;
-                            const key = "PATH";
-                            if (env_map.get(key)) |prev_path| {
-                                env_map.put(key, b.fmt("{s}{c}{s}", .{
-                                    prev_path,
-                                    std.fs.path.delimiter,
-                                    search_path,
-                                })) catch @panic("OOM");
-                            } else {
-                                env_map.put(key, b.dupePath(search_path)) catch @panic("OOM");
-                            }
-                        }
-                    }
-                    const file_path = artifact.installed_path orelse artifact.generated_bin.?.path.?;
+                    const file_path = artifact.getEmittedBin().getPath2(b, &run.step);
                     try argv_list.append(arena, b.dupe(file_path));
                 },
             }
@@ -1049,7 +1052,7 @@ const ZlinterRun = struct {
             return run.step.fail("Host cannot spawn zlinter:\n\t{s}", .{
                 std.Build.Step.allocPrintCmd(
                     arena,
-                    b.build_root.path,
+                    b.build_root.path orelse ".",
                     argv_list.items,
                 ) catch @panic("OOM"),
             });
@@ -1059,14 +1062,14 @@ const ZlinterRun = struct {
             std.debug.print("zlinter command:\n\t{s}\n", .{
                 std.Build.Step.allocPrintCmd(
                     arena,
-                    b.build_root.path,
+                    b.build_root.path orelse ".",
                     argv_list.items,
                 ) catch @panic("OOM"),
             });
         }
 
         var child = std.process.Child.init(argv_list.items, arena);
-        child.cwd = b.build_root.path;
+        child.cwd = b.build_root.path orelse ".";
         child.cwd_dir = b.build_root.handle;
         child.env_map = env_map;
         // As we're using stdout and stderr inherit we don't want to update
@@ -1093,7 +1096,7 @@ const ZlinterRun = struct {
 
             var stdin_file = child.stdin.?;
             switch (version.zig) {
-                .@"0.14" => {
+                .@"0.13", .@"0.14" => {
                     var writer = stdin_file.writer();
                     writer.writeInt(usize, build_info_zon_bytes.len, .little) catch @panic("stdin write failed");
                     writer.writeAll(build_info_zon_bytes) catch @panic("stdin write failed");
@@ -1128,7 +1131,7 @@ const ZlinterRun = struct {
                     return step.fail("zlinter command crashed:\n\t{s}", .{
                         std.Build.Step.allocPrintCmd(
                             arena,
-                            b.build_root.path,
+                            b.build_root.path orelse ".",
                             argv_list.items,
                         ) catch @panic("OOM"),
                     });
@@ -1138,7 +1141,7 @@ const ZlinterRun = struct {
                 return step.fail("zlinter was terminated unexpectedly:\n\t{s}", .{
                     std.Build.Step.allocPrintCmd(
                         arena,
-                        b.build_root.path,
+                        b.build_root.path orelse ".",
                         argv_list.items,
                     ) catch @panic("OOM"),
                 });
@@ -1148,18 +1151,14 @@ const ZlinterRun = struct {
 };
 
 fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
-    const rules_path = path.getPath3(b, null);
-
-    var file = try rules_path.root_dir.handle.openFile(rules_path.subPathOrDot(), .{});
+    const abs_path = path.getPath2(b, null);
+    var file = try std.fs.openFileAbsolute(abs_path, .{});
     defer file.close();
-
     const max_bytes = 128 * 1024;
     const bytes = try file.readToEndAlloc(b.allocator, max_bytes);
     defer b.allocator.free(bytes);
-
     const replacement = b.fmt("{d}", .{std.time.milliTimestamp()});
     const needle = "{{build_timestamp}}";
-
     const buffer = try b.allocator.alloc(u8, std.mem.replacementSize(
         u8,
         bytes,
@@ -1167,7 +1166,6 @@ fn readHtmlTemplate(b: *std.Build, path: std.Build.LazyPath) ![]const u8 {
         replacement,
     ));
     errdefer b.allocator.free(buffer);
-
     const replacements = std.mem.replace(
         u8,
         bytes,
@@ -1211,11 +1209,11 @@ const BuildCwd = struct {
                 to,
             ) catch |e|
                 switch (e) {
-                    error.OutOfMemory => @panic("OOM"),
-                    error.Unexpected,
-                    error.CurrentWorkingDirectoryUnlinked,
-                    => return null,
-                };
+                error.OutOfMemory => @panic("OOM"),
+                error.Unexpected,
+                error.CurrentWorkingDirectoryUnlinked,
+                => return null,
+            };
             errdefer b.allocator.free(relative);
 
             if (relative.len != 0 and isReadable(&self.dir, relative)) {
@@ -1245,5 +1243,6 @@ const BuildInfo = @import("src/lib/BuildInfo.zig");
 const std = @import("std");
 const isLintableFilePath = @import("src/lib/files.zig").isLintableFilePath;
 const shims = @import("src/lib/shims.zig");
+const zon_lib = @import("src/lib/zon.zig");
 
 pub const version = @import("./src/lib/version.zig");

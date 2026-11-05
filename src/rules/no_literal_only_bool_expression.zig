@@ -50,12 +50,12 @@ fn run(
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
-    var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
+    var lint_problems = shims.ArrayList(zlinter.results.LintProblem){};
     defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
 
-    const root: NodeIndexShim = .root;
+    const root: NodeIndexShim = NodeIndexShim.root;
     var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
@@ -73,15 +73,15 @@ fn run(
             => {
                 const data = shims.nodeData(tree, node.toNodeIndex());
                 const lhs, const rhs = switch (zlinter.version.zig) {
-                    .@"0.14" => .{ data.lhs, data.rhs },
+                    .@"0.13", .@"0.14" => .{ data.lhs, data.rhs },
                     .@"0.15", .@"0.16" => .{ data.node_and_node[0], data.node_and_node[1] },
                 };
                 if (isLiteral(tree, lhs) != null and isLiteral(tree, rhs) != null) {
                     try lint_problems.append(gpa, .{
                         .rule_id = rule.rule_id,
                         .severity = config.severity,
-                        .start = .startOfNode(tree, node.toNodeIndex()),
-                        .end = .endOfNode(tree, node.toNodeIndex()),
+                        .start = zlinter.results.LintProblemLocation.startOfNode(tree, node.toNodeIndex()),
+                        .end = zlinter.results.LintProblemLocation.endOfNode(tree, node.toNodeIndex()),
                         .message = try gpa.dupe(u8, "Useless condition"),
                     });
                 }
@@ -91,8 +91,8 @@ fn run(
                     try lint_problems.append(gpa, .{
                         .rule_id = rule.rule_id,
                         .severity = config.severity,
-                        .start = .startOfNode(tree, full_if.ast.cond_expr),
-                        .end = .endOfNode(tree, full_if.ast.cond_expr),
+                        .start = zlinter.results.LintProblemLocation.startOfNode(tree, full_if.ast.cond_expr),
+                        .end = zlinter.results.LintProblemLocation.endOfNode(tree, full_if.ast.cond_expr),
                         .message = try gpa.dupe(u8, "Useless condition"),
                     });
                 }
@@ -103,8 +103,8 @@ fn run(
                     try lint_problems.append(gpa, .{
                         .rule_id = rule.rule_id,
                         .severity = config.severity,
-                        .start = .startOfNode(tree, full_while.ast.cond_expr),
-                        .end = .endOfNode(tree, full_while.ast.cond_expr),
+                        .start = zlinter.results.LintProblemLocation.startOfNode(tree, full_while.ast.cond_expr),
+                        .end = zlinter.results.LintProblemLocation.endOfNode(tree, full_while.ast.cond_expr),
                         .message = try gpa.dupe(u8, "Useless condition"),
                     });
                 }

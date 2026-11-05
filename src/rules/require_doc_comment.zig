@@ -36,20 +36,20 @@ fn run(
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
-    var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
+    var lint_problems = shims.ArrayList(zlinter.results.LintProblem){};
     defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
 
-    const root: NodeIndexShim = .root;
+    const root: NodeIndexShim = NodeIndexShim.root;
 
     if (config.file_severity != .off) {
         if (!try hasDocComments(tree, root.toNodeIndex())) {
             try lint_problems.append(gpa, .{
                 .rule_id = rule.rule_id,
                 .severity = config.file_severity,
-                .start = .startOfNode(tree, root.toNodeIndex()),
-                .end = .startOfNode(tree, root.toNodeIndex()),
+                .start = zlinter.results.LintProblemLocation.startOfNode(tree, root.toNodeIndex()),
+                .end = zlinter.results.LintProblemLocation.startOfNode(tree, root.toNodeIndex()),
                 .message = try gpa.dupe(u8, "File is missing a doc comment"),
             });
         }
@@ -80,8 +80,8 @@ fn run(
                 try lint_problems.append(gpa, .{
                     .rule_id = rule.rule_id,
                     .severity = severity,
-                    .start = .startOfToken(tree, tree.firstToken(node.toNodeIndex())),
-                    .end = .endOfNode(tree, fn_decl.ast.proto_node),
+                    .start = zlinter.results.LintProblemLocation.startOfToken(tree, tree.firstToken(node.toNodeIndex())),
+                    .end = zlinter.results.LintProblemLocation.endOfNode(tree, fn_decl.ast.proto_node),
                     .message = try std.fmt.allocPrint(gpa, "{s} function is missing a doc comment", .{label}),
                 });
             },
@@ -97,8 +97,8 @@ fn run(
                 try lint_problems.append(gpa, .{
                     .rule_id = rule.rule_id,
                     .severity = severity,
-                    .start = .startOfToken(tree, tree.firstToken(node.toNodeIndex())),
-                    .end = .endOfToken(tree, var_decl.ast.mut_token + 1),
+                    .start = zlinter.results.LintProblemLocation.startOfToken(tree, tree.firstToken(node.toNodeIndex())),
+                    .end = zlinter.results.LintProblemLocation.endOfToken(tree, var_decl.ast.mut_token + 1),
                     .message = try std.fmt.allocPrint(gpa, "{s} declaration is missing a doc comment", .{label}),
                 });
             },

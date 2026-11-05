@@ -43,7 +43,7 @@ fn run(
     const config = options.getConfig(Config);
     if (config.severity == .off) return null;
 
-    var lint_problems: shims.ArrayList(zlinter.results.LintProblem) = .empty;
+    var lint_problems: shims.ArrayList(zlinter.results.LintProblem) = .{};
     defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
@@ -77,9 +77,9 @@ fn run(
         try lint_problems.append(gpa, .{
             .rule_id = rule.rule_id,
             .severity = config.severity,
-            .start = .startOfComment(doc.comments, comment),
-            .end = .endOfComment(doc.comments, comment),
-            .message = try gpa.dupe(u8, if (config.exclude_if_contains_issue_number or !config.exclude_if_contains_url)
+            .start = zlinter.results.LintProblemLocation.startOfComment(doc.comments, comment),
+            .end = zlinter.results.LintProblemLocation.endOfComment(doc.comments, comment),
+            .message = try gpa.dupe(u8, if (config.exclude_if_contains_issue_number)
                 "Avoid todo comments that don't link to a tracked issue"
             else
                 "Avoid todo comments"),
@@ -110,7 +110,7 @@ fn isExcluded(content: []const u8, config: Config) bool {
         if (config.exclude_if_contains_issue_number and looksLikeIssueId(word)) {
             return true;
         }
-        if (config.exclude_if_contains_issue_number and looksLikeUrl(word)) {
+        if (config.exclude_if_contains_url and looksLikeUrl(word)) {
             return true;
         }
     }
@@ -169,6 +169,243 @@ test looksLikeUrl {
 
 test {
     std.testing.refAllDecls(@This());
+}
+
+test "run detects todo" {
+    const rule = buildRule(.{});
+    const source =
+        \\// TODO
+        \\
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_todo",
+                .severity = .warning,
+                .slice = "// TODO\n",
+                .message = "Avoid todo comments that don't link to a tracked issue",
+            },
+        },
+    );
+}
+
+test "run excludes todo with issue number" {
+    const rule = buildRule(.{});
+    const source =
+        \\// TODO(#10)
+        \\
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{},
+        &.{},
+    );
+}
+
+test "run excludes todo with url" {
+    const rule = buildRule(.{});
+    const source =
+        \\// TODO(http://example.com/10)
+        \\
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{},
+        &.{},
+    );
+}
+
+test "run excludes todo with issue in content" {
+    const rule = buildRule(.{});
+    const source =
+        \\// TODO: fix in #10
+        \\
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{},
+        &.{
+        },
+    );
+}
+
+test "run excludes todo with url in content" {
+    const rule = buildRule(.{});
+    const source =
+        \\// TODO: fix in https://example.com/10
+        \\
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{},
+        &.{
+        },
+    );
+}
+
+test "run detects todo with bare number" {
+    const rule = buildRule(.{});
+    const source =
+        \\// TODO(10)
+        \\
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_todo",
+                .severity = .warning,
+                .slice = "// TODO(10)\n",
+                .message = "Avoid todo comments that don't link to a tracked issue",
+            },
+        },
+    );
+}
+
+test "run issue exclusion disabled" {
+    const rule = buildRule(.{});
+    const source =
+        \\// TODO(#10)
+        \\
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .exclude_if_contains_issue_number = false },
+        &.{
+            .{
+                .rule_id = "no_todo",
+                .severity = .warning,
+                .slice = "// TODO(#10)\n",
+                .message = "Avoid todo comments",
+            },
+        },
+    );
+}
+
+test "run url exclusion disabled" {
+    const rule = buildRule(.{});
+    const source =
+        \\// TODO(http://example.com/10)
+        \\
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .exclude_if_contains_url = false },
+        &.{
+            .{
+                .rule_id = "no_todo",
+                .severity = .warning,
+                .slice = "// TODO(http://example.com/10)\n",
+                .message = "Avoid todo comments that don't link to a tracked issue",
+            },
+        },
+    );
+}
+
+test "run message when exclusions off" {
+    const rule = buildRule(.{});
+    const source =
+        \\// TODO
+        \\
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .exclude_if_contains_issue_number = false, .exclude_if_contains_url = false },
+        &.{
+            .{
+                .rule_id = "no_todo",
+                .severity = .warning,
+                .slice = "// TODO\n",
+                .message = "Avoid todo comments",
+            },
+        },
+    );
+}
+
+test "run off" {
+    const rule = buildRule(.{});
+    const source =
+        \\// TODO
+        \\
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{ .severity = .off },
+        &.{},
+    );
+}
+
+test "run todo empty parens" {
+    const rule = buildRule(.{});
+    const source =
+        \\// TODO()
+        \\
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{},
+        &.{
+            .{
+                .rule_id = "no_todo",
+                .severity = .warning,
+                .slice = "// TODO()\n",
+                .message = "Avoid todo comments that don't link to a tracked issue",
+            },
+        },
+    );
+}
+
+test "run ignores non-todo comment" {
+    const rule = buildRule(.{});
+    const source =
+        \\// This is a regular comment, not a todo
+        \\
+    ;
+
+    try zlinter.testing.testRunRule(
+        rule,
+        source,
+        .{},
+        Config{},
+        &.{
+        },
+    );
 }
 
 const std = @import("std");

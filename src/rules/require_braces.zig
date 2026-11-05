@@ -103,12 +103,12 @@ fn run(
 ) error{OutOfMemory}!?zlinter.results.LintResult {
     const config = options.getConfig(Config);
 
-    var lint_problems = shims.ArrayList(zlinter.results.LintProblem).empty;
+    var lint_problems = shims.ArrayList(zlinter.results.LintProblem){};
     defer lint_problems.deinit(gpa);
 
     const tree = doc.handle.tree;
 
-    const root: NodeIndexShim = .root;
+    const root: NodeIndexShim = NodeIndexShim.root;
     var it = try doc.nodeLineageIterator(root, gpa);
     defer it.deinit();
 
@@ -140,7 +140,7 @@ fn run(
         if (req_and_severity.severity == .off) continue :nodes;
 
         var expr_nodes_buffer: [2]Ast.Node.Index = undefined;
-        var expr_nodes: std.ArrayListUnmanaged(Ast.Node.Index) = .initBuffer(&expr_nodes_buffer);
+        var expr_nodes: std.ArrayListUnmanaged(Ast.Node.Index) = std.ArrayListUnmanaged(Ast.Node.Index).initBuffer(&expr_nodes_buffer);
 
         switch (statement) {
             .@"if" => |info| {
@@ -222,8 +222,8 @@ fn run(
             try lint_problems.append(gpa, .{
                 .rule_id = rule.rule_id,
                 .severity = req_and_severity.severity,
-                .start = .startOfToken(tree, first_token),
-                .end = .endOfToken(tree, last_token),
+                .start = zlinter.results.LintProblemLocation.startOfToken(tree, first_token),
+                .end = zlinter.results.LintProblemLocation.endOfToken(tree, last_token),
                 .message = error_msg,
             });
         }

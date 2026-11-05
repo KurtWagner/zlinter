@@ -46,7 +46,7 @@ test "integration test rules" {
     // Lint command "zig build lint -- <file>.zig"
     // --------------------------------------------------------------------
     {
-        var lint_args = std.ArrayListUnmanaged([]const u8).empty;
+        var lint_args = std.ArrayListUnmanaged([]const u8){};
         defer lint_args.deinit(std.testing.allocator);
 
         try lint_args.appendSlice(std.testing.allocator, &.{
@@ -103,14 +103,14 @@ test "integration test rules" {
         );
         defer allocator.free(temp_path);
 
-        try std.fs.cwd().copyFile(
+        try copyFile(
+            std.fs.cwd(),
             input_zig_file.?,
             std.fs.cwd(),
             temp_path,
-            .{},
         );
 
-        var lint_args = std.ArrayListUnmanaged([]const u8).empty;
+        var lint_args = std.ArrayListUnmanaged([]const u8){};
         defer lint_args.deinit(std.testing.allocator);
 
         try lint_args.appendSlice(std.testing.allocator, &.{
@@ -153,7 +153,8 @@ test "integration test rules" {
             return e;
         };
 
-        const actual = try std.fs.cwd().readFileAlloc(
+        const actual = try readFileAlloc(
+            std.fs.cwd(),
             allocator,
             temp_path,
             max_file_size_bytes,
@@ -172,7 +173,8 @@ test "integration test rules" {
 }
 
 fn expectFileContentsEquals(dir: std.fs.Dir, file_path: []const u8, actual: []const u8) !void {
-    const contents = dir.readFileAlloc(
+    const contents = readFileAlloc(
+        dir,
         std.testing.allocator,
         file_path,
         max_file_size_bytes,
@@ -214,7 +216,7 @@ fn expectEqualStringsNormalized(expected: []const u8, actual: []const u8) !void 
 }
 
 fn normalizeNewLinesAlloc(input: []const u8, allocator: std.mem.Allocator) ![]const u8 {
-    var result = std.ArrayListUnmanaged(u8).empty;
+    var result = std.ArrayListUnmanaged(u8){};
     defer result.deinit(allocator);
 
     // Removes "\r". e.g., "\r\n"
@@ -244,6 +246,25 @@ fn printWithHeader(header: []const u8, content: []const u8) !void {
     @memset(bottom_bar, '=');
 
     std.debug.print("{s}\n{s}\n{s}\n", .{ top_bar, content, bottom_bar[0..] });
+}
+
+fn readFileAlloc(dir: std.fs.Dir, allocator: std.mem.Allocator, file_path: []const u8, max_bytes: usize) ![]u8 {
+    const file = try dir.openFile(file_path, .{});
+    defer file.close();
+    return try file.readToEndAlloc(allocator, max_bytes);
+}
+
+fn copyFile(src_dir: std.fs.Dir, src_path: []const u8, dest_dir: std.fs.Dir, dest_path: []const u8) !void {
+    const src_file = try src_dir.openFile(src_path, .{});
+    defer src_file.close();
+    const dest_file = try dest_dir.createFile(dest_path, .{});
+    defer dest_file.close();
+    var buf: [8192]u8 = undefined;
+    while (true) {
+        const n = try src_file.read(&buf);
+        if (n == 0) break;
+        try dest_file.writeAll(buf[0..n]);
+    }
 }
 
 fn runLintCommand(args: []const []const u8) !std.process.Child.RunResult {
