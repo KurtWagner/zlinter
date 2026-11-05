@@ -197,14 +197,16 @@ const Parser = struct {
     fn parseString(self: *Parser) ![]const u8 {
         self.skipWhitespace();
         if (self.pos >= self.source.len or self.source[self.pos] != '"') return error.ParseZon;
-        self.pos += 1;
         const start = self.pos;
+        self.pos += 1;
         while (self.pos < self.source.len) {
             const c = self.source[self.pos];
             if (c == '"') {
-                const result = self.source[start..self.pos];
                 self.pos += 1;
-                return try self.gpa.dupe(u8, result);
+                return std.zig.string_literal.parseAlloc(self.gpa, self.source[start..self.pos]) catch |err| switch (err) {
+                    error.InvalidLiteral => error.ParseZon,
+                    error.OutOfMemory => error.OutOfMemory,
+                };
             }
             if (c == '\\') {
                 self.pos += 2;
@@ -389,6 +391,35 @@ const Parser = struct {
         return items.toOwnedSlice();
     }
 };
+
+test "strings round trip through ZON" {
+    for ([_][]const u8{ "", "plain", "C:\\work\\src", "\"quoted\"", "line\nreturn\rtab\t" }) |original| {
+        var encoded = std.ArrayList(u8).init(std.testing.allocator);
+        defer encoded.deinit();
+        try stringify.serialize(original, encoded.writer());
+        const source = try encoded.toOwnedSliceSentinel(0);
+        defer std.testing.allocator.free(source);
+
+        const parsed = try parseFromSlice([]const u8, std.testing.allocator, source, null);
+        defer std.testing.allocator.free(parsed);
+        try std.testing.expectEqualStrings(original, parsed);
+    }
+}
+
+test "parseString decodes hex and Unicode escapes" {
+    const source =
+        \\"\x41\u{1f600}\'"
+    ;
+    const parsed = try parseFromSlice([]const u8, std.testing.allocator, source, null);
+    defer std.testing.allocator.free(parsed);
+    try std.testing.expectEqualStrings("A😀'", parsed);
+}
+
+test "parseString rejects invalid literals" {
+    for ([_][:0]const u8{ "\"\\q\"", "\"\\xGG\"", "\"\\u{110000}\"", "\"line\nbreak\"", "\"unterminated\\" }) |source| {
+        try std.testing.expectError(error.ParseZon, parseFromSlice([]const u8, std.testing.allocator, source, null));
+    }
+}
 
 test "parseFileAlloc" {
     const BasicStruct = struct {
