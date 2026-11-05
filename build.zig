@@ -1213,14 +1213,18 @@ const BuildCwd = struct {
                 to,
             ) catch |e|
                 switch (e) {
-                error.OutOfMemory => @panic("OOM"),
-                error.Unexpected,
-                error.CurrentWorkingDirectoryUnlinked,
-                => return null,
-            };
+                    error.OutOfMemory => @panic("OOM"),
+                    error.Unexpected,
+                    error.CurrentWorkingDirectoryUnlinked,
+                    => return null,
+                };
             errdefer b.allocator.free(relative);
 
-            if (relative.len != 0 and isReadable(&self.dir, relative)) {
+            // On Windows, paths on different drives remain absolute after relative().
+            if (!std.fs.path.isAbsolute(relative) and
+                relative.len != 0 and
+                isReadable(&self.dir, relative))
+            {
                 return b.path(relative);
             } else {
                 b.allocator.free(relative);
