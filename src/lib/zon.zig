@@ -9,12 +9,15 @@ pub const CustomDiagnostics = struct {
     error_count: usize = 0,
 
     pub const Error = struct {
-        msg: []const u8,
+        msg: std.BoundedArray(u8, 256),
     };
 
     pub fn add(self: *CustomDiagnostics, msg: []const u8) void {
         if (self.error_count < self.errors.len) {
-            self.errors[self.error_count] = .{ .msg = msg };
+            self.errors[self.error_count] = .{
+                .msg = std.BoundedArray(u8, 256).fromSlice(msg) catch
+                    (std.BoundedArray(u8, 256).fromSlice("parse error") catch unreachable),
+            };
             self.error_count += 1;
         }
     }
@@ -44,10 +47,20 @@ pub const CustomDiagnostics = struct {
         _ = fmt;
         _ = options;
         for (self.errors[0..self.error_count]) |err| {
-            try writer.print("{s}\n", .{err.msg});
+            try writer.print("{s}\n", .{err.msg.constSlice()});
         }
     }
 };
+
+test "CustomDiagnostics owns error messages" {
+    var diagnostics = CustomDiagnostics{};
+    var message = "Unknown field 'name'".*;
+    diagnostics.add(&message);
+    @memset(&message, 'X');
+
+    var it = diagnostics.iterateErrors();
+    try std.testing.expectEqualStrings("Unknown field 'name'", it.next().?.msg.constSlice());
+}
 
 pub fn parseFileAlloc(
     T: type,
