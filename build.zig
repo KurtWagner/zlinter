@@ -934,11 +934,16 @@ const ZlinterRun = struct {
                 .compiled_unit => |info| {
                     const exe = info.compile_step;
 
-                    if (exe.root_module.root_source_file) |root_file| {
+                    var modules = exe.root_module.iterateDependencies(null, false);
+                    defer modules.deinit();
+                    while (modules.next()) |entry| {
+                        const root_file = entry.module.root_source_file orelse continue;
                         const path_str = root_file.getPath2(b, step);
-                        if (cwd.relativePath(b, path_str)) |path| {
-                            try includes.append(b.allocator, path);
-                        }
+                        const path = cwd.relativePath(b, path_str) orelse continue;
+                        const relative = path.src_path.sub_path;
+                        if (std.mem.eql(u8, relative, "..") or std.mem.startsWith(u8, relative, ".." ++ std.fs.path.sep_str)) continue;
+                        if (!try isLintableFilePath(relative)) continue;
+                        try includes.append(b.allocator, path);
                         // Recursively resolve @import statements to find all source files (0.13 has no step.inputs)
                         {
                             var visited = std.StringHashMap(void).init(b.allocator);

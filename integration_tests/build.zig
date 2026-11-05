@@ -87,12 +87,20 @@ pub fn build(b: *std.Build) !void {
                 .{ .builtin = .no_panic },
                 .{ .severity = .warning },
             );
-            builder.addSource(.{ .compiled_unit = .{ .compile_step = b.addStaticLibrary(.{
+            const compiled = b.addStaticLibrary(.{
                 .name = "main",
                 .root_source_file = b.path("src/check_compiled_source/main.zig"),
                 .target = target,
                 .optimize = optimize,
-            }) } });
+            });
+            const named_module = b.createModule(.{
+                .root_source_file = b.path("src/check_compiled_source/named_module.zig"),
+            });
+            named_module.addImport("used", b.createModule(.{
+                .root_source_file = b.path("src/check_compiled_source/used.zig"),
+            }));
+            compiled.root_module.addImport("named_module", named_module);
+            builder.addSource(.{ .compiled_unit = .{ .compile_step = compiled } });
             builder.addPaths(.{ .exclude = &.{b.path("src/check_compiled_source/excluded.zig")} });
             break :step builder.build();
         });
