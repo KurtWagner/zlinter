@@ -554,12 +554,12 @@ pub fn build(b: *std.Build) void {
 
         // TODO: Fix this false positive in declaration naming rule.
         // zlinter-disable-next-line declaration_naming - this looks like a false positive based on use of @typeInfo it things its a type?
-        const builtin_rule_values = @typeInfo(BuiltinLintRule).@"enum".field_values;
+        const builtin_rule_values = std.enums.values(BuiltinLintRule);
         var build_lint_builtin = b.allocator.alloc(BuiltRule, builtin_rule_values.len) catch @panic("OOM");
-        inline for (builtin_rule_values, 0..) |field_value, i|
+        inline for (builtin_rule_values, 0..) |rule, i|
             build_lint_builtin[i] = buildBuiltinRule(
                 b,
-                @fromBackingInt(@intCast(field_value)),
+                rule,
                 .{ .target = target, .optimize = optimize, .zlinter_import = zlinter_import },
                 .{},
             );
