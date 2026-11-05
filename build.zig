@@ -976,32 +976,31 @@ const ZlinterRun = struct {
                                 if (!std.fs.path.isAbsolute(current_path)) b.allocator.free(abs_path);
                                 const import_file = std.fs.cwd().openFile(abs_path, .{}) catch continue;
                                 defer import_file.close();
-                                const import_source = import_file.readToEndAlloc(b.allocator, 1024 * 1024) catch continue;
+                                const import_source = import_file.readToEndAllocOptions(b.allocator, 1024 * 1024, null, @alignOf(u8), 0) catch continue;
                                 defer b.allocator.free(import_source);
-                                var line_it = std.mem.splitScalar(u8, import_source, '\n');
-                                while (line_it.next()) |line| {
-                                    const trimmed = std.mem.trim(u8, line, " \t\r");
-                                    if (std.mem.indexOf(u8, trimmed, "@import(")) |import_idx| {
-                                        const after = trimmed[import_idx + 8 ..];
-                                        if (std.mem.indexOfScalar(u8, after, '"')) |q1| {
-                                            const rest = after[q1 + 1 ..];
-                                            if (std.mem.indexOfScalar(u8, rest, '"')) |q2| {
-                                                const import_path = rest[0..q2];
-                                                if (std.mem.endsWith(u8, import_path, ".zig")) {
-                                                    const resolved = if (std.fs.path.isAbsolute(import_path))
-                                                        import_path
-                                                    else blk: {
-                                                        const dir = std.fs.path.dirname(abs_path) orelse ".";
-                                                        break :blk try std.fs.path.join(b.allocator, &.{ dir, import_path });
-                                                    };
-                                                    if (cwd.relativePath(b, resolved)) |lazy| {
-                                                        try includes.append(b.allocator, lazy);
-                                                    }
-                                                    try import_stack.append(resolved);
-                                                }
-                                            }
-                                        }
+                                var tree = try std.zig.Ast.parse(b.allocator, import_source, .zig);
+                                defer tree.deinit(b.allocator);
+                                for (tree.nodes.items(.tag), tree.nodes.items(.data), tree.nodes.items(.main_token)) |tag, data, main_token| {
+                                    if (tag != .builtin_call_two and tag != .builtin_call_two_comma) continue;
+                                    if (!std.mem.eql(u8, tree.tokenSlice(main_token), "@import")) continue;
+                                    if (data.lhs == 0 or data.rhs != 0 or tree.nodes.items(.tag)[data.lhs] != .string_literal) continue;
+                                    const import_path = std.zig.string_literal.parseAlloc(
+                                        b.allocator,
+                                        tree.tokenSlice(tree.nodes.items(.main_token)[data.lhs]),
+                                    ) catch |err| switch (err) {
+                                        error.InvalidLiteral => continue,
+                                        error.OutOfMemory => return err,
+                                    };
+                                    defer b.allocator.free(import_path);
+                                    if (!std.mem.endsWith(u8, import_path, ".zig")) continue;
+                                    const resolved = try std.fs.path.resolve(b.allocator, &.{
+                                        std.fs.path.dirname(abs_path) orelse ".",
+                                        import_path,
+                                    });
+                                    if (cwd.relativePath(b, resolved)) |lazy| {
+                                        try includes.append(b.allocator, lazy);
                                     }
+                                    try import_stack.append(resolved);
                                 }
                             }
                         }

@@ -97,7 +97,7 @@ pub fn build(b: *std.Build) !void {
                 .root_source_file = b.path("src/check_compiled_source/named_module.zig"),
             });
             named_module.addImport("used", b.createModule(.{
-                .root_source_file = b.path("src/check_compiled_source/used.zig"),
+                .root_source_file = b.path("src/check_compiled_source/imports.zig"),
             }));
             compiled.root_module.addImport("named_module", named_module);
             builder.addSource(.{ .compiled_unit = .{ .compile_step = compiled } });
