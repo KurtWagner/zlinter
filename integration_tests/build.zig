@@ -21,7 +21,7 @@ pub fn build(b: *std.Build) !void {
     defer test_cases_dir.close(io);
 
     var walker = try test_cases_dir.walk(b.allocator);
-    defer walker.deinit();
+    defer walker.deinit(io);
 
     createCompiledUnits(b, target, optimize);
 

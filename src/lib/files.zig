@@ -173,7 +173,7 @@ fn walkDirectory(
     std.debug.assert(std.Io.Dir.path.isAbsolute(parent_abs_path));
 
     var walker = try dir.walk(allocator);
-    defer walker.deinit();
+    defer walker.deinit(io);
 
     while (try walker.next(io)) |item| {
         if (item.kind != .file) continue;

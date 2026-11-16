@@ -40,7 +40,7 @@ pub fn main(init: std.process.Init) !void {
     defer rules_dir.close(io);
 
     var walker = try rules_dir.walk(gpa);
-    defer walker.deinit();
+    defer walker.deinit(io);
 
     while (try walker.next(io)) |entry| {
         if (entry.kind != .file) continue;

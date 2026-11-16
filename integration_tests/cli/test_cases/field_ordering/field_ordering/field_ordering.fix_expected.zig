@@ -71,7 +71,7 @@ const MyError = error{
 };
 
 // Structs are off by default so these should be ignored
-const Packed = packed struct(u64) {
+const Packed = bitpack struct(u64) {
     b: u32,
     a: u32,
 };

@@ -1,4 +1,4 @@
-const Packed = packed struct(u64) {
+const Packed = bitpack struct(u64) {
     b: u32,
     a: u32,
 };

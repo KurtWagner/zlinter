@@ -242,7 +242,7 @@ Enforce a consistent, predictable order for fields in structs, enums, and unions
 
 * `exclude_packed_structs`
 
-  * Whether to check order of packed structs (e.g., `packed struct(u32) { .. }`). You probably never want to enforce order of packed structs, so best to leave as `true` unless you're certain.
+  * Whether to check order of packed structs (e.g., `bitpack struct(u32) { .. }`). You probably never want to enforce order of packed structs, so best to leave as `true` unless you're certain.
 
   * **Default:** `true`
 

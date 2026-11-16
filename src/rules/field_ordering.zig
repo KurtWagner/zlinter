@@ -14,7 +14,7 @@ pub const Config = struct {
     /// Order and severity for struct fields
     struct_field_order: zlinter.rules.LintTextOrderWithSeverity = .off,
 
-    /// Whether to check order of packed structs (e.g., `packed struct(u32) { .. }`).
+    /// Whether to check order of packed structs (e.g., `bitpack struct(u32) { .. }`).
     /// You probably never want to enforce order of packed structs, so best to
     /// leave as `true` unless you're certain.
     exclude_packed_structs: bool = true,
@@ -84,8 +84,10 @@ fn run(
                 if (container_decl.layout_token) |layout_token| {
                     if (config.exclude_extern_structs and tree.tokens.items(.tag)[layout_token] == .keyword_extern)
                         break :blk null;
-                    if (config.exclude_packed_structs and tree.tokens.items(.tag)[layout_token] == .keyword_packed)
-                        break :blk null;
+                    if (config.exclude_packed_structs) switch (tree.tokens.items(.tag)[layout_token]) {
+                        .keyword_bitpack, .keyword_packed => break :blk null,
+                        else => {},
+                    };
                 }
                 break :blk .{
                     .order_with_severity = config.struct_field_order,
