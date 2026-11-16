@@ -626,7 +626,24 @@ pub fn resolveLazyPath(
         .relative => |rel| {
             const sub_path = rel.sub_path.slice(config);
 
-            const root = switch (rel.flags.base) {
+            // Zig 0.17.1 added deployed_* bases, keep both versions exhaustive.
+            const root = if (comptime @hasField(@TypeOf(rel.flags.base), "deployed_prefix")) switch (rel.flags.base) {
+                .cwd, .build_root => build_root_path,
+                .local_cache,
+                .global_cache,
+                .zig_exe,
+                .zig_lib,
+                .install_prefix,
+                .install_lib,
+                .install_bin,
+                .install_include,
+                .deployed_prefix,
+                .deployed_lib,
+                .deployed_bin,
+                .deployed_include,
+                .libc_runtimes,
+                => return null,
+            } else switch (rel.flags.base) {
                 .cwd, .build_root => build_root_path,
                 .local_cache,
                 .global_cache,
